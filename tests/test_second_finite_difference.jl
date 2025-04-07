@@ -1,7 +1,4 @@
-cd("MultiSymplectic.jl")
-using Pkg
-Pkg.activate(".")
-using GeometricIntegrators
+
 # using NonlinearSolve
 
 # include("/Users/zeyuanli/Documents/Codes/GeometricProblems.jl/src/sine_gordon.jl")
@@ -128,16 +125,20 @@ using GeometricIntegrators
 
 # plot(ham_record[3:end])
 
-# include("/Users/zeyuanli/Documents/Codes/MultiSymplectic.jl/src/linear_wave.jl")
+using Pkg
+cd("IntegratorNN")
+Pkg.activate(".")
 
-# problem = LinearWave.hodeproblem(tspan = (0, 20), tstep = 0.005)
-# sol = integrate(problem, RK4())
-
-# @gif for i in 1:1000
-#     plot(sol.p[i, :],ylims=(-3,3))
-# end
-
-
+using GeometricIntegrators
 using GeometricProblems:HarmonicOscillator
-problem = HarmonicOscillator.hodeproblem(tspan = (0, 1), tstep = 0.1)
-sol = integrate(problem, ExplicitEuler())
+
+initial_hamiltonian = HarmonicOscillator.hamiltonian(0.0,HO.ics.q,HO.ics.p,HO.parameters)
+
+HO = HarmonicOscillator.podeproblem(tspan = (0,1000),tstep = 4.0)
+sol = integrate(HO, ImplicitMidpoint())
+hams = [HarmonicOscillator.hamiltonian(0,q,p,HO.parameters) for (q,p) in zip(collect(sol.q[:]),collect(sol.p[:]))]
+@show maximum(abs.((hams .- initial_hamiltonian)/initial_hamiltonian))
+
+sol.q[:,1]
+ref = HarmonicOscillator.exact_solution(HarmonicOscillator.podeproblem(tspan = (0,1000),tstep = 4.0))
+ref.q[:,1]

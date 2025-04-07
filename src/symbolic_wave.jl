@@ -14,17 +14,14 @@ l = 2
 Δx = l/(N-1)
 
 
-u = Symbolics.variables(:u, 1:N)
-v = Symbolics.variables(:v, 1:N)
-
-z = u .+ v
-z = substitute(z, Dict([(u[i] => i) for i in 1:N],[(v[i] => 2i) for i in 1:N]))
-z = substitute(z, Dict([(v[i] => 2i) for i in 1:N]))
-simplify(z)
-
+uₕ = Symbolics.variables(:u, 1:N)
+vₕ = Symbolics.variables(:v, 1:N)
 
 # Discrete Hamiltonian, Periodic BC 
 Hₙ = sum(1/2 * vₕ[i]^2 + 1/2 *(uₕ[i] - uₕ[i-1])^2/ Δx ^2 for i in 2:N) + 1/2 * vₕ[1]^2 + 1/2 *(uₕ[1] - uₕ[N])^2/ Δx ^2
+
+# mapping_dict = Dict(zip([uₕ...,vₕ...], [uf...,vf...]))
+# substitute(Hₙ, mapping_dict)
 
 #Righthand side of the Hamiltonian ODE
 function ∂H∂uᵢ(i,uh,vh,dx)
@@ -47,6 +44,7 @@ push!(∂H∂v, v[N])
 
 
 #Initial condition
+
 function initial_position(N,l)
     x = range(0,l,length=N)
     2 * exp.(-((x .- l/2).^2))
