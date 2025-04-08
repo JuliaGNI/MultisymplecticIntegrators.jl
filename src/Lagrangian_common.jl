@@ -8,38 +8,38 @@ struct LagrangianPDESystem
     w # alias for ux
     parameters
     equations
-    # functions
-    function LagrangianPDESystem(L,t,x,u,v,w,params = NamedTuple();simplify = true, scalarize = true)
+    functions
+    function LagrangianPDESystem(L,t,x,U,V,W,params = NamedTuple();simplify = true, scalarize = true)
 
         Ls = scalarize ? Symbolics.scalarize(L) : L
         Ls = simplify ? Symbolics.simplify(Ls) : Ls
 
-        Dt, Dx, Du, Dv, Dw = lagrangianPDE_derivatives(t,x,u,v,w)
+        ∂L∂U_expr = [Symbolics.derivative(Ls, U[i]) for i in eachindex(U)]
+        ∂L∂V_expr = [Symbolics.derivative(Ls, V[i]) for i in eachindex(V)]
+        ∂L∂W_expr = [Symbolics.derivative(Ls, W[i]) for i in eachindex(W)]
 
-        ∂L∂u = [expand_derivatives(du(Ls)) for du in Du]
-        ∂L∂v = [expand_derivatives(dv(Ls)) for dv in Dv]
-        ∂L∂w = [expand_derivatives(dw(Ls)) for dw in Dw]
-        # ∂L∂u = expand_derivatives(Du(Ls))
-        # ∂L∂v = expand_derivatives(Dv(Ls))
-        # ∂L∂w = expand_derivatives(Dw(Ls))
-
-        ∂_∂t_∂L∂v  = [expand_derivatives(Dt(dv(Ls))) for dv in Dv]
-        ∂_∂x_∂L∂w = sum(hcat([expand_derivatives(dx.(∂L∂w)) for dx in Dx]...),dims=2)[:,1]
-        EL_field = [∂L∂u[i] - ∂_∂t_∂L∂v[i] - ∂_∂x_∂L∂w[i] for i in eachindex(∂L∂u,∂_∂t_∂L∂v,∂_∂x_∂L∂w)]
-
-        # ∂_∂t_∂L∂v = expand_derivatives(Dt(Dv(Ls)))
-        # ∂_∂x_∂L∂w = expand_derivatives(Dx(Dw(Ls)))
-        # EL_field = ∂L∂u - ∂_∂t_∂L∂v - ∂_∂x_∂L∂w
         equs = (
             L = Ls,
-            ∂L∂u = ∂L∂u,
-            ∂L∂v = ∂L∂v,
-            ∂L∂w = ∂L∂w,
-            ∂_∂t_∂L∂v = ∂_∂t_∂L∂v,
-            ∂_∂x_∂L∂w = ∂_∂x_∂L∂w,
-            EL = EL_field,
-        )
-        return new(Ls, t, x, u, v, w, params, equs)
+            ∂L∂U = ∂L∂U_expr,
+            ∂L∂V = ∂L∂V_expr,
+            ∂L∂W = ∂L∂W_expr,
+        ) # set of expressions
+
+        ∂L∂U = [substitute_parameters(Symbolics.build_function(∂L∂U_expr[i], U, V, W,sparams...; nanmath = false),sparams) for i in eachindex(∂L∂U_expr)]
+        ∂L∂V = [substitute_parameters(Symbolics.build_function(∂L∂V_expr[i], U, V, W,sparams...; nanmath = false),sparams) for i in eachindex(∂L∂V_expr)]
+        ∂L∂W = [substitute_parameters(Symbolics.build_function(∂L∂W_expr[i], U, V, W,sparams...; nanmath = false),sparams) for i in eachindex(∂L∂W_expr)]
+
+        ∂L∂U = [Symbolics.eval(∂L∂U[i]) for i in eachindex(∂L∂U)]
+        ∂L∂V = [Symbolics.eval(∂L∂V[i]) for i in eachindex(∂L∂V)]
+        ∂L∂W = [Symbolics.eval(∂L∂W[i]) for i in eachindex(∂L∂W)]
+
+        codes = (
+            ∂L∂U = ∂L∂U,
+            ∂L∂V = ∂L∂V,
+            ∂L∂W = ∂L∂W,
+        ) # set of callable functions
+
+        return new(Ls, t, x, u, v, w, params, equs, codes)
     end
 end
 
@@ -48,11 +48,13 @@ end
 function lagrangianPDE_variables(variable_dimension::Integer,x_domain_dimension::Integer)
     @variables t
     @variables x[1:x_domain_dimension]
-    @variables (u(x...,t))[1:variable_dimension]     #@variables (u(sym_x,sym_t))[1:variable_dimension] to not expand spatial variable x
-    @variables (v(x...,t))[1:variable_dimension]
-    @variables (w(x...,t))[1:variable_dimension,1:x_domain_dimension] # what is the dimension of w?
-
-    return (t, x, u, v, w)
+    # @variables (u(x...,t))[1:variable_dimension]     #@variables (u(sym_x,sym_t))[1:variable_dimension] to not expand spatial variable x
+    # @variables (v(x...,t))[1:variable_dimension]
+    # @variables (w(x...,t))[1:variable_dimension,1:x_domain_dimension] # what is the dimension of w?
+    @variables U[1:variable_dimension]     
+    @variables V[1:variable_dimension]
+    @variables W[1:variable_dimension,1:x_domain_dimension]
+    return (t, x, U, V, W)
 end
 
 function lagrangianPDE_derivatives(t,x,u,v,w)

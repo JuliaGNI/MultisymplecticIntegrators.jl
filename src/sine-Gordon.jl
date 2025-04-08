@@ -39,9 +39,9 @@ module SineGordon
         @assert tspan[1] < tspan[2] "tspan must be increasing"
         @assert xspan[1] < xspan[2] "xspan must be increasing"
 
-        t, x, u, v, w = lagrangianPDE_variables(1, 1)
+        t,x,U,V,W = lagrangianPDE_variables(1, 1) # U,V,W does not have t,x dependence 
         sparams = symbolize(parameters)
-        lag_sys = LagrangianPDESystem(lagrangian(t, x, u, v, w, sparams), t, x, u, v, w, sparams)
+        lag_sys = LagrangianPDESystem(lagrangian(t,x,U,V,W, sparams), t,x,U,V,W, sparams)
         LPDEProblem(lag_sys, tspan, tstep, xspan=xspan, xstep=xstep, u₀, v₀, w₀; v̄=θ̇, parameters=parameters)
     end
 
@@ -56,39 +56,96 @@ end
 
 # sum(hcat([expand_derivatives(dx.(∂L∂w)) for dx in Dx]...),dims=2)[:,1]
 
+RT = 4
+RX = 8
 
+include("./common.jl")
+dimensions = [RX,RT]  # Number of quadrature points in each dimension
+grid_matrix, grid_weights = construct_quadrature_grid(dimensions)
 
-@variables W[1:6]
-u = W[1] * sin(W[2] * t[1] + W[3]) * cos(W[4] * x[1] + W[5]) + W[6]
+@variables P[1:6]
+t,x,U,V,W = lagrangianPDE_variables(1, 1) # U,V,W does not have t,x dependence 
 
-t,x,u,v,w = lagrangianPDE_variables(1, 1)
+u_expr = P[1] * sin(P[2] * t[1] + P[3]) * cos(P[4] * x[1] + P[5]) + P[6]
 
+Symbolics.derivative(u_expr,P[1])
+
+∂u_expr∂P = [Symbolics.derivative(u_expr,P[i]) for i in eachindex(P)]
 
 Dt = Differential(t)
 Dx = Differential(x)
 
 v_expr = expand_derivatives(Dt(u_expr))
-w_expr = expand_derivatives(Dx(u_expr))
+w_expr = [Symbolics.derivative(u_expr, x[i]) for i in eachindex(x)]
 
-u_func = eval(build_function(u_expr, W, t, x))
-# u_func(rand(6), rand(1)[1], rand(1)[1])
-v_func = eval(build_function(v_expr, W, t, x))
-w_func = eval(build_function(w_expr, W, t, x))
+∂v_expr∂P = [Symbolics.derivative(v_expr,P[i]) for i in eachindex(P)]
+∂w_expr∂P = [Symbolics.derivative(w_expr[i],P[j]) for i in eachindex(w_expr) for j in eachindex(P)]
 
-Du = Differential(u)
-Dv = Differential(v)
-Dw = Differential(w)
+∂u∂P = [Symbolics.eval(build_function(∂u_expr∂P[i], P, t, x)) for i in eachindex(∂u_expr∂P)]
+∂v∂P = [Symbolics.eval(build_function(∂v_expr∂P[i], P, t, x)) for i in eachindex(∂v_expr∂P)]
+∂w∂P = [Symbolics.eval(build_function(∂w_expr∂P[i], P, t, x)) for i in eachindex(∂w_expr∂P)]
+# ∂w∂P[1](rand(6), rand(1)[1], rand(1)[1])
 
 
-sparams = symbolize(default_parameters)
-Ls = SineGordon.lagrangian(t, x, u, v, w, sparams)
 
-expand_derivatives(Du(Ls))
+u = eval(build_function(u_expr, P, t, x))
+v = eval(build_function(v_expr, P, t, x))
+w = [eval(build_function(w_expr[i], P, t, x)) for i in eachindex(w_expr)]
+# u(rand(6), rand(1)[1], rand(1)[1])
+
+DU = Differential(U)
+DV = Differential(V)
+DW = Differential(W)
+
+
+
+sparams = symbolize(SineGordon.default_parameters)
+Ls = SineGordon.lagrangian(t, x, U, V, W, sparams)
+
+∂L∂U_expr = [Symbolics.derivative(Ls, U[i]) for i in eachindex(U)]
+∂L∂V_expr = [Symbolics.derivative(Ls, V[i]) for i in eachindex(V)]
+∂L∂W_expr = [Symbolics.derivative(Ls, W[i]) for i in eachindex(W)]
+
+∂L∂U = [substitute_parameters(Symbolics.build_function(∂L∂U_expr[i], U, V, W,sparams...; nanmath = false),sparams) for i in eachindex(∂L∂U_expr)]
+∂L∂V = [substitute_parameters(Symbolics.build_function(∂L∂V_expr[i], U, V, W,sparams...; nanmath = false),sparams) for i in eachindex(∂L∂V_expr)]
+∂L∂W = [substitute_parameters(Symbolics.build_function(∂L∂W_expr[i], U, V, W,sparams...; nanmath = false),sparams) for i in eachindex(∂L∂W_expr)]
+
+∂L∂U = [Symbolics.eval(∂L∂U[i]) for i in eachindex(∂L∂U)]
+∂L∂V = [Symbolics.eval(∂L∂V[i]) for i in eachindex(∂L∂V)]
+∂L∂W = [Symbolics.eval(∂L∂W[i]) for i in eachindex(∂L∂W)]
+
+u_quad_values = zeros(Float64,RX,RT)
+v_quad_values = zeros(Float64,RX,RT)
+w_quad_values = zeros(Float64,RX,RT)
+
+for i in 1:RX
+    for j in 1:RT
+        u_quad_values[i,j] = u(rand(6),grid_matrix[i,j][2], grid_matrix[i,j][1])
+        v_quad_values[i,j] = v(rand(6),grid_matrix[i,j][2], grid_matrix[i,j][1])
+        w_quad_values[i,j] = w[1](rand(6),grid_matrix[i,j][2], grid_matrix[i,j][1])
+    end
+end
+
+
+∂L∂U_quad_values = zeros(Float64,RX,RT)
+∂L∂V_quad_values = zeros(Float64,RX,RT)
+∂L∂W_quad_values = zeros(Float64,RX,RT)
+
+for i in 1:RX
+    for j in 1:RT
+        ∂L∂U_quad_values[i,j] = ∂L∂U[1](u_quad_values[i,j],v_quad_values[i,j],w_quad_values[i,j],SineGordon.default_parameters)
+        ∂L∂V_quad_values[i,j] = ∂L∂V[1](u_quad_values[i,j],v_quad_values[i,j],w_quad_values[i,j],SineGordon.default_parameters)
+        ∂L∂W_quad_values[i,j] = ∂L∂W[1](u_quad_values[i,j],v_quad_values[i,j],w_quad_values[i,j],SineGordon.default_parameters)
+    end
+end
+
+
 
 lag_sys = LagrangianPDESystem(Ls, t, x, u, v, w, sparams)
 typeof(lag_sys.equations.∂L∂u) 
 ∂L∂u = eval(build_function(lag_sys.equations.∂L∂u[1],u))
 ∂L∂u(0.1)
+
 
 
 QGau4 = QuadratureRules.GaussLegendreQuadrature(4)
@@ -102,15 +159,20 @@ BGau4 = CompactBasisFunctions.Lagrange(QuadratureRules.nodes(QGau4))
 λ₂_x = CompactBasisFunctions.Lagrange(QuadratureRules.nodes(QuadratureRules.GaussLegendreQuadrature(8)))
 
 # Cache
+# the symbolics expression should be computed ahead, and eval as a matrix of callable function 
 
-RT = 4
-RX = 8
+
+D = 1 #u,v,w, are scaler value functions
+∂L∂u = zeros()
+
+expand_derivatives(Du(Ls))
+
 ∂L∂u_mat = zeros(ST,RX,RT)
 ∂L∂v_mat = zeros(ST,RX,RT)
 ∂L∂w_mat = zeros(ST,RX,RT)
 
 NΘ = length(W)
-D = 1
+ST = Float64
 ∂u∂θ_mat = zeros(ST,D,NΘ)
 ∂v∂θ_mat = zeros(ST,D,NΘ)
 ∂w∂θ_mat = zeros(ST,D,NΘ) 
@@ -119,6 +181,11 @@ D = 1
 μ₂_t_coes = zeros(ST,RT)
 λ₁_x_coes = zeros(ST,RX)
 λ₂_x_coes = zeros(ST,RX) 
+
+
+
+
+
 
 # components
 
