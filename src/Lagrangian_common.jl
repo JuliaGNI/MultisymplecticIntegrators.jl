@@ -39,7 +39,7 @@ struct LagrangianPDESystem
             ∂L∂W = ∂L∂W,
         ) # set of callable functions
 
-        return new(Ls, t, x, u, v, w, params, equs, codes)
+        return new(Ls, t, x, U,V,W, params, equs, codes)
     end
 end
 
@@ -71,7 +71,6 @@ function lagrangianPDE_derivatives(t,x,u,v,w)
 
     return (Dt, Dx, Du, Dv, Dw)
 end
-
 
 
 function symbolize(p::Union{AbstractArray, Tuple}, name)

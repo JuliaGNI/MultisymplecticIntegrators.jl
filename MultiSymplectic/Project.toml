@@ -1,0 +1,4 @@
+name = "MultiSymplectic"
+uuid = "fc6e6b89-2c6d-470d-9919-6343887f3aa5"
+authors = ["ZeyuanLee <zeyuanli.tum@outlook.com>"]
+version = "0.1.0"
