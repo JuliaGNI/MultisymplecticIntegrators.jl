@@ -11,12 +11,21 @@ struct LagrangianPDESystem
     functions
     function LagrangianPDESystem(L,t,x,U,V,W,params = NamedTuple();simplify = true, scalarize = true)
 
+        DX = length(x)
+        D = length(U)
+
         Ls = scalarize ? Symbolics.scalarize(L) : L
         Ls = simplify ? Symbolics.simplify(Ls) : Ls
 
         ∂L∂U_expr = [Symbolics.derivative(Ls, U[i]) for i in eachindex(U)]
         ∂L∂V_expr = [Symbolics.derivative(Ls, V[i]) for i in eachindex(V)]
-        ∂L∂W_expr = [Symbolics.derivative(Ls, W[i]) for i in eachindex(W)]
+        
+        ∂L∂W_expr = zeros(Num,D,DX)
+        for d in 1:D
+            for dx in 1:DX
+                ∂L∂W_expr[d,dx] = Symbolics.derivative(Ls, W[d,dx])
+            end
+        end
 
         equs = (
             L = Ls,
@@ -25,14 +34,16 @@ struct LagrangianPDESystem
             ∂L∂W = ∂L∂W_expr,
         ) # set of expressions
 
-        ∂L∂U = [substitute_parameters(Symbolics.build_function(∂L∂U_expr[i], U, V, W,sparams...; nanmath = false),sparams) for i in eachindex(∂L∂U_expr)]
-        ∂L∂V = [substitute_parameters(Symbolics.build_function(∂L∂V_expr[i], U, V, W,sparams...; nanmath = false),sparams) for i in eachindex(∂L∂V_expr)]
-        ∂L∂W = [substitute_parameters(Symbolics.build_function(∂L∂W_expr[i], U, V, W,sparams...; nanmath = false),sparams) for i in eachindex(∂L∂W_expr)]
+        ∂L∂U = [Symbolics.eval(substitute_parameters(Symbolics.build_function(∂L∂U_expr[i], U, V, W,sparams...; nanmath = false),sparams)) for i in eachindex(∂L∂U_expr)]
+        ∂L∂V = [Symbolics.eval(substitute_parameters(Symbolics.build_function(∂L∂V_expr[i], U, V, W,sparams...; nanmath = false),sparams)) for i in eachindex(∂L∂V_expr)]
 
-        ∂L∂U = [Symbolics.eval(∂L∂U[i]) for i in eachindex(∂L∂U)]
-        ∂L∂V = [Symbolics.eval(∂L∂V[i]) for i in eachindex(∂L∂V)]
-        ∂L∂W = [Symbolics.eval(∂L∂W[i]) for i in eachindex(∂L∂W)]
-
+        ∂L∂W = zeros(D,DX)
+        for d in 1:D
+            for dx in 1:DX
+                ∂L∂W[d,dx] = Symbolics.eval(substitute_parameters(Symbolics.build_function(∂L∂W_expr[d,dx], U, V, W,sparams...; nanmath = false),sparams))
+            end
+        end
+        
         codes = (
             ∂L∂U = ∂L∂U,
             ∂L∂V = ∂L∂V,

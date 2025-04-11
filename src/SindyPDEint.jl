@@ -6,7 +6,7 @@ struct Sindy_PDE_Integrator{T,RT,basisType<:Basis{T}}
 
     spatial_quadrature::Vector{QuadratureRule{T}}
     RX::Vector{Int} # Number of quadrature points in each spatial dimension
-    grid_matrix # Quadrature grid points
+    grid_matrix # Quadrature grid points: [(t1,x1), (t1,x2), ...]
     grid_weights # Quadrature weights
 
     μ₁_t::Lagrange
@@ -24,7 +24,7 @@ struct Sindy_PDE_Integrator{T,RT,basisType<:Basis{T}}
         t_quadrature = QuadratureRules.GaussLegendreQuadrature(RT)
         x_quadratures = [QuadratureRules.GaussLegendreQuadrature(RX[i]) for i in eachindex(RX)]
 
-        dimensions = [RX..., RT]  # Number of quadrature points in each dimension
+        dimensions = [RT,RX...]  # Number of quadrature points in each dimension
         grid_matrix, grid_weights = construct_quadrature_grid(dimensions)
 
         μ₁_t = CompactBasisFunctions.Lagrange(RT)
@@ -42,15 +42,13 @@ struct Sindy_PDE_Integrator{T,RT,basisType<:Basis{T}}
     end
 end
 
-
-
-struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,DX,NΘ}
+struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,DX,NP}
     """
     RT = number of quadrature points in time
     RX = number of quadrature points in space
     D = dimension of output of u,v,w, i.e. scaler value function (D = 1) or vector function
     DX = dimension of input of u,v,w, i.e. number of spatial dimensions
-    NΘ = number of parameters in the expression
+    NP = number of parameters in the expression
     """
     x::Vector{ST}
 
@@ -62,29 +60,29 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,DX,NΘ}
     ∂L∂V_quad_values::Array{ST}
     ∂L∂W_quad_values::Array{ST}
 
-    ∂u∂θ_mat::Matrix{ST}
-    ∂v∂θ_mat::Matrix{ST}
-    ∂w∂θ_mat::Array{ST}
+    ∂u∂P_quad_values
+    ∂v∂P_quad_values
+    ∂w∂P_quad_values
 
     λ₁_x_coes::Vector{ST}
     λ₂_x_coes::Vector{ST}
 
     μ₁_t_coes::Matrix{ST}
     μ₂_t_coes::Matrix{ST}
-    function Sindy_PDE_IntegratorCache{ST,RT,RX,D,DX,NΘ}() where {ST,RT,RX,D,DX,NΘ}
-        x = zeros(ST, NΘ + 2 * RT + 2 * DX * RX)
+    function Sindy_PDE_IntegratorCache{ST,RT,RX,D,DX,NP}() where {ST,RT,RX,D,DX,NP}
+        x = zeros(ST, NP + 2 * RT + 2 * DX * RX)
 
-        u_quad_values = zeros(ST, D, DX, RX, RT)
-        v_quad_values = zeros(ST, D, DX, RX, RT)
-        w_quad_values = zeros(ST, D, DX, RX, RT)
+        u_quad_values = zeros(ST, D, RT, RX)
+        v_quad_values = zeros(ST, D, RT, RX)
+        w_quad_values = zeros(ST, D, DX, RT, RX)
 
-        ∂L∂U_quad_values = zeros(ST, D, RX, RT)
-        ∂L∂V_quad_values = zeros(ST, D, RX, RT)
-        ∂L∂W_quad_values = zeros(ST, D, DX, RX, RT)
+        ∂L∂U_quad_values = zeros(ST, D, RT, RX)
+        ∂L∂V_quad_values = zeros(ST, D, RT, RX)
+        ∂L∂W_quad_values = zeros(ST, D, DX, RT, RX)
 
-        ∂u∂P_mat = zeros(ST, D, NΘ)
-        ∂v∂p_mat = zeros(ST, D, NΘ)
-        ∂w∂P_mat = zeros(ST, D, DX, NΘ)
+        ∂u∂P_quad_values = zeros(ST, D, NP)
+        ∂v∂p_quad_values = zeros(ST, D, NP)
+        ∂w∂P_quad_values = zeros(ST, D, DX, NP)
 
         λ₁_x_coes = zeros(ST, RT)
         λ₂_x_coes = zeros(ST, RT)
@@ -94,7 +92,7 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,DX,NΘ}
         new(x,
             u_quad_values, v_quad_values, w_quad_values,
             ∂L∂U_quad_values, ∂L∂V_quad_values, ∂L∂W_quad_values,
-            ∂u∂P_mat, ∂v∂p_mat, ∂w∂P_mat,
+            ∂u∂P_quad_values, ∂v∂p_quad_values, ∂w∂P_quad_values,
             λ₁_x_coes, λ₂_x_coes,
             μ₁_t_coes, μ₂_t_coes)
     end
@@ -104,12 +102,15 @@ struct LPDEhistory
     u_expr::Vector{Num}
 end
 function Cache{ST}(problem, int::Sindy_PDE_Integrator; kwargs...) where {ST}
-    Sindy_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,problem.DX,int.symbolic_expr_basis.Nθ}(; kwargs...)
+    Sindy_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,problem.DX,int.symbolic_expr_basis.NP}(; kwargs...)
 end
 
 
 function components(x::AbstractVector{ST}, sol, params, int::GeometricIntegrator{<:PR_Integrator}, lagrangian_system) where {ST}
     local C = cache(int)
+    local P = int.init_w
+    local P_sizes = int.symbolic_expr_basis.P_sizes
+
     local ∂L∂U = lagrangian_system.codes.∂L∂U
     local ∂L∂V = lagrangian_system.codes.∂L∂V
     local ∂L∂W = lagrangian_system.codes.∂L∂W
@@ -124,26 +125,50 @@ function components(x::AbstractVector{ST}, sol, params, int::GeometricIntegrator
 
     local grid_matrix = int.grid_matrix
 
-    for dx in 1:DX
-        for i in 1:RX
-            for j in 1:RT
-                C.u_quad_values[dx, i, j] = u[d](rand(6), grid_matrix[i, j][2], grid_matrix[i, j][1])
-                C.v_quad_values[dx, i, j] = v[d](rand(6), grid_matrix[i, j][2], grid_matrix[i, j][1])
-                for d in 1:D
-                    C.w_quad_values[d,dx, i, j] = w[d,dx](rand(6), grid_matrix[i, j][2], grid_matrix[i, j][1])
+    for d in 1:D
+        for i in 1:RT
+            for j in 1:RX
+                C.u_quad_values[d, i, j] = u[d](P[d], grid_matrix[i, j][1], grid_matrix[i, j][2])
+                C.v_quad_values[d, i, j] = v[d](P[d], grid_matrix[i, j][1], grid_matrix[i, j][2])
+                for dx in 1:DX
+                    C.w_quad_values[d, dx, i, j] = w[d,dx](P[d], grid_matrix[i, j][1], grid_matrix[i, j][2])
                 end
             end
         end
     end
 
-    for i in 1:RX
-        for j in 1:RT
-            C.∂L∂U_quad_values[i, j] = ∂L∂U[1](u_quad_values[i, j], v_quad_values[i, j], w_quad_values[i, j], SineGordon.default_parameters)
-            C.∂L∂V_quad_values[i, j] = ∂L∂V[1](u_quad_values[i, j], v_quad_values[i, j], w_quad_values[i, j], SineGordon.default_parameters)
-            C.∂L∂W_quad_values[i, j] = ∂L∂W[1](u_quad_values[i, j], v_quad_values[i, j], w_quad_values[i, j], SineGordon.default_parameters)
+    for d in 1:D
+        for n in 1:P_sizes[d]
+
         end
     end
 
+    for d in 1:D
+        for i in 1:RT
+            for j in 1:RX
+                C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], SineGordon.default_parameters)
+                C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], SineGordon.default_parameters)
+                for dx in 1:DX
+                    C.∂L∂W_quad_values[d, dx, i, j] = ∂L∂W[d,dx](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], SineGordon.default_parameters)
+                end
+            end
+        end 
+    end
 
 
+end
+
+
+function create_interior_quadrature_points_derivative_mat(ST::Type, RT::Int,RX::Vector{Int}, D::Int,W_sizes::Vector{Int})
+    mat = []
+    for d in 1:D
+        push!(mat, zeros(ST, RT, RX..., W_sizes[d]))
+    end
+end
+
+function create_interior_quadrature_points_derivative_mat(ST::Type, RT::Int,RX::Vector{Int}, D::Int, DX::Int,W_sizes::Vector{Int})
+    mat = []
+    for d in 1:D
+        push!(mat, zeros(ST, RT, RX..., W_sizes[d]))
+    end
 end

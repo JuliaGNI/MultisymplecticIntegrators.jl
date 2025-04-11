@@ -52,11 +52,3 @@ module SineGordon
     export lagrangian, hamiltonian
 end
 
-
-for i in 1:2
-    for j in 1:5
-        res[i,j] = i + j
-    end
-end
-
-res = [2*res[i] for i in eachindex(res)]

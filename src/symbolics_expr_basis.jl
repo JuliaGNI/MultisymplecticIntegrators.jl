@@ -13,37 +13,62 @@ struct SindyPDEBasis
     v   
     w
 
-    Nθ::Int
-    function SindyPDEBasis(u_expr::Vector{Num}, P::Symbolics.Arr{Num, 1},t::Num,x::Symbolics.Arr{Num, 1})
-        v_expr = [Symbolics.derivative(u_expr[i],t) for i in eachindex(u_expr)]
+    NP::Int
+    P_sizes::Vector{Int}
 
-        w_expr = zeros(Symbolics.Arr{Num, 1}, length(u_expr), length(x))
+    function SindyPDEBasis(u_expr::Vector{Num}, P::Vector{Symbolics.Arr{Num, 1}},t::Num,x::Symbolics.Arr{Num, 1})
+        P_sizes = map(length,P)
+        NP = length(P)
+        D = length(u_expr)
+        DX = length(x)
+        
+        v_expr = [Symbolics.derivative(u_expr[i],t) for i in 1:D]
 
-        for d in eachindex(u_expr)
-            for dx in eachindex(x)
-                    w_expr[d,dx] = Symbolics.derivative(u_expr[d],x[dx])
+        # Compute the derivatives of u and v with respect to P
+        ∂u∂P = []
+        ∂v∂P = []
+        for d in 1:D
+            ∂u_expr∂P = zeros(Num,P_sizes[d])
+            ∂v_expr∂P = zeros(Num,P_sizes[d])
+            for i in 1:P_sizes[d]
+                ∂u_expr∂P[i] = Symbolics.derivative(u_expr[d],P[d][i])
+                ∂v_expr∂P[i] = Symbolics.derivative(v_expr[d],P[d][i])
+            end
+            dqdP = [Symbolics.eval(Symbolics.build_function(∂u_expr∂P[i],P, t, x)) for i in 1:P_sizes[d]]
+            dvdP = [Symbolics.eval(Symbolics.build_function(∂v_expr∂P[i],P, t, x)) for i in 1:P_sizes[d]]
+
+            push!(∂u∂P,dqdP)
+            push!(∂v∂P,dvdP)
+        end
+
+        #Derive the w expression
+        w_expr = zeros(Symbolics.Arr{Num, 1}, D, DX)
+        for d in 1:D
+            for dx in 1:DX
+                w_expr[d,dx] = Symbolics.derivative(u_expr[d],x[dx])
             end
         end
 
-        ∂u_expr∂P = [Symbolics.derivative(u_expr,P[i]) for i in eachindex(P)]
-        ∂v_expr∂P = [Symbolics.derivative(v_expr,P[i]) for i in eachindex(P)]
-        ∂w_expr∂P = [Symbolics.derivative(w_expr[i],P[j]) for i in eachindex(w_expr) for j in eachindex(P)]
-        
-        ∂u∂P = [Symbolics.eval(build_function(∂u_expr∂P[i], P, t, x)) for i in eachindex(∂u_expr∂P)]
-        ∂v∂P = [Symbolics.eval(build_function(∂v_expr∂P[i], P, t, x)) for i in eachindex(∂v_expr∂P)]
-        ∂w∂P = [Symbolics.eval(build_function(∂w_expr∂P[i], P, t, x)) for i in eachindex(∂w_expr∂P)]
+        # Compute the derivatives of w with respect to P
+        ∂w_expr∂P = Array{Vector{Num}}(undef, D, DX)
+        ∂w∂P = Array{Vector{Function}}(undef, D, DX)
+        for d in 1:D
+            for dx in 1:DX
+                ∂w_expr∂P[d, dx] = [Symbolics.derivative(w_expr[d, dx], P[j]) for j in 1:NP]
+                ∂w∂P[d, dx] = Symbolics.eval(build_function(∂w_expr∂P[d, dx], P, t, x))
+            end
+        end
 
-        u = eval(build_function(u_expr, P, t, x))
-        v = eval(build_function(v_expr, P, t, x))
-        w = zeros(Function, length(u_expr), length(x))
-
-        for d in eachindex(u_expr)
-            for dx in eachindex(x)
+        # Build the callable functions
+        u = [eval(build_function(u_expr[d], P, t, x)) for d in 1:D]
+        v = [eval(build_function(v_expr[d], P, t, x)) for d in 1:D]
+        w = zeros(Function, D,DX)
+        for d in 1:D
+            for dx in 1:DX
                 w[d,dx] = eval(build_function(w_expr[d,dx], P, t, x))
             end
         end
 
-        Nθ = length(P)
-        new(u_expr, v_expr, w_expr, P, ∂u∂P, ∂v∂P, ∂w∂P, u, v, w, Nθ)
+        new(u_expr, v_expr, w_expr, P, ∂u∂P, ∂v∂P, ∂w∂P, u, v, w, NP, P_sizes)
     end
 end
