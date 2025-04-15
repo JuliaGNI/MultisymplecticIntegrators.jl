@@ -2,7 +2,7 @@
 
 julia_version = "1.11.2"
 manifest_format = "2.0"
-project_hash = "279002f6597cf5ee302b748df8fb2313ff65a94d"
+project_hash = "a66d2e02d5b02ff0bf02d88026d09bdde9943b19"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "e2478490447631aedba0823d4d7a80b2cc8cdb32"
@@ -436,6 +436,17 @@ deps = ["LinearAlgebra", "Printf", "Random", "libblastrampoline_jll"]
 git-tree-sha1 = "54ee4866eb8c982ee23cf79230ca0aaf916c382b"
 uuid = "14197337-ba66-59df-a3e3-ca00e7dcff7a"
 version = "0.3.15"
+
+[[deps.GeometricBase]]
+git-tree-sha1 = "a3f7967d9be5da465de9e8536951f46d1ef14f0d"
+uuid = "9a0b12b7-583b-4f04-aa1f-d8551b6addc9"
+version = "0.10.11"
+
+[[deps.GeometricEquations]]
+deps = ["GeometricBase", "Parameters", "Random"]
+git-tree-sha1 = "2bd4fa9a494c14798c45f3d13d7720ea02e0930c"
+uuid = "c85262ba-a08a-430a-b926-d29770767bf2"
+version = "0.18.0"
 
 [[deps.HypergeometricFunctions]]
 deps = ["LinearAlgebra", "OpenLibm_jll", "SpecialFunctions"]

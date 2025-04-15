@@ -5,7 +5,7 @@ struct Sindy_PDE_Integrator{T,RT,basisType<:Basis{T}}
 
 
     spatial_quadrature::Vector{QuadratureRule{T}}
-    RX::Vector{Int} # Number of quadrature points in each spatial dimension
+    RX::Vector{Int} # Number of quadrature points in spatial dimension, for simplicity, set the same for all dimensions
     grid_matrix # Quadrature grid points: [(t1,x1), (t1,x2), ...]
     grid_weights # Quadrature weights
 
@@ -18,7 +18,7 @@ struct Sindy_PDE_Integrator{T,RT,basisType<:Basis{T}}
     init_w::Vector{Vector{T}}
     nstages::Int
 
-    function Sindy_PDE_Integrator(basis, RT::Int, RX::Vector{Int}, init_w::Vector{Vector{T}};
+    function Sindy_PDE_Integrator(basis, RT::Int, RX::Int, init_w::Vector{Vector{T}};
         nstages::Int=10) where {T}
         @assert length(RX) == length(init_w)
 
@@ -73,7 +73,7 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,DX,NP}
 
     tem_P::Vector{Vector{ST}} # temporary storage for P values
     function Sindy_PDE_IntegratorCache{ST,RT,RX,D,DX,NP}(P_sizes) where {ST,RT,RX,D,DX,NP}
-        x = zeros(ST, NP + 2 * RT + 2 * DX * RX) # TODO: how to deal with RX being a vector
+        x = zeros(ST, NP + 2 * D * RX + 2* D * DX * RT ) # TODO: how to deal with RX being a vector
 
         u_quad_values = zeros(ST, D, RT, RX...)
         v_quad_values = zeros(ST, D, RT, RX...)
@@ -87,11 +87,26 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,DX,NP}
         ∂v∂p_quad_values = create_interior_quadrature_points_derivative_mat(ST, RT,RX,D,P_sizes)
         ∂w∂P_quad_values = create_interior_quadrature_points_derivative_mat(ST, RT,RX,D,DX,P_sizes)
 
-        λ₁_x_coes = zeros(ST, RT)
-        λ₂_x_coes = zeros(ST, RT)
+        λ₁_x_coes = zeros(ST, D, DX, RX...)
+        λ₂_x_coes = zeros(ST, D, DX, RX...)
+        μ₁_t_coes = zeros(ST, D, DX, RT)
+        μ₂_t_coes = zeros(ST, D, DX, RT)
 
-        μ₁_t_coes = zeros(ST, DX, RX...)
-        μ₂_t_coes = zeros(ST, DX, RX...)
+        u₁_quad_value = zeros(ST,D,RT) # left boundary, i.e. t = 0
+        u₂_quad_value = zeros(ST,D,RT) # right boundary, i.e. t = T
+        v₁_quad_value = zeros(ST,D,RT)
+        v₂_quad_value = zeros(ST,D,RT)
+        w₁_quad_value = zeros(ST,D,DX,RT)
+        w₂_quad_value = zeros(ST,D,DX,RT)
+
+        u_bottom_quad_value = zeros(ST,D,RX) # bottom boundary, i.e. x = 0
+        u_top_quad_value = zeros(ST,D,RX) # top boundary, i.e. x = L
+        v_bottom_quad_value = zeros(ST,D,RX)
+        v_top_quad_value = zeros(ST,D,RX)
+        w_bottom_quad_value = zeros(ST,D,DX,RX...)
+        w_top_quad_value = zeros(ST,D,DX,RX...)
+
+
 
         tem_P = create_boundary_derivative_vector(ST, D, P_sizes)
         new(x,
@@ -107,11 +122,31 @@ end
 struct LPDEhistory
     u_expr::Vector{Num}
 end
+
 function Cache{ST}(problem, int::Sindy_PDE_Integrator; kwargs...) where {ST}
     Sindy_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,problem.DX,int.symbolic_expr_basis.NP}(; kwargs...)
 end
 
-function initial_guess()
+function initial_guess(cache,lag_sys,init_w,int)
+    local x = cache.x
+    local P_sizes = int.symbolic_expr_basis.P_sizes
+    local NP = int.symbolic_expr_basis.NP
+    local RT = int.RT
+    local RX = int.RX
+
+    local u = int.symbolic_expr_basis.u
+    local v = int.symbolic_expr_basis.v
+    local w = int.symbolic_expr_basis.w
+
+    start_idx = 1
+    for (d,P_size) in enumerate(P_sizes)
+        x[start_idx:start_idx+P_size-1]= init_w[d][:]
+        start_idx += P_size
+    end
+
+    temp_u = u()
+
+    x[NP+1:NP+RT] = lag_sys.∂L∂V()
 end
 
 
