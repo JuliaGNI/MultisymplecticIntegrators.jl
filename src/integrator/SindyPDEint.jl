@@ -42,6 +42,9 @@ struct Sindy_PDE_Integrator{T,RT,basisType<:Basis{T}}
     end
 end
 
+default_solver(::Sindy_PDE_Integrator) = Newton()
+
+
 struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP}
     """
     RT = number of quadrature points in time
@@ -234,10 +237,10 @@ function components(x::AbstractVector{ST}, sol, params, int::GeometricIntegrator
     local tspan = SineGordon.tspan
     local x_domain = SineGordon.xspan[2] - SineGordon.xspan[1]
 
+    local λ₀_x = int.λ₀_x
     local λ₁_x = int.λ₁_x
-    local λ₂_x = int.λ₂_x
+    local μ₀_t = int.μ₀_t
     local μ₁_t = int.μ₁_t
-    local μ₂_t = int.μ₂_t
 
     start_idx = 1
     for (d,P_size) in enumerate(P_sizes)
@@ -418,7 +421,4 @@ function create_boundary_derivative_vector(ST::Type, D::Int,P_sizes::Vector{Int}
     return mat
 end
 
-RX = 8
-x_quadratures = QuadratureRules.GaussLegendreQuadrature(RX)
-λ₁_x = CompactBasisFunctions.Lagrange(x_quadratures.nodes)
-λ₁_x.b
+
