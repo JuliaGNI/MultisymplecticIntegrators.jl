@@ -21,8 +21,8 @@ module SineGordon
     const DX = 1
 
     const tstep = 0.01
-    const tspan = (0.0, 10.0)
-    const xspan = (0.0, 10.0)
+    const tspan = (0.0, 1.0)
+    const xspan = (0.0, 1.0)
 
     const default_parameters = (
         c=1.0,
