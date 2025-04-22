@@ -4,8 +4,11 @@
 """
 
 
-
 module SineGordon
+
+    export lagrangian,hamiltonian,initial_condition,boundary_condition,lpdeproblem
+
+    
     using Parameters: @unpack
     using EulerLagrange
     using LinearAlgebra
@@ -16,10 +19,12 @@ module SineGordon
 
     const tstep = 0.01
     const tspan = (0.0, 1.0)
+
+    const xstep = 0.01
     const xspan = (0.0, 1.0)
 
     const c = 4.0 # wave speed square
-    const velotity = 1.0
+    const velocity = 1.0
     const γ = 1/sqrt(1-velocity^2/c)
 
     const default_parameters = (
@@ -53,6 +58,55 @@ module SineGordon
          w = [exact_w(ti,xi) for ti in t, xi in x])
     end
 
+    function initial_condition(x::Float64)
+        u₀ = exact_u(0,x)
+        v₀ = exact_v(0,x)
+        w₀ = exact_w(0,x)
+        return (u = u₀, v = v₀, w = w₀)
+    end
+
+    function initial_condition(x::Vector{Float64})
+        u₀ = [exact_u(0,xi) for xi in x]
+        v₀ = [exact_v(0,xi) for xi in x]
+        w₀ = [exact_w(0,xi) for xi in x]
+        return (u = u₀, v = v₀, w = w₀)
+    end
+
+    function left_boundary_condition(t::Float64)
+        u₀ = exact_u(t,xspan[1])
+        v₀ = exact_v(t,xspan[1])
+        w₀ = exact_w(t,xspan[1])
+        return (u = u₀, v = v₀, w = w₀)
+    end
+
+    function left_boundary_condition(t::Vector{Float64})
+        u₀ = [exact_u(ti,xspan[1]) for ti in t]
+        v₀ = [exact_v(ti,xspan[1]) for ti in t]
+        w₀ = [exact_w(ti,xspan[1]) for ti in t]
+        return (u = u₀, v = v₀, w = w₀)
+    end
+
+    function right_boundary_condition(t::Float64)
+        u₀ = exact_u(t,xspan[2])
+        v₀ = exact_v(t,xspan[2])
+        w₀ = exact_w(t,xspan[2])
+        return (u = u₀, v = v₀, w = w₀)
+    end
+
+    function right_boundary_condition(t::Vector{Float64})
+        u₀ = [exact_u(ti,xspan[2]) for ti in t]
+        v₀ = [exact_v(ti,xspan[2]) for ti in t]
+        w₀ = [exact_w(ti,xspan[2]) for ti in t]
+        return (u = u₀, v = v₀, w = w₀)
+    end
+
+    function boundary_condition(t)
+        bc₀ = left_boundary_condition(t)
+        bc₁ = right_boundary_condition(t)
+        return (bc₀ = bc₀, bc₁ = bc₁)
+    end
+
+
     function lagrangian(t, x, u, v, w, params)
         @unpack c = params
         1 / 2 * (c * v[1]^2 - w[1,1]^2) + (1 + cos(u[1]))
@@ -63,19 +117,19 @@ module SineGordon
         1 / 2 * (c * v[1]^2 + w[1]^2) - (1 + cos(u[1]))
     end
 
-    function lpdeproblem(u₀=u₀, v₀=v₀, w₀=w₀; tspan=tspan, tstep=tstep, xspan=xspan, xstep=xstep, parameters=default_parameters)
-        @assert tstep < xstep "tstep must be less than xstep for stability"
+    function lpdeproblem(lagrangian,initial_condition,boundary_condition;tspan=tspan, tstep=tstep, xspan=xspan,xstep = xstep, params=default_parameters)
+        @unpack c = params
+        @assert tstep^2 < c*xstep^2 "tstep^2 < c*xstep^2 must hold for CFL condition"
         @assert tspan[1] < tspan[2] "tspan must be increasing"
         @assert xspan[1] < xspan[2] "xspan must be increasing"
 
         t,x,U,V,W = lagrangianPDE_variables(1, 1) # U,V,W does not have t,x dependence 
-        sparams = symbolize(parameters)
+        sparams = symbolize(params)
         lag_sys = LagrangianPDESystem(lagrangian(t,x,U,V,W, sparams), t,x,U,V,W, sparams)
-        #TODO LPDEProblem(lag_sys, tspan, tstep, xspan=xspan, xstep=xstep, u₀, v₀, w₀; v̄=θ̇, parameters=parameters)
+        LPDEProblem(lag_sys,initial_condition,boundary_condition, tspan, tstep, xspan=xspan, xstep=xstep; params=params)
     end
 
-    export lagrangian, hamiltonian
+
 end
 
 
-sol = [exact_u(ti,xi) for ti in 0:0.1:1, xi in 0:0.1:2]
