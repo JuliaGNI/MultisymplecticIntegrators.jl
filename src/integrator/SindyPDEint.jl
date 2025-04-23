@@ -45,7 +45,7 @@ end
 default_solver(::Sindy_PDE_Integrator) = Newton()
 
 
-struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP}
+struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     """
     RT = number of quadrature points in time
     RX = number of quadrature points in space

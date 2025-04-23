@@ -1,5 +1,5 @@
 
-struct LagrangianPDESystem
+struct LPDESystem
     L
     t 
     x
@@ -9,7 +9,7 @@ struct LagrangianPDESystem
     parameters
     equations
     functions
-    function LagrangianPDESystem(L,t,x,U,V,W,params = NamedTuple();simplify = true, scalarize = true)
+    function LPDESystem(L,t,x,U,V,W,params = NamedTuple();simplify = true, scalarize = true)
 
         DX = length(x)
         D = length(U)
@@ -56,7 +56,7 @@ end
 
 
 
-function lagrangianPDE_variables(variable_dimension::Integer,x_domain_dimension::Integer)
+function LPDE_variables(variable_dimension::Integer,x_domain_dimension::Integer)
     @variables t
     @variables x[1:x_domain_dimension]
     # @variables (u(x...,t))[1:variable_dimension]     #@variables (u(sym_x,sym_t))[1:variable_dimension] to not expand spatial variable x
