@@ -12,7 +12,8 @@ struct LPDEProblem <: PDEProblem
     xspan::Vector{Tuple{Float64, Float64}}
 
     params
-    function LPDEProblem(lag_sys,ics_function,bcs_function,ics_values,tspan, tstep, xspan, xstep, params)
+    internal
+    function LPDEProblem(lag_sys,ics_function,bcs_function,ics_values,tspan, tstep, xspan, xstep, params,internal)
         new(
             lagrangian_system = lag_sys,
             ics_function = ics_function,
@@ -22,7 +23,8 @@ struct LPDEProblem <: PDEProblem
             tstep = tstep,
             xspan = xspan,
             xstep = xstep,
-            params = params
+            params = params,
+            internal = internal
         )
     end
 end
