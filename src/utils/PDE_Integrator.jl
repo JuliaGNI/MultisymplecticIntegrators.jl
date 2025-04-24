@@ -42,8 +42,8 @@ function integrate(problem::PDEProblem, method::PDEMethod; kwargs...)
 end
 
 function integrate(integrator::AbstractPDEIntegrator)
-    solution = LPDE_solution(problem(integrator))
-    integrate!(solution, integrator)
+    sol = LPDE_solution(problem(integrator))
+    integrate!(sol, integrator)
 end
 
 function integrate!(sol::GeometricPDESolution, int::AbstractPDEIntegrator)
@@ -58,35 +58,51 @@ function integrate!(sol::GeometricPDESolution, int::AbstractPDEIntegrator, n₁:
     @assert n₂ ≤ ntime(sol)
 
     # copy initial condition from solution to solutionstep and initialize
-    solstep = solutionstep(int, sol[n₁-1])
-
+    # solstep = solutionstep(int, sol[n₁-1])
+ß
     # loop over time steps
-    for n in n₁:n₂
+    for sol.current_step in n₁:n₂
         # integrate one step and copy solution from cache to solution
-        sol[n] = integrate!(solstep, int)
-
-        # try
-        #     sol[n] = integrate!(int)
-        # catch ex
-        #     tstr = " in time step " * string(n)
-        #
-        #     if m₁ ≠ m₂
-        #         tstr *= " for initial condition " * string(m)
-        #     end
-        #
-        #     tstr *= "."
-        #
-        #     if isa(ex, DomainError)
-        #         @warn("Domain error" * tstr)
-        #     elseif isa(ex, ErrorException)
-        #         @warn("Simulation exited early" * tstr)
-        #         @warn(ex.msg)
-        #     else
-        #         @warn(string(typeof(ex)) * tstr)
-        #         throw(ex)
-        #     end
-        # end
+        integrate!(sol, int, sol.current_step)
+        sol.current_step += 1
+        sol.current_time += int.problem.tstep
     end
 
     return sol
+end
+
+function integrate!(sol::GeometricPDESolution, int::AbstractPDEIntegrator, current_step::Int)
+
+    initial_guess!(cache(int),sol,int,current_step)
+
+    integrate_step!(sol, int)
+
+    return sol
+end
+
+
+
+function integrate_step!(sol::GeometricPDESolution, int::AbstractPDEIntegrator)
+    # call nonlinear solver
+    solve!(cache(int).x, (b,x) -> residual!(b, x, sol, int), solver(int))
+
+    # print solver status
+    # println(status(solver))
+
+    # check if solution contains NaNs or error bounds are violated
+    # println(meets_stopping_criteria(status(solver)))
+
+    # compute final update
+    # update!(sol, nlsolution(int), int)
+end
+
+function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol::GeometricPDESolution, int::AbstractPDEIntegrator) where {ST}
+    # check that x and b are compatible
+    @assert axes(x) == axes(b)
+
+    # compute stages of implicit Runge-Kutta methods from nonlinear solver solution x
+    components!(x, sol, int)
+
+    # compute right-hand side b of nonlinear solver
+    residual!(b, sol, int)
 end

@@ -1,8 +1,3 @@
-
-
-using QuadratureRules
-using IterTools
-
 function construct_quadrature_grid(dimensions::Vector{Int})
     # Create quadrature rules for each dimension
     quadrature_rules = [QuadratureRules.GaussLegendreQuadrature(R) for R in dimensions]

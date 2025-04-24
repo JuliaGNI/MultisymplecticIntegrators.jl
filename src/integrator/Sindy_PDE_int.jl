@@ -1,4 +1,4 @@
-struct Sindy_PDE_Integrator{T,RT,basisType<:Basis{T}}
+struct Sindy_PDE_Integrator{T,RT,basisType<:Basis{T}} <: AbstractPDEIntegrator
     symbolic_expr_basis
     time_quadrature::QuadratureRule{T,NNODES}
     RT::Int # Number of quadrature points in time
@@ -12,13 +12,12 @@ struct Sindy_PDE_Integrator{T,RT,basisType<:Basis{T}}
     μ₁_t::Lagrange
 
     λ₀_x::Lagrange
-    λ₁_x::Lagrange
+    # λ₁_x::Lagrange
 
     init_w::Vector{Vector{T}}
-    nstages::Int
+    nstages::Int # ?
 
-    function Sindy_PDE_Integrator(basis, RT::Int, RX::Int, init_w::Vector{Vector{T}};
-        nstages::Int=10) where {T}
+    function Sindy_PDE_Integrator(basis, RT::Int, RX::Int, init_w::Vector{Vector{T}};nstages::Int=10) where {T}
         @assert length(RX) == length(init_w)
 
         t_quadrature = QuadratureRules.GaussLegendreQuadrature(RT)
@@ -31,19 +30,18 @@ struct Sindy_PDE_Integrator{T,RT,basisType<:Basis{T}}
         μ₁_t = CompactBasisFunctions.Lagrange(t_quadrature.nodes)
 
         λ₀_x = CompactBasisFunctions.Lagrange(x_quadrature.nodes)
-        λ₁_x = CompactBasisFunctions.Lagrange(x_quadrature.nodes)
+        # λ₁_x = CompactBasisFunctions.Lagrange(x_quadrature.nodes)
 
         new{T,RT,typeof(basis)}(basis, t_quadrature, RT,
             x_quadratures, RX,
             grid_matrix, grid_weights,
             μ₀_t, μ₁_t,
-            λ₀_x, λ₁_x,
+            λ₀_x, #λ₁_x,
             init_w, nstages)
     end
 end
 
 default_solver(::Sindy_PDE_Integrator) = Newton()
-
 
 struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     """
@@ -177,68 +175,65 @@ struct LPDEhistory
     u_expr::Vector{Num}
 end
 
-function Cache{ST}(problem, int::Sindy_PDE_Integrator; kwargs) where {ST}
-    Sindy_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,problem.int.symbolic_expr_basis.NP}(; kwargs)
+function Cache{ST}(problem, int::AbstractPDEIntegrator{<:Sindy_PDE_Integrator}; kwargs) where {ST}
+    Sindy_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,problem.int.method.symbolic_expr_basis.NP}(; kwargs)
 end
 
-function initial_guess(cache,lag_sys,init_w,int)
-    local x = nlsolution(int)
-    local P_sizes = int.symbolic_expr_basis.P_sizes
-    local NP = int.symbolic_expr_basis.NP
+function initial_guess(cache,sol,int,current_step)
+    local P_sizes = int.method.symbolic_expr_basis.P_sizes
+    local NP = int.method.symbolic_expr_basis.NP
     local RT = int.RT
     local RX = int.RX
     local C = cache(int)
 
-
-    local u = int.symbolic_expr_basis.u
-    local v = int.symbolic_expr_basis.v
-    local w = int.symbolic_expr_basis.w
-
     start_idx = 1
     for (d,P_size) in enumerate(P_sizes)
-        x[start_idx:start_idx+P_size-1]= init_w[d][:]
+        if current_step == 1
+            C.x[start_idx:start_idx+P_size-1]= init_w[d][:]
+        else
+            C.x[start_idx:start_idx+P_size-1] = sol.x[current_step-1][start_idx:start_idx+P_size-1]
+        end
+
         start_idx += P_size
     end
 
     for d in 1:D
-        x[NP+1:NP+RX] = lag_sys.∂L∂V[d].(C.ut₀_quad_values[d,:], C.vt₀_quad_values[d,:], C.wt₀_quad_values[d,:], SineGordon.default_parameters)
-        x[NP+RX+1:NP+RX+RT] = lag_sys.∂L∂W[d].(C.ux₀_quad_values[d,:], C.vx₀_quad_values[d,:], C.wx₀_quad_values[d,:], SineGordon.default_parameters)
-        x[NP+RX+RT+1:NP+RX+2*RT] = lag_sys.∂L∂W[d].(C.ux₁_quad_values[d,:], C.vx₁_quad_values[d,:], C.wx₁_quad_values[d,:], SineGordon.default_parameters)
+        C.x[NP+1:NP+RX] = lag_sys.∂L∂V[d].(C.ut₀_quad_values[d,:], C.vt₀_quad_values[d,:], C.wt₀_quad_values[d,:], int.problem.default_parameters)
+        C.x[NP+RX+1:NP+RX+RT] = lag_sys.∂L∂W[d].(C.ux₀_quad_values[d,:], C.vx₀_quad_values[d,:], C.wx₀_quad_values[d,:], int.problem.default_parameters)
+        C.x[NP+RX+RT+1:NP+RX+2*RT] = lag_sys.∂L∂W[d].(C.ux₁_quad_values[d,:], C.vx₁_quad_values[d,:], C.wx₁_quad_values[d,:], int.problem.default_parameters)
     end
 
 end
 
 
-function components(x::AbstractVector{ST}, sol, params, int::GeometricIntegrator{<:PR_Integrator}, lagrangian_system) where {ST}
+function components(x::AbstractVector{ST}, sol, int::AbstractPDEIntegrator{<:Sindy_PDE_Integrator}) where {ST}
     local C = cache(int)
 
-    local P_sizes = int.symbolic_expr_basis.P_sizes
-    local NP = int.symbolic_expr_basis.NP
+    local P_sizes = int.method.symbolic_expr_basis.P_sizes
+    local NP = int.method.symbolic_expr_basis.NP
     local RT = int.RT
     local RX = int.RX
-    local D = SineGordon.D #TODO D should from the problem be used
+    local D = int.problem.D #TODO D should from the problem be used
 
-    local ∂L∂U = lagrangian_system.codes.∂L∂U
-    local ∂L∂V = lagrangian_system.codes.∂L∂V
-    local ∂L∂W = lagrangian_system.codes.∂L∂W
+    local ∂L∂U = int.problem.lagrangian_system.codes.∂L∂U
+    local ∂L∂V = int.problem.lagrangian_system.codes.∂L∂V
+    local ∂L∂W = int.problem.lagrangian_system.codes.∂L∂W
 
-    local u = int.symbolic_expr_basis.u # f = f(Parameters,t,x)
-    local v = int.symbolic_expr_basis.v
-    local w = int.symbolic_expr_basis.w
+    local u = int.method.symbolic_expr_basis.u # f = f(Parameters,t,x)
+    local v = int.method.symbolic_expr_basis.v
+    local w = int.method.symbolic_expr_basis.w
 
-    local ∂u∂P = int.symbolic_expr_basis.∂u∂P
-    local ∂v∂P = int.symbolic_expr_basis.∂v∂P
-    local ∂w∂P = int.symbolic_expr_basis.∂w∂P
+    local ∂u∂P = int.method.symbolic_expr_basis.∂u∂P
+    local ∂v∂P = int.method.symbolic_expr_basis.∂v∂P
+    local ∂w∂P = int.method.symbolic_expr_basis.∂w∂P
 
     local grid_matrix = int.grid_matrix
     local x_quad_nodes = int.spatial_quadrature.nodes
     local t_quad_nodes = int.time_quadrature.nodes
-    local xspan = SineGordon.xspan
-    local tspan = SineGordon.tspan
-    local x_domain = SineGordon.xspan[2] - SineGordon.xspan[1]
+    local xspan = int.problem.xspan
+    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
 
     local λ₀_x = int.λ₀_x
-    local λ₁_x = int.λ₁_x
     local μ₀_t = int.μ₀_t
     local μ₁_t = int.μ₁_t
 
@@ -282,9 +277,9 @@ function components(x::AbstractVector{ST}, sol, params, int::GeometricIntegrator
     for d in 1:D
         for i in 1:RT
             for j in 1:RX
-                C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], SineGordon.default_parameters)
-                C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], SineGordon.default_parameters)
-                C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], SineGordon.default_parameters)
+                C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], int.problem.default_parameters)
+                C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], int.problem.default_parameters)
+                C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], int.problem.default_parameters)
             end
         end 
     end
@@ -312,11 +307,9 @@ function components(x::AbstractVector{ST}, sol, params, int::GeometricIntegrator
         C.μ₁_t_coes[d,:] = x[NP+RX+RT+1:NP+RX+2*RT]
     end
 
-
     for d in 1:D
         for rx in 1:RX
             C.λ₀_quad_values[d,rx] = sum([C.λ₀_x_coes[d,i]*λ₀_x.b[i](x_quad_nodes[i]) for i in 1:RX])
-            C.λ₁_quad_values[d,rx] = sum([C.λ₁_x_coes[d,i]*λ₁_x.b[i](x_quad_nodes[i]) for i in 1:RX])
         end
 
         for rt in 1:RT
@@ -328,16 +321,16 @@ function components(x::AbstractVector{ST}, sol, params, int::GeometricIntegrator
 end
 
 
-function residual(b::Vector{ST}, sol, params, int::GeometricIntegrator{<:NonLinear_OneLayer_Lux}) where {ST}
-    local D = SineGordon.D #TODO D should from the problem be used
+function residual(b::Vector{ST}, sol, int::AbstractPDEIntegrator{<:Sindy_PDE_Integrator}) where {ST}
+    local D = int.problem.D #TODO D should from the problem be used
     local RT = int.RT
     local RX = int.RX
-    local P_sizes = int.symbolic_expr_basis.P_sizes
-    local NP = int.symbolic_expr_basis.NP
+    local P_sizes = int.method.symbolic_expr_basis.P_sizes
+    local NP = int.method.symbolic_expr_basis.NP
 
     local quad_b = int.grid_weights
     local C = cache(int)
-    local x_domain = SineGordon.xspan[2] - SineGordon.xspan[1]
+    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
     local brx = int.spatial_quadrature.weights
     local brt = int.time_quadrature.weights
 
