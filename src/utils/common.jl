@@ -86,3 +86,33 @@ function substitute_parameters(code, params)
 end
 
 
+function LPDE_variables(variable_dimension::Integer,x_domain_dimension::Integer)
+    @variables t
+    @variables x[1:x_domain_dimension]
+    # @variables (u(x...,t))[1:variable_dimension]     #@variables (u(sym_x,sym_t))[1:variable_dimension] to not expand spatial variable x
+    # @variables (v(x...,t))[1:variable_dimension]
+    # @variables (w(x...,t))[1:variable_dimension,1:x_domain_dimension] # what is the dimension of w?
+    @variables U[1:variable_dimension]     
+    @variables V[1:variable_dimension]
+    @variables W[1:variable_dimension]
+    # @variables W[1:variable_dimension,1:x_domain_dimension]
+
+    return (t, x, U, V, W)
+end
+
+function lagrangianPDE_derivatives(t,x,u,v,w)
+
+    Dt = Differential(t)
+    Dx = collect(Differential.(x))
+    Du = collect(Differential.(u))
+    Dv = collect(Differential.(v))
+    Dw = collect(Differential.(w))
+    # Dx = Differential(x)
+    # Du = Differential(u)
+    # Dv = Differential(v)
+    # Dw = Differential(w)
+
+    return (Dt, Dx, Du, Dv, Dw)
+end
+
+GeometricIntegrators.Integrators.nlsolution(c::PDEIntegratorCache) = c.x

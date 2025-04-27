@@ -1,5 +1,6 @@
 struct LPDEProblem <: PDEProblem
     lagrangian_system
+    D::Int
     ics_function::Function
     bcs_function::Function
 
@@ -8,23 +9,28 @@ struct LPDEProblem <: PDEProblem
     tspan::Tuple{Float64, Float64}
     tstep::Float64
 
+    xspan::Tuple{Float64, Float64}
     xstep::Float64
-    xspan::Vector{Tuple{Float64, Float64}}
 
     params
     internal
-    function LPDEProblem(lag_sys,ics_function,bcs_function,ics_values,tspan, tstep, xspan, xstep, params,internal)
+    function LPDEProblem(lag_sys,ics_function,bcs_function,ics_values,tspan, tstep, xspan, xstep, params;internal = nothing)
         new(
-            lagrangian_system = lag_sys,
-            ics_function = ics_function,
-            bcs_function = bcs_function,
-            ics_values = ics_values,
-            tspan = tspan,
-            tstep = tstep,
-            xspan = xspan,
-            xstep = xstep,
-            params = params,
-            internal = internal
+            lag_sys,
+            lag_sys.D,
+            ics_function,
+            bcs_function,
+            ics_values,
+            tspan,
+            tstep,
+            xspan,
+            xstep,
+            params,
+            internal
         )
     end
 end
+
+datatype(problem::LPDEProblem) = eltype(problem.ics_values.u)
+timestep(problem::LPDEProblem) = problem.tstep
+spacestep(problem::LPDEProblem) = problem.xstep

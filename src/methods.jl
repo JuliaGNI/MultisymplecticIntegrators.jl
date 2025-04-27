@@ -10,6 +10,8 @@ abstract type PDEIntegratorCache{DT,D} <: IntegratorCache{DT,D} end
 using GeometricIntegrators:AbstractIntegrator
 abstract type AbstractPDEIntegrator <: AbstractIntegrator end
 
-using GeometricSolutions:AbstractSolution
-abstract type GeometricPDESolution <: AbstractSolution end
+# using GeometricSolutions:AbstractSolution
+abstract type AbstractPDESolution end #<: AbstractSolution
 
+# using CompactBasisFunctions: Basis
+abstract type AbstractPDEBasis end #<: Basis 

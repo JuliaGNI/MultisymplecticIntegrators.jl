@@ -1,18 +1,26 @@
+cd("..")
+using Pkg
+Pkg.activate(".")
+using GeometricIntegrators
+
 using MultiSymplectic
 using Symbolics
 
-@variables P[1:6] t x[1]
-u_expr = P[1] * sin(P[2] * t[1] + P[3]) * cos(P[4] * x[1] + P[5]) + P[6]
+@variables t x p[1:3]
+u_expr = p[1] * atan(exp(p[2] * (x - p[3] * t)))
+sindy_basis = SindyPDEBasis([u_expr], [p], t, [x])
 
-sindy_base = MultiSymplectic.SindyPDEBasis([u_expr], P, t, x)
+RT = 4
+RX = 8
+init_p = [4,1.15470,1.02]
 
-function lagrangian(t, x, u, v, w, params)
-    @unpack c = params
-    1 / 2 * (c * v[1]^2 - w[1,1]^2) + (1 + cos(u[1]))
-end
-t,x,U,V,W = lagrangianPDE_variables(1, 1) # U,V,W does not have t,x dependence 
-const default_parameters = (
-    c=1.0,
-)
-sparams = symbolize(default_parameters)
-lag_sys = LagrangianPDESystem(lagrangian(t,x,U,V,W, sparams), t,x,U,V,W, sparams)
+sindy_int = Sindy_PDE_Integrator(sindy_basis,RT,RX,init_p)
+
+lpde = MultiSymplectic.SineGordon.lpdeproblem()
+sol = MultiSymplectic.integrate(lpde,sindy_int)
+
+
+# using GeometricProblems.HarmonicOscillator
+
+# lode = HarmonicOscillator.lodeproblem()
+# sol = integrate(lode, ImplicitMidpoint())
