@@ -50,7 +50,7 @@ function integrate(problem::PDEProblem, method::PDEMethod; kwargs...)
 end
 
 function integrate(integrator::AbstractPDEIntegrator)
-    sol = LPDE_solution(problem(integrator))
+    sol = LPDE_solution(problem(integrator),internal = internal_variables(integrator,problem(integrator)))
     integrate!(sol, integrator)
 end
 
@@ -70,29 +70,22 @@ function integrate!(sol::AbstractPDESolution, int::AbstractPDEIntegrator, n₁::
     # loop over time steps
     for sol.current_step in n₁:n₂
         # integrate one step and copy solution from cache to solution
-        integrate!(sol, int, sol.current_step)
-        sol.current_step += 1
-        sol.t += int.problem.tstep
+        integrate_step!(sol, int)
     end
 
     return sol
 end
 
-function integrate!(sol::AbstractPDESolution, int::AbstractPDEIntegrator, current_step::Int)
-
-    initial_guess!(cache(int),sol,int,current_step)
-
-    integrate_step!(sol, int)
-
-    return sol
-end
-
-
+# function integrate!(sol::AbstractPDESolution, int::AbstractPDEIntegrator, n::Int)
+#     integrate_step!(sol, int)
+#     return sol
+# end
 
 function integrate_step!(sol::AbstractPDESolution, int::AbstractPDEIntegrator)
     # call nonlinear solver
     solve!(cache(int).x, (b,x) -> residual!(b, x, sol, int), solver(int))
 
+    println("x after solve!", cache(int).x)
     # print solver status
     # println(status(solver))
 
@@ -100,7 +93,7 @@ function integrate_step!(sol::AbstractPDESolution, int::AbstractPDEIntegrator)
     # println(meets_stopping_criteria(status(solver)))
 
     # compute final update
-    # update!(sol, nlsolution(int), int)
+    update!(sol, int)
 end
 
 function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol::AbstractPDESolution, int::AbstractPDEIntegrator) where {ST}

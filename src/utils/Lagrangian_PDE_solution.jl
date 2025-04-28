@@ -7,7 +7,7 @@ mutable struct LPDE_solution{TT,ST,PT,IT} <: AbstractPDESolution
 
     params::PT
     internal::IT
-    function LPDE_solution(t,ics::NamedTuple,ntime::Int,params::PT,internal::IT;kwargs...) where {IT,PT}
+    function LPDE_solution(t,ics::NamedTuple,ntime::Int,params::PT;internal::IT = nothing, kwargs...) where {IT,PT}
         current_step = 1
 
         sol = map(v -> (v, ntuple(_ -> zeros(size(v)...), ntime)...), ics)
@@ -16,10 +16,10 @@ mutable struct LPDE_solution{TT,ST,PT,IT} <: AbstractPDESolution
     end
 end
 
-function LPDE_solution(problem::PDEProblem)
+function LPDE_solution(problem::PDEProblem;internal = nothing)
     ntime = Int((problem.tspan[2] - problem.tspan[1]) / problem.tstep)
     t = problem.tstep
-    LPDE_solution(t,problem.ics_values, ntime, problem.params, problem.internal)
+    LPDE_solution(t,problem.ics_values, ntime, problem.params;internal)
 end
 
 ntime(sol::LPDE_solution) = sol.ntime
