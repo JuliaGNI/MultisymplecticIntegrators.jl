@@ -264,7 +264,6 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:Sindy_PDE_
     local ic_fun = int.problem.ics_function
     local bc_fun = int.problem.bcs_function
 
-    prior_initial_guess!(cache(int),sol,int)
 
     start_idx = 1
     # for (d,P_size) in enumerate(P_sizes)
@@ -346,7 +345,7 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:Sindy_PDE_
         end
     end
 
-    post_initial_guess!(cache(int),sol,int)
+    (x == cache(int).x && eltype(x) == eltype(cache(int).x)) ? post_initial_guess!(cache(int),sol,int) : nothing
 
     for d in 1:D
         C.λ₀_x_coes[d,:] = x[NP+1:NP+RX]

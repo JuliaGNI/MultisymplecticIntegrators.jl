@@ -17,10 +17,10 @@ module SineGordon
     const DX = 1
 
     const tstep = 1.0
-    const tspan = (0.0, 2.0)
+    const tspan = (0.0, 10.0)
 
     const xstep = 0.01
-    const xspan = (0.0, 1.0)
+    const xspan = (0., 1.0)
 
     const c = 4.0 # wave speed square
     const velocity = 1.0

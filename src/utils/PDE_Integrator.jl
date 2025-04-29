@@ -69,6 +69,8 @@ function integrate!(sol::AbstractPDESolution, int::AbstractPDEIntegrator, n₁::
     # solstep = solutionstep(int, sol[n₁-1])ß
     # loop over time steps
     for sol.current_step in n₁:n₂
+        prior_initial_guess!(cache(int),sol,int)
+
         # integrate one step and copy solution from cache to solution
         integrate_step!(sol, int)
     end
@@ -85,7 +87,6 @@ function integrate_step!(sol::AbstractPDESolution, int::AbstractPDEIntegrator)
     # call nonlinear solver
     solve!(cache(int).x, (b,x) -> residual!(b, x, sol, int), solver(int))
 
-    println("x after solve!", cache(int).x)
     # print solver status
     # println(status(solver))
 
@@ -102,8 +103,6 @@ function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol::AbstractPD
 
     # compute stages of implicit Runge-Kutta methods from nonlinear solver solution x
     components!(x, sol, int)
-
-    println("Initial guess",cache(int).x)
 
     # compute right-hand side b of nonlinear solver
     residual!(b, sol, int)
