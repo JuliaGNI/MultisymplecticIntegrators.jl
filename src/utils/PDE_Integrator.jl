@@ -103,6 +103,8 @@ function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol::AbstractPD
     # compute stages of implicit Runge-Kutta methods from nonlinear solver solution x
     components!(x, sol, int)
 
+    println("Initial guess",cache(int).x)
+
     # compute right-hand side b of nonlinear solver
     residual!(b, sol, int)
 end
