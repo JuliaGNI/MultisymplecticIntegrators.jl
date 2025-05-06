@@ -69,10 +69,15 @@ function integrate!(sol::AbstractPDESolution, int::AbstractPDEIntegrator, n₁::
     # solstep = solutionstep(int, sol[n₁-1])ß
     # loop over time steps
     for sol.current_step in n₁:n₂
+        println("start integrating step = ", sol.current_step, "current time = ", sol.t)
+        
         prior_initial_guess!(cache(int),sol,int)
+        initialize_bcs_ics!(sol,int)
 
         # integrate one step and copy solution from cache to solution
         integrate_step!(sol, int)
+        println("finish integrating step  = ", sol.current_step, "current time = ", sol.t)
+
     end
 
     return sol

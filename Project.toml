@@ -3,6 +3,7 @@ uuid = "287958db-332d-4045-951c-e8138db0f134"
 version = "0.1.0"
 
 [deps]
+BSplineKit = "093aae92-e908-43d7-9660-e50ee39d5a0a"
 CompactBasisFunctions = "a09551c4-f815-4143-809e-dd1986753ba7"
 GeometricEquations = "c85262ba-a08a-430a-b926-d29770767bf2"
 GeometricIntegrators = "dcce2d33-59f6-5b8d-9047-0defad88ae06"
@@ -15,6 +16,7 @@ SimpleSolvers = "36b790f5-6434-4fbe-b711-1f64a1e2f6a2"
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 
 [compat]
+BSplineKit = "0.19.0"
 GeometricEquations = "0.18.0"
 GeometricIntegrators = "0.14.5"
 GeometricSolutions = "0.4.2"

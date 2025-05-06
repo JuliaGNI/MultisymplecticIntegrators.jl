@@ -199,9 +199,42 @@ function prior_initial_guess!(C,sol_struct,int)
 
         start_idx += P_size
     end
-
 end
 
+function initialize_bcs_ics!(sol,int::PDEIntegrator{<:Sindy_PDE_Integrator})
+    local C = cache(int)
+    local x_quad_nodes = int.method.spatial_quadrature.nodes
+    local t_quad_nodes = int.method.time_quadrature.nodes
+    local u = int.method.symbolic_expr_basis.u # f = f(Parameters,t,x)
+    local D = int.problem.D 
+    local RT = int.method.RT
+    local ic_fun = int.problem.ics_function
+    local bc_fun = int.problem.bcs_function
+    local current_step = sol.current_step
+    local NP = int.method.symbolic_expr_basis.NP
+
+    for d in 1:D
+        println("update initial condition, current time = ", sol.t, "the initial condition is at time = ", sol.t - timestep(int))
+
+        if current_step ==1 
+            C.init_condition_t₀[d,:] .= ic_fun(x_quad_nodes).u
+        else
+            println("sol.internal.x[current_step-1][1:NP] = " , sol.internal.x[current_step-1][1:NP])
+
+            for i in eachindex(C.init_condition_t₀[d,:])
+                C.init_condition_t₀[d,i] = u[d]([sol.internal.x[current_step-1][1:NP]],sol.t - timestep(int),x_quad_nodes[i])
+            end
+            println("initial condition = " , C.init_condition_t₀[d,:])
+        end
+
+        for i in 1:RT
+            C.boundary_condition_x₀[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i]).bc₀.u
+            C.boundary_condition_x₁[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i]).bc₁.u
+        end
+        println("left boundary condition = " , C.boundary_condition_x₀[d,:])
+    end
+
+end
 
 function post_initial_guess!(C,sol_struct,int)
     local NP = int.method.symbolic_expr_basis.NP
@@ -261,9 +294,10 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:Sindy_PDE_
     local μ₁_t = int.method.μ₁_t
     local params = int.problem.lagrangian_system.params
 
-    local ic_fun = int.problem.ics_function
-    local bc_fun = int.problem.bcs_function
 
+
+    # println("In components function", current_step)
+    # println("In components function, time = ", sol.t)
 
     start_idx = 1
     # for (d,P_size) in enumerate(P_sizes)
@@ -336,15 +370,6 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:Sindy_PDE_
         end
     end
 
-    for d in 1:D
-        C.init_condition_t₀[d,:] .= ic_fun(x_quad_nodes).u
-
-        for i in 1:RT
-            C.boundary_condition_x₀[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i]).bc₀.u
-            C.boundary_condition_x₁[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i]).bc₁.u
-        end
-    end
-
     (x == cache(int).x && eltype(x) == eltype(cache(int).x)) ? post_initial_guess!(cache(int),sol,int) : nothing
 
     for d in 1:D
@@ -367,7 +392,7 @@ end
 
 
 function residual!(b::Vector{ST}, sol, int::PDEIntegrator{<:Sindy_PDE_Integrator}) where {ST}
-    local D = int.problem.D #TODO D should from the problem be used
+    local D = int.problem.D 
     local RT = int.method.RT
     local RX = int.method.RX
     local P_sizes = int.method.symbolic_expr_basis.P_sizes
@@ -397,7 +422,7 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{<:Sindy_PDE_Integrator
             for rt in 1:RT
                 z+= timestep(int)* brt[rt] * (C.μ₀_quad_values[d,rt] * C.∂u∂P_x₀_quad_values[d][rt,p] - C.μ₁_quad_values[d,rt] * C.∂u∂P_x₁_quad_values[d][rt,p])
             end
-            b[current_idx] = -z
+            b[current_idx] = -z # TODO: check the sign
             current_idx += 1
         end
     end
@@ -433,21 +458,27 @@ function update!(sol_struct, int::PDEIntegrator{<:Sindy_PDE_Integrator})
     local xspan = int.problem.xspan
     local xstep = int.problem.xstep
     local C = cache(int)
-    x_nodes = collect(xspan[1]:xstep:xspan[2])
+    local NP = int.method.symbolic_expr_basis.NP
 
-    sol_struct.current_step += 1
-    sol_struct.t += int.problem.tstep
+    x_nodes = collect(xspan[1]:xstep:xspan[2])
+    tem_p = [C.x[1:NP]]
+
+    # println("In update! function, step = ", sol_struct.current_step)
+    # println("In update! function, time = ", sol_struct.t)
 
     for d in 1:D
         for i in eachindex(x_nodes)
-            sol_struct.sol.u[sol_struct.current_step][i] = u[d](C.tem_P,sol_struct.t, x_nodes[i])
-            sol_struct.sol.v[sol_struct.current_step][i] = v[d](C.tem_P,sol_struct.t, x_nodes[i])
-            sol_struct.sol.w[sol_struct.current_step][i] = w[d](C.tem_P,sol_struct.t, x_nodes[i])
+            sol_struct.sol.u[sol_struct.current_step][i] = u[d](tem_p,sol_struct.t, x_nodes[i])
+            sol_struct.sol.v[sol_struct.current_step][i] = v[d](tem_p,sol_struct.t, x_nodes[i])
+            sol_struct.sol.w[sol_struct.current_step][i] = w[d](tem_p,sol_struct.t, x_nodes[i])
         end
     end
 
     # copy internal variables from cache to solution
     sol_struct.internal.x[sol_struct.current_step] .= cache(int).x 
+
+    sol_struct.t += int.problem.tstep
+    # println("In the end of update! function, time = ", sol_struct.t)
 end
 
 function create_interior_quadrature_points_derivative_mat(ST::Type, RT::Int,RX::Int, D::Int,P_sizes::Vector{Int})
