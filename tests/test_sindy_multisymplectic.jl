@@ -12,12 +12,14 @@ u_expr = p[1] * atan(exp(p[2] * (x - p[3] * t)))
 sindy_basis = SindyPDEBasis([u_expr], [p], t, [x])
 
 RT = 6
-RX = 12 # when x interval is quite large, getting slow, and unstable
-init_p = [4,1.15470,1.02]
+RX = 18 # when x interval is quite large, getting slow, and unstable
+init_p = [3.8,1.15470,0.9]
 
-sindy_int = Sindy_PDE_Integrator(sindy_basis,RT,RX,init_p)
+t_step = 2.0
+x_span = (0.0,3.0)
+sindy_int = Sindy_PDE_Integrator(sindy_basis,RT,RX,init_p,x_span,t_step)
 
-lpde = MultiSymplectic.SineGordon.lpdeproblem(tstep = 1.0,tspan =(0.0,10.0))
+lpde = MultiSymplectic.SineGordon.lpdeproblem(tstep = t_step,tspan =(0.0,8.0),xspan = x_span)
 sol = MultiSymplectic.integrate(lpde,sindy_int)
 
 
@@ -31,12 +33,6 @@ sol = MultiSymplectic.integrate(lpde,sindy_int)
 # HO_CGVI = integrate(lode, CGVI(BGau4,QGau4))
 
 using Plots
-plot(sol.sol.u[1], label= "t = 0.0")
-plot!(sol.sol.u[2], label= "t = 1.0")
-plot!(sol.sol.u[3], label= "t = 2.0")
-plot!(sol.sol.u[4], label= "t = 3.0")
-plot!(sol.sol.u[5], label= "t = 4.0")
-
 
 c=4.0
 velocity = 1.0
@@ -59,7 +55,9 @@ plot(x_ls,ics.(x_ls,6.0),label="Analytic solution")
 plot!(x_ls,sol.sol.u[6],label = "Sindy")
 title!("t=6.0")
 
-
+plot(x_ls,ics.(x_ls,9.0),label="Analytic solution")
+plot!(x_ls,sol.sol.u[9],label = "Sindy")
+title!("t=9.0")
 
 
 c2 = 3.96116055279388

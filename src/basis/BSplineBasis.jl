@@ -7,7 +7,7 @@ struct BSplineDirichlet{T}
     t::AbstractVector{T} # vector to generate knots
 
     knot_seq
-    B #  basis functions 
+    b #  basis functions 
     function BSplineDirichlet(k::Int,t::AbstractVector{T}) where T
         B = BSplineBasis(BSplineOrder(k), t)
         knot_seq = B.t
@@ -20,4 +20,4 @@ struct BSplineDirichlet{T}
     end
 end
 
-Base.length(Basis::BSplineDirichlet) = Base.length(Basis.B)
+Base.length(Basis::BSplineDirichlet) = Base.length(Basis.b)
