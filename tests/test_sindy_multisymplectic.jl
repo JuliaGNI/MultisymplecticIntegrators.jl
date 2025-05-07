@@ -11,9 +11,9 @@ using Symbolics
 u_expr = p[1] * atan(exp(p[2] * (x - p[3] * t)))
 sindy_basis = SindyPDEBasis([u_expr], [p], t, [x])
 
-RT = 6
+RT = 8
 RX = 18 # when x interval is quite large, getting slow, and unstable
-init_p = [3.8,1.15470,0.9]
+init_p = [4.02,1.15470,1.05]
 
 t_step = 2.0
 x_span = (0.0,3.0)
