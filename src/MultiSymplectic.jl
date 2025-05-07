@@ -10,7 +10,9 @@ module MultiSymplectic
     using LinearAlgebra
     import IterTools:product
     using SimpleSolvers:NewtonMethod, Options, NonlinearSolver,Newton,solve!
+    
     using BSplineKit
+    import BSplineKit.SplineInterpolations:make_knots
 
     # abstract types
     include("methods.jl")
@@ -38,7 +40,7 @@ module MultiSymplectic
 
     include("basis/BSplineBasis.jl")
     export BSplineDirichlet
-    
+
     # integrators
     include("integrator/Sindy_PDE_int.jl")
     export Sindy_PDE_Integrator

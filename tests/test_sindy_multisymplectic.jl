@@ -11,15 +11,15 @@ using Symbolics
 u_expr = p[1] * atan(exp(p[2] * (x - p[3] * t)))
 sindy_basis = SindyPDEBasis([u_expr], [p], t, [x])
 
-RT = 8
-RX = 18 # when x interval is quite large, getting slow, and unstable
-init_p = [4.02,1.15470,1.05]
+RT = 6
+RX = 12 # when x interval is quite large, getting slow, and unstable
+init_p = [4.00,1.15470,1.04]
 
-t_step = 2.0
-x_span = (0.0,3.0)
-sindy_int = Sindy_PDE_Integrator(sindy_basis,RT,RX,init_p,x_span,t_step)
+t_step = 1.0
+x_span = (0.0,1.0)
+sindy_int = Sindy_PDE_Integrator(sindy_basis,RT,RX,init_p,x_span,t_step,k_μ = 6,k_λ₀_x = 6)
 
-lpde = MultiSymplectic.SineGordon.lpdeproblem(tstep = t_step,tspan =(0.0,8.0),xspan = x_span)
+lpde = MultiSymplectic.SineGordon.lpdeproblem(tstep = t_step,tspan =(0.0,10.0),xspan = x_span)
 sol = MultiSymplectic.integrate(lpde,sindy_int)
 
 
@@ -60,9 +60,9 @@ plot!(x_ls,sol.sol.u[9],label = "Sindy")
 title!("t=9.0")
 
 
-c2 = 3.96116055279388
-v2 = 1.0001766110236021
-γ2 = 1.1514154675252721 # small error but obvious in plot
+c2 = 3.9999951547393993
+v2 = 1.0397741828102778
+γ2 = 1.1546989298112151 # small error but obvious in plot
 
 fun2(x,t) = 4 * atan(exp(γ2 * (x - v2 * t)))
 plot(x_ls,ics.(x_ls,1.0),label="t=1.0")

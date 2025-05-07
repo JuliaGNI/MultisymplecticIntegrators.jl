@@ -4,18 +4,20 @@ Basis for Lagrangian multipliers at the boundary, for 1D.
 
 struct BSplineDirichlet{T} 
     k::Int # order
-    t::AbstractVector{T} # vector to generate knots
+    x::AbstractVector{T} # vector to generate knots
+    t::AbstractVector{T} # knots from BSplineKit, was optimized
 
     Bspline
     b #  basis functions 
-    function BSplineDirichlet(k::Int,t::AbstractVector{T}) where T
-        B = BSplineBasis(BSplineOrder(k), t)
+    function BSplineDirichlet(k::Int,x::AbstractVector{T}) where T
+        t = make_knots(x,BSplineOrder(k),nothing) # nothing is the bc,default is Dirichlet
+        B = BSplineBasis(BSplineOrder(k), t;augment = Val(false))
         basis_fct = []
         for i in eachindex(B)
             push!(basis_fct, B[i])
         end
 
-        return new{T}(k, t, B, basis_fct)
+        return new{T}(k, x, t, B, basis_fct)
     end
 end
 
