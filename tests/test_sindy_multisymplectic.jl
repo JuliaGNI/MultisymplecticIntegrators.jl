@@ -11,13 +11,14 @@ using Symbolics
 u_expr = p[1] * atan(exp(p[2] * (x - p[3] * t)))
 sindy_basis = SindyPDEBasis([u_expr], [p], t, [x])
 
+
 RT = 6
-RX = 12 # when x interval is quite large, getting slow, and unstable
-init_p = [4.00,1.15470,1.04]
+RX = 14 # when x interval is quite large, getting slow, and unstable
+init_p = [3.9999951547393993 ,1.1546989298112151,1.0397741828102778]
 
 t_step = 1.0
 x_span = (0.0,1.0)
-sindy_int = Sindy_PDE_Integrator(sindy_basis,RT,RX,init_p,x_span,t_step,k_μ = 6,k_λ₀_x = 6)
+sindy_int = Sindy_PDE_Integrator(sindy_basis,init_p,RT = RT,RX = RX, xspan = x_span, tstep = t_step,μ =:Lagrange,λ =:Lagrange)
 
 lpde = MultiSymplectic.SineGordon.lpdeproblem(tstep = t_step,tspan =(0.0,10.0),xspan = x_span)
 sol = MultiSymplectic.integrate(lpde,sindy_int)
@@ -41,15 +42,15 @@ velocity = 1.0
 
 
 ics(x,t) = 4 * atan(exp(γ * (x - velocity * t)))
-x_ls = collect(0.0:0.01:1)
+x_ls = collect(-1:0.01:1)
 
 plot(x_ls,ics.(x_ls,1.0),label="Analytic solution")
 plot!(x_ls,sol.sol.u[1],label = "Sindy")
 title!("t=1.0")
 
-plot(x_ls,ics.(x_ls,5.0),label="Analytic solution")
-plot!(x_ls,sol.sol.u[5],label = "Sindy")
-title!("t=5.0")
+plot(x_ls,ics.(x_ls,3.0),label="Analytic solution")
+plot!(x_ls,sol.sol.u[3],label = "Sindy")
+title!("t=3.0")
 
 plot(x_ls,ics.(x_ls,6.0),label="Analytic solution")
 plot!(x_ls,sol.sol.u[6],label = "Sindy")

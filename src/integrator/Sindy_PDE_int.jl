@@ -1,5 +1,6 @@
-struct Sindy_PDE_Integrator{T,basisType<:AbstractPDEBasis} <: PDEMethod
-    symbolic_expr_basis
+struct Sindy_PDE_Integrator{T,MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
+
+    symbolic_expr_basis::BT
     time_quadrature::QuadratureRule{T}
     RT::Int # Number of quadrature points in time
 
@@ -9,28 +10,26 @@ struct Sindy_PDE_Integrator{T,basisType<:AbstractPDEBasis} <: PDEMethod
     grid_weights # Quadrature weights
     
     k_μ::Int
-    μ₀_t::BSplineDirichlet
-    μ₁_t::BSplineDirichlet
+    μ₀_t::MVT
+    μ₁_t::MVT
 
     k_λ₀_x::Int
-    λ₀_x::BSplineDirichlet
+    λ₀_x::LT
 
     init_w::Vector{T}
-    nstages::Int # ?
     mλ₀_x
     mμ_t
-    function Sindy_PDE_Integrator(basis, RT::Int, RX::Int, init_w::Vector{T},xspan::Tuple,h ;nstages::Int=10,k_μ = 4,k_λ₀_x = 4) where {T}
+    function Sindy_PDE_Integrator(basis,init_w::Vector{T};RT::Int = 6,RX::Int = 8,xspan::Tuple = (0.,1.0),tstep::Float64 = 1.0, k_μ::Int = 4,k_λ₀_x::Int = 4,μ::Symbol = :Spline,λ::Symbol= :Spline) where {T}
         t_quadrature = QuadratureRules.GaussLegendreQuadrature(RT)
         x_quadrature = QuadratureRules.GaussLegendreQuadrature(RX)
 
         dimensions = [RT,RX]  
         grid_matrix, grid_weights = construct_quadrature_grid(dimensions)
 
-        μ₀_t = BSplineDirichlet(k_μ,h .* t_quadrature.nodes)
-        μ₁_t = BSplineDirichlet(k_μ,h .* t_quadrature.nodes)
+        μ₀_t = Lagrangian_multiplier(μ,k_μ,tstep .* t_quadrature.nodes)
+        μ₁_t = Lagrangian_multiplier(μ,k_μ,tstep .* t_quadrature.nodes)
+        λ₀_x = Lagrangian_multiplier(λ,k_λ₀_x,xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes)
 
-        λ₀_x = BSplineDirichlet(k_λ₀_x, xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes)
-        
         mλ₀_x = zeros(RX, RX)
         mμ_t = zeros(RT, RT)
 
@@ -39,15 +38,15 @@ struct Sindy_PDE_Integrator{T,basisType<:AbstractPDEBasis} <: PDEMethod
         end
     
         for i in 1:RT
-            mμ_t[i,:] = μ₀_t.b[i].(h .* t_quadrature.nodes)
+            mμ_t[i,:] = μ₀_t.b[i].(tstep .* t_quadrature.nodes)
         end
 
-        new{T,typeof(basis)}(basis, t_quadrature, RT,
+        new{T,typeof(μ₀_t),typeof(λ₀_x),typeof(basis)}(basis, t_quadrature, RT,
             x_quadrature, RX,
             grid_matrix, grid_weights,
             k_μ, μ₀_t, μ₁_t,
             k_λ₀_x,λ₀_x, #λ₁_x,
-            init_w, nstages,
+            init_w,
             mλ₀_x, mμ_t)
     end 
 end
@@ -104,12 +103,6 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     wx₀_quad_values::Matrix{ST}
     wx₁_quad_values::Matrix{ST}
 
-    ux₀_bd_values::Matrix{ST} 
-    ux₁_bd_values::Matrix{ST}
-    vx₀_bd_values::Matrix{ST}
-    vx₁_bd_values::Matrix{ST}
-    wx₀_bd_values::Matrix{ST}
-    wx₁_bd_values::Matrix{ST}
     mλ₀_x::Matrix{ST} # λ₀_x values at quadrature points
     mμ_t::Matrix{ST} # μ₀_t values at quadrature points
 
@@ -165,13 +158,6 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
         wx₀_quad_values = zeros(ST,D,RT)
         wx₁_quad_values = zeros(ST,D,RT)
 
-        ux₀_bd_values = zeros(ST,D,2) # left boundary, i.e. x = 0, t=0,T
-        ux₁_bd_values = zeros(ST,D,2) 
-        vx₀_bd_values = zeros(ST,D,2)
-        vx₁_bd_values = zeros(ST,D,2)
-        wx₀_bd_values = zeros(ST,D,2)
-        wx₁_bd_values = zeros(ST,D,2)
-
         mλ₀_x = zeros(ST,RX, RX)
         mμ_t = zeros(ST,RT, RT)
 
@@ -191,7 +177,6 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
             ∂u∂P_t₀_quad_values, ∂u∂P_t₁_quad_values, ∂u∂P_x₀_quad_values, ∂u∂P_x₁_quad_values,
             ut₀_quad_values, ut₁_quad_values,vt₀_quad_values, vt₁_quad_values,wt₀_quad_values, wt₁_quad_values,
             ux₀_quad_values, ux₁_quad_values,vx₀_quad_values, vx₁_quad_values,wx₀_quad_values, wx₁_quad_values,
-            ux₀_bd_values, ux₁_bd_values, vx₀_bd_values, vx₁_bd_values, wx₀_bd_values, wx₁_bd_values,
             mλ₀_x, mμ_t,
             tem_P,
             init_condition_t₀, 
@@ -218,7 +203,7 @@ end
 end
 
 
-function prior_initial_guess!(C,sol_struct,int)
+function prior_initial_guess!(C,sol_struct,int::PDEIntegrator{<:Sindy_PDE_Integrator})
     local P_sizes = int.method.symbolic_expr_basis.P_sizes
     local init_w = int.method.init_w
     local internal = sol_struct.internal
@@ -271,17 +256,17 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:Sindy_PDE_Integrator})
 
 end
 
-function post_initial_guess!(C,sol_struct,int)
-    local NP = int.method.symbolic_expr_basis.NP
-    local RT = int.method.RT
-    local RX = int.method.RX
-    local D = int.problem.D #TODO D should from the problem be used
+function post_initial_guess!(C,sol_struct,int::PDEIntegrator{<:Sindy_PDE_Integrator},int_method::Sindy_PDE_Integrator{T,MVT,LT,BT}) where {T,MVT<:BSplineDirichlet{T},LT<:BSplineDirichlet{T},BT}
+    local NP = int_method.symbolic_expr_basis.NP
+    local RT = int_method.RT
+    local RX = int_method.RX
+    local D = int.problem.D 
     local lag_sys = int.problem.lagrangian_system.functions
     local params = int.problem.lagrangian_system.params
     local xspan = int.problem.xspan
-    local x_quad_nodes = int.method.spatial_quadrature.nodes
-    local k_λ₀_x = int.method.k_λ₀_x
-    local t_quad_nodes = int.method.time_quadrature.nodes
+    local x_quad_nodes = int_method.spatial_quadrature.nodes
+    local k_λ₀_x = int_method.k_λ₀_x
+    local t_quad_nodes = int_method.time_quadrature.nodes
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
     # for d in 1:D
     #     for i in 1:RX
@@ -312,7 +297,7 @@ function post_initial_guess!(C,sol_struct,int)
         end
 
         tem_t = sol_struct.t .- timestep(int) .+ timestep(int) .* t_quad_nodes
-        μ₀_t = interpolate(tem_t, tem_x₀_∂L∂W, BSplineOrder(int.method.k_μ))
+        μ₀_t = interpolate(tem_t, tem_x₀_∂L∂W, BSplineOrder(int_method.k_μ))
         for i in 1:RT
             C.x[NP + D * RX + (d - 1) * RT + i] = μ₀_t.spline.coefs[i]
         end
@@ -322,11 +307,37 @@ function post_initial_guess!(C,sol_struct,int)
             tem_x₁_∂L∂W[i] = lag_sys.∂L∂W[d](C.ux₁_quad_values[d,i], C.vx₁_quad_values[d,i], C.wx₁_quad_values[d,i], params)
         end
 
-        μ₁_t = interpolate(tem_t, tem_x₁_∂L∂W, BSplineOrder(int.method.k_μ))
+        μ₁_t = interpolate(tem_t, tem_x₁_∂L∂W, BSplineOrder(int_method.k_μ))
         for i in 1:RT
             C.x[NP+ D * RX + D * RT + (d-1)*RT+i] = μ₁_t.spline.coefs[i]
         end
 
+    end
+end
+
+function post_initial_guess!(C,sol_struct,int::PDEIntegrator{<:Sindy_PDE_Integrator},int_method::Sindy_PDE_Integrator{T,MVT,LT,BT}) where {T,MVT<:Lagrange,LT<:Lagrange,BT}
+    local NP = int_method.symbolic_expr_basis.NP
+    local RT = int_method.RT
+    local RX = int_method.RX
+    local D = int.problem.D 
+    local lag_sys = int.problem.lagrangian_system.functions
+    local params = int.problem.lagrangian_system.params
+
+    # for d in 1:D
+    #     C.x[NP+1:NP+RX] = lag_sys.∂L∂V[d].(C.ut₀_quad_values[d,:], C.vt₀_quad_values[d,:], C.wt₀_quad_values[d,:], params)
+    #     C.x[NP+RX+1:NP+RX+RT] = lag_sys.∂L∂W[d].(C.ux₀_quad_values[d,:], C.vx₀_quad_values[d,:], C.wx₀_quad_values[d,:], params)
+    #     C.x[NP+RX+RT+1:NP+RX+2*RT] = lag_sys.∂L∂W[d].(C.ux₁_quad_values[d,:], C.vx₁_quad_values[d,:], C.wx₁_quad_values[d,:], params)
+    # end
+
+    for d in 1:D
+        for i in 1:RX
+            C.x[NP + (d - 1) * RX + i] = lag_sys.∂L∂V[d](C.ut₀_quad_values[d,i], C.vt₀_quad_values[d,i], C.wt₀_quad_values[d,i], params)
+        end
+
+        for i in 1:RT
+            C.x[NP+ D * RX+(d-1)*RT+i] = lag_sys.∂L∂W[d](C.ux₀_quad_values[d,i], C.vx₀_quad_values[d,i], C.wx₀_quad_values[d,i], params)
+            C.x[NP+ D * RX+ D * RT + (d-1)*RT+i] = lag_sys.∂L∂W[d](C.ux₁_quad_values[d,i], C.vx₁_quad_values[d,i], C.wx₁_quad_values[d,i], params)
+        end
     end
 end
 
@@ -337,7 +348,7 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:Sindy_PDE_
     local NP = int.method.symbolic_expr_basis.NP
     local RT = int.method.RT
     local RX = int.method.RX
-    local D = int.problem.D #TODO D should from the problem be used
+    local D = int.problem.D
 
     local ∂L∂U = int.problem.lagrangian_system.functions.∂L∂U
     local ∂L∂V = int.problem.lagrangian_system.functions.∂L∂V
@@ -434,7 +445,7 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:Sindy_PDE_
 
     end
 
-    (x == cache(int).x && eltype(x) == eltype(cache(int).x)) ? post_initial_guess!(cache(int),sol,int) : nothing
+    (x == cache(int).x && eltype(x) == eltype(cache(int).x)) ? post_initial_guess!(cache(int),sol,int,int.method) : nothing
 
     for d in 1:D
         C.λ₀_x_coes[d,:] = x[NP+1:NP+RX]
@@ -455,7 +466,8 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:Sindy_PDE_
 end
 
 
-function residual!(b::Vector{ST}, sol, int::PDEIntegrator{<:Sindy_PDE_Integrator}) where {ST}
+function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT <: Spline,LT  <: Spline,BT,IT <: Sindy_PDE_Integrator{T, MVT, LT, BT}}
+    local D = int.problem.D 
     local D = int.problem.D 
     local RT = int.method.RT
     local RX = int.method.RX
@@ -526,6 +538,66 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{<:Sindy_PDE_Integrator
     end
 
 end
+
+
+function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT <: Lagrange,LT  <: Lagrange,BT,IT <: Sindy_PDE_Integrator{T, MVT, LT, BT}}
+    local D = int.problem.D 
+    local RT = int.method.RT
+    local RX = int.method.RX
+    local P_sizes = int.method.symbolic_expr_basis.P_sizes
+    local NP = int.method.symbolic_expr_basis.NP
+
+    local quad_b = int.method.grid_weights
+    local C = cache(int,ST)
+    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+    local brx = int.method.spatial_quadrature.weights
+    local brt = int.method.time_quadrature.weights
+
+    current_idx = 1
+    for d in 1:D 
+        for p in 1:P_sizes[d]
+            z = zero(ST)
+            for rt in 1:RT
+                for rx in 1:RX
+                    z += timestep(int) * quad_b[rt,rx]* x_domain *
+                        (C.∂L∂U_quad_values[d,rt,rx] * C.∂u∂P_quad_values[d][rt, rx,p]
+                        + C.∂L∂V_quad_values[d,rt,rx] * C.∂v∂P_quad_values[d][rt, rx,p]
+                        + C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂P_quad_values[d][rt, rx,p])
+                end
+            end
+            for rx in 1:RX
+                z+= x_domain * brx[rx] * (C.λ₀_quad_values[d,rx] * C.∂u∂P_t₀_quad_values[d][rx,p]) #- C.λ₁_quad_values[d,rx] * C.∂u∂P_t₁_quad_values[d, rx]
+            end
+            for rt in 1:RT
+                z+= timestep(int)* brt[rt] * (C.μ₀_quad_values[d,rt] * C.∂u∂P_x₀_quad_values[d][rt,p] - C.μ₁_quad_values[d,rt] * C.∂u∂P_x₁_quad_values[d][rt,p])
+            end
+            b[current_idx] = -z # TODO: check the sign
+            current_idx += 1
+        end
+    end
+
+    @assert current_idx == NP + 1 "Wrong indexing in residual computation"
+
+    for d in 1:D
+        for rx in 1:RX
+            b[NP + (d - 1) * RX + rx] = x_domain * brx[rx] * (C.ut₀_quad_values[d, rx] - C.init_condition_t₀[d, rx])
+        end
+    end
+
+    for d in 1:D
+        for rt in 1:RT
+            b[NP+ D * RX+(d-1)*RT+rt]= timestep(int) *brt[rt]*(C.ux₀_quad_values[d,rt] - C.boundary_condition_x₀[d,rt])
+        end
+    end
+
+    for d in 1:D
+        for rt in 1:RT
+            b[NP+ D * RX+ D * RT + (d-1)*RT+rt]= timestep(int) *brt[rt]*(C.ux₁_quad_values[d,rt] - C.boundary_condition_x₁[d,rt])
+        end
+    end
+
+end
+
 
 
 function update!(sol_struct, int::PDEIntegrator{<:Sindy_PDE_Integrator})

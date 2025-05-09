@@ -2,7 +2,7 @@
 
 julia_version = "1.11.2"
 manifest_format = "2.0"
-project_hash = "31aef317a747b31f27f69a1ac63ce7f59524ae71"
+project_hash = "cb01579990a8d25124bc35eeef8c30580ba0629a"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "e2478490447631aedba0823d4d7a80b2cc8cdb32"
@@ -1251,9 +1251,11 @@ version = "1.11.0"
 
 [[deps.SimpleSolvers]]
 deps = ["Distances", "ForwardDiff", "GeometricBase", "LineSearches", "LinearAlgebra", "NLsolve", "Printf"]
-path = "/Users/zeyuan/Documents/GitHub/SimpleSolvers.jl"
+git-tree-sha1 = "6b4f21a06f39feddaf36c231e408247792496040"
+repo-rev = "main"
+repo-url = "/Users/zeyuanli/Documents/Codes/SimpleSolvers.jl"
 uuid = "36b790f5-6434-4fbe-b711-1f64a1e2f6a2"
-version = "0.3.7"
+version = "0.3.8"
 
 [[deps.Sockets]]
 uuid = "6462fe0b-24de-5631-8697-dd941f90decc"

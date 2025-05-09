@@ -20,7 +20,7 @@ module MultiSymplectic
 
     # utils
     include("utils/common.jl")
-    export LPDE_variables,symbolize,substitute_parameters
+    export LPDE_variables,symbolize,substitute_parameters,Lagrangian_multiplier
 
     include("utils/Lagrangian_PDE_problem.jl")
     export LPDEProblem
