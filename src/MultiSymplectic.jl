@@ -49,5 +49,6 @@ module MultiSymplectic
     include("problem/sine_Gordon.jl")
     export SineGordon
 
-
+    include("problem/wave.jl")
+    export Wave
 end

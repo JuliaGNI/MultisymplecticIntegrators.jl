@@ -103,9 +103,6 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     wx₀_quad_values::Matrix{ST}
     wx₁_quad_values::Matrix{ST}
 
-    mλ₀_x::Matrix{ST} # λ₀_x values at quadrature points
-    mμ_t::Matrix{ST} # μ₀_t values at quadrature points
-
     tem_P::Vector{Vector{ST}} # temporary storage for P values
 
     init_condition_t₀::Matrix{ST}
@@ -158,9 +155,6 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
         wx₀_quad_values = zeros(ST,D,RT)
         wx₁_quad_values = zeros(ST,D,RT)
 
-        mλ₀_x = zeros(ST,RX, RX)
-        mμ_t = zeros(ST,RT, RT)
-
         tem_P = create_tem_vector(ST, D, P_sizes)
 
         init_condition_t₀ = zeros(ST, D, RX)
@@ -177,7 +171,6 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
             ∂u∂P_t₀_quad_values, ∂u∂P_t₁_quad_values, ∂u∂P_x₀_quad_values, ∂u∂P_x₁_quad_values,
             ut₀_quad_values, ut₁_quad_values,vt₀_quad_values, vt₁_quad_values,wt₀_quad_values, wt₁_quad_values,
             ux₀_quad_values, ux₁_quad_values,vx₀_quad_values, vx₁_quad_values,wx₀_quad_values, wx₁_quad_values,
-            mλ₀_x, mμ_t,
             tem_P,
             init_condition_t₀, 
             boundary_condition_x₀, boundary_condition_x₁)
@@ -232,17 +225,18 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:Sindy_PDE_Integrator})
     local bc_fun = int.problem.bcs_function
     local current_step = sol.current_step
     local NP = int.method.symbolic_expr_basis.NP
+    local xspan = int.problem.xspan
+    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
 
     for d in 1:D
         # println("update initial condition, current time = ", sol.t, "the initial condition is at time = ", sol.t - timestep(int))
 
         if current_step ==1 
-            C.init_condition_t₀[d,:] .= ic_fun(x_quad_nodes).u
+            C.init_condition_t₀[d,:] .= ic_fun(xspan[1] .+ x_domain .* x_quad_nodes).u
         else
             # println("sol.internal.x[current_step-1][1:NP] = " , sol.internal.x[current_step-1][1:NP])
-
             for i in eachindex(C.init_condition_t₀[d,:])
-                C.init_condition_t₀[d,i] = u[d]([sol.internal.x[current_step-1][1:NP]],sol.t - timestep(int),x_quad_nodes[i])
+                C.init_condition_t₀[d,i] = u[d]([sol.internal.x[current_step-1][1:NP]],sol.t - timestep(int),xspan[1] + x_domain * x_quad_nodes[i])
             end
             # println("initial condition = " , C.init_condition_t₀[d,:])
         end
@@ -466,7 +460,7 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:Sindy_PDE_
 end
 
 
-function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT <: Spline,LT  <: Spline,BT,IT <: Sindy_PDE_Integrator{T, MVT, LT, BT}}
+function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT <: BSplineDirichlet,LT  <: BSplineDirichlet,BT,IT <: Sindy_PDE_Integrator{T, MVT, LT, BT}}
     local D = int.problem.D 
     local D = int.problem.D 
     local RT = int.method.RT
@@ -500,7 +494,7 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT 
             for rt in 1:RT
                 z+= timestep(int)* brt[rt] * (C.μ₀_quad_values[d,rt] * C.∂u∂P_x₀_quad_values[d][rt,p] - C.μ₁_quad_values[d,rt] * C.∂u∂P_x₁_quad_values[d][rt,p])
             end
-            b[current_idx] = z # TODO: check the sign
+            b[current_idx] = z 
             current_idx += 1
         end
     end
