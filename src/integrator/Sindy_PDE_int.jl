@@ -1,10 +1,10 @@
 struct Sindy_PDE_Integrator{T,MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
 
     symbolic_expr_basis::BT
-    time_quadrature::QuadratureRule{T}
+    time_quadrature
     RT::Int # Number of quadrature points in time
 
-    spatial_quadrature::QuadratureRule{T}
+    spatial_quadrature
     RX::Int # Number of quadrature points in spatial dimension, for simplicity, set the same for all dimensions
     grid_matrix # Quadrature grid points: [(t1,x1), (t1,x2), ]
     grid_weights # Quadrature weights
@@ -20,8 +20,22 @@ struct Sindy_PDE_Integrator{T,MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
     mλ₀_x
     mμ_t
     function Sindy_PDE_Integrator(basis,init_w::Vector{T};RT::Int = 6,RX::Int = 8,xspan::Tuple = (0.,1.0),tstep::Float64 = 1.0, k_μ::Int = 4,k_λ₀_x::Int = 4,μ::Symbol = :Spline,λ::Symbol= :Spline) where {T}
-        t_quadrature = QuadratureRules.GaussLegendreQuadrature(RT)
-        x_quadrature = QuadratureRules.GaussLegendreQuadrature(RX)
+        
+        if RT ==128 
+            t_quadrature = GaussQuadrature128()
+        elseif RT == 64
+            t_quadrature = GaussQuadrature64()
+        else
+            t_quadrature = QuadratureRules.GaussLegendreQuadrature(RT)
+        end
+
+        if RX == 128
+            x_quadrature = GaussQuadrature128()
+        elseif RX == 64
+            x_quadrature = GaussQuadrature64()
+        else
+            x_quadrature = QuadratureRules.GaussLegendreQuadrature(RX)
+        end
 
         dimensions = [RT,RX]  
         grid_matrix, grid_weights = construct_quadrature_grid(dimensions)
@@ -242,8 +256,8 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:Sindy_PDE_Integrator})
         end
 
         for i in 1:RT
-            C.boundary_condition_x₀[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i]).bc₀.u
-            C.boundary_condition_x₁[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i]).bc₁.u
+            C.boundary_condition_x₀[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₀.u
+            C.boundary_condition_x₁[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₁.u
         end
         # println("left boundary condition = " , C.boundary_condition_x₀[d,:])
     end

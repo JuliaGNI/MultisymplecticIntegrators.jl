@@ -80,37 +80,37 @@ module SineGordon
         return (u=u₀, v=v₀, w=w₀)
     end
 
-    function left_boundary_condition(t::Float64)
+    function left_boundary_condition(t::Float64,xspan::Tuple)
         u₀ = exact_u(t, xspan[1])
         v₀ = exact_v(t, xspan[1])
         w₀ = exact_w(t, xspan[1])
         return (u=u₀, v=v₀, w=w₀)
     end
 
-    function left_boundary_condition(t::Vector{Float64})
+    function left_boundary_condition(t::Vector{Float64},xspan::Tuple)
         u₀ = [exact_u(ti, xspan[1]) for ti in t]
         v₀ = [exact_v(ti, xspan[1]) for ti in t]
         w₀ = [exact_w(ti, xspan[1]) for ti in t]
         return (u=u₀, v=v₀, w=w₀)
     end
 
-    function right_boundary_condition(t::Float64)
+    function right_boundary_condition(t::Float64,xspan::Tuple)
         u₀ = exact_u(t, xspan[2])
         v₀ = exact_v(t, xspan[2])
         w₀ = exact_w(t, xspan[2])
         return (u=u₀, v=v₀, w=w₀)
     end
 
-    function right_boundary_condition(t::Vector{Float64})
+    function right_boundary_condition(t::Vector{Float64},xspan::Tuple)
         u₀ = [exact_u(ti, xspan[2]) for ti in t]
         v₀ = [exact_v(ti, xspan[2]) for ti in t]
         w₀ = [exact_w(ti, xspan[2]) for ti in t]
         return (u=u₀, v=v₀, w=w₀)
     end
 
-    function boundary_condition(t)
-        bc₀ = left_boundary_condition(t)
-        bc₁ = right_boundary_condition(t)
+    function boundary_condition(t,xspan)
+        bc₀ = left_boundary_condition(t,xspan)
+        bc₁ = right_boundary_condition(t,xspan)
         return (bc₀=bc₀, bc₁=bc₁)
     end
 

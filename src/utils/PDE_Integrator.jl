@@ -112,3 +112,11 @@ function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol::AbstractPD
     # compute right-hand side b of nonlinear solver
     residual!(b, sol, int)
 end
+
+function block_solve!(x::AbstractVector{ST}, f, solver) where{ST}
+    local J = solver.cache.J# In jacobian, the right bottom block : J[NP+1:end, NP+1:end] is all zeros
+    
+    compute_jacobian!(solver, x, f)
+
+    
+end
