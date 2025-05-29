@@ -25,7 +25,6 @@ module Wave
 
     const c = 1.0 # wave speed square
 
-
     const default_parameters = (
         c=1.0,
         A1 = 1.0,
@@ -41,12 +40,12 @@ module Wave
 
     function exact_v(t,x;params = default_parameters)
         @unpack c, A1, A2, B1, B2 = params
-        sin((2*pi*x) / xL)*((-2*pi*A2*c*sin((2*pi*c*t) / xL)) / xL + (2*pi*B2*c*cos((2*pi*c*t) / xL)) / xL) + ((-pi*A1*c*sin((pi*c*t) / xL)) / xL + (pi*B1*c*cos((pi*c*t) / xL)) / xL)*sin((pi*x) / xL)
+        (-A1*c*pi*sin((pi*x) / xL)*sin((c*pi*t) / xL) - (2//1)*A2*c*pi*sin((2*pi*c*t) / xL)*sin((2*pi*x) / xL) + B1*c*pi*sin((pi*x) / xL)*cos(((1//6)*pi*xL + c*pi*t) / xL) + (2//1)*B2*c*pi*cos(((1//6)*pi*xL + (2//1)*c*pi*t) / xL)*sin((2*pi*x) / xL)) / xL
     end
 
     function exact_w(t,x;params = default_parameters)
         @unpack c, A1, A2, B1, B2 = params
-        (pi*(A1*cos((pi*c*t) / xL) + B1*sin((pi*c*t) / xL))*cos((pi*x) / xL)) / xL + (2*pi*(A2*cos((2*pi*c*t) / xL) + B2*sin((2*pi*c*t) / xL))*cos((2*pi*x) / xL)) / xL    
+        (A1*pi*cos((pi*x) / xL)*cos((c*pi*t) / xL) + (2//1)*A2*pi*cos((2*pi*c*t) / xL)*cos((2*pi*x) / xL) + B1*pi*cos((pi*x) / xL)*sin(((1//6)*pi*xL + c*pi*t) / xL) + (2//1)*B2*pi*sin(((1//6)*pi*xL + (2//1)*c*pi*t) / xL)*cos((2*pi*x) / xL)) / xL
     end
 
     function exact_solution(t::Float64, x::Float64)
