@@ -1,6 +1,6 @@
 """
-    Nonlinear Sine-Gordon equation
-    c* u_tt - u_xx = - sin(u) = d(V(u))/du = d(1+cos(u)) / du
+    Wave equation
+    c* u_tt - u_xx = 0
 """
 
 
@@ -16,36 +16,35 @@ module Wave
     const D = 1
     const DX = 1
 
-    const tstep = 1.0
-    const tspan = (0.0, 10.0)
+    const tstep = 0.05
+    const tspan = (0.0, 5.0)
 
     const xstep = 0.01
-    const xspan = (-0.8, 0.8)
-    const xL = xspan[2] - xspan[1]
-
+    const xspan = (0.2, 0.8)
     const c = 1.0 # wave speed square
 
     const default_parameters = (
         c=1.0,
-        A1 = 1.0,
-        A2 = -0.5,
-        B1 = 1.0,
+        A1 = 0.3,
+        A2 = 0.4,
+        B1 = 0.2,
         B2 = 0.5,
+        l = 1.0,
     )
 
     function exact_u(t,x;params = default_parameters)
-        @unpack c, A1, A2, B1, B2 = params
-        (A1 * cos((pi*c*t)/xL) + B1 * sin((pi*c*t)/xL + pi/6)) * sin((pi*x)/xL) + (A2 * cos((2*pi*c*t)/xL) + B2 * sin((2*pi*c*t)/xL + pi/6)) * sin((2*pi*x)/xL)
+        @unpack c, A1, A2, B1, B2, l = params
+        (A1 * cos((pi*c*t)/l) + B1 * sin((pi*c*t)/l + pi/6)) * sin((pi*x)/l) + (A2 * cos((2*pi*c*t)/l) + B2 * sin((2*pi*c*t)/l + pi/6)) * sin((2*pi*x)/l)
     end
 
     function exact_v(t,x;params = default_parameters)
-        @unpack c, A1, A2, B1, B2 = params
-        (-A1*c*pi*sin((pi*x) / xL)*sin((c*pi*t) / xL) - (2//1)*A2*c*pi*sin((2*pi*c*t) / xL)*sin((2*pi*x) / xL) + B1*c*pi*sin((pi*x) / xL)*cos(((1//6)*pi*xL + c*pi*t) / xL) + (2//1)*B2*c*pi*cos(((1//6)*pi*xL + (2//1)*c*pi*t) / xL)*sin((2*pi*x) / xL)) / xL
+        @unpack c, A1, A2, B1, B2, l = params
+        (-A1*c*pi*sin((pi*x) / l)*sin((c*pi*t) / l) - (2//1)*A2*c*pi*sin((2*pi*c*t) / l)*sin((2*pi*x) / l) + B1*c*pi*sin((pi*x) / l)*cos(((1//6)*pi*l + c*pi*t) / l) + (2//1)*B2*c*pi*cos(((1//6)*pi*l + (2//1)*c*pi*t) / l)*sin((2*pi*x) / l)) / l
     end
 
     function exact_w(t,x;params = default_parameters)
-        @unpack c, A1, A2, B1, B2 = params
-        (A1*pi*cos((pi*x) / xL)*cos((c*pi*t) / xL) + (2//1)*A2*pi*cos((2*pi*c*t) / xL)*cos((2*pi*x) / xL) + B1*pi*cos((pi*x) / xL)*sin(((1//6)*pi*xL + c*pi*t) / xL) + (2//1)*B2*pi*sin(((1//6)*pi*xL + (2//1)*c*pi*t) / xL)*cos((2*pi*x) / xL)) / xL
+        @unpack c, A1, A2, B1, B2, l = params
+        (A1*pi*cos((pi*x) / l)*cos((c*pi*t) / l) + (2//1)*A2*pi*cos((2*pi*c*t) / l)*cos((2*pi*x) / l) + B1*pi*cos((pi*x) / l)*sin(((1//6)*pi*l + c*pi*t) / l) + (2//1)*B2*pi*sin(((1//6)*pi*l + (2//1)*c*pi*t) / l)*cos((2*pi*x) / l)) / l
     end
 
     function exact_solution(t::Float64, x::Float64)
@@ -117,17 +116,16 @@ module Wave
 
     # Lagrangian and Hamiltonian density
     function lagrangian(t, x, u, v, w, params)
-        @unpack c, A1, A2, B1, B2 = params
+        @unpack c, A1, A2, B1, B2, l = params
         1 / 2 * (c * v[1]^2 - w[1]^2)
     end
 
     function hamiltonian(t, x, u, v, w, params)
-        @unpack c, A1, A2, B1, B2 = params
+        @unpack c, A1, A2, B1, B2, l = params
         1 / 2 * (c * v[1]^2 + w[1]^2)  
     end
 
     function lpdeproblem(; lagrangian_function=lagrangian, initial_condition_function=initial_condition, boundary_condition_function=boundary_condition, tspan=tspan, tstep::Float64=tstep, xspan::Tuple=xspan, xstep::Float64=xstep, params=default_parameters)
-        @unpack c = params
         # @assert tstep^2 < c * xstep^2 "tstep^2 < c*xstep^2 must hold for CFL condition"
         @assert tspan[1] < tspan[2] "tspan must be increasing"
         @assert xspan[1] < xspan[2] "xspan must be increasing"
