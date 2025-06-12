@@ -12,7 +12,7 @@ module MultiSymplectic
     using LinearAlgebra
     using IterTools:product
     using SimpleSolvers:NewtonMethod, Options, NonlinearSolver,Newton,solve!
-    
+    using Random
     using BSplineKit
     import BSplineKit.SplineInterpolations:make_knots
 
