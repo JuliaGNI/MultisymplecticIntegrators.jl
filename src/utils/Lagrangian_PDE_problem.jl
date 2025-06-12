@@ -3,7 +3,7 @@ struct LPDEProblem <: PDEProblem
     D::Int
     ics_function::Function
     bcs_function::Function
-
+    
     ics_values::NamedTuple
 
     tspan::Tuple{Float64, Float64}
@@ -14,7 +14,9 @@ struct LPDEProblem <: PDEProblem
 
     params
     internal
-    function LPDEProblem(lag_sys,ics_function,bcs_function,ics_values,tspan, tstep, xspan, xstep, params;internal = nothing)
+
+    exact_u
+    function LPDEProblem(lag_sys,ics_function,bcs_function,ics_values,tspan, tstep, xspan, xstep, params,exact_u;internal = nothing)
         new(
             lag_sys,
             lag_sys.D,
@@ -26,7 +28,8 @@ struct LPDEProblem <: PDEProblem
             xspan,
             xstep,
             params,
-            internal
+            internal,
+            exact_u
         )
     end
 end

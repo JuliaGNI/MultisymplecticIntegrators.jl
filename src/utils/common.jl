@@ -154,3 +154,174 @@ function Lagrangian_multiplier(basis::Symbol, order::Integer, quad_nodes::Vector
     Lagrangian_multiplier(Val(basis), order, quad_nodes)
 end
 
+
+
+# flat = flatten_params(pnn.params)
+# reconstructed = reconstruct_params(flat, pnn.params)
+
+function flatten_params(params::NeuralNetworkParameters)
+    flat_list = []
+    for layer in values(params)
+        for field in fieldnames(typeof(layer))
+            val = getfield(layer, field)
+            push!(flat_list, vec(val))
+        end
+    end
+    return vcat(flat_list...)
+end
+
+function reconstruct_params(flat::Vector{Float64}, template::NeuralNetworkParameters)
+    idx = 1
+    reconstructed = NamedTuple()
+    
+    # Iterate over the outer NamedTuple (layers)
+    layers = map(values(template)) do layer
+        # Iterate over the inner NamedTuple (fields like weights, biases)
+        fields = map(fieldnames(typeof(layer))) do fname
+            original_val = getfield(layer, fname)
+            len = length(original_val)
+            reconstructed_val = reshape(flat[idx:idx+len-1], size(original_val))
+            idx += len
+            fname => reconstructed_val
+        end
+        NamedTuple(fields)
+    end
+    
+    # Reconstruct using the original keys of the outer NamedTuple
+    named_keys = keys(template)
+    return NamedTuple{named_keys}(layers)
+end
+
+using IterTools
+
+function construct_quadrature_grid_with_boundary(dimensions::Vector{Int})
+    d = length(dimensions)
+
+    # Create quadrature rules for each dimension
+    function quad_rules(R)
+        if R == 128
+            return GaussQuadrature128()
+        elseif R == 64
+            return GaussQuadrature64()
+        else
+            return QuadratureRules.GaussLegendreQuadrature(R)
+        end
+    end
+
+    quadrature_rules = [quad_rules(R) for R in dimensions]
+    nodes = [rule.nodes for rule in quadrature_rules]
+    weights = [rule.weights for rule in quadrature_rules]
+
+    # Interior grid
+    interior_grid = collect(product(nodes...))
+    interior_weights = [prod(w) for w in product(weights...)]
+
+    full_grid = Vector{Vector{Float64}}()
+    full_weights = Float64[]
+
+    # Add interior points
+    for (pt, w) in zip(interior_grid, interior_weights)
+        push!(full_grid, collect(pt))
+        push!(full_weights, w)
+    end
+
+    # Add boundary faces
+    for i in 1:d
+        other_indices = setdiff(1:d, [i])
+        nodes_rest = nodes[other_indices]
+        weights_rest = weights[other_indices]
+
+        subgrid = collect(product(nodes_rest...))
+        subweights = [prod(w) for w in product(weights_rest...)]
+
+        for fixed_val in (0.0, 1.0)
+            for (pt, w) in zip(subgrid, subweights)
+                new_point = Vector{Float64}(undef, d)
+                k = 1  # index for accessing elements of pt
+                for j in 1:d
+                    if j == i
+                        new_point[j] = fixed_val
+                    else
+                        new_point[j] = pt[k]
+                        k += 1
+                    end
+                end
+                push!(full_grid, new_point)
+                push!(full_weights, w)
+            end
+        end
+    end
+
+    # Convert to matrix where each column is a point
+    grid_matrix = hcat(full_grid...)
+
+    @assert size(grid_matrix, 2) == length(full_weights) "Mismatch between number of grid points and weights."
+
+    return grid_matrix, full_weights
+end
+
+
+function box_init_plain(input_dim::Int, output_dim::Int;Random_rng = Random.seed!(1))
+    W = zeros(Float32, output_dim, input_dim)
+    b = zeros(Float32, output_dim)
+
+    for i in 1:output_dim
+        p = rand(Random_rng,Float32, input_dim) 
+        n = randn(Random_rng,Float32, input_dim)
+        n ./= norm(n)
+        p_max = map((n_i) -> n_i ≥ 0 ? 1.0f0 : 0.0f0, n)
+        k = 1 / dot((p_max .- p), n)
+        W[i, :] = k * n
+        b[i] = k * dot(p, n)
+    end
+    return W, b
+end
+
+function lsgd_loss(network_inputs,labels,NN,ps)
+    NN_output = NN(network_inputs, ps)
+    return sqrt(mean((labels .- NN_output).^2))
+end
+
+
+function create_interior_quadrature_points_derivative_mat(ST::Type, RT::Int,RX::Int, D::Int,P_sizes::Vector{Int})
+    mat = []
+    for d in 1:D
+        push!(mat, zeros(ST, RT, RX, P_sizes[d]))
+    end
+    return mat
+end
+
+function create_interior_quadrature_points_derivative_mat(ST::Type, RT::Int,RX::Int, D::Int, DX::Int,P_sizes::Vector{Int})
+    mat = Array{Array{ST}}(undef,D,DX)
+
+    for d in 1:D
+        for dx in 1:DX
+            mat[d,dx] = zeros(ST, RT, RX, P_sizes[d])
+        end
+    end
+
+    return mat
+end
+
+function create_boundary_derivative_vector(ST::Type, D::Int,R::Int,P_sizes::Vector{Int})
+    mat = []
+    for d in 1:D
+        push!(mat, zeros(ST, R, P_sizes[d]))
+    end
+    return mat
+end
+
+function create_tem_vector(ST::Type, D::Int,P_sizes::Vector{Int})
+    mat = []
+    for d in 1:D
+        push!(mat, zeros(ST, P_sizes[d]))
+    end
+    return mat
+end
+
+function internal_variables(int,problem::PDEProblem)
+    local x = cache(int).x
+    ntime = Int((problem.tspan[2] - problem.tspan[1]) / problem.tstep)
+    xx = (x, ntuple( _ -> zeros(size(x)...), ntime)...)
+    return (x = xx,)
+end

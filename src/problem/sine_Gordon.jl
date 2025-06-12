@@ -125,7 +125,8 @@ module SineGordon
         1 / 2 * (c * v[1]^2 + w[1]^2) - (1 + cos(u[1]))
     end
 
-    function lpdeproblem(; lagrangian_function=lagrangian, initial_condition_function=initial_condition, boundary_condition_function=boundary_condition, tspan=tspan, tstep::Float64=tstep, xspan::Tuple=xspan, xstep::Float64=xstep, params=default_parameters)
+    function lpdeproblem(; lagrangian_function=lagrangian, initial_condition_function=initial_condition, boundary_condition_function=boundary_condition, tspan=tspan, tstep::Float64=tstep, xspan::Tuple=xspan, xstep::Float64=xstep, params=default_parameters,
+        exact_u_func=exact_u)
         @unpack c = params
         # @assert tstep^2 < c * xstep^2 "tstep^2 < c*xstep^2 must hold for CFL condition"
         @assert tspan[1] < tspan[2] "tspan must be increasing"
@@ -137,7 +138,7 @@ module SineGordon
         x_nodes = collect(xspan[1]:xstep:xspan[2])
         ics = initial_condition_function(x_nodes)
 
-        LPDEProblem(lag_sys, initial_condition_function, boundary_condition_function, ics, tspan, tstep, xspan, xstep, params)
+        LPDEProblem(lag_sys, initial_condition_function, boundary_condition_function, ics, tspan, tstep, xspan, xstep, params, exact_u_func)
     end
 
 end

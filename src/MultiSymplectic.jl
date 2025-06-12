@@ -4,11 +4,13 @@ module MultiSymplectic
     import GeometricIntegrators.Integrators: default_solver, default_iguess,default_options,initsolver,datatype
     import GeometricIntegrators.Integrators: CacheDict, Cache,cache, caches,CacheType,solver
     using Symbolics
+    using AbstractNeuralNetworks
+    using SymbolicNeuralNetworks
     using CompactBasisFunctions
     using QuadratureRules
     using Parameters: @unpack
     using LinearAlgebra
-    import IterTools:product
+    using IterTools:product
     using SimpleSolvers:NewtonMethod, Options, NonlinearSolver,Newton,solve!
     
     using BSplineKit
@@ -41,10 +43,15 @@ module MultiSymplectic
     include("basis/BSplineBasis.jl")
     export BSplineDirichlet
 
+    include("basis/Network_PDE_Basis.jl")
+    export NetworkPDEBasis
+
     # integrators
     include("integrator/Sindy_PDE_int.jl")
     export Sindy_PDE_Integrator
 
+    include("integrator/NN_PDE_int.jl")
+    export NN_PDE_Integrator
     #problems
     include("problem/sine_Gordon.jl")
     export SineGordon
