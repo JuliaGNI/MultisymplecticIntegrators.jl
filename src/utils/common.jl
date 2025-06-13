@@ -170,7 +170,7 @@ function flatten_params(params::NeuralNetworkParameters)
     return vcat(flat_list...)
 end
 
-function reconstruct_params(flat::Vector{Float64}, template::NeuralNetworkParameters)
+function reconstruct_params(flat, template::NeuralNetworkParameters)
     idx = 1
     reconstructed = NamedTuple()
     
@@ -279,7 +279,7 @@ end
 
 function lsgd_loss(network_inputs,labels,NN,ps)
     NN_output = NN(network_inputs, ps)
-    return sqrt(mean((labels .- NN_output).^2))
+    return sqrt(Statistics.mean((labels .- NN_output).^2))
 end
 
 

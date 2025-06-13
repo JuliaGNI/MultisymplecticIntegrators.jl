@@ -1,4 +1,6 @@
 struct NetworkPDEBasis <: AbstractPDEBasis
+    network_arch
+    
     u
     v
     w    
@@ -13,7 +15,7 @@ struct NetworkPDEBasis <: AbstractPDEBasis
         u_func = AbstractNeuralNetworks.NeuralNetwork(u_network)
         NP = AbstractNeuralNetworks.parameterlength(u_network)
         
-        sym_∂u∂P = SymbolicNeuralNetworks.derivative(SymbolicNeuralNetworks.Gradient(sym_u)) #[1]
+        sym_∂u∂P = SymbolicNeuralNetworks.derivative(SymbolicNeuralNetworks.Gradient(sym_u))[1]
         ∂u∂P_func = SymbolicNeuralNetworks.build_nn_function(sym_∂u∂P, sym_u.params, sym_u.input)
 
         jac = SymbolicNeuralNetworks.Jacobian(sym_u)
@@ -28,8 +30,9 @@ struct NetworkPDEBasis <: AbstractPDEBasis
         ∂v∂P_func = SymbolicNeuralNetworks.build_nn_function(sym_∂v∂P, sym_u.params, sym_u.input)
         ∂w∂P_func = SymbolicNeuralNetworks.build_nn_function(sym_∂w∂P, sym_u.params, sym_u.input)
 
-        return new(u_func, v_func, w_func,
-                    ∂u∂P_func, ∂v∂P_func, ∂w∂P_func,
-                    NP)
+        return new(u_network,
+            u_func, v_func, w_func,
+            ∂u∂P_func, ∂v∂P_func, ∂w∂P_func,
+            NP)
     end
 end

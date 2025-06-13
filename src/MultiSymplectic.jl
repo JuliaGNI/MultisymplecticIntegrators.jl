@@ -6,6 +6,7 @@ module MultiSymplectic
     using Symbolics
     using AbstractNeuralNetworks
     using SymbolicNeuralNetworks
+    using GeometricMachineLearning    
     using CompactBasisFunctions
     using QuadratureRules
     using Parameters: @unpack
@@ -15,7 +16,8 @@ module MultiSymplectic
     using Random
     using BSplineKit
     import BSplineKit.SplineInterpolations:make_knots
-
+    using Zygote
+    using Statistics
     # abstract types
     include("methods.jl")
     export PDEMethod, PDEProblem, PDEIntegratorCache, AbstractPDEIntegrator, GeometricPDESolution
