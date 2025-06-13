@@ -234,7 +234,7 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator})
     end
 
     tem_ps = PNN.params[keys(PNN.params)[1:end-1]]
-    opt = GeometricMachineLearning.Optimizer(GeometricMachineLearning.GradientOptimizer(.001), tem_ps)
+    opt = GeometricMachineLearning.Optimizer(GeometricMachineLearning.GradientOptimizer(.0005), tem_ps)
     err = 0
     λ = GeometricMachineLearning.GlobalSection(tem_ps)
 
@@ -420,9 +420,9 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:NN_PDE_Int
     for d in 1:D
         for i in 1:RT
             for j in 1:RX
-                C.u_quad_values[d, i, j] = (u[d])([sol.t - timestep(int) + timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
-                C.v_quad_values[d, i, j] = (v[d])([sol.t - timestep(int) + timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
-                C.w_quad_values[d, i, j] = (w[d])([sol.t - timestep(int) + timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
+                C.u_quad_values[d, i, j] = (u[d])([timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
+                C.v_quad_values[d, i, j] = (v[d])([timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
+                C.w_quad_values[d, i, j] = (w[d])([timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
             end
         end
     end
@@ -430,19 +430,19 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:NN_PDE_Int
     for d in 1:D
         for i in 1:RT
             for j in 1:RX#TODO what if RX is a Vector
-                C.∂u∂P_quad_values[d][i, j, :] = flatten_params(∂u∂P([sol.t - timestep(int) + timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
-                C.∂v∂P_quad_values[d][i, j, :] = flatten_params(∂v∂P([sol.t - timestep(int) + timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
-                C.∂w∂P_quad_values[d][i, j, :] = flatten_params(∂w∂P([sol.t - timestep(int) + timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
+                C.∂u∂P_quad_values[d][i, j, :] = flatten_params(∂u∂P([timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
+                C.∂v∂P_quad_values[d][i, j, :] = flatten_params(∂v∂P([timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
+                C.∂w∂P_quad_values[d][i, j, :] = flatten_params(∂w∂P([timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
             end
         end
     
         for rx in 1:RX
-            C.∂u∂P_t₀_quad_values[d][rx,:] = flatten_params(∂u∂P([sol.t - timestep(int), xspan[1] + x_domain* x_quad_nodes[rx]],sol_params))
-            C.∂u∂P_t₁_quad_values[d][rx,:] = flatten_params(∂u∂P([sol.t                , xspan[1] + x_domain* x_quad_nodes[rx]],sol_params))
+            C.∂u∂P_t₀_quad_values[d][rx,:] = flatten_params(∂u∂P([0.0, xspan[1] + x_domain* x_quad_nodes[rx]],sol_params))
+            C.∂u∂P_t₁_quad_values[d][rx,:] = flatten_params(∂u∂P([1.0, xspan[1] + x_domain* x_quad_nodes[rx]],sol_params))
         end
         for rt in 1:RT
-            C.∂u∂P_x₀_quad_values[d][rt,:] = flatten_params(∂u∂P([sol.t - timestep(int) + timestep(int)* t_quad_nodes[rt], xspan[1]],sol_params))
-            C.∂u∂P_x₁_quad_values[d][rt,:] = flatten_params(∂u∂P([sol.t - timestep(int) + timestep(int)* t_quad_nodes[rt], xspan[2]],sol_params))
+            C.∂u∂P_x₀_quad_values[d][rt,:] = flatten_params(∂u∂P([timestep(int)* t_quad_nodes[rt], xspan[1]],sol_params))
+            C.∂u∂P_x₁_quad_values[d][rt,:] = flatten_params(∂u∂P([timestep(int)* t_quad_nodes[rt], xspan[2]],sol_params))
         end
     end
 
@@ -459,23 +459,23 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:NN_PDE_Int
     # boundary values at quadrature points
     for d in 1:D
         for j in 1:RX
-            C.ut₀_quad_values[d,j] = u[d]([sol.t - timestep(int),xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1] # bottom 
-            C.ut₁_quad_values[d,j] = u[d]([sol.t                ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1] # top
+            C.ut₀_quad_values[d,j] = u[d]([0.0 ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1] # bottom 
+            C.ut₁_quad_values[d,j] = u[d]([1.0 ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1] # top
 
-            C.vt₀_quad_values[d,j] = v[d]([sol.t - timestep(int),xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1]
-            C.vt₁_quad_values[d,j] = v[d]([sol.t                ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1]
+            C.vt₀_quad_values[d,j] = v[d]([0.0 ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1]
+            C.vt₁_quad_values[d,j] = v[d]([1.0 ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1]
 
-            C.wt₀_quad_values[d,j] = w[d]([sol.t - timestep(int),xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1]
-            C.wt₁_quad_values[d,j] = w[d]([sol.t                ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1]
+            C.wt₀_quad_values[d,j] = w[d]([0.0 ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1]
+            C.wt₁_quad_values[d,j] = w[d]([1.0 ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1]
         end
 
         for i in 1:RT
-            C.ux₀_quad_values[d,i] = u[d]([sol.t - timestep(int) + timestep(int) .* t_quad_nodes[i],xspan[1]],sol_params)[1]
-            C.ux₁_quad_values[d,i] = u[d]([sol.t - timestep(int) + timestep(int) .* t_quad_nodes[i],xspan[2]],sol_params)[1]
-            C.vx₀_quad_values[d,i] = v[d]([sol.t - timestep(int) + timestep(int) .* t_quad_nodes[i],xspan[1]],sol_params)[1]
-            C.vx₁_quad_values[d,i] = v[d]([sol.t - timestep(int) + timestep(int) .* t_quad_nodes[i],xspan[2]],sol_params)[1]
-            C.wx₀_quad_values[d,i] = w[d]([sol.t - timestep(int) + timestep(int) .* t_quad_nodes[i],xspan[1]],sol_params)[1]
-            C.wx₁_quad_values[d,i] = w[d]([sol.t - timestep(int) + timestep(int) .* t_quad_nodes[i],xspan[2]],sol_params)[1]
+            C.ux₀_quad_values[d,i] = u[d]([timestep(int) .* t_quad_nodes[i],xspan[1]],sol_params)[1]
+            C.ux₁_quad_values[d,i] = u[d]([timestep(int) .* t_quad_nodes[i],xspan[2]],sol_params)[1]
+            C.vx₀_quad_values[d,i] = v[d]([timestep(int) .* t_quad_nodes[i],xspan[1]],sol_params)[1]
+            C.vx₁_quad_values[d,i] = v[d]([timestep(int) .* t_quad_nodes[i],xspan[2]],sol_params)[1]
+            C.wx₀_quad_values[d,i] = w[d]([timestep(int) .* t_quad_nodes[i],xspan[1]],sol_params)[1]
+            C.wx₁_quad_values[d,i] = w[d]([timestep(int) .* t_quad_nodes[i],xspan[2]],sol_params)[1]
         end
 
     end
