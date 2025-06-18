@@ -21,7 +21,7 @@ module MultiSymplectic
     # abstract types
     include("methods.jl")
     export PDEMethod, PDEProblem, PDEIntegratorCache, AbstractPDEIntegrator, GeometricPDESolution
-
+    export InitialParametersMethod, LSGD, GroundTruth
     # utils
     include("utils/common.jl")
     export LPDE_variables,symbolize,substitute_parameters,Lagrangian_multiplier
@@ -60,4 +60,7 @@ module MultiSymplectic
 
     include("problem/wave.jl")
     export Wave
+
+    include("problem/linear_transport.jl")
+    export LinearTransport
 end

@@ -1,4 +1,4 @@
-struct NN_PDE_Integrator{T,MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
+struct NN_PDE_Integrator{T,MVT,LT,BT<:AbstractPDEBasis, IPMT<:InitialParametersMethod} <: PDEMethod
     basis::BT
     time_quadrature
     RT::Int # Number of quadrature points in time
@@ -18,8 +18,10 @@ struct NN_PDE_Integrator{T,MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
     mλ₀_x # λ₀_x evaluated at quadrature points
     mμ_t
     nepochs::Int
-
-    function NN_PDE_Integrator(basis;RT::Int = 6,RX::Int = 8,xspan::Tuple = (0.,1.0),tstep::T = 1.0, k_μ::Int = 4,k_λ₀_x::Int = 4,μ::Symbol = :BSplineDirichlet,λ::Symbol= :BSplineDirichlet,nepochs = 1000) where {T}
+    initial_guess_method::IPMT # :LSGD or :GroundTruth
+    params_turbulance::Float64 # a small value to add to the parameters to avoid zeros in the system
+    function NN_PDE_Integrator(basis; RT::Int = 6,RX::Int = 8,xspan::Tuple = (0.,1.0),tstep::T = 1.0, k_μ::Int = 4,k_λ₀_x::Int = 4,
+        μ::Symbol = :BSplineDirichlet,λ::Symbol= :BSplineDirichlet,nepochs = 1000,initial_guess_method::IPMT=:LSGD(),params_turbulance = 0.0001) where {T, IPMT}
         
         if RT ==128 
             t_quadrature = GaussQuadrature128()
@@ -55,13 +57,14 @@ struct NN_PDE_Integrator{T,MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
             mμ_t[i,:] = μ₀_t.b[i].(tstep .* t_quadrature.nodes)
         end
 
-        new{T,typeof(μ₀_t),typeof(λ₀_x),typeof(basis)}(basis, t_quadrature, RT,
+        new{T,typeof(μ₀_t),typeof(λ₀_x),typeof(basis),typeof(initial_guess_method)}(basis, t_quadrature, RT,
             x_quadrature, RX,
             grid_matrix, grid_weights,
             k_μ, μ₀_t, μ₁_t,
             k_λ₀_x,λ₀_x, #λ₁_x,
-            mλ₀_x, mμ_t
-            , nepochs)
+            mλ₀_x, mμ_t,
+            nepochs,
+            initial_guess_method,params_turbulance)
     end 
 end
 
@@ -205,24 +208,22 @@ end
 end
 
 
-function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator})
+function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT,LT,BT,IPMT}}) where {T,MVT,LT,BT,IPMT<:LSGD}
     local NP = int.method.basis.NP
-    local internal = sol.internal
-    local current_step = sol.current_step
     local RT = int.method.RT
     local RX = int.method.RX
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
     local NN = int.method.basis.network_arch
     local PNN = int.method.basis.u
     local nepochs = int.method.nepochs
-
+    local optim_mode = int.method.basis.optim_mode
 
     network_inputs,_ = construct_quadrature_grid_with_boundary([RT,RX])
     labels = int.problem.exact_u.(sol.t .- timestep(int) .+ timestep(int) .* network_inputs[1,:],int.problem.xspan[1] .+ x_domain .* network_inputs[2,:])
     labels = reshape(labels,1,:) # labels should be a matrix with one row and multiple columns
 
     # initialize the parameters and train with LSGD
-    for (name, layer) in zip(keys(PNN.params), values(PNN.params) )
+    for (name, layer) in zip(keys(PNN.params), values(PNN.params))
         in_size = size(layer.W, 2)
         out_size = size(layer.W, 1)
         if hasfield(typeof(layer), :b)
@@ -257,7 +258,42 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator})
     end
 
     # copy the parameters to the cache
-    C.x[1:NP]= flatten_params(PNN.params)
+    if optim_mode == :Partially
+        C.x[1:NP] = PNN.params[keys(PNN.params)[end]].W[:]
+    elseif optim_mode == :Fully
+        C.x[1:NP]= flatten_params(PNN.params)
+    end
+
+end
+
+function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT,LT,BT,IPMT}}) where {T,MVT,LT,BT,IPMT<:GroundTruth}
+    local NP = int.method.basis.NP
+    local PNN = int.method.basis.u
+    local optim_mode = int.method.basis.optim_mode
+    local params_turbulance = int.method.params_turbulance
+
+    PNN.params.L1.W[:,2] .= 1.0 
+    PNN.params.L1.W[:,1] .= - 0.2
+    PNN.params.L1.b[:] = [-0.0000, -0.2930, -0.5664, -0.1328, -0.7207, -0.3965, -0.4893, -0.6426]
+    PNN.params.L2.W[:] = [0.3275,   52.7569,   -6.1713,   -1.7977,    6.4468, -153.8942,137.0191,  -34.2571]
+
+    # copy the parameters to the cache
+    if optim_mode == :Partially
+        PNN.params[keys(PNN.params)[end]].W[:] = PNN.params[keys(PNN.params)[end]].W[:] .+ params_turbulance .* randn(Random.seed!(1),NP, 1)
+        C.x[1:NP] = PNN.params[keys(PNN.params)[end]].W[:]
+    elseif optim_mode == :Fully
+        # Purtube the parameters a little bit to avoid zeros in the syste
+        for (name, layer) in zip(keys(PNN.params), values(PNN.params))
+            if hasfield(typeof(layer), :b)
+                layer.W[:] = layer.W[:] .+ params_turbulance .* randn(Random.seed!(1), size(layer.W[:]))
+                layer.b[:] = layer.b[:] .+ params_turbulance .* randn(Random.seed!(1), size(layer.b[:]))
+            else
+                # For layers without bias (e.g., output), just regenerate W
+                layer.W[:] = layer.W[:] .+ params_turbulance .* randn(Random.seed!(2),size(layer.W[:]))
+            end
+        end
+        C.x[1:NP]= flatten_params(PNN.params)
+    end
 
 end
 
@@ -298,7 +334,7 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:NN_PDE_Integrator})
 
 end
 
-function post_initial_guess!(C,sol_struct,int::PDEIntegrator{<:NN_PDE_Integrator},int_method::NN_PDE_Integrator{T,MVT,LT,BT}) where {T,MVT<:BSplineDirichlet{T},LT<:BSplineDirichlet{T},BT}
+function post_initial_guess!(C,sol_struct,int::PDEIntegrator{<:NN_PDE_Integrator},int_method::NN_PDE_Integrator{T,MVT,LT,BT, IPMT}) where {T,MVT<:BSplineDirichlet{T},LT<:BSplineDirichlet{T},BT,IPMT}
     local NP = int_method.basis.NP
     local RT = int_method.RT
     local RX = int_method.RX
@@ -357,7 +393,7 @@ function post_initial_guess!(C,sol_struct,int::PDEIntegrator{<:NN_PDE_Integrator
     end
 end
 
-function post_initial_guess!(C,sol_struct,int::PDEIntegrator{<:NN_PDE_Integrator},int_method::NN_PDE_Integrator{T,MVT,LT,BT}) where {T,MVT<:Lagrange,LT<:Lagrange,BT}
+function post_initial_guess!(C,sol_struct,int::PDEIntegrator{<:NN_PDE_Integrator},int_method::NN_PDE_Integrator{T,MVT,LT,BT, IPMT}) where {T,MVT<:Lagrange,LT<:Lagrange,BT,IPMT}
     local NP = int_method.basis.NP
     local RT = int_method.RT
     local RX = int_method.RX
@@ -412,10 +448,14 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:NN_PDE_Int
     local params = int.problem.lagrangian_system.params
     local mλ₀_x = int.method.mλ₀_x
     local mμ_t = int.method.mμ_t
-
+    local optim_mode = int.method.basis.optim_mode
     #copy part of x into the network parameter
-    sol_params = NeuralNetworkParameters(reconstruct_params(x[1:NP], u[1].params))
-
+    if optim_mode == :Fully
+        sol_params = NeuralNetworkParameters(reconstruct_params(x[1:NP], u[1].params))
+    elseif optim_mode == :Partially
+        sol_params = u[1].params
+        sol_params[keys(u[1].params)[end]].W[:] = x[1:NP]
+    end
     # interior values at quadrature points
     for d in 1:D
         for i in 1:RT
@@ -499,7 +539,6 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:NN_PDE_Int
         end
     end
 end
-
 
 function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT <: BSplineDirichlet,LT  <: BSplineDirichlet,BT,IT <: NN_PDE_Integrator{T, MVT, LT, BT}}
     local D = int.problem.D 
@@ -593,10 +632,9 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT 
             z = zero(ST)
             for rt in 1:RT
                 for rx in 1:RX
-                    z += timestep(int) * quad_b[rt,rx]* x_domain *
-                        (C.∂L∂U_quad_values[d,rt,rx] * C.∂u∂P_quad_values[d][rt, rx,p]
-                        + C.∂L∂V_quad_values[d,rt,rx] * C.∂v∂P_quad_values[d][rt, rx,p]
-                        + C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂P_quad_values[d][rt, rx,p])
+                        ( x_domain *timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * C.∂u∂P_quad_values[d][rt, rx,p]
+                        + x_domain                * C.∂L∂V_quad_values[d,rt,rx] * C.∂v∂P_quad_values[d][rt, rx,p]
+                        + timestep(int)           * C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂P_quad_values[d][rt, rx,p])
                 end
             end
             for rx in 1:RX
