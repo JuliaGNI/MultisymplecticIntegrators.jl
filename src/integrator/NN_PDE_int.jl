@@ -457,12 +457,13 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:NN_PDE_Int
         sol_params[keys(u[1].params)[end]].W[:] = x[1:NP]
     end
     # interior values at quadrature points
+
     for d in 1:D
         for i in 1:RT
             for j in 1:RX
-                C.u_quad_values[d, i, j] = (u[d])([timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
-                C.v_quad_values[d, i, j] = (v[d])([timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
-                C.w_quad_values[d, i, j] = (w[d])([timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
+                C.u_quad_values[d, i, j] = (u[d])([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
+                C.v_quad_values[d, i, j] = (v[d])([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
+                C.w_quad_values[d, i, j] = (w[d])([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
             end
         end
     end
@@ -470,9 +471,9 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:NN_PDE_Int
     for d in 1:D
         for i in 1:RT
             for j in 1:RX#TODO what if RX is a Vector
-                C.∂u∂P_quad_values[d][i, j, :] = flatten_params(∂u∂P([timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
-                C.∂v∂P_quad_values[d][i, j, :] = flatten_params(∂v∂P([timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
-                C.∂w∂P_quad_values[d][i, j, :] = flatten_params(∂w∂P([timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
+                C.∂u∂P_quad_values[d][i, j, :] = flatten_params(∂u∂P([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
+                C.∂v∂P_quad_values[d][i, j, :] = flatten_params(∂v∂P([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
+                C.∂w∂P_quad_values[d][i, j, :] = flatten_params(∂w∂P([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
             end
         end
     
@@ -481,8 +482,8 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:NN_PDE_Int
             C.∂u∂P_t₁_quad_values[d][rx,:] = flatten_params(∂u∂P([1.0, xspan[1] + x_domain* x_quad_nodes[rx]],sol_params))
         end
         for rt in 1:RT
-            C.∂u∂P_x₀_quad_values[d][rt,:] = flatten_params(∂u∂P([timestep(int)* t_quad_nodes[rt], xspan[1]],sol_params))
-            C.∂u∂P_x₁_quad_values[d][rt,:] = flatten_params(∂u∂P([timestep(int)* t_quad_nodes[rt], xspan[2]],sol_params))
+            C.∂u∂P_x₀_quad_values[d][rt,:] = flatten_params(∂u∂P([t_quad_nodes[rt], xspan[1]],sol_params))
+            C.∂u∂P_x₁_quad_values[d][rt,:] = flatten_params(∂u∂P([t_quad_nodes[rt], xspan[2]],sol_params))
         end
     end
 
@@ -510,12 +511,12 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:NN_PDE_Int
         end
 
         for i in 1:RT
-            C.ux₀_quad_values[d,i] = u[d]([timestep(int) .* t_quad_nodes[i],xspan[1]],sol_params)[1]
-            C.ux₁_quad_values[d,i] = u[d]([timestep(int) .* t_quad_nodes[i],xspan[2]],sol_params)[1]
-            C.vx₀_quad_values[d,i] = v[d]([timestep(int) .* t_quad_nodes[i],xspan[1]],sol_params)[1]
-            C.vx₁_quad_values[d,i] = v[d]([timestep(int) .* t_quad_nodes[i],xspan[2]],sol_params)[1]
-            C.wx₀_quad_values[d,i] = w[d]([timestep(int) .* t_quad_nodes[i],xspan[1]],sol_params)[1]
-            C.wx₁_quad_values[d,i] = w[d]([timestep(int) .* t_quad_nodes[i],xspan[2]],sol_params)[1]
+            C.ux₀_quad_values[d,i] = u[d]([t_quad_nodes[i],xspan[1]],sol_params)[1]
+            C.ux₁_quad_values[d,i] = u[d]([t_quad_nodes[i],xspan[2]],sol_params)[1]
+            C.vx₀_quad_values[d,i] = v[d]([t_quad_nodes[i],xspan[1]],sol_params)[1]
+            C.vx₁_quad_values[d,i] = v[d]([t_quad_nodes[i],xspan[2]],sol_params)[1]
+            C.wx₀_quad_values[d,i] = w[d]([t_quad_nodes[i],xspan[1]],sol_params)[1]
+            C.wx₁_quad_values[d,i] = w[d]([t_quad_nodes[i],xspan[2]],sol_params)[1]
         end
 
     end
@@ -563,9 +564,9 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT 
             for rt in 1:RT
                 for rx in 1:RX
                     z +=  quad_b[rt,rx] * 
-                        ( x_domain *timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * C.∂u∂P_quad_values[d][rt, rx,p]
-                        + x_domain                * C.∂L∂V_quad_values[d,rt,rx] * C.∂v∂P_quad_values[d][rt, rx,p]
-                        + timestep(int)           * C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂P_quad_values[d][rt, rx,p])
+                        ( x_domain * timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * C.∂u∂P_quad_values[d][rt, rx,p]
+                        + x_domain                 * C.∂L∂V_quad_values[d,rt,rx] * C.∂v∂P_quad_values[d][rt, rx,p]
+                        + x_domain * timestep(int) * C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂P_quad_values[d][rt, rx,p])
                 end
             end
             for rx in 1:RX
@@ -610,7 +611,6 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT 
             b[NP + D * RX + D * RT + (d - 1) * RT + i] = z
         end
     end
-
 end
 
 
@@ -632,9 +632,10 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT 
             z = zero(ST)
             for rt in 1:RT
                 for rx in 1:RX
-                        ( x_domain *timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * C.∂u∂P_quad_values[d][rt, rx,p]
-                        + x_domain                * C.∂L∂V_quad_values[d,rt,rx] * C.∂v∂P_quad_values[d][rt, rx,p]
-                        + timestep(int)           * C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂P_quad_values[d][rt, rx,p])
+                    z +=  quad_b[rt,rx] * 
+                        ( x_domain * timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * C.∂u∂P_quad_values[d][rt, rx,p]
+                        + x_domain                 * C.∂L∂V_quad_values[d,rt,rx] * C.∂v∂P_quad_values[d][rt, rx,p]
+                        + x_domain * timestep(int) * C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂P_quad_values[d][rt, rx,p])
                 end
             end
             for rx in 1:RX
