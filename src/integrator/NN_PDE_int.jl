@@ -21,7 +21,7 @@ struct NN_PDE_Integrator{T,MVT,LT,BT<:AbstractPDEBasis, IPMT<:InitialParametersM
     initial_guess_method::IPMT # :LSGD or :GroundTruth
     params_turbulance::Float64 # a small value to add to the parameters to avoid zeros in the system
     function NN_PDE_Integrator(basis; RT::Int = 6,RX::Int = 8,xspan::Tuple = (0.,1.0),tstep::T = 1.0, k_μ::Int = 4,k_λ₀_x::Int = 4,
-        μ::Symbol = :BSplineDirichlet,λ::Symbol= :BSplineDirichlet,nepochs = 1000,initial_guess_method::IPMT=:LSGD(),params_turbulance = 0.0001) where {T, IPMT}
+        μ::Symbol = :BSplineDirichlet,λ::Symbol= :BSplineDirichlet,nepochs = 1000,initial_guess_method::IPMT=:LSGD(),params_turbulance = 1e-7) where {T, IPMT}
         
         if RT ==128 
             t_quadrature = GaussQuadrature128()
@@ -124,8 +124,8 @@ struct NN_PDE_IntegratorCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     boundary_condition_x₀::Matrix{ST}
     boundary_condition_x₁::Matrix{ST}
 
-
-    function NN_PDE_IntegratorCache{ST,RT,RX,D,NP}() where {ST,RT,RX,D,NP}
+    sol_params
+    function NN_PDE_IntegratorCache{ST,RT,RX,D,NP}(network_arch) where {ST,RT,RX,D,NP}
         # x = zeros(ST, NP + 2 * D * RX + 2* D * DX * RT ) # TODO: how to deal with RX being a vector/
         x = zeros(ST,NP + D * RX +2* D * RT) # params, λ₀_x_coes,μ₀_t_coes,μ₁_t_coes
         # TODO:consider when DX is a vector
@@ -175,6 +175,8 @@ struct NN_PDE_IntegratorCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
         boundary_condition_x₀ = zeros(ST, D, RT)
         boundary_condition_x₁ = zeros(ST, D, RT)
 
+        sol_params = network_cache_create(network_arch,ST)
+
         new(x,
             u_quad_values, v_quad_values, w_quad_values,
             ∂L∂U_quad_values, ∂L∂V_quad_values, ∂L∂W_quad_values,
@@ -185,14 +187,15 @@ struct NN_PDE_IntegratorCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
             ut₀_quad_values, ut₁_quad_values,vt₀_quad_values, vt₁_quad_values,wt₀_quad_values, wt₁_quad_values,
             ux₀_quad_values, ux₁_quad_values,vx₀_quad_values, vx₁_quad_values,wx₀_quad_values, wx₁_quad_values,
             init_condition_t₀, 
-            boundary_condition_x₀, boundary_condition_x₁)
+            boundary_condition_x₀, boundary_condition_x₁,
+            sol_params)
     end
 end
 
 nlsolution(cache::NN_PDE_IntegratorCache) = cache.x
 
 function Cache{ST}(problem::PDEProblem, int::NN_PDE_Integrator; kwargs...) where {ST}
-    NN_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.NP}(; kwargs...)
+    NN_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.NP}(int.basis.network_arch; kwargs...)
 end
 
 #{ST,RT,RX,D,NP}(NP) where {ST,RT,RX,D,NP}
@@ -266,16 +269,52 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT
 
 end
 
+# function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT,LT,BT,IPMT}}) where {T,MVT,LT,BT,IPMT<:GroundTruth}
+#     local NP = int.method.basis.NP
+#     local PNN = int.method.basis.u
+#     local optim_mode = int.method.basis.optim_mode
+#     local params_turbulance = int.method.params_turbulance
+
+#     PNN.params.L1.W[:,2] .= 1.0 
+#     PNN.params.L1.W[:,1] .= - 0.2
+#     PNN.params.L1.b[:] = [-0.0000, -0.2930, -0.5664, -0.1328, -0.7207, -0.3965, -0.4893, -0.6426]
+#     PNN.params.L2.W[:] = [0.3275,   52.7569,   -6.1713,   -1.7977,    6.4468, -153.8942,137.0191,  -34.2571]
+
+#     # copy the parameters to the cache
+#     if optim_mode == :Partially
+#         PNN.params[keys(PNN.params)[end]].W[:] = PNN.params[keys(PNN.params)[end]].W[:] .+ params_turbulance .* randn(Random.seed!(1),NP, 1)
+#         C.x[1:NP] = PNN.params[keys(PNN.params)[end]].W[:]
+#     elseif optim_mode == :Fully
+#         # Purtube the parameters a little bit to avoid zeros in the syste
+#         for (name, layer) in zip(keys(PNN.params), values(PNN.params))
+#             if hasfield(typeof(layer), :b)
+#                 layer.W[:] = layer.W[:] .+ params_turbulance .* randn(Random.seed!(1), size(layer.W[:]))
+#                 layer.b[:] = layer.b[:] .+ params_turbulance .* randn(Random.seed!(1), size(layer.b[:]))
+#             else
+#                 # For layers without bias (e.g., output), just regenerate W
+#                 layer.W[:] = layer.W[:] .+ params_turbulance .* randn(Random.seed!(2),size(layer.W[:]))
+#             end
+#         end
+#         C.x[1:NP]= flatten_params(PNN.params)
+#     end
+
+# end
+
 function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT,LT,BT,IPMT}}) where {T,MVT,LT,BT,IPMT<:GroundTruth}
     local NP = int.method.basis.NP
     local PNN = int.method.basis.u
     local optim_mode = int.method.basis.optim_mode
     local params_turbulance = int.method.params_turbulance
 
-    PNN.params.L1.W[:,2] .= 1.0 
-    PNN.params.L1.W[:,1] .= - 0.2
-    PNN.params.L1.b[:] = [-0.0000, -0.2930, -0.5664, -0.1328, -0.7207, -0.3965, -0.4893, -0.6426]
-    PNN.params.L2.W[:] = [0.3275,   52.7569,   -6.1713,   -1.7977,    6.4468, -153.8942,137.0191,  -34.2571]
+    PNN.params.L1.W[:,2] .= [-1.0,1.0,-1.0,-1.0,1.0,1.0,-1.0,-1.0,1.0,-1.0,1.0,-1.0,-1.0,1.0,1.0,1.0,1.0,-1.0,-1.0,-1.0]
+    PNN.params.L1.W[:,1] .= - 0.2 * [-1.0,1.0,-1.0,-1.0,1.0,1.0,-1.0,-1.0,1.0,-1.0,1.0,-1.0,-1.0,1.0,1.0,1.0,1.0,-1.0,-1.0,-1.0]
+    PNN.params.L1.b[:] = [ 0.9995, -0.0000,  0.6479,  0.3423, -0.5156, -0.7178,  0.2222,  0.7964,
+        -0.4072,  0.4653, -0.2852,  0.5786,  0.1450, -0.3730, -0.4873, -0.6123,
+        -0.2559,  0.4321,  0.3091,  0.3911]
+    PNN.params.L2.W[:] = [-5.5742e+00,  1.1024e+01, -5.3139e+00, -4.0719e+00,  6.0699e+01,
+         -7.4047e-01, -9.1054e-01, -1.7195e-01, -1.5121e+02,  4.6744e+01,
+          2.2065e+01,  2.3221e+01,  1.1691e-01, -2.3493e+01,  1.2785e+02,
+         -3.6581e+01, -4.0092e+00, -4.0954e+01, -3.2466e+01,  8.3772e+00]
 
     # copy the parameters to the cache
     if optim_mode == :Partially
@@ -285,18 +324,17 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT
         # Purtube the parameters a little bit to avoid zeros in the syste
         for (name, layer) in zip(keys(PNN.params), values(PNN.params))
             if hasfield(typeof(layer), :b)
-                layer.W[:] = layer.W[:] .+ params_turbulance .* randn(Random.seed!(1), size(layer.W[:]))
-                layer.b[:] = layer.b[:] .+ params_turbulance .* randn(Random.seed!(1), size(layer.b[:]))
+                layer.W[:] = layer.W[:] .+ params_turbulance .* randn(size(layer.W[:]))
+                layer.b[:] = layer.b[:] .+ params_turbulance .* randn(size(layer.b[:]))
             else
                 # For layers without bias (e.g., output), just regenerate W
-                layer.W[:] = layer.W[:] .+ params_turbulance .* randn(Random.seed!(2),size(layer.W[:]))
+                layer.W[:] = layer.W[:] .+ params_turbulance .* randn(size(layer.W[:]))
             end
         end
         C.x[1:NP]= flatten_params(PNN.params)
     end
 
 end
-
 function initialize_bcs_ics!(sol,int::PDEIntegrator{<:NN_PDE_Integrator})
     local C = cache(int)
     local x_quad_nodes = int.method.spatial_quadrature.nodes
@@ -449,43 +487,76 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:NN_PDE_Int
     local mλ₀_x = int.method.mλ₀_x
     local mμ_t = int.method.mμ_t
     local optim_mode = int.method.basis.optim_mode
+    last_layer = keys(u[1].params)[end]
+
     #copy part of x into the network parameter
     if optim_mode == :Fully
         sol_params = NeuralNetworkParameters(reconstruct_params(x[1:NP], u[1].params))
     elseif optim_mode == :Partially
-        sol_params = u[1].params
-        sol_params[keys(u[1].params)[end]].W[:] = x[1:NP]
+        for (name, layer) in zip(keys(u[1].params), values(u[1].params))
+            if hasfield(typeof(layer), :b)
+                C.sol_params[name].W[:] = layer.W[:] 
+                C.sol_params[name].b[:] = layer.b[:]
+            else
+                # For layers without bias (e.g., output), just regenerate W
+                C.sol_params[name].W[:] = layer.W[:]
+            end
+        end
+
+        C.sol_params[last_layer].W[:] = x[1:NP]
     end
     # interior values at quadrature points
-
     for d in 1:D
         for i in 1:RT
             for j in 1:RX
-                C.u_quad_values[d, i, j] = (u[d])([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
-                C.v_quad_values[d, i, j] = (v[d])([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
-                C.w_quad_values[d, i, j] = (w[d])([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params)[1]
+                C.u_quad_values[d, i, j] = (u[d])([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],C.sol_params)[1]
+                C.v_quad_values[d, i, j] = (v[d])([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],C.sol_params)[1]
+                C.w_quad_values[d, i, j] = (w[d])([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],C.sol_params)[1]
             end
         end
     end
 
-    for d in 1:D
-        for i in 1:RT
-            for j in 1:RX#TODO what if RX is a Vector
-                C.∂u∂P_quad_values[d][i, j, :] = flatten_params(∂u∂P([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
-                C.∂v∂P_quad_values[d][i, j, :] = flatten_params(∂v∂P([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
-                C.∂w∂P_quad_values[d][i, j, :] = flatten_params(∂w∂P([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],sol_params))
+    if optim_mode == :Fully
+        for d in 1:D
+            for i in 1:RT
+                for j in 1:RX#TODO what if RX is a Vector
+                    C.∂u∂P_quad_values[d][i, j, :] = flatten_params(∂u∂P([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],C.sol_params))
+                    C.∂v∂P_quad_values[d][i, j, :] = flatten_params(∂v∂P([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],C.sol_params))
+                    C.∂w∂P_quad_values[d][i, j, :] = flatten_params(∂w∂P([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],C.sol_params))
+                end
+            end
+        
+            for rx in 1:RX
+                C.∂u∂P_t₀_quad_values[d][rx,:] = flatten_params(∂u∂P([0.0, xspan[1] + x_domain* x_quad_nodes[rx]],C.sol_params))
+                C.∂u∂P_t₁_quad_values[d][rx,:] = flatten_params(∂u∂P([1.0, xspan[1] + x_domain* x_quad_nodes[rx]],C.sol_params))
+            end
+            for rt in 1:RT
+                C.∂u∂P_x₀_quad_values[d][rt,:] = flatten_params(∂u∂P([t_quad_nodes[rt], xspan[1]],C.sol_params))
+                C.∂u∂P_x₁_quad_values[d][rt,:] = flatten_params(∂u∂P([t_quad_nodes[rt], xspan[2]],C.sol_params))
             end
         end
-    
-        for rx in 1:RX
-            C.∂u∂P_t₀_quad_values[d][rx,:] = flatten_params(∂u∂P([0.0, xspan[1] + x_domain* x_quad_nodes[rx]],sol_params))
-            C.∂u∂P_t₁_quad_values[d][rx,:] = flatten_params(∂u∂P([1.0, xspan[1] + x_domain* x_quad_nodes[rx]],sol_params))
-        end
-        for rt in 1:RT
-            C.∂u∂P_x₀_quad_values[d][rt,:] = flatten_params(∂u∂P([t_quad_nodes[rt], xspan[1]],sol_params))
-            C.∂u∂P_x₁_quad_values[d][rt,:] = flatten_params(∂u∂P([t_quad_nodes[rt], xspan[2]],sol_params))
+    elseif optim_mode == :Partially
+        for d in 1:D
+            for i in 1:RT
+                for j in 1:RX#TODO what if RX is a Vector
+                    C.∂u∂P_quad_values[d][i, j, :] = ∂u∂P([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],C.sol_params)[last_layer].W[:]
+                    C.∂v∂P_quad_values[d][i, j, :] = ∂v∂P([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],C.sol_params)[last_layer].W[:]
+                    C.∂w∂P_quad_values[d][i, j, :] = ∂w∂P([grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2]],C.sol_params)[last_layer].W[:]
+                end
+            end
+        
+            for rx in 1:RX
+                C.∂u∂P_t₀_quad_values[d][rx,:] = ∂u∂P([0.0, xspan[1] + x_domain* x_quad_nodes[rx]],C.sol_params)[last_layer].W[:]
+                C.∂u∂P_t₁_quad_values[d][rx,:] = ∂u∂P([1.0, xspan[1] + x_domain* x_quad_nodes[rx]],C.sol_params)[last_layer].W[:]
+            end
+            for rt in 1:RT
+                C.∂u∂P_x₀_quad_values[d][rt,:] = ∂u∂P([t_quad_nodes[rt], xspan[1]],C.sol_params)[last_layer].W[:]
+                C.∂u∂P_x₁_quad_values[d][rt,:] = ∂u∂P([t_quad_nodes[rt], xspan[2]],C.sol_params)[last_layer].W[:]
+            end
         end
     end
+
+
 
     for d in 1:D
         for i in 1:RT
@@ -500,23 +571,23 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:NN_PDE_Int
     # boundary values at quadrature points
     for d in 1:D
         for j in 1:RX
-            C.ut₀_quad_values[d,j] = u[d]([0.0 ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1] # bottom 
-            C.ut₁_quad_values[d,j] = u[d]([1.0 ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1] # top
+            C.ut₀_quad_values[d,j] = u[d]([0.0 ,xspan[1] + x_domain* x_quad_nodes[j]],C.sol_params)[1] # bottom 
+            C.ut₁_quad_values[d,j] = u[d]([1.0 ,xspan[1] + x_domain* x_quad_nodes[j]],C.sol_params)[1] # top
 
-            C.vt₀_quad_values[d,j] = v[d]([0.0 ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1]
-            C.vt₁_quad_values[d,j] = v[d]([1.0 ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1]
+            C.vt₀_quad_values[d,j] = v[d]([0.0 ,xspan[1] + x_domain* x_quad_nodes[j]],C.sol_params)[1]
+            C.vt₁_quad_values[d,j] = v[d]([1.0 ,xspan[1] + x_domain* x_quad_nodes[j]],C.sol_params)[1]
 
-            C.wt₀_quad_values[d,j] = w[d]([0.0 ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1]
-            C.wt₁_quad_values[d,j] = w[d]([1.0 ,xspan[1] + x_domain* x_quad_nodes[j]],sol_params)[1]
+            C.wt₀_quad_values[d,j] = w[d]([0.0 ,xspan[1] + x_domain* x_quad_nodes[j]],C.sol_params)[1]
+            C.wt₁_quad_values[d,j] = w[d]([1.0 ,xspan[1] + x_domain* x_quad_nodes[j]],C.sol_params)[1]
         end
 
         for i in 1:RT
-            C.ux₀_quad_values[d,i] = u[d]([t_quad_nodes[i],xspan[1]],sol_params)[1]
-            C.ux₁_quad_values[d,i] = u[d]([t_quad_nodes[i],xspan[2]],sol_params)[1]
-            C.vx₀_quad_values[d,i] = v[d]([t_quad_nodes[i],xspan[1]],sol_params)[1]
-            C.vx₁_quad_values[d,i] = v[d]([t_quad_nodes[i],xspan[2]],sol_params)[1]
-            C.wx₀_quad_values[d,i] = w[d]([t_quad_nodes[i],xspan[1]],sol_params)[1]
-            C.wx₁_quad_values[d,i] = w[d]([t_quad_nodes[i],xspan[2]],sol_params)[1]
+            C.ux₀_quad_values[d,i] = u[d]([t_quad_nodes[i],xspan[1]],C.sol_params)[1]
+            C.ux₁_quad_values[d,i] = u[d]([t_quad_nodes[i],xspan[2]],C.sol_params)[1]
+            C.vx₀_quad_values[d,i] = v[d]([t_quad_nodes[i],xspan[1]],C.sol_params)[1]
+            C.vx₁_quad_values[d,i] = v[d]([t_quad_nodes[i],xspan[2]],C.sol_params)[1]
+            C.wx₀_quad_values[d,i] = w[d]([t_quad_nodes[i],xspan[1]],C.sol_params)[1]
+            C.wx₁_quad_values[d,i] = w[d]([t_quad_nodes[i],xspan[2]],C.sol_params)[1]
         end
 
     end
@@ -683,18 +754,41 @@ function update!(sol_struct, int::PDEIntegrator{<:NN_PDE_Integrator})
     local C = cache(int)
     local NP = int.method.basis.NP
     local x = nlsolution(int)
+    local optim_mode = int.method.basis.optim_mode
+    last_layer = keys(u[1].params)[end]
 
     x_nodes = collect(xspan[1]:xstep:xspan[2])
-    sol_params = NeuralNetworkParameters(reconstruct_params(x[1:NP], u[1].params))
-
+    if optim_mode == :Fully
+        tem_params = NeuralNetworkParameters(reconstruct_params(x[1:NP], u[1].params))
+        for (name, layer) in zip(keys(tem_params), values(tem_params))
+            if hasfield(typeof(layer), :b)
+                C.sol_params[name].W[:] = layer.W[:] 
+                C.sol_params[name].b[:] = layer.b[:]
+            else
+                # For layers without bias (e.g., output), just regenerate W
+                C.sol_params[name].W[:] = layer.W[:]
+            end
+        end
+    elseif optim_mode == :Partially
+        for (name, layer) in zip(keys(u[1].params), values(u[1].params))
+            if hasfield(typeof(layer), :b)
+                C.sol_params[name].W[:] = layer.W[:] 
+                C.sol_params[name].b[:] = layer.b[:]
+            else
+                # For layers without bias (e.g., output), just regenerate W
+                C.sol_params[name].W[:] = layer.W[:]
+            end
+        end
+        C.sol_params[last_layer].W[:] = x[1:NP]
+    end
     # println("In update! function, step = ", sol_struct.current_step)
     # println("In update! function, time = ", sol_struct.t)
 
     for d in 1:D
         for i in eachindex(x_nodes)
-            sol_struct.sol.u[sol_struct.current_step][i] = u[d]([sol_struct.t, x_nodes[i]],sol_params)[1]
-            sol_struct.sol.v[sol_struct.current_step][i] = v[d]([sol_struct.t, x_nodes[i]],sol_params)[1]
-            sol_struct.sol.w[sol_struct.current_step][i] = w[d]([sol_struct.t, x_nodes[i]],sol_params)[1]
+            sol_struct.sol.u[sol_struct.current_step][i] = u[d]([sol_struct.t, x_nodes[i]],C.sol_params)[1]
+            sol_struct.sol.v[sol_struct.current_step][i] = v[d]([sol_struct.t, x_nodes[i]],C.sol_params)[1]
+            sol_struct.sol.w[sol_struct.current_step][i] = w[d]([sol_struct.t, x_nodes[i]],C.sol_params)[1]
         end
     end
 
@@ -705,4 +799,7 @@ function update!(sol_struct, int::PDEIntegrator{<:NN_PDE_Integrator})
     # println("In the end of update! function, time = ", sol_struct.t)
 end
 
-
+function network_cache_create(u_network, ST)
+    pnn=NeuralNetwork(u_network,ST,initializer = ZeroInitializer())#,initializer = ZeroInitializer()
+    pnn.params
+end

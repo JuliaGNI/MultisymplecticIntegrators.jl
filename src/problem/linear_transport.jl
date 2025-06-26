@@ -38,45 +38,45 @@ module LinearTransport
 
     # The Initial condition is either set as a BSpline Basis function, or a network approximation of the Basis function.
 
-    # B = BSplineBasis(BSplineOrder(3), [0, 0, 0, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9, 1, 1, 1],augment = Val(false))
-    # function exact_u(t,x;params = default_parameters)
-    #     @unpack c, = params
-    #     B[4](x-c*t)
-    # end
-
-    # function exact_v(t,x;params = default_parameters)
-    #     @unpack c, = params
-    #     -c * B[4](x - c*t, Derivative(1))
-    # end
-
-    # function exact_w(t,x;params = default_parameters)
-    #     @unpack c, = params
-    #     B[4](x - c * t, Derivative(1))
-    # end
-
-    # The parameters of the neural network are set to approximate the above BSpline Basis B[4], from OGA
-    NN = Chain(
-        Dense(2, 8, relu2),
-        Dense(8, 1, identity, use_bias=false)
-    )
-    PNN = NeuralNetwork(NN)
-    PNN.params.L1.W[:,2] .= 1.0 
-    PNN.params.L1.W[:,1] .= - c
-    PNN.params.L1.b[:] = [-0.0000, -0.2930, -0.5664, -0.1328, -0.7207, -0.3965, -0.4893, -0.6426]
-    PNN.params.L2.W[:] = [0.3275,   52.7569,   -6.1713,   -1.7977,    6.4468, -153.8942,137.0191,  -34.2571]
-
+    B = BSplineBasis(BSplineOrder(3), [0, 0, 0, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9, 1, 1, 1],augment = Val(false))
     function exact_u(t,x;params = default_parameters)
         @unpack c, = params
-        PNN([t,x])[1]
+        B[4](x-c*t)
     end
 
     function exact_v(t,x;params = default_parameters)
-        Zygote.gradient(t -> PNN([t, x])[1], t)[1]    
+        @unpack c, = params
+        -c * B[4](x - c*t, Derivative(1))
     end
 
     function exact_w(t,x;params = default_parameters)
-        Zygote.gradient(x -> PNN([t, x])[1], x)[1]    
+        @unpack c, = params
+        B[4](x - c * t, Derivative(1))
     end
+
+    # The parameters of the neural network are set to approximate the above BSpline Basis B[4], from OGA
+    # NN = Chain(
+    #     Dense(2, 8, relu2),
+    #     Dense(8, 1, identity, use_bias=false)
+    # )
+    # PNN = NeuralNetwork(NN)
+    # PNN.params.L1.W[:,2] .= 1.0 
+    # PNN.params.L1.W[:,1] .= - c
+    # PNN.params.L1.b[:] = [-0.0000, -0.2930, -0.5664, -0.1328, -0.7207, -0.3965, -0.4893, -0.6426]
+    # PNN.params.L2.W[:] = [0.3275,   52.7569,   -6.1713,   -1.7977,    6.4468, -153.8942,137.0191,  -34.2571]
+
+    # function exact_u(t,x;params = default_parameters)
+    #     @unpack c, = params
+    #     PNN([t,x])[1]
+    # end
+
+    # function exact_v(t,x;params = default_parameters)
+    #     Zygote.gradient(t -> PNN([t, x])[1], t)[1]    
+    # end
+
+    # function exact_w(t,x;params = default_parameters)
+    #     Zygote.gradient(x -> PNN([t, x])[1], x)[1]    
+    # end
 
     function exact_solution(t::Float64, x::Float64)
         (u=exact_u(t, x), v=exact_v(t, x), w=exact_w(t, x))
