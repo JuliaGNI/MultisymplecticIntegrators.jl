@@ -121,3 +121,107 @@ wave_anim = @animate for (i, t) in enumerate(0:t_step:0.8)
     ylabel!("u")
 end 
 gif(wave_anim, "figures/wave_eqn.gif",fps = 5)
+
+
+
+
+
+# Linear Transport PDE
+
+# y3(x₁) = exp((x₁ + (x₁ + 0.31313)) * ((x₁ + 3.8436) * -0.49997)) * 0.0094303
+# y4(x₁) = exp(((x₁ + x₁) + (((x₁ - -0.86449) * (x₁ - -1.1355)) + 0.048086)) * -1) * 0.014468
+# y5(x₁) = exp(x₁ * ((x₁ - -4) * -1)) * 0.0051667
+# y6(x₁) = exp((x₁ - -3.9999999915018885) * (x₁ * -1.000000000573464)) * 0.005166746413755448
+
+
+@variables t x p[1:5]
+c = 0.2
+u_expr = exp((p[1] * (x - c*t) + p[2])*(x - c * t + p[3])*p[4]) * p[5]
+init_p = [2.00, 0.31313, 3.8436, -0.49997, 0.0094303]
+sindy_basis_linear_transport = SindyPDEBasis([u_expr], [p], t, [x])
+RT = 4
+RX = 6
+t_step= 0.1
+xspan = (-0.5, 0.0)
+sindy_int_lt = Sindy_PDE_Integrator(sindy_basis_linear_transport,init_p,RT = RT,RX = RX, xspan = (-0.5, 0.0), tstep = t_step,μ =:BSplineDirichlet,λ =:BSplineDirichlet,k_μ = 4,k_λ₀_x = 4)
+lpde_lt = MultiSymplectic.LinearTransport.lpdeproblem(tstep = t_step,tspan =(0.0,15.0),xspan = (-0.5, 0.0))
+sol_lt = MultiSymplectic.integrate(lpde_lt,sindy_int_lt)
+
+function exact_u(t,x)
+    c = 0.2
+    0.5 * exp(-(x+2 - c*t)^2) / sqrt(π)   
+end
+
+function exact_v(t,x)
+    c = 0.2
+    c*(2 + x - c*t)*exp(-((2 + x - c*t)^2)) / sqrt(π)
+end
+
+function exact_w(t,x)
+    c = 0.2
+    -(2 + x - c*t)*exp(-((2 + x - c*t)^2)) / sqrt(π)
+end 
+
+
+u0 = exact_u.(0.0,collect(-5:0.01:5.0))
+v0 = exact_v.(0.0,collect(-5:0.01:5.0))
+w0 = exact_w.(0.0,collect(-5:0.01:5.0))
+H0_ls = [MultiSymplectic.LinearTransport.hamiltonian(0.0,0.0,u0i,v0i,w0i,(c=0.2,)) for (u0i,v0i,w0i) in zip(u0,v0,w0)]
+H0 = sum(H0_ls)
+
+function lt_u_SindySol(x,t,p)
+    exp((p[1] * (x - 0.2*t) + p[2])*(x - 0.2 * t + p[3])*p[4]) * p[5]
+end
+
+function lt_v_SindySol(x,t,p)
+    -0.2 * (p[1] * (x - 0.2*t) + p[2]) * exp((p[1] * (x - 0.2*t) + p[2])*(x - 0.2 * t + p[3])*p[4]) * p[5]
+end
+
+function lt_w_SindySol(x,t,p)
+    (x - 0.2 * t + p[3]) * exp((p[1] * (x - 0.2*t) + p[2])*(x - 0.2 * t + p[3])*p[4]) * p[5]
+end
+
+
+x_vertics = [xspan[1], xspan[2], xspan[2], xspan[1]]
+y_vertics = [-0.05,-0.05, 0.3, 0.3]
+x_ls = collect(-5:0.01:5.0)
+
+plot(x_ls,[lt_u_SindySol(xx,0.0,sol_lt.internal.x[2][1:5]) for xx in x_ls],label = "SINDy Solution")
+plot!(x_ls,[lt_u_SindySol(xx,0.1,init_p) for xx in x_ls],label = "init Solution")
+plot!(x_ls,exact_u.(0,x_ls),label="Analytic Solution",size = (1000,400))
+
+tem_p = sol_lt.internal.x[2][1:5]
+u_sol_ls = [lt_u_SindySol(xx,0,tem_p) for xx in x_ls] 
+v_sol_ls = [lt_v_SindySol(xx,0,tem_p) for xx in x_ls]
+w_sol_ls = [lt_w_SindySol(xx,0,tem_p) for xx in x_ls]
+ham_ls = [MultiSymplectic.LinearTransport.hamiltonian(0.0,0.0,ui,vi,wi,(c=0.2,)) for (ui,vi,wi) in zip(u_sol_ls,v_sol_ls,w_sol_ls)]
+total_sum = sum(ham_ls)
+
+
+t_ls = 0:t_step:9.2
+ham_ls = zeros(length(t_ls))
+current_domain_ham = zeros(length(x_ls))
+lp_anim = @animate for (i, t) in enumerate(t_ls)
+    p = plot(layout=@layout([a;b]), label="", size=(1200,400))# d;e
+
+    tem_p = sol_lt.internal.x[i+1][1:5]
+    u_sol_ls = [lt_u_SindySol(xx,t,tem_p) for xx in x_ls]
+    v_sol_ls = [lt_v_SindySol(xx,t,tem_p) for xx in x_ls]
+    w_sol_ls = [lt_w_SindySol(xx,t,tem_p) for xx in x_ls]
+    plot!(p[1],x_ls,u_sol_ls,label = "VISE Solution")
+    plot!(p[1],x_ls,exact_u.(t,x_ls),label="Analytic Solution",size = (800,400),ylims = (-0.05,0.3),linestyle = :dash)
+
+    title!(p[1],"t = $t,\n exp(($(tem_p[1]) * (x -c*t) + $(tem_p[2]))*(x - c * t + $(tem_p[3]))*$(tem_p[4])) * $(tem_p[5])",titlefontsize = 7)
+    xlabel!(p[1],"x")
+    ylabel!(p[1],"u")
+
+
+    current_domain_ham = [MultiSymplectic.LinearTransport.hamiltonian(0.0,0.0,ui,vi,wi,(c=0.2,)) for (ui,vi,wi) in zip(u_sol_ls,v_sol_ls,w_sol_ls)]
+    total_sum = sum(current_domain_ham)
+    ham_ls[i] = total_sum
+    plot!(p[2],t_ls[1:i],ham_ls[1:i],label = "VISE Hamiltonian",size = (800,400), xlims = (0, 9.2),ylims = (-1.8388,-1.8380))
+    # plot!(Shape(x_vertics, y_vertics), label = "Spatial Domain", color = :lightblue, alpha = 0.2, linestyle = :dash)
+    xlabel!(p[2],"t")
+    ylabel!(p[2],"Hamiltonian")
+end
+gif(lp_anim, "figures/linear_transport.gif",fps = 5)

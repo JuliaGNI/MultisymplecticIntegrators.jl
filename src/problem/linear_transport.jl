@@ -27,33 +27,36 @@ module LinearTransport
     const tspan = (0.0, 10.0)
 
     const xstep = 0.01
-    const xspan = (0., 1.0)
+    # const xspan = (0., 1.0) # for Exact solution 1 ,2 
+    const xspan = (-0.5, 0.0) # for Exact solution 3
 
-    const c = 0.2 
+    const c = 0.2
 
     const default_parameters = (
         c = 0.2,
     )
+
     relu2(x) = max(0, x) ^2
 
-    # The Initial condition is either set as a BSpline Basis function, or a network approximation of the Basis function.
+    # Exact solution 1
+    # The Initial condition is either set as a BSpline Basis function, or a network approximation of the Basis function.\
+    # B = BSplineBasis(BSplineOrder(3), [0, 0, 0, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9, 1, 1, 1],augment = Val(false))
+    # function exact_u(t,x;params = default_parameters)
+    #     @unpack c, = params
+    #     B[4](x-c*t)
+    # end
 
-    B = BSplineBasis(BSplineOrder(3), [0, 0, 0, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9, 1, 1, 1],augment = Val(false))
-    function exact_u(t,x;params = default_parameters)
-        @unpack c, = params
-        B[4](x-c*t)
-    end
+    # function exact_v(t,x;params = default_parameters)
+    #     @unpack c, = params
+    #     -c * B[4](x - c*t, Derivative(1))
+    # end
 
-    function exact_v(t,x;params = default_parameters)
-        @unpack c, = params
-        -c * B[4](x - c*t, Derivative(1))
-    end
+    # function exact_w(t,x;params = default_parameters)
+    #     @unpack c, = params
+    #     B[4](x - c * t, Derivative(1))
+    # end
 
-    function exact_w(t,x;params = default_parameters)
-        @unpack c, = params
-        B[4](x - c * t, Derivative(1))
-    end
-
+    # Exact solution 2
     # The parameters of the neural network are set to approximate the above BSpline Basis B[4], from OGA
     # NN = Chain(
     #     Dense(2, 8, relu2),
@@ -77,6 +80,22 @@ module LinearTransport
     # function exact_w(t,x;params = default_parameters)
     #     Zygote.gradient(x -> PNN([t, x])[1], x)[1]    
     # end
+
+    # Exact solution 3 : Specific example for symbolic integrator.
+    function exact_u(t,x;params = default_parameters)
+        @unpack c = params
+        0.5 * exp(-(x+2 - c*t)^2) / sqrt(π)   
+    end
+
+    function exact_v(t,x;params = default_parameters)
+        @unpack c = params
+        c*(2 + x - c*t)*exp(-((2 + x - c*t)^2)) / sqrt(π)
+    end
+
+    function exact_w(t,x;params = default_parameters)
+        @unpack c = params
+        -(2 + x - c*t)*exp(-((2 + x - c*t)^2)) / sqrt(π)
+    end
 
     function exact_solution(t::Float64, x::Float64)
         (u=exact_u(t, x), v=exact_v(t, x), w=exact_w(t, x))
