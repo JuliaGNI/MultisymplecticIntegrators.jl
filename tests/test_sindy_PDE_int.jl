@@ -147,28 +147,6 @@ sindy_int_lt = Sindy_PDE_Integrator(sindy_basis_linear_transport,init_p,RT = RT,
 lpde_lt = MultiSymplectic.LinearTransport.lpdeproblem(tstep = t_step,tspan =(0.0,15.0),xspan = (-0.5, 0.0))
 sol_lt = MultiSymplectic.integrate(lpde_lt,sindy_int_lt)
 
-function exact_u(t,x)
-    c = 0.2
-    0.5 * exp(-(x+2 - c*t)^2) / sqrt(π)   
-end
-
-function exact_v(t,x)
-    c = 0.2
-    c*(2 + x - c*t)*exp(-((2 + x - c*t)^2)) / sqrt(π)
-end
-
-function exact_w(t,x)
-    c = 0.2
-    -(2 + x - c*t)*exp(-((2 + x - c*t)^2)) / sqrt(π)
-end 
-
-
-u0 = exact_u.(0.0,collect(-5:0.01:5.0))
-v0 = exact_v.(0.0,collect(-5:0.01:5.0))
-w0 = exact_w.(0.0,collect(-5:0.01:5.0))
-H0_ls = [MultiSymplectic.LinearTransport.hamiltonian(0.0,0.0,u0i,v0i,w0i,(c=0.2,)) for (u0i,v0i,w0i) in zip(u0,v0,w0)]
-H0 = sum(H0_ls)
-
 function lt_u_SindySol(x,t,p)
     exp((p[1] * (x - 0.2*t) + p[2])*(x - 0.2 * t + p[3])*p[4]) * p[5]
 end
@@ -200,7 +178,6 @@ total_sum = sum(ham_ls)
 
 t_ls = 0:t_step:9.2
 ham_ls = zeros(length(t_ls))
-current_domain_ham = zeros(length(x_ls))
 lp_anim = @animate for (i, t) in enumerate(t_ls)
     p = plot(layout=@layout([a;b]), label="", size=(1200,400))# d;e
 
@@ -214,7 +191,6 @@ lp_anim = @animate for (i, t) in enumerate(t_ls)
     title!(p[1],"t = $t,\n exp(($(tem_p[1]) * (x -c*t) + $(tem_p[2]))*(x - c * t + $(tem_p[3]))*$(tem_p[4])) * $(tem_p[5])",titlefontsize = 7)
     xlabel!(p[1],"x")
     ylabel!(p[1],"u")
-
 
     current_domain_ham = [MultiSymplectic.LinearTransport.hamiltonian(0.0,0.0,ui,vi,wi,(c=0.2,)) for (ui,vi,wi) in zip(u_sol_ls,v_sol_ls,w_sol_ls)]
     total_sum = sum(current_domain_ham)
