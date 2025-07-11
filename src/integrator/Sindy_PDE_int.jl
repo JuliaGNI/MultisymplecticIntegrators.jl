@@ -638,3 +638,13 @@ function update!(sol_struct, int::PDEIntegrator{<:Sindy_PDE_Integrator})
     sol_struct.t += int.problem.tstep
     # println("In the end of update! function, time = ", sol_struct.t)
 end
+
+
+# GeometricIntegrators.Integrators.default_options(::Sindy_PDE_Integrator) = Options(
+#     x_reltol = 8eps(),
+#     x_suctol = 2eps(),
+#     f_abstol = 8eps(),
+#     f_reltol = 8eps(),
+#     f_suctol = 2eps(),
+#     max_iterations = 10,
+# )

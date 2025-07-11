@@ -1,7 +1,7 @@
 """
     Linear Tansport Problem
     u_t + c(t,x) u_x = 0
-    where c(t,x) is a speed of propagation, in our case, c is constant c = 0.05.
+    where c(t,x) is a speed of propagation, in our case, c is constant c = 0.02.
     Since when we want to represent the solution as a neural network exactly, the parameters dependend on c.
     Given initial condition u(0,x) = u₀(x), we can solve this problem analytically, u(t,x) = u₀(x - c * t).
     
