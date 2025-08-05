@@ -48,33 +48,12 @@ u_network([0.3,0.4],sol_params)[1]
 
 x_vertics = [x_span[1], x_span[2], x_span[2], x_span[1]]
 y_vertics = [-0.1,-0.1, 1.0,1.0]
-
 x_ls = collect(0.2:0.01:1)
 
-linear_transport_anim = @animate for (i, t) in enumerate(0:t_step:0.94)
-    plot(x_ls,lpde.exact_u.(t,x_ls),label="Analytic Solution",size = (1000,400), ylims = (-0.1,1.0))
-    sol_params = NeuralNetworkParameters(MultiSymplectic.reconstruct_params(sol.internal.x[i+1][1:NP], pnn.params))
 
-    plot!(x_ls,[u_network([t,xx],sol_params)[1] for xx in x_ls],label = "NN Solution")
-    plot!(Shape(x_vertics, y_vertics), label = "Computation Domain", color = :lightblue, alpha = 0.2, linestyle = :dash)
-    # scatter!(x_span[2] .* QuadratureRules.GaussLegendreQuadrature(RX).nodes,-0.18 * ones(RX),label = "Quadrature Points", color = :red, markersize = 5, markershape = :x)
-    title!("t = $t")
-    xlabel!("x")
-    ylabel!("u")
-end 
-gif(linear_transport_anim, "figures/linear_transport_eqn.gif",fps = 5)
-
-
-sol_params = NeuralNetworkParameters(MultiSymplectic.reconstruct_params(sol.internal.x[8][1:NP], pnn.params))
-
-plot!(x_ls,[u_network([0.16,xx],sol_params)[1] for xx in x_ls],label = "NN Solution")
-plot!(x_ls,lpde.exact_u.(0.96,x_ls),label = "Exact Solution")
-
-
-PNN = NeuralNetwork(u_network)#,initializer = ZeroInitializer()
-
+PNN = NeuralNetwork(NN)
 PNN.params.L1.W[:,2] .= [-1.0,1.0,-1.0,-1.0,1.0,1.0,-1.0,-1.0,1.0,-1.0,1.0,-1.0,-1.0,1.0,1.0,1.0,1.0,-1.0,-1.0,-1.0]
-PNN.params.L1.W[:,1] .= - 0.2 .* [-1.0,1.0,-1.0,-1.0,1.0,1.0,-1.0,-1.0,1.0,-1.0,1.0,-1.0,-1.0,1.0,1.0,1.0,1.0,-1.0,-1.0,-1.0]
+PNN.params.L1.W[:,1] .= - 0.2 * [-1.0,1.0,-1.0,-1.0,1.0,1.0,-1.0,-1.0,1.0,-1.0,1.0,-1.0,-1.0,1.0,1.0,1.0,1.0,-1.0,-1.0,-1.0]
 PNN.params.L1.b[:] = [ 0.9995, -0.0000,  0.6479,  0.3423, -0.5156, -0.7178,  0.2222,  0.7964,
     -0.4072,  0.4653, -0.2852,  0.5786,  0.1450, -0.3730, -0.4873, -0.6123,
     -0.2559,  0.4321,  0.3091,  0.3911]
@@ -82,6 +61,31 @@ PNN.params.L2.W[:] = [-5.5742e+00,  1.1024e+01, -5.3139e+00, -4.0719e+00,  6.069
         -7.4047e-01, -9.1054e-01, -1.7195e-01, -1.5121e+02,  4.6744e+01,
         2.2065e+01,  2.3221e+01,  1.1691e-01, -2.3493e+01,  1.2785e+02,
         -3.6581e+01, -4.0092e+00, -4.0954e+01, -3.2466e+01,  8.3772e+00]
+
+function exact_u(t,x)
+    PNN([t,x])[1]
+end
+
+
+linear_transport_anim = @animate for (i, tt) in enumerate(0:t_step:0.9)
+    plot(x_ls,exact_u.(tt,x_ls),label="Analytic Solution",size = (900,500), ylims = (-0.1,1.0))
+    sol_params = NeuralNetworkParameters(MultiSymplectic.reconstruct_params(sol.internal.x[i+1][1:NP], pnn.params))
+
+    plot!(x_ls,[u_network([tt,xx],sol_params)[1] for xx in x_ls],label = "NVI Solution")
+    # plot!(Shape(x_vertics, y_vertics), label = "Computation Domain", color = :lightblue, alpha = 0.2, linestyle = :dash)
+    # scatter!(x_span[2] .* QuadratureRules.GaussLegendreQuadrature(RX).nodes,-0.18 * ones(RX),label = "Quadrature Points", color = :red, markersize = 5, markershape = :x)
+    title!("t = $tt")
+    xlabel!("x")
+    ylabel!("u")
+end 
+gif(linear_transport_anim, "figures/linear_transport_eqn2.gif",fps = 5)
+
+
+sol_params = NeuralNetworkParameters(MultiSymplectic.reconstruct_params(sol.internal.x[8][1:NP], pnn.params))
+
+plot!(x_ls,[u_network([0.16,xx],sol_params)[1] for xx in x_ls],label = "NN Solution")
+plot!(x_ls,lpde.exact_u.(0.96,x_ls),label = "Exact Solution")
+
 
 x_ls =  collect(0:0.01:1)
 t_ls = collect(0:0.01:1)

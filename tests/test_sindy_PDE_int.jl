@@ -291,7 +291,7 @@ begin
 
     # x_vertics = [xspan[1], xspan[2], xspan[2], xspan[1]]
     # y_vertics = [-0.05,-0.05, 0.3, 0.3]
-    # x_ls = collect(-5:0.01:5.0)
+    x_ls = collect(-5:0.01:5.0)
 
     # plot(x_ls,[lt_u_SindySol(xx,0.0,sol_lt.internal.x[2][1:5]) for xx in x_ls],label = "SINDy Solution")
     # plot!(x_ls,[lt_u_SindySol(xx,0.1,init_p) for xx in x_ls],label = "init Solution")
@@ -304,33 +304,44 @@ begin
     # ham_ls = [MultiSymplectic.LinearTransport.hamiltonian(0.0,0.0,ui,vi,wi,(c=0.2,)) for (ui,vi,wi) in zip(u_sol_ls,v_sol_ls,w_sol_ls)]
     # total_sum = sum(ham_ls)
 
+    total_sum = 0.0
+    t_ls = t_step:t_step:4.0
+    ham_ls = zeros(length(t_ls))
+    lp_anim = @animate for (i, t) in enumerate(t_ls)
+        p = plot(layout=@layout([a;b]), label="", size=(1200,400))# d;e
 
-    # t_ls = t_step:t_step:5.0
-    # ham_ls = zeros(length(t_ls))
-    # lp_anim = @animate for (i, t) in enumerate(t_ls)
-    #     p = plot(layout=@layout([a;b]), label="", size=(1200,400))# d;e
+        tem_p = sol_lt.internal.x[i+1][1:5]
+        u_sol_ls = [lt_u_SindySol(xx,t,tem_p) for xx in x_ls]
+        v_sol_ls = [lt_v_SindySol(xx,t,tem_p) for xx in x_ls]
+        w_sol_ls = [lt_w_SindySol(xx,t,tem_p) for xx in x_ls]
+        plot!(p[1],x_ls,u_sol_ls,label = "VISE Solution")
+        plot!(p[1],x_ls,exact_u.(t,x_ls),label="Analytic Solution",size = (800,400),ylims = (-0.05,0.3),xlims = (-5,5),linestyle = :dash)
 
-    #     tem_p = sol_lt.internal.x[i+1][1:5]
-    #     u_sol_ls = [lt_u_SindySol(xx,t,tem_p) for xx in x_ls]
-    #     v_sol_ls = [lt_v_SindySol(xx,t,tem_p) for xx in x_ls]
-    #     w_sol_ls = [lt_w_SindySol(xx,t,tem_p) for xx in x_ls]
-    #     plot!(p[1],x_ls,u_sol_ls,label = "VISE Solution")
-    #     plot!(p[1],x_ls,exact_u.(t,x_ls),label="Analytic Solution",size = (800,400),ylims = (-0.05,0.3),linestyle = :dash)
+        title!(p[1],"t = $t,\n exp(($(tem_p[1]) * (x -c*t) + $(tem_p[2]))*(x - c * t + $(tem_p[3]))*$(tem_p[4])) * $(tem_p[5])",titlefontsize = 7)
+        xlabel!(p[1],"x")
+        ylabel!(p[1],"u")
 
-    #     title!(p[1],"t = $t,\n exp(($(tem_p[1]) * (x -c*t) + $(tem_p[2]))*(x - c * t + $(tem_p[3]))*$(tem_p[4])) * $(tem_p[5])",titlefontsize = 7)
-    #     xlabel!(p[1],"x")
-    #     ylabel!(p[1],"u")
+        current_domain_ham = [MultiSymplectic.LinearTransport.hamiltonian(0.0,0.0,ui,vi,wi,(c=0.2,)) for (ui,vi,wi) in zip(u_sol_ls,v_sol_ls,w_sol_ls)]
+        total_sum = sum(current_domain_ham)
+        ham_ls[i] = total_sum
 
-    #     current_domain_ham = [MultiSymplectic.LinearTransport.hamiltonian(0.0,0.0,ui,vi,wi,(c=0.2,)) for (ui,vi,wi) in zip(u_sol_ls,v_sol_ls,w_sol_ls)]
-    #     total_sum = sum(current_domain_ham)
-    #     ham_ls[i] = total_sum
-    #     plot!(p[2],t_ls[1:i],ham_ls[1:i],label = "VISE Hamiltonian",size = (800,400), xlims = (0, 5),ylims = (-1.8388,-1.8375))
-    #     # plot!(Shape(x_vertics, y_vertics), label = "Spatial Domain", color = :lightblue, alpha = 0.2, linestyle = :dash)
-    #     xlabel!(p[2],"t")
-    #     ylabel!(p[2],"Hamiltonian")
-    # end
-    # # gif(lp_anim, "figures/linear_transport.gif",fps = 5)
-    # gif(lp_anim, fps = 5)
+        analytic_u_values = exact_u.(t,x_ls)
+        analytic_v_values = exact_v.(t,x_ls)
+        analytic_w_values = exact_w.(t,x_ls)
+
+        exact_u_ls[i] = sum(analytic_u_values)
+        exact_v_ls[i] = sum(analytic_v_values)
+        exact_w_ls[i] = sum(analytic_w_values)
+        current_ham = [MultiSymplectic.LinearTransport.hamiltonian(0.0,0.0,ui,vi,wi,(c=0.2,)) for (ui,vi,wi) in zip(analytic_u_values,analytic_v_values,analytic_w_values)]
+        analytic_ham[i] = sum(current_ham)
+
+        plot!(p[2],t_ls[1:i],abs.((ham_ls .- analytic_ham)./analytic_ham)[1:i],label = "Hamiltonian Error",size = (800,400), xlims = (0, 4),ylims = (-0.001,0.02))#
+        # plot!(Shape(x_vertics, y_vertics), label = "Spatial Domain", color = :lightblue, alpha = 0.2, linestyle = :dash)
+        xlabel!(p[2],"t")
+        ylabel!(p[2],"Hamiltonian")
+    end
+    gif(lp_anim, "figures/linear_transport2.gif",fps = 5)
+    gif(lp_anim, fps = 5)
     
     t_ls = t_step:t_step:5.0
     VISE_ham = zeros(length(t_ls))
