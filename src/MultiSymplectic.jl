@@ -48,6 +48,9 @@ module MultiSymplectic
     include("basis/Network_PDE_Basis.jl")
     export NetworkPDEBasis
 
+    include("basis/ELM_NN_Basis.jl")
+    export ELM_NN_Basis
+
     # integrators
     include("integrator/Sindy_PDE_int.jl")
     export Sindy_PDE_Integrator

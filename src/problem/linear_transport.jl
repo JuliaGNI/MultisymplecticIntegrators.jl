@@ -175,6 +175,11 @@ module LinearTransport
         -1/2 * c * u[1] * w[1]
     end
 
+    function eqn_residual(u,v,w,params)
+        @unpack c = params
+        return v .- c .* w
+    end
+
     function lpdeproblem(; lagrangian_function=lagrangian, initial_condition_function=initial_condition, boundary_condition_function=boundary_condition, tspan=tspan, tstep::Float64=tstep, xspan::Tuple=xspan, xstep::Float64=xstep, params=default_parameters,
         exact_u_func=exact_u)
         @unpack c = params
