@@ -196,6 +196,18 @@ module LinearTransport
         LPDEProblem(lag_sys, initial_condition_function, boundary_condition_function, ics, tspan, tstep, xspan, xstep, params, exact_u_func)
     end
 
+    function ELM_least_square_problem(b,x,int::PDEIntegrator{<:ELM_PDE_int})
+        local C = cache(int)
+        local problem = problem(int)
+        local NP = int.method.basis.NP
+        local RT = int.method.RT
+        local RX = int.method.RX
+        local D = problem.D
+
+        
+    
+    end
+
 end
 
 

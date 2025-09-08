@@ -58,6 +58,10 @@ struct ELM_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     """
     x::Vector{ST}
 
+    u_basis_quad_values::Array{ST} # (NP, RT, RX)
+    v_basis_quad_values::Array{ST} # (NP, RT, RX)
+    w_basis_quad_values::Array{ST} # (NP, RT, RX)
+
     u_quad_values::Array{ST}
     v_quad_values::Array{ST}
     w_quad_values::Array{ST}
@@ -96,7 +100,11 @@ struct ELM_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     sol_params
     function ELM_PDE_intCache{ST,RT,RX,D,NP}(network_arch) where {ST,RT,RX,D,NP}
         x = zeros(ST, NP) # in ELM, x is just the output layer parameters
-        
+
+        u_basis_quad_values = zeros(ST, NP, RT, RX)
+        v_basis_quad_values = zeros(ST, NP, RT, RX)
+        w_basis_quad_values = zeros(ST, NP, RT, RX)
+
         u_quad_values = zeros(ST, D, RT, RX)
         v_quad_values = zeros(ST, D, RT, RX)
         w_quad_values = zeros(ST, D, RT, RX)
@@ -137,6 +145,7 @@ struct ELM_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
         sol_params = network_cache_create(network_arch, ST)
 
         new(x,
+            u_basis_quad_values, v_basis_quad_values, w_basis_quad_values,
             u_quad_values, v_quad_values, w_quad_values,
             ∂L∂U_quad_values, ∂L∂V_quad_values, ∂L∂W_quad_values,
             ∂u∂P_quad_values, ∂v∂P_quad_values, ∂w∂P_quad_values,
@@ -169,6 +178,44 @@ end
 
 function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:ELM_PDE_int}) where {ST}
     local x = C.x
+    local NP = int.method.basis.NP
+    local v_basis_func = int.method.basis.v
+    local w_basis_func = int.method.basis.w
+    local u_basis_func = int.method.basis.u
+    local grid_matrix = int.method.grid_matrix
+    local x_quad_nodes = int.method.spatial_quadrature.nodes
+    local t_quad_nodes = int.method.time_quadrature.nodes
+    local nn_params = C.sol_params
+
+    for i in 1:NP
+        for rt in 1:RT
+            for rx in 1:RX
+                C.u_basis_quad_values[:, rt, rx] = u_basis_func([grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2]],nn_params)[1]
+                C.v_basis_quad_values[:, rt, rx] = v_basis_func([grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2]],nn_params)[1]
+                C.w_basis_quad_values[:, rt, rx] = w_basis_func([grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2]],nn_params)[1]
+            end
+        end
+    end
+
+    for j in 1:RX
+        C.ut₀_basis_quad_values[:,j] = u_basis_func([0.0 ,xspan[1] + x_domain* x_quad_nodes[j]],nn_params)[1] # bottom 
+    end
+    for i in 1:RT
+        C.ux₀_basis_quad_values[:,i] = u_basis_func([t_quad_nodes[i],xspan[1]],nn_params)[1]
+        C.ux₁_basis_quad_values[:,i] = u_basis_func([t_quad_nodes[i],xspan[2]],nn_params)[1]
+    end
+
+
+end
+
+
+
+function prior_initial_guess!(C,sol,int::PDEIntegrator{<:ELM_PDE_int})
+    local x = C.x
+
+    #Equation:
+
+
 
 
 end
