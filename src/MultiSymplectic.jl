@@ -57,6 +57,10 @@ module MultiSymplectic
 
     include("integrator/NN_PDE_int.jl")
     export NN_PDE_Integrator
+
+    include("integrator/ELM_PDE_int.jl")
+    export ELM_PDE_int
+
     #problems
     include("problem/sine_Gordon.jl")
     export SineGordon

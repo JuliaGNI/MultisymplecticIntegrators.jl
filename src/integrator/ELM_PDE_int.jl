@@ -3,7 +3,7 @@
     Boundary condition and initial condition are imposed with least square method.
 """
 
-struct ELM_PDE_int{T,BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PDEMethod
+struct ELM_PDE_int{BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PDEMethod
     basis::BT
     time_quadrature
     RT::Int # Number of quadrature points in time
@@ -17,7 +17,7 @@ struct ELM_PDE_int{T,BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PDEM
     initial_with_PINN::Bool
     initial_guess_method::IPMT # :LSGD or :GroundTruth
 
-    function ELM_PDE_int(basis; RT::Int=6, RX::Int=8, initial_with_PINN=true, initial_guess_method::IPMT=:LSGD()) where {T,IPMT}
+    function ELM_PDE_int(basis; RT::Int=6, RX::Int=8, initial_with_PINN=true, initial_guess_method::IPMT=:LSGD()) where {IPMT}
         if RT == 128
             t_quadrature = GaussQuadrature128()
         elseif RT == 64
@@ -37,7 +37,7 @@ struct ELM_PDE_int{T,BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PDEM
         dimensions = [RT, RX]
         grid_matrix, grid_weights = construct_quadrature_grid(dimensions)
 
-        new{T,typeof(basis),typeof(initial_guess_method)}(basis,
+        new{typeof(basis),typeof(initial_guess_method)}(basis,
             t_quadrature, RT,
             x_quadrature, RX,
             grid_matrix, grid_weights,
@@ -61,6 +61,10 @@ struct ELM_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     u_basis_quad_values::Array{ST} # (NP, RT, RX)
     v_basis_quad_values::Array{ST} # (NP, RT, RX)
     w_basis_quad_values::Array{ST} # (NP, RT, RX)
+
+    ut₀_basis_quad_values::Array{ST}
+    ux₀_basis_quad_values::Array{ST}
+    ux₁_basis_quad_values::Array{ST}
 
     u_quad_values::Array{ST}
     v_quad_values::Array{ST}
@@ -98,12 +102,19 @@ struct ELM_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     boundary_condition_x₁::Matrix{ST}
 
     sol_params
+    system_matrix = ::Array{ST}
+
     function ELM_PDE_intCache{ST,RT,RX,D,NP}(network_arch) where {ST,RT,RX,D,NP}
         x = zeros(ST, NP) # in ELM, x is just the output layer parameters
 
-        u_basis_quad_values = zeros(ST, NP, RT, RX)
-        v_basis_quad_values = zeros(ST, NP, RT, RX)
-        w_basis_quad_values = zeros(ST, NP, RT, RX)
+        u_basis_quad_values = zeros(ST, D, RT * RX, NP)
+        v_basis_quad_values = zeros(ST, D, RT * RX, NP)
+        w_basis_quad_values = zeros(ST, D, RT * RX, NP)
+
+        ut₀_basis_quad_values = zeros(ST, D, RX, NP) # bottom boundary, i.e. t = 0
+        ux₀_basis_quad_values = zeros(ST, D, RT, NP) # left boundary, i.e. x = 0
+        ux₁_basis_quad_values = zeros(ST, D, RT, NP) # right boundary, i.e. x = L
+
 
         u_quad_values = zeros(ST, D, RT, RX)
         v_quad_values = zeros(ST, D, RT, RX)
@@ -143,9 +154,11 @@ struct ELM_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
         boundary_condition_x₁ = zeros(ST, D, RT)
 
         sol_params = network_cache_create(network_arch, ST)
-
+        system_matrix = zeros(ST, RT * RX +  RX + 2* RT, NP)
+        
         new(x,
             u_basis_quad_values, v_basis_quad_values, w_basis_quad_values,
+            ut₀_basis_quad_values, ux₀_basis_quad_values, ux₁_basis_quad_values,
             u_quad_values, v_quad_values, w_quad_values,
             ∂L∂U_quad_values, ∂L∂V_quad_values, ∂L∂W_quad_values,
             ∂u∂P_quad_values, ∂v∂P_quad_values, ∂w∂P_quad_values,
@@ -154,7 +167,7 @@ struct ELM_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
             ux₀_quad_values, ux₁_quad_values, vx₀_quad_values, vx₁_quad_values, wx₀_quad_values, wx₁_quad_values,
             init_condition_t₀,
             boundary_condition_x₀, boundary_condition_x₁,
-            sol_params)
+            sol_params, system_matrix)
     end
 end
 
@@ -176,8 +189,44 @@ end
     end::CacheType(ST, c.problem, c.method)
 end
 
+function initialize_bcs_ics!(sol,int::PDEIntegrator{<:NN_PDE_Integrator})
+    local C = cache(int)
+    local x_quad_nodes = int.method.spatial_quadrature.nodes
+    local t_quad_nodes = int.method.time_quadrature.nodes
+    local u = [int.method.basis.u]
+    local D = int.problem.D 
+    local RT = int.method.RT
+    local ic_fun = int.problem.ics_function
+    local bc_fun = int.problem.bcs_function
+    local current_step = sol.current_step
+    local NP = int.method.basis.NP
+    local xspan = int.problem.xspan
+    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+
+    for d in 1:D
+        # println("update initial condition, current time = ", sol.t, "the initial condition is at time = ", sol.t - timestep(int))
+
+        if current_step ==1 
+            C.init_condition_t₀[d,:] .= ic_fun(xspan[1] .+ x_domain .* x_quad_nodes).u
+        else
+            # println("sol.internal.x[current_step-1][1:NP] = " , sol.internal.x[current_step-1][1:NP])
+            sol_params = NeuralNetworkParameters(reconstruct_params(sol.internal.x[current_step-1][1:NP], u[d].params))
+            for i in eachindex(C.init_condition_t₀[d,:])
+                C.init_condition_t₀[d,i] = u[d]([1.0,xspan[1] + x_domain * x_quad_nodes[i]], sol_params)[1]
+            end
+            # println("initial condition = " , C.init_condition_t₀[d,:])
+        end
+
+        for i in 1:RT
+            C.boundary_condition_x₀[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₀.u
+            C.boundary_condition_x₁[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₁.u
+        end
+        # println("left boundary condition = " , C.boundary_condition_x₀[d,:])
+    end
+
+end
+
 function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:ELM_PDE_int}) where {ST}
-    local x = C.x
     local NP = int.method.basis.NP
     local v_basis_func = int.method.basis.v
     local w_basis_func = int.method.basis.w
@@ -187,30 +236,34 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:ELM_PDE_in
     local t_quad_nodes = int.method.time_quadrature.nodes
     local nn_params = C.sol_params
 
-    for i in 1:NP
-        for rt in 1:RT
-            for rx in 1:RX
-                C.u_basis_quad_values[:, rt, rx] = u_basis_func([grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2]],nn_params)[1]
-                C.v_basis_quad_values[:, rt, rx] = v_basis_func([grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2]],nn_params)[1]
-                C.w_basis_quad_values[:, rt, rx] = w_basis_func([grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2]],nn_params)[1]
+    # Load values based on cache size
+    for d in 1:D
+        for i in 1:NP
+            for rt in 1:RT
+                for rx in 1:RX
+                    idx = (rt - 1) * RX + rx
+                    C.u_basis_quad_values[d, :, idx] = u_basis_func([grid_matrix[idx][1], xspan[1] + x_domain * grid_matrix[idx][2]], nn_params)
+                    C.v_basis_quad_values[d, :, idx] = v_basis_func([grid_matrix[idx][1], xspan[1] + x_domain * grid_matrix[idx][2]], nn_params)
+                    C.w_basis_quad_values[d, :, idx] = w_basis_func([grid_matrix[idx][1], xspan[1] + x_domain * grid_matrix[idx][2]], nn_params)
+                end
             end
         end
     end
 
     for j in 1:RX
-        C.ut₀_basis_quad_values[:,j] = u_basis_func([0.0 ,xspan[1] + x_domain* x_quad_nodes[j]],nn_params)[1] # bottom 
+        C.ut₀_basis_quad_values[j, :] = u_basis_func([0.0, xspan[1] + x_domain * x_quad_nodes[j]], nn_params)[1] # bottom 
     end
     for i in 1:RT
-        C.ux₀_basis_quad_values[:,i] = u_basis_func([t_quad_nodes[i],xspan[1]],nn_params)[1]
-        C.ux₁_basis_quad_values[:,i] = u_basis_func([t_quad_nodes[i],xspan[2]],nn_params)[1]
+        C.ux₀_basis_quad_values[i, :] = u_basis_func([t_quad_nodes[i], xspan[1]], nn_params)[1]
+        C.ux₁_basis_quad_values[i, :] = u_basis_func([t_quad_nodes[i], xspan[2]], nn_params)[1]
     end
 
-
+    
 end
 
 
 
-function prior_initial_guess!(C,sol,int::PDEIntegrator{<:ELM_PDE_int})
+function prior_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int})
     local x = C.x
 
     #Equation:

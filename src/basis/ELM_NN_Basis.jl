@@ -6,7 +6,7 @@ struct ELM_NN_Basis <: AbstractPDEBasis
     w    
 
     NP::Int
-    function ELM_NN_Basis(u_network,NP) where {OMT} 
+    function ELM_NN_Basis(u_network,NP)
         sym_u = SymbolicNeuralNetworks.SymbolicNeuralNetwork(u_network)
         u_func = AbstractNeuralNetworks.NeuralNetwork(u_network)
         jac = SymbolicNeuralNetworks.Jacobian(sym_u)

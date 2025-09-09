@@ -7,6 +7,7 @@
     
 """
 
+using MultiSymplectic:ELM_PDE_int
 
 module LinearTransport
  
@@ -196,7 +197,7 @@ module LinearTransport
         LPDEProblem(lag_sys, initial_condition_function, boundary_condition_function, ics, tspan, tstep, xspan, xstep, params, exact_u_func)
     end
 
-    function ELM_least_square_problem(b,x,int::PDEIntegrator{<:ELM_PDE_int})
+    function problem_matrix_assemble(b,x,int::PDEIntegrator{<:ELM_PDE_int})
         local C = cache(int)
         local problem = problem(int)
         local NP = int.method.basis.NP
@@ -204,8 +205,15 @@ module LinearTransport
         local RX = int.method.RX
         local D = problem.D
 
-        
-    
+        C.system_matrix[1:RT * RX, :] = C.v_basis_quad_values .- c * C.w_basis_quad_values
+        C.system_matrix[RT * RX + 1:RT * RX + RX, :] = C.ux₀_basis_quad_values
+        C.system_matrix[RT * RX + RX + 1:RT * RX + RX + RT, :] = C.ut₀_basis_quad_values
+        C.system_matrix[RT * RX + RX + RT + 1:RT * RX + RX + 2 * RT, :] = C.ut₁_basis_quad_values
+
+        C.rhs = zeros(RT * RX + RX + 2 * RT)
+        C.rhs[RT * RX + 1:RT * RX + RX] = C.init_condition_t₀
+        C.rhs[RT * RX + RX + 1:RT * RX + RX + RT] = C.boundary_condition_x₀
+        C.rhs[RT * RX + RX + RT + 1:RT * RX + RX + 2 * RT] = C.boundary_condition_x₁
     end
 
 end
