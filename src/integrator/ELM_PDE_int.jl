@@ -160,7 +160,7 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:ELM_PDE_int})
         else
             # println("sol.internal.x[current_step-1][1:NP] = " , sol.internal.x[current_step-1][1:NP])
             for i in eachindex(C.init_condition_t₀[d,:])
-                C.init_condition_t₀[d,i] = sol.internal.end_quad[i]
+                C.init_condition_t₀[d,i] = sol.internal.end_quad[current_step-1][i]
             end
             # println("initial condition = " , C.init_condition_t₀[d,:])
         end
@@ -267,8 +267,9 @@ function post_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int})
 
     prob = NonlinearLeastSquaresProblem(
         NonlinearFunction(elm_lsq!, resid_prototype = zeros(3)), zeros(NP), cache_)
-
-    C.x[:] = solve(prob).u[:]
+    ls_sol = solve(prob)
+    @show ls_sol
+    C.x[:] = ls_sol.u
 end
 
 function residual!(b::Vector{ST}, sol, int::PDEIntegrator{<:ELM_PDE_int}) where {ST}
@@ -353,7 +354,7 @@ function internal_variables(int::PDEIntegrator{<:ELM_PDE_int},problem::PDEProble
     local init_condition_t₀ = cache(int).init_condition_t₀
     ntime = Int((problem.tspan[2] - problem.tspan[1]) / problem.tstep)
     xx = (x, ntuple( _ -> zeros(size(x)...), ntime)...)
-    end_quad = (init_condition_t₀, ntuple( _ -> zeros(size(x)...), ntime)...)
+    end_quad = (init_condition_t₀, ntuple( _ -> zeros(size(init_condition_t₀)...), ntime)...)
 
     return (x = xx, end_quad = end_quad)
 end
