@@ -799,7 +799,3 @@ function update!(sol_struct, int::PDEIntegrator{<:NN_PDE_Integrator})
     # println("In the end of update! function, time = ", sol_struct.t)
 end
 
-function network_cache_create(u_network, ST)
-    pnn=NeuralNetwork(u_network,ST,initializer = ZeroInitializer())#,initializer = ZeroInitializer()
-    pnn.params
-end

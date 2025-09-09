@@ -18,6 +18,8 @@ module MultiSymplectic
     import BSplineKit.SplineInterpolations:make_knots
     using Zygote
     using Statistics
+    using NonlinearSolve
+
     # abstract types
     include("methods.jl")
     export PDEMethod, PDEProblem, PDEIntegratorCache, AbstractPDEIntegrator, GeometricPDESolution

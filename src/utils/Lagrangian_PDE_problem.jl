@@ -16,7 +16,8 @@ struct LPDEProblem <: PDEProblem
     internal
 
     exact_u
-    function LPDEProblem(lag_sys,ics_function,bcs_function,ics_values,tspan, tstep, xspan, xstep, params,exact_u;internal = nothing)
+    least_squares_assemble
+    function LPDEProblem(lag_sys,ics_function,bcs_function,ics_values,tspan, tstep, xspan, xstep, params,exact_u,least_squares_assemble = nothing;internal = nothing)
         new(
             lag_sys,
             lag_sys.D,
@@ -29,7 +30,8 @@ struct LPDEProblem <: PDEProblem
             xstep,
             params,
             internal,
-            exact_u
+            exact_u,
+            least_squares_assemble
         )
     end
 end

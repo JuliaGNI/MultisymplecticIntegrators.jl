@@ -14,15 +14,6 @@ u_network = Chain(
 )
 
 nn_elm_basis = ELM_NN_Basis(u_network, 10)
-
-
-using NonlinearSolve
-
-function nlls!(du, u, p)
-    du .= p * u .- rand(10)
-end
-
-p = rand(10, 5)
-prob = NonlinearLeastSquaresProblem(
-    NonlinearFunction(nlls!, resid_prototype = zeros(10)), u0, p)
-solve(prob)
+elm_int = ELM_PDE_int(nn_elm_basis; RT=8,RX = 16)
+lpde = MultiSymplectic.LinearTransport.lpdeproblem(tstep = 0.2,tspan =(0.0,1.0))
+sol = MultiSymplectic.integrate(lpde,elm_int)
