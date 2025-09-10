@@ -153,7 +153,7 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:ELM_PDE_int})
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
 
     for d in 1:D
-        # println("update initial condition, current time = ", sol.t, "the initial condition is at time = ", sol.t - timestep(int))
+        println("update initial condition, current time = ", sol.t, "the initial condition is at time = ", sol.t - timestep(int))
 
         if current_step ==1 
             C.init_condition_t₀[d,:] .= ic_fun(xspan[1] .+ x_domain .* x_quad_nodes).u
@@ -162,7 +162,7 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:ELM_PDE_int})
             for i in eachindex(C.init_condition_t₀[d,:])
                 C.init_condition_t₀[d,i] = sol.internal.end_quad[current_step-1][i]
             end
-            # println("initial condition = " , C.init_condition_t₀[d,:])
+            println("initial condition = " , C.init_condition_t₀[d,:])
         end
 
         for i in 1:RT
@@ -261,15 +261,17 @@ function post_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int})
     local cache_ = cache(int)
 
     lsq_assemble(int)
-    function elm_lsq!(du,x,p)
-        du= cache_.system_matrix * x .- cache_.system_rhs
-    end
+    # function elm_lsq!(du,x,p)
+    #     du= cache_.system_matrix * x .- cache_.system_rhs
+    # end
 
-    prob = NonlinearLeastSquaresProblem(
-        NonlinearFunction(elm_lsq!, resid_prototype = zeros(3)), zeros(NP), cache_)
-    ls_sol = solve(prob)
-    @show ls_sol
-    C.x[:] = ls_sol.u
+    # prob = NonlinearLeastSquaresProblem(
+    #     NonlinearFunction(elm_lsq!, resid_prototype = zeros(3)), zeros(NP), cache_)
+    # ls_sol = solve(prob)
+    # @show ls_sol
+    # C.x[:] = ls_sol.u
+    C.x[:] = cache_.system_matrix \ cache_.system_rhs
+    # println("After least square, the parameters are: ", C.x)
 end
 
 function residual!(b::Vector{ST}, sol, int::PDEIntegrator{<:ELM_PDE_int}) where {ST}
@@ -339,7 +341,7 @@ function update!(sol_struct, int::PDEIntegrator{<:ELM_PDE_int})
 
     for d in 1:D
         for rx in 1:RX
-            sol_struct.internal.end_quad[sol_struct.current_step] .= sum(u_basis_func([1.0, xspan[1] + x_domain* x_quad_nodes[rx]], nn_params) .* x)
+            sol_struct.internal.end_quad[sol_struct.current_step][rx] = sum(u_basis_func([sol_struct.t, xspan[1] + x_domain* x_quad_nodes[rx]], nn_params) .* x)
         end
     end
 
