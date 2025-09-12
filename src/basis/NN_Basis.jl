@@ -1,4 +1,4 @@
-struct ELM_NN_Basis <: AbstractPDEBasis
+struct NN_Basis <: AbstractPDEBasis
     network_arch
     
     u
@@ -6,7 +6,7 @@ struct ELM_NN_Basis <: AbstractPDEBasis
     w    
 
     NP::Int
-    function ELM_NN_Basis(u_network,NP)
+    function NN_Basis(u_network,NP)
         u_func = AbstractNeuralNetworks.NeuralNetwork(u_network) # how to set the random seed???
         # u_grad(x) = Zygote.jacobian(input -> u_func(input),x)[1]
         v_func(x,ps) = Zygote.jacobian(input -> u_func(input,ps),x)[1][:,1]
