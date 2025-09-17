@@ -5,150 +5,117 @@ using LinearAlgebra
 using Statistics
 using Zygote
 using IterTools
-function box_init_resnet!(PNN)
-    m = 1.0
-    L = length(keys(PNN.params))
-    # for l in 2:L
-    for (l, (name, layer)) in enumerate(zip(keys(PNN.params), values(PNN.params)))
-        if l ==1
-            # First layer
-            width = size(layer[keys(layer)[1]])[1]
-            input_dim = size(layer[keys(layer)[1]])[2]
-            layer.W[:],layer.b[:] = MultiSymplectic.box_init_plain(input_dim, width)
-            continue
-        end
-        if l == L
-            # Last layer
-            width = size(layer[keys(layer)[1]])[2]
-            layer.W[:], _= MultiSymplectic.box_init_plain(width, 1)
-            continue
-        end
-        width = size(layer[keys(layer)[1]])[2]
-        m *= (1 + 1 / (L - 1))
-        W = zeros(Float32, width, width)
-        b = zeros(Float32, width)
-        for i in 1:width
-            p = m * rand(Float32, width)
-            n = randn(Float32, width)
-            n ./= LinearAlgebra.norm(n)
-            p_max = map(nj -> nj ≥ 0 ? m : 0.0f0, n)
-            k = 1 / (dot(p_max .- p, n) * (L - 1))
-            W[i, :] = k * n
-            b[i] = k * dot(p, n)
-        end
-        layer[keys(layer)[1]][:] = W
-        layer[keys(layer)[2]][:] = b
-    end
-end
-
-
+using Plots
+using Random
 u_network = Chain(
-    Dense(2, 32, tanh),
-    # GeometricMachineLearning.ResNetLayer(24, tanh),
-    Dense(32, 1,identity,use_bias = false)
+    Dense(2, 100, tanh),
+    Dense(100, 100,tanh,),
+    Dense(100, 1,identity,use_bias = false),
 )
 
 PNN = NeuralNetwork(u_network)
-box_init_resnet!(PNN)
+exact_u = MultiSymplectic.LinearTransport.exact_u
+exact_u(0.0,0.5)
 
+tstep = 0.3
+tspan =(0.0,1.5)
+xspan = (-4.,-1.)
+a,b = xspan[1], xspan[2]
+x_domain = xspan[2] - xspan[1]
+h = tstep
 
-# --------------------------------------------------
-# PINN Loss Function
-# --------------------------------------------------
-velocity(x, t) = x  # a(x, t) = x
-u0(x) = max(0, 1 - abs(2x - 1))  # initial condition
-analytic_solution(t,x) = u0(x-t)
-function pinn_loss(int_pts, init_pts, bc_pts, arch,params; ε=1.0)
-    t_int, x_int = int_pts
-    t0, x0 = init_pts
-    tb, xb = bc_pts
+#  Trial solution function construction
+psi_L(x) = (b - x) / x_domain       # left 
+psi_R(x) = (x - a) / x_domain       # right
+phi_B(t) = (h - t) / h   # bottom
 
-    J1 = Statistics.mean([
-        let input = hcat(t, x)'  # time first
-            ∂u = gradient(tx -> arch(tx, params)[1],input)[1]
-            # ∂u∂x = Zygote.gradient(x -> arch(hcat(t, x)',params)[1], x)[1]
-            # ∂u∂t = Zygote.gradient(tt -> arch(hcat(tt, x)',params)[1], t)[1]
-            ∂u∂x = ∂u[2]
-            ∂u∂t = ∂u[1]
-            r = ∂u∂t + velocity(x, t) * ∂u∂x
-            r^2
-        end for (t, x) in zip(t_int, x_int)
-    ])
+function T1NN(t, x, tn, params)
+    return psi_L(x) * PNN([t,a],params)[1] +
+        psi_R(x) * PNN([t,b],params)[1] +
+        phi_B(t) * PNN([0.0,x],params)[1]
+end
 
-    J2 = Statistics.mean([(arch(hcat(0.0, x)',params)[1] - u0(x))^2 for x in x0])
-    J3 = Statistics.mean([(arch(hcat(t, 0.0)',params)[1])^2 for t in tb])
+function T2NN(t, x, tn, params)
+    return psi_L(x) * phi_B(t) * PNN([0.0,a],params)[1] +
+        psi_R(x) * phi_B(t) * PNN([0.0,b],params)[1]
+end
 
-    return ε * J1 + J2 + J3
+function C1(t, x, tn, params)
+    return psi_L(x) * exact_u(t,a)  +
+        psi_R(x) * exact_u(t,b) +
+        phi_B(t) * exact_u(0,x) 
+
+end
+
+function C2(t, x, tn, params)
+    return psi_L(x) * phi_B(t) * exact_u(0,a) +
+        psi_R(x) * phi_B(t) * exact_u(0,b)
 end
 
 
-dx = 0.05
-x_int = collect(0:dx:1.)
-t_int = collect(0:dx:1.0)
-grid = collect(IterTools.product(t_int, x_int))
-grid = vcat(grid...)  # Convert to a matrix with time in the first row and space in the second row
-tx_int = hcat(collect.(grid)...)'
-    
-# tx_int = [t_int x_int]
-t0 = zeros(Float32, size(x_int))
-x0 = x_int  # Initial condition at t=0
-tx_0 = [t0 x_int]
-
-xb = zeros(Float32, size(t_int))
-tb = t_int  # Boundary condition at t=1
-tx_b = [t_int xb]
+u_trial(t,x,tn,params) = PNN([t,x])[1] - T1NN(t,x,tn,params) + T2NN(t,x,tn,params) + C1(t,x,tn,params) - C2(t,x,tn,params)
+v_trial(t,x,tn,params) = Zygote.gradient(tt -> u_trial(tt,x,tn,params),t)[1]
+w_trial(t,x,tn,params) = Zygote.gradient(xx -> u_trial(t,xx,tn,params),x)[1]
 
 
-bc_initial_inputs = vcat(tx_0, tx_b)'
-bc_labels = analytic_solution.(bc_initial_inputs[1,:], bc_initial_inputs[2,:])
-bc_labels = reshape(bc_labels, 1, :)  # labels should be a matrix with one row and multiple columns
-# u_network(network_inputs, PNN.params)
+∂u∂θ_func(t,x,tn,params) = Zygote.gradient(ps -> u_trial(t,x,tn,ps), params)[1]
+∂v∂θ_func(t,x,tn,params) = Zygote.gradient(ps -> v_trial(t,x,tn,ps), params)[1]
+∂w∂θ_func(t,x,tn,params) = Zygote.gradient(ps -> w_trial(t,x,tn,ps), params)[1]
+u_trial(0.3, -2.0, 0.3, PNN.params)
+∂u∂θ_func(0.3, -2.0, 0.3, PNN.params)
 
+# t_val = collect(tspan[1]:0.01:tspan[2])
+# x_val = collect(xspan[1]:0.01:xspan[2])
 
-data = ((tx_int[:, 1], tx_int[:, 2]), (t0, x0), (tb, xb))
-# pinn_loss((t_int, x_int), (t0, x0), (tb, xb), u_network, PNN.params; ε=1.0)
-# Zygote.gradient(p -> pinn_loss((t_int, x_int), (t0, x0), (tb, xb), u_network, p; ε=1.0), PNN.params)
+# Z = [u_trial(t,x,0.0, PNN.params) for (t,x) in Iterators.product(t_val,x_val)]
+# analytic_sol = [exact_u(t,x) for (t,x) in Iterators.product(t_val,x_val)]
+# Z .- analytic_sol
 
+tx_in = rand(Random.seed!(1),2,2000)
+tx_in[2,:] .= xspan[1] .+ (xspan[2] - xspan[1]) * tx_in[2,:]
 
-tem_ps = PNN.params[keys(PNN.params)[1:end-1]]
-opt = GeometricMachineLearning.Optimizer(GeometricMachineLearning.GradientOptimizer(.005), tem_ps)
-λ = GeometricMachineLearning.GlobalSection(tem_ps)
-
-nepochs = 20
-err_ls = zeros(Float64, nepochs)
-for ep in 1:nepochs
-    Φ = AbstractNeuralNetworks.Chain(u_network.layers[1:end-1]...)(bc_initial_inputs,tem_ps)
-    # Φ = NN(network_inputs, PNN.params)
-    # PNN.params.L3.W[:] = labels/Φ
-    PNN.params[keys(PNN.params)[end]].W[:] = (Φ' \ bc_labels')'
-    gs = Zygote.gradient(p -> pinn_loss((tx_int[:, 1], tx_int[:, 2]), (t0, x0), (tb, xb), u_network, p; ε=1.0), PNN.params)[1]
-    tem_ps = PNN.params[keys(PNN.params)[1:end-1]]
-    tem_gs = gs[keys(gs)[1:end-1]]
-    GeometricMachineLearning.optimization_step!(opt,λ, tem_ps, tem_gs)
-    err_ls[ep] = pinn_loss((tx_int[:, 1], tx_int[:, 2]), (t0, x0), (tb, xb), u_network, PNN.params; ε=1.0)
-    println("Epoch: $ep, Loss: $(err_ls[ep])")
-    @show PNN.params
-end
-
-plot(err_ls, title = "Loss over epochs", xlabel = "Epochs", ylabel = "Loss")
-
-
-
-
-
-
-using Plots
-plot(u0.(-1:0.01:1))
-
-test_x_ls = collect(0:0.01:10.)
-test_t_ls = collect(0:0.01:10.0)
-test_grid = collect(IterTools.product(test_t_ls, test_x_ls))
-truth_sol = zeros(size(test_grid))
-for i in 1:size(test_grid, 1)
-    for j in 1:size(test_grid, 2)
-        truth_sol[i,j] = analytic_solution(test_grid[i,j][1], test_grid[i,j][2])
+# PINN loss for Linear Transport Equation: u_t + u_x = 0
+function pinn_loss(dofs, tx_in)
+    loss = 0.0
+    for i in 1:size(tx_in, 2)
+        t, x = tx_in[:, i]
+        ut = v_trial(t, x, 0.0, dofs)
+        ux = w_trial(t, x, 0.0, dofs)
+        res = ut + 0.2 * ux
+        loss += res^2
     end
+    return loss / size(tx_in, 2)
 end
-plot(test_t_ls, test_x_ls,truth_sol)
 
+# Training loop
+opt = GeometricMachineLearning.Optimizer(GeometricMachineLearning.GradientOptimizer(.001), PNN.params)
+λ = GeometricMachineLearning.GlobalSection(PNN.params)
 
+loss_history = []
+
+batch_size = 100
+num_samples = size(tx_in, 2)
+num_batches = cld(num_samples, batch_size)
+
+# for epoch in 1:500
+#     epoch_loss = 0.0
+    # for batch_idx in 1:num_batches
+    batch_idx = 1
+    batch_start = (batch_idx - 1) * batch_size + 1
+    batch_end = min(batch_idx * batch_size, num_samples)
+    batch_tx = tx_in[:, batch_start:batch_end]
+
+    grads = Zygote.gradient(d -> pinn_loss(d, batch_tx), PNN.params)[1]
+    GeometricMachineLearning.optimization_step!(opt, λ, PNN.params, grads)
+
+    batch_loss = pinn_loss(PNN.params, batch_tx)
+    epoch_loss += batch_loss * size(batch_tx, 2)
+#     end
+#     epoch_loss /= num_samples
+#     push!(loss_history, epoch_loss)
+#     println("Epoch $epoch, Loss: $epoch_loss")
+    
+# end
+
+# Plot loss history
+plot(loss_history, xlabel="Epoch", ylabel="PINN Loss", title="Training Loss History")
