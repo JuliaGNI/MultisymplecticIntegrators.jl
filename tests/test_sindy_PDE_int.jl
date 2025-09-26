@@ -3,8 +3,8 @@ using QuadratureRules
 using MultiSymplectic
 using Symbolics
 using Parameters
-# using Plots
-using CairoMakie
+using Plots
+# using CairoMakie
 
 
 # Sine-Gordon Equation
@@ -189,54 +189,54 @@ end
 
 # # Wave equation 
 # begin
-#     A1 = 0.3
-#     B1 = 0.2
-#     A2 = 0.4
-#     B2 = 0.5
-#     c = 1.
-#     u_exact_sol(x,t)=  (A1 * cos((pi*c*t)) + B1 * sin((pi*c*t) + pi/6)) * sin((pi*x)) + (A2 * cos((2*pi*c*t)) + B2 * sin((2*pi*c*t) + pi/6)) * sin((2*pi*x))
-#     x_ls = collect(0.2:0.01:0.8)
-#     plot(x_ls,u_exact_sol.(x_ls,0.0),label="Analytic Solution")
-#     function wave_u_SindySol(x,t,p)
-#         (p[1] * cos((pi*t)) + p[2] * sin((pi*t) + pi/6)) * sin((pi*x)) + (p[3] * cos((2*pi*t)) + p[4] * sin((2*pi*t) + pi/6)) * sin((2*pi*x))
-#     end
+    A1 = 0.4
+    B1 = 0.3
+    A2 = 0.0
+    B2 = 0.0
+    c = 1.
+    u_exact_sol(x,t)=  (A1 * cos((pi*c*t)) + B1 * sin((pi*c*t) + pi/6)) * sin((pi*x)) + (A2 * cos((2*pi*c*t)) + B2 * sin((2*pi*c*t) + pi/6)) * sin((2*pi*x)) + 1.0 
+    x_ls = collect(-2:0.01:2)
+    Plots.plot(x_ls,u_exact_sol.(x_ls,0.0),label="Analytic Solution")
+    function wave_u_SindySol(x,t,p)
+        (p[1] * cos((pi*t)) + p[2] * sin((pi*t) + pi/6)) * sin((pi*x)) + (p[3] * cos((2*pi*t)) + p[4] * sin((2*pi*t) + pi/6)) * sin((2*pi*x))
+    end
 
 
-#     @variables t x p[1:4]
-#     c=1.0
-#     u_expr_wave =  (p[1] * cos((pi*t)) + p[2] * sin((pi*t) + pi/6)) * sin((pi*x)) + (p[3] * cos((2*pi*t)) + p[4] * sin((2*pi*t) + pi/6)) * sin((2*pi*x))
-#     init_p_wave = [0.300001, 0.200001, 0.400001, 0.500001] # initial guess for the parameters
-#     sindy_basis_wave = SindyPDEBasis([u_expr_wave], [p], t, [x])
-#     RT = 4
-#     RX = 6
-#     t_step = 0.05
-#     xspan = (0.2, 0.8)
-#     sindy_int_wave = Sindy_PDE_Integrator(sindy_basis_wave,init_p_wave,RT = RT,RX = RX, xspan = xspan, tstep = t_step,μ =:BSplineDirichlet,λ =:BSplineDirichlet,k_μ = 4,k_λ₀_x = 4)
+    @variables t x p[1:4]
+    c=1.0
+    u_expr_wave =  (p[1] * cos((pi*t)) + p[2] * sin((pi*t) + pi/6)) * sin((pi*x)) + (p[3] * cos((2*pi*t)) + p[4] * sin((2*pi*t) + pi/6)) * sin((2*pi*x))
+    init_p_wave = [0.300001, 0.200001, 0.400001, 0.500001] # initial guess for the parameters
+    sindy_basis_wave = SindyPDEBasis([u_expr_wave], [p], t, [x])
+    RT = 4
+    RX = 6
+    t_step = 0.05
+    xspan = (0.2, 0.8)
+    sindy_int_wave = Sindy_PDE_Integrator(sindy_basis_wave,init_p_wave,RT = RT,RX = RX, xspan = xspan, tstep = t_step,μ =:BSplineDirichlet,λ =:BSplineDirichlet,k_μ = 4,k_λ₀_x = 4)
 
-#     lpde_wave = MultiSymplectic.Wave.lpdeproblem(tspan =(0.0,1.0),tstep = t_step, xspan = xspan)
-#     wave_sol = MultiSymplectic.integrate(lpde_wave,sindy_int_wave)
+    lpde_wave = MultiSymplectic.Wave.lpdeproblem(tspan =(0.0,1.0),tstep = t_step, xspan = xspan)
+    wave_sol = MultiSymplectic.integrate(lpde_wave,sindy_int_wave)
 
-#     x_ls = collect(0.2:0.01:0.8)
-#     plot(x_ls,u_exact_sol.(x_ls,0.05),label="Analytic Solution",ylims = (-1.,1.50),size = (1000,400))
-#     plot!(x_ls,[wave_u_SindySol(x,0.05,wave_sol.internal.x[2][1:4]) for x in x_ls],label = "SINDy Solution")
-#     title!("t = 0.05")
-#     xlabel!("x")
-#     ylabel!("u")
+    x_ls = collect(0.2:0.01:0.8)
+    plot(x_ls,u_exact_sol.(x_ls,0.05),label="Analytic Solution",ylims = (-1.,1.50),size = (1000,400))
+    plot!(x_ls,[wave_u_SindySol(x,0.05,wave_sol.internal.x[2][1:4]) for x in x_ls],label = "SINDy Solution")
+    title!("t = 0.05")
+    xlabel!("x")
+    ylabel!("u")
 
 
-#     x_vertics = [xspan[1], xspan[2], xspan[2], xspan[1]]
-#     y_vertics = [-1,-1, 1.5, 1.5]
+    x_vertics = [xspan[1], xspan[2], xspan[2], xspan[1]]
+    y_vertics = [-1,-1, 1.5, 1.5]
 
-#     wave_anim = @animate for (i, t) in enumerate(0:t_step:0.8)
-#         plot(x_ls,u_exact_sol.(x_ls,t),label="Analytic Solution",size = (1000,400), ylims = (-1.,1.50))
-#         plot!(x_ls,[wave_u_SindySol(x,t,wave_sol.internal.x[i+1][1:4]) for x in x_ls],label = "SINDy Solution")
-#         plot!(Shape(x_vertics, y_vertics), label = "Spatial Domain", color = :lightblue, alpha = 0.2, linestyle = :dash)
-#         # scatter!(x_span[2] .* QuadratureRules.GaussLegendreQuadrature(RX).nodes,-0.18 * ones(RX),label = "Quadrature Points", color = :red, markersize = 5, markershape = :x)
-#         title!("t = $t")
-#         xlabel!("x")
-#         ylabel!("u")
-#     end 
-#     gif(wave_anim, "figures/wave_eqn.gif",fps = 5)
+    wave_anim = @animate for (i, t) in enumerate(0:t_step:5.0)
+        plot(x_ls,u_exact_sol.(x_ls,t),label="Analytic Solution",size = (1000,400), ylims = (-1.,1.50))
+        # plot!(x_ls,[wave_u_SindySol(x,t,wave_sol.internal.x[i+1][1:4]) for x in x_ls],label = "SINDy Solution")
+        # plot!(Shape(x_vertics, y_vertics), label = "Spatial Domain", color = :lightblue, alpha = 0.2, linestyle = :dash)
+        # scatter!(x_span[2] .* QuadratureRules.GaussLegendreQuadrature(RX).nodes,-0.18 * ones(RX),label = "Quadrature Points", color = :red, markersize = 5, markershape = :x)
+        title!("t = $t")
+        xlabel!("x")
+        ylabel!("u")
+    end 
+    gif(wave_anim, "figures/wave_eqn.gif",fps = 5)
 
 # end
 
