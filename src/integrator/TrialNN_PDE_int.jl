@@ -54,6 +54,28 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     """
     x::Vector{ST}
 
+    nn_quad_values::Array{ST}
+    nnt_quad_values::Array{ST}
+    nnx_quad_values::Array{ST}
+
+    nn_t₀_quad_values::Matrix{ST}
+    nn_x₀_quad_values::Matrix{ST}
+    nn_x₁_quad_values::Matrix{ST}
+    nn_t₀x₀::Vector{ST}
+    nn_t₀x₁::Vector{ST}
+
+    nnt_t₀_quad_values::Matrix{ST}
+    nnt_x₀_quad_values::Matrix{ST}
+    nnt_x₁_quad_values::Matrix{ST}
+    nnt_t₀x₀::Vector{ST}
+    nnt_t₀x₁::Vector{ST}
+
+    nnx_t₀_quad_values::Matrix{ST}
+    nnx_x₀_quad_values::Matrix{ST}
+    nnx_x₁_quad_values::Matrix{ST}
+    nnx_t₀x₀::Vector{ST}
+    nnx_t₀x₁::Vector{ST}
+
     u_quad_values::Array{ST}
     v_quad_values::Array{ST}
     w_quad_values::Array{ST}
@@ -71,10 +93,49 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     ux₁_quad_values::Matrix{ST} # right boundary, i.e. x = L
 
     basis_nn_ps
+    
+    ics_t₀_quad_values::Matrix{ST}
+    bcs_x₀_quad_values::Matrix{ST}
+    bcs_x₁_quad_values::Matrix{ST}
+    bcs_t₀x₀_quad_values::Vector{ST}
+    bcs_t₀x₁_quad_values::Vector{ST}
 
-    done_initial_guess::Vector{Int} # flag for initial guess computation
+    icst_t₀_quad_values::Matrix{ST}
+    bcst_x₀_quad_values::Matrix{ST}
+    bcst_x₁_quad_values::Matrix{ST}
+    bcst_t₀x₀_quad_values::Vector{ST}
+    bcst_t₀x₁_quad_values::Vector{ST}
+
+    icsx_t₀_quad_values::Matrix{ST}
+    bcsx_x₀_quad_values::Matrix{ST}
+    bcsx_x₁_quad_values::Matrix{ST}
+    bcsx_t₀x₀_quad_values::Vector{ST}
+    bcsx_t₀x₁_quad_values::Vector{ST}
+
     function TrialNN_PDE_intCache{ST,RT,RX,D,NP}() where {ST,RT,RX,D,NP}
         x = zeros(ST, NP) # in ELM, x is just the output layer parameters
+
+        nn_quad_values = zeros(ST, D, RT, RX,NP)
+        nnt_quad_values = zeros(ST, D, RT, RX, NP)
+        nnx_quad_values = zeros(ST, D, RT, RX, NP)
+
+        nn_t₀_quad_values = zeros(ST, D, RX, NP)
+        nn_x₀_quad_values = zeros(ST, D, RT, NP)
+        nn_x₁_quad_values = zeros(ST, D, RT, NP)
+        nn_t₀x₀ = zeros(ST, D, NP)
+        nn_t₀x₁ = zeros(ST, D, NP)
+
+        nnt_t₀_quad_values = zeros(ST, D, RX, NP)
+        nnt_x₀_quad_values = zeros(ST, D, RT, NP)
+        nnt_x₁_quad_values = zeros(ST, D, RT, NP)
+        nnt_t₀x₀ = zeros(ST, D, NP)
+        nnt_t₀x₁ = zeros(ST, D, NP)
+
+        nnx_t₀_quad_values = zeros(ST, D, RX, NP)
+        nnx_x₀_quad_values = zeros(ST, D, RT, NP)
+        nnx_x₁_quad_values = zeros(ST, D, RT, NP)
+        nnx_t₀x₀ = zeros(ST, D, NP)
+        nnx_t₀x₁ = zeros(ST, D, NP)
 
         u_quad_values = zeros(ST, D, RT, RX)
         v_quad_values = zeros(ST, D, RT, RX)
@@ -92,25 +153,49 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
         ux₀_quad_values = zeros(ST, D, RT) # left boundary, i.e. x = 0
         ux₁_quad_values = zeros(ST, D, RT) # right boundary, i.e. x = L
 
-        basis_nn_ps = (L1=(W=zeros(ST, 100, 2), b=zeros(ST, 100)), L2=(W=zeros(ST, 100, 100),b=zeros(ST, 100)), 
-        L3=(W=zeros(ST, 100, 100),b=zeros(ST, 100)),L4=(W=zeros(ST, NP, 100),b=zeros(ST, NP)),) #L4=(W=zeros(ST, NP, 100),b=zeros(ST, NP)),
+        basis_nn_ps = (L1=(W=zeros(ST, 10, 2), b=zeros(ST, 10)), 
+        # L2=(W=zeros(ST, 100, 100),b=zeros(ST, 100)), 
+        # L3=(W=zeros(ST, 100, 100),b=zeros(ST, 100)),
+        L2=(W=zeros(ST, NP, 10),b=zeros(ST, NP)),) #L4=(W=zeros(ST, NP, 100),b=zeros(ST, NP)),
 
-        done_initial_guess = [0]
+        ics_t₀_quad_values = zeros(ST, D, RX)
+        bcs_x₀_quad_values = zeros(ST, D, RT)
+        bcs_x₁_quad_values = zeros(ST, D, RT)
+        bcs_t₀x₀_quad_values = zeros(ST, D)
+        bcs_t₀x₁_quad_values = zeros(ST, D)
+
+        icst_t₀_quad_values = zeros(ST, D, RX)
+        bcst_x₀_quad_values = zeros(ST, D, RT)
+        bcst_x₁_quad_values = zeros(ST, D, RT)
+        bcst_t₀x₀_quad_values = zeros(ST, D)
+        bcst_t₀x₁_quad_values = zeros(ST, D)
+
+        icsx_t₀_quad_values = zeros(ST, D, RX)
+        bcsx_x₀_quad_values = zeros(ST, D, RT)
+        bcsx_x₁_quad_values = zeros(ST, D, RT)
+        bcsx_t₀x₀_quad_values = zeros(ST, D)
+        bcsx_t₀x₁_quad_values = zeros(ST, D)
+
         new(x,
-            u_quad_values,
-            v_quad_values,
-            w_quad_values,
-            ∂L∂U_quad_values,
-            ∂L∂V_quad_values,
-            ∂L∂W_quad_values,
-            ∂u∂θ_quad_values,
-            ∂v∂θ_quad_values,
-            ∂w∂θ_quad_values,
-            ut₀_quad_values,
-            ux₀_quad_values,
-            ux₁_quad_values,
+            nn_quad_values,nnt_quad_values,nnx_quad_values,
+            nn_t₀_quad_values,nn_x₀_quad_values,nn_x₁_quad_values,
+            nn_t₀x₀,nn_t₀x₁,
+            nnt_t₀_quad_values,nnt_x₀_quad_values,nnt_x₁_quad_values,
+            nnt_t₀x₀,nnt_t₀x₁,
+            nnx_t₀_quad_values,nnx_x₀_quad_values,nnx_x₁_quad_values,
+            nnx_t₀x₀,nnx_t₀x₁,
+            u_quad_values,v_quad_values,w_quad_values,
+            ∂L∂U_quad_values,∂L∂V_quad_values,∂L∂W_quad_values,
+            ∂u∂θ_quad_values,∂v∂θ_quad_values,∂w∂θ_quad_values,
+            ut₀_quad_values,ux₀_quad_values,ux₁_quad_values,
             basis_nn_ps,
-            done_initial_guess)
+            ics_t₀_quad_values,bcs_x₀_quad_values,bcs_x₁_quad_values,
+            bcs_t₀x₀_quad_values,bcs_t₀x₁_quad_values,
+            icst_t₀_quad_values,bcst_x₀_quad_values,bcst_x₁_quad_values,
+            bcst_t₀x₀_quad_values,bcst_t₀x₁_quad_values,
+            icsx_t₀_quad_values,bcsx_x₀_quad_values,bcsx_x₁_quad_values,
+            bcsx_t₀x₀_quad_values,bcsx_t₀x₁_quad_values
+            )
     end
 end
 
@@ -138,6 +223,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int})
     local h = timestep(int)
     local a,b = int.problem.xspan[1],int.problem.xspan[2]
     local PNN = int.method.basis.sol_network
+    local BNN = int.method.basis.basis_network
     local ic_fun = int.problem.ics_function
     local bc_fun = int.problem.bcs_function
     local previous_params = sol.internal.previous_params
@@ -182,7 +268,6 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int})
         return loss / size(tx_in, 2)
     end
 
-
     function C2(t, x, tn, params)
         return psi_L(x) * phi_B(t) * bc_fun(tn, xspan).bc₀.u +
             psi_R(x) * phi_B(t) * bc_fun(tn, xspan).bc₁.u
@@ -195,7 +280,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int})
     tx_in = rand(Random.seed!(1),2,5000)
     tx_in[2,:] .= xspan[1] .+ (xspan[2] - xspan[1]) * tx_in[2,:]
 
-    epochs = 3000
+    epochs = 10000
     opt = GeometricMachineLearning.Optimizer(GeometricMachineLearning.AdamOptimizerWithDecay(epochs), PNN.params)
     λ = GeometricMachineLearning.GlobalSection(PNN.params)
     loss_history = []
@@ -203,6 +288,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int})
     batch_size = 100
     num_samples = size(tx_in, 2)
     num_batches = cld(num_samples, batch_size)
+    print("Start initial guess function! \n")
 
     for epoch in 1:epochs
         epoch_loss = 0.0
@@ -229,22 +315,172 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int})
         if hasfield(typeof(layer), :b)
             C.basis_nn_ps[name].W[:] = layer.W[:] 
             C.basis_nn_ps[name].b[:] = layer.b[:]
+            BNN.params[name].W[:] = layer.W[:]
+            BNN.params[name].b[:] = layer.b[:]
         else
             # For layers without bias (e.g., output), just regenerate W
             C.x[:] = layer.W[:]
         end
     end
 
+    local RT = int.method.RT
+    local RX = int.method.RX
+    local D = int.problem.D
+    local x_quad_nodes = int.method.spatial_quadrature.nodes
+    local t_quad_nodes = int.method.time_quadrature.nodes
+
+    BNNt(t,x) = Zygote.gradient(tt -> BNN([tt,x], BNN.params)[1], t)[1]
+    BNNx(t,x) = Zygote.gradient(xx -> BNN([t,xx], BNN.params)[1], x)[1]
+    for d in 1:D
+        for rt in 1:RT
+            for rx in 1:RX
+                C.nn_quad_values[d,rt,rx,:] = BNN([t_quad_nodes[rt], x_quad_nodes[rx]], BNN.params)[1]
+                #TODO:check if this is correct with cache parameters
+                C.nnt_quad_values[d,rt,rx,:] = BNNt(t_quad_nodes[rt], x_quad_nodes[rx])
+                C.nnx_quad_values[d,rt,rx,:] = BNNx(t_quad_nodes[rt], x_quad_nodes[rx])
+            end
+        end
+        for rx in 1:RX
+            C.nn_t₀_quad_values[d,rx,:] = BNN([0.0, x_quad_nodes[rx]], BNN.params)[1]
+            C.nnt_t₀_quad_values[d,rx,:] = BNNt(0.0, x_quad_nodes[rx])
+            C.nnx_t₀_quad_values[d,rx,:] = BNNx(0.0, x_quad_nodes[rx])
+        end
+
+        for rt in 1:RT
+            C.nn_x₀_quad_values[d,rt,:] = BNN([t_quad_nodes[rt], a], BNN.params)[1]
+            C.nn_x₁_quad_values[d,rt,:] = BNN([t_quad_nodes[rt], b], BNN.params)[1]
+            C.nnt_x₀_quad_values[d,rt,:] = BNNt(t_quad_nodes[rt], a)
+            C.nnt_x₁_quad_values[d,rt,:] = BNNt(t_quad_nodes[rt], b)
+            C.nnx_x₀_quad_values[d,rt,:] = BNNx(t_quad_nodes[rt], a)
+            C.nnx_x₁_quad_values[d,rt,:] = BNNx(t_quad_nodes[rt], b)
+        end
+
+        C.nn_t₀x₀[d,:] = BNN([0.0, a], BNN.params)
+        C.nn_t₀x₁[d,:] = BNN([0.0, b], BNN.params)
+        C.nnt_t₀x₀[d,:] = BNNt(0.0, a)
+        C.nnt_t₀x₁[d,:] = BNNt(0.0, b)
+        C.nnx_t₀x₀[d,:] = BNNx(0.0, a)
+        C.nnx_t₀x₁[d,:] = BNNx(0.0, b)
+    end
+
 end
 
-initialize_bcs_ics!(sol,int::PDEIntegrator{<:TrialNN_PDE_int}) = nothing
+function initialize_bcs_ics!(sol,int::PDEIntegrator{<:TrialNN_PDE_int}) 
+    local C = cache(int)
+    local current_step = sol.current_step
+    local D = int.problem.D
+    local x_quad_nodes = int.method.spatial_quadrature.nodes
+    local t_quad_nodes = int.method.time_quadrature.nodes
+    local ic_fun = int.problem.ics_function
+    local bc_fun = int.problem.bcs_function
+    local xspan = int.problem.xspan
+    if current_step == 1
+        for d in 1:D
+            C.ics_t₀_quad_values[d,:] = ic_fun(x_quad_nodes).u
+            C.icst_t₀_quad_values[d,:] = ic_fun(x_quad_nodes).v
+            C.icsx_t₀_quad_values[d,:] = ic_fun(x_quad_nodes).w
+        end
+    else
+
+    end
+
+    for d in 1:D
+        C.bcs_x₀_quad_values[d,:] = bc_fun(t_quad_nodes, xspan).bc₀.u
+        C.bcs_x₁_quad_values[d,:] = bc_fun(t_quad_nodes, xspan).bc₁.u
+        C.bcs_t₀x₀[d,:] = bc_fun(0.0, xspan).bc₀.u
+        C.bcs_t₀x₁[d,:] = bc_fun(0.0, xspan).bc₁.u
+    
+        C.bcst_x₀_quad_values[d,:] = bc_fun(t_quad_nodes, xspan).bc₀.v
+        C.bcst_x₁_quad_values[d,:] = bc_fun(t_quad_nodes, xspan).bc₁.v
+        C.bcst_t₀x₀[d,:] = bc_fun(0.0, xspan).bc₀.v
+        C.bcst_t₀x₁[d,:] = bc_fun(0.0, xspan).bc₁.v
+
+        C.bcsx_x₀_quad_values[d,:] = bc_fun(t_quad_nodes, xspan).bc₀.w
+        C.bcsx_x₁_quad_values[d,:] = bc_fun(t_quad_nodes, xspan).bc₁.w
+        C.bcsx_t₀x₀[d,:] = bc_fun(0.0, xspan).bc₀.w
+        C.bcsx_t₀x₁[d,:] = bc_fun(0.0, xspan).bc₁.w
+    end
+end
+
+#  Trial solution function construction
+# psi_L(x) = (b - x) / x_domain       # left 
+# psi_R(x) = (x - a) / x_domain       # right
+# phi_B(t) = (h - t) / h   # bottom
+
+function T1NN(t, x, tn, dofs, int)
+    local fixed_params = cache(int).basis_nn_ps
+    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+    local h = timestep(int)
+    local a,b = int.problem.xspan[1],int.problem.xspan[2]
+    local PNN = int.method.basis.basis_network
+
+    return (b - x)  * dofs' * PNN([t,a], fixed_params) / x_domain +
+        (x - a)  * dofs' * PNN([t,b],fixed_params) / x_domain +
+        (h - t)  * dofs' * PNN([0.0,x],fixed_params) / h
+end
+
+function T2NN(t, x, tn, dofs, int)
+    local fixed_params = cache(int).basis_nn_ps
+    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+    local h = timestep(int)
+    local a,b = int.problem.xspan[1],int.problem.xspan[2]
+    local PNN = int.method.basis.basis_network
+
+    return (b - x)   * (h - t)  * dofs' * PNN([0.0,a],fixed_params) / x_domain / h +
+        (x - a)  * (h - t)  * dofs' * PNN([0.0,b],fixed_params)/ x_domain / h
+end
+
+function C1(t, x, tn, dofs,int,sol)
+    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+    local h = timestep(int)
+    local a,b = int.problem.xspan[1],int.problem.xspan[2]
+    local previous_params = sol.internal.previous_params
+    local PNN = int.method.basis.basis_network
+    local bc_fun = int.problem.bcs_function
+    local ic_fun = int.problem.ics_function
+    local current_step = sol.current_step
+    local xspan = int.problem.xspan
+
+    if current_step == 1
+        return (b - x)  * bc_fun(t, xspan).bc₀.u / x_domain+
+            (x - a)  * bc_fun(t, xspan).bc₁.u / x_domain +
+            (h - t)  * ic_fun(x).u / h
+    else
+        return (b - x)  * bc_fun(t, xspan).bc₀.u / x_domain +
+            (x - a)  * bc_fun(t, xspan).bc₁.u / x_domain +
+            (h - t) * sol.internal.x[current_step-1]' * PNN([1.0,x],previous_params) / h
+    end
+end
+
+function C2(t, x, tn, dofs,int)
+    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+    local a,b = int.problem.xspan[1],int.problem.xspan[2]
+    local h = timestep(int)
+    local bc_fun = int.problem.bcs_function
+    local xspan = int.problem.xspan
+    return (b - x)  * (h - t) * bc_fun(tn, xspan).bc₀.u / x_domain / h +
+        (x - a)  * (h - t) * bc_fun(tn, xspan).bc₁.u / x_domain / h
+end
+
+
+# u_trial(t,x,tn,dofs,int) = sum(dofs .*PNN([t,x],fixed_params)) - T1NN(t,x,tn,dofs,int) + T2NN(t,x,tn,dofs,int) + C1(t,x,tn,dofs,int) - C2(t,x,tn,dofs,int)
+
+function u_trial(t,x,tn,dofs,int,sol)
+    local fixed_params = cache(int).basis_nn_ps
+    local PNN = int.method.basis.basis_network
+    return dofs' * PNN([t,x],fixed_params) - T1NN(t,x,tn,dofs,int) + T2NN(t,x,tn,dofs,int) + C1(t,x,tn,dofs,int,sol) - C2(t,x,tn,dofs,int)
+end
+
+v_trial(t,x,tn,dofs,int,sol) = Zygote.gradient(tt -> u_trial(tt,x,tn,dofs,int,sol),t)[1]
+w_trial(t,x,tn,dofs,int,sol) = Zygote.gradient(xx -> u_trial(t,xx,tn,dofs,int,sol),x)[1]
+
+∂u∂θ_func(t,x,tn,dofs,int,sol) = Zygote.gradient(θ -> u_trial(t,x,tn,θ,int,sol), dofs)[1]
+∂v∂θ_func(t,x,tn,dofs,int,sol) = Zygote.gradient(θ -> v_trial(t,x,tn,θ,int,sol), dofs)[1]
+∂w∂θ_func(t,x,tn,dofs,int,sol) = Zygote.gradient(θ -> w_trial(t,x,tn,θ,int,sol), dofs)[1]
 
 
 function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PDE_int}) where {ST}
-    local PNN = int.method.basis.basis_network
     local problem_params = int.problem.lagrangian_system.params
-
-    local NP = int.method.basis.NP
     local grid_matrix = int.method.grid_matrix
     local x_quad_nodes = int.method.spatial_quadrature.nodes
     local t_quad_nodes = int.method.time_quadrature.nodes
@@ -260,56 +496,9 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
     local C = cache(int,ST)
 
     local h = timestep(int)
-    local a,b = int.problem.xspan[1],int.problem.xspan[2]
-    local ic_fun = int.problem.ics_function
-    local bc_fun = int.problem.bcs_function
     local current_step = sol.current_step
     local tn = (current_step - 1) * h
-    local N_in = int.method.N_in
-    local previous_params = sol.internal.previous_params
  
-    #  Trial solution function construction
-    psi_L(x) = (b - x) / x_domain       # left 
-    psi_R(x) = (x - a) / x_domain       # right
-    phi_B(t) = (h - t) / h   # bottom
-
-    fixed_params = cache(int).basis_nn_ps
-    function T1NN(t, x, tn, dofs)
-        return psi_L(x) * sum(dofs .* PNN([t,a],fixed_params)) +
-            psi_R(x) * sum(dofs .* PNN([t,b],fixed_params)) +
-            phi_B(t) * sum(dofs .* PNN([0.0,x],fixed_params))
-    end
-
-    function T2NN(t, x, tn, dofs)
-        return psi_L(x) * phi_B(t) * sum(dofs .* PNN([0.0,a],fixed_params)) +
-            psi_R(x) * phi_B(t) * sum(dofs .* PNN([0.0,b],fixed_params))
-    end
-
-    function C1(t, x, tn, dofs)
-        if current_step == 1
-            return psi_L(x) * bc_fun(t, xspan).bc₀.u +
-                psi_R(x) * bc_fun(t, xspan).bc₁.u +
-                phi_B(t) * ic_fun(x).u 
-        else
-            return psi_L(x) * bc_fun(t, xspan).bc₀.u +
-                psi_R(x) * bc_fun(t, xspan).bc₁.u +
-                phi_B(t) * sum(sol.internal.x[current_step-1] .* PNN([1.0,x],previous_params))
-        end
-    end
-
-    function C2(t, x, tn, dofs)
-        return psi_L(x) * phi_B(t) * bc_fun(tn, xspan).bc₀.u +
-            psi_R(x) * phi_B(t) * bc_fun(tn, xspan).bc₁.u
-    end
-
-
-    u_trial(t,x,tn,dofs) = sum(dofs .*PNN([t,x],fixed_params)) - T1NN(t,x,tn,dofs) + T2NN(t,x,tn,dofs) + C1(t,x,tn,dofs) - C2(t,x,tn,dofs)
-    v_trial(t,x,tn,dofs) = Zygote.gradient(tt -> u_trial(tt,x,tn,dofs),t)[1]
-    w_trial(t,x,tn,dofs) = Zygote.gradient(xx -> u_trial(t,xx,tn,dofs),x)[1]
-
-    ∂u∂θ_func(t,x,tn,dofs) = Zygote.gradient(θ -> u_trial(t,x,tn,θ), dofs)[1]
-    ∂v∂θ_func(t,x,tn,dofs) = Zygote.gradient(θ -> v_trial(t,x,tn,θ), dofs)[1]
-    ∂w∂θ_func(t,x,tn,dofs) = Zygote.gradient(θ -> w_trial(t,x,tn,θ), dofs)[1]
 
     # function nlls!(du, u, int::PDEIntegrator{<:TrialNN_PDE_int})
     #     local xspan = int.problem.xspan
@@ -338,33 +527,35 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
     #     C.done_initial_guess[1] = 1
     # end
 
-    if C.done_initial_guess[1] == 0
-        print("Start initial guess function in Component function! \n")
-        prior_initial_guess!(C, sol, int) 
-        C.done_initial_guess[1] = 1
-    end
-
+    # if C.done_initial_guess[1] == 0
+    #     prior_initial_guess!(C, sol, int) 
+    #     C.done_initial_guess[1] = 1
+    # end
+    t1 = time()
     for d in 1:D
         for rt in 1:RT
             for rx in 1:RX
-                C.u_quad_values[d, rt, rx] = u_trial(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2], tn, x)
-                C.v_quad_values[d, rt, rx] = v_trial(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2], tn, x)
-                C.w_quad_values[d, rt, rx] = w_trial(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2], tn, x)
+                C.u_quad_values[d, rt, rx] = u_trial(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2], tn, x, int,sol)
+                C.v_quad_values[d, rt, rx] = v_trial(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2], tn, x, int,sol)
+                C.w_quad_values[d, rt, rx] = w_trial(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2], tn, x, int,sol)
             end
         end
     end
+    t2 = time()
+    println("Time for computing u,v,w at quad points: ", t2 - t1)
 
     for d in 1:D
         for j in 1:RX
-            C.ut₀_quad_values[d,j] = u_trial(0.0 ,xspan[1] + x_domain* x_quad_nodes[j], tn, x)
+            C.ut₀_quad_values[d,j] = u_trial(0.0 ,xspan[1] + x_domain* x_quad_nodes[j], tn, x, int,sol)
         end
 
         for i in 1:RT
-            C.ux₀_quad_values[d,i] =  u_trial(t_quad_nodes[i], xspan[1], tn, x)
-            C.ux₁_quad_values[d,i] =  u_trial(t_quad_nodes[i], xspan[2], tn, x)
+            C.ux₀_quad_values[d,i] =  u_trial(t_quad_nodes[i], xspan[1], tn, x, int,sol)
+            C.ux₁_quad_values[d,i] =  u_trial(t_quad_nodes[i], xspan[2], tn, x, int,sol)
         end
     end
-
+    t3 = time()
+    println("Time for computing boundary quad values: ", t3 - t2)
     for d in 1:D
         for i in 1:RT
             for j in 1:RX
@@ -374,17 +565,20 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
             end
         end 
     end
-
+    t4 = time()
+    println("Time for computing ∂L/∂U, ∂L/∂V, ∂L/∂W at quad points: ", t4 - t3)
     for d in 1:D
         for i in 1:RT
             for j in 1:RX
-                C.∂u∂θ_quad_values[d,i,j,:] = ∂u∂θ_func(grid_matrix[i,j][1], xspan[1] + x_domain* grid_matrix[i,j][2], tn, x)
-                C.∂v∂θ_quad_values[d,i,j,:] = ∂v∂θ_func(grid_matrix[i,j][1], xspan[1] + x_domain* grid_matrix[i,j][2], tn, x)
-                C.∂w∂θ_quad_values[d,i,j,:] = ∂w∂θ_func(grid_matrix[i,j][1], xspan[1] + x_domain* grid_matrix[i,j][2], tn, x)
+                C.∂u∂θ_quad_values[d,i,j,:] = ∂u∂θ_func(grid_matrix[i,j][1], xspan[1] + x_domain* grid_matrix[i,j][2], tn, x, int,sol)
+                C.∂v∂θ_quad_values[d,i,j,:] = ∂v∂θ_func(grid_matrix[i,j][1], xspan[1] + x_domain* grid_matrix[i,j][2], tn, x, int,sol)
+                C.∂w∂θ_quad_values[d,i,j,:] = ∂w∂θ_func(grid_matrix[i,j][1], xspan[1] + x_domain* grid_matrix[i,j][2], tn, x, int,sol)
             end
         end
     end
-
+    t5 = time()
+    println("Time for computing ∂u/∂θ, ∂v/∂θ, ∂w/∂θ at quad points: ", t5 - t4)
+    println("Total time for components! function: ", t5 - t1)
 end
 
 post_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int}) = nothing
@@ -444,10 +638,25 @@ function update!(sol_struct, int::PDEIntegrator{<:TrialNN_PDE_int})
 end
 
 function internal_variables(int::PDEIntegrator{<:TrialNN_PDE_int},problem::PDEProblem)
-    local x = cache(int).x
-    ntime = Int((problem.tspan[2] - problem.tspan[1]) / problem.tstep)
-    xx = (x, ntuple( _ -> zeros(size(x)...), ntime)...)
-    previous_params = cache(int).basis_nn_ps
+    local PNN = int.method.basis.sol_network
+    local BNN = int.method.basis.basis_network
+    local C = cache(int)
+    local x = nlsolution(int)
+
+    for (name, layer) in zip(keys(PNN.params), values(PNN.params))
+        if hasfield(typeof(layer), :b)
+            layer.W[:] = C.basis_nn_ps[name].W[:] 
+            layer.b[:] = C.basis_nn_ps[name].b[:]
+        else
+            # For layers without bias (e.g., output), just regenerate W
+            layer.W[:] = x
+        end
+    end
+
+    
+
+
+
     return (x = xx, previous_params = previous_params)
 end
 
