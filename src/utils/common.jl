@@ -319,10 +319,5 @@ function create_tem_vector(ST::Type, D::Int,P_sizes::Vector{Int})
     return mat
 end
 
-function internal_variables(int,problem::PDEProblem)
-    local x = cache(int).x
-    ntime = Int((problem.tspan[2] - problem.tspan[1]) / problem.tstep)
-    xx = (x, ntuple( _ -> zeros(size(x)...), ntime)...)
-    return (x = xx,)
-end
+
 

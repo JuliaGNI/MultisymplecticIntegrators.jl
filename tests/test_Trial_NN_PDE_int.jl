@@ -23,12 +23,6 @@ u_network = Chain(
 )
 
 u_func = NeuralNetwork(u_network)
-u_func([0.1,0.2])
-pnn_v_func(t,x) = Zygote.jacobian(tt -> PNN_basis([tt,x]),t)[1]
-pnn_v_func(0.1,0.3)
-
-
-
 trial_basis = Trial_Solution_Basis(PNN_basis,u_func,NP)
 trial_int = TrialNN_PDE_int(trial_basis)
 

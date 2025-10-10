@@ -113,3 +113,9 @@ function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol::AbstractPD
     residual!(b, sol, int)
 end
 
+function internal_variables(int,problem::PDEProblem)
+    local x = cache(int).x
+    ntime = Int((problem.tspan[2] - problem.tspan[1]) / problem.tstep)
+    xx = (x, ntuple( _ -> zeros(size(x)...), ntime)...)
+    return (x = xx,)
+end
