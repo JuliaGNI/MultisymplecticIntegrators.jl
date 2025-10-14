@@ -10,8 +10,9 @@ struct TrialNN_PDE_int{BT<:AbstractPDEBasis} <: PDEMethod
     grid_weights # Quadrature weights
 
     N_in::Int # Inside the Domain
-
-    function TrialNN_PDE_int(trial_NN; RT::Int=6, RX::Int=8, N_in::Int=600)
+    x_nodes 
+    N_nodes::Int # Number of spatial nodes
+    function TrialNN_PDE_int(trial_NN,;xstep,xspan, RT::Int=6, RX::Int=8, N_in::Int=600)
         if RT == 128
             t_quadrature = GaussQuadrature128()
         elseif RT == 64
@@ -33,18 +34,19 @@ struct TrialNN_PDE_int{BT<:AbstractPDEBasis} <: PDEMethod
 
         # number of collocation points during parameter initial initial_guess_method
 
-
+        x_nodes = collect(xspan[1]:xstep:xspan[2])
+        N = length(x_nodes)
         new{typeof(trial_NN)}(trial_NN,
             t_quadrature, RT,
             x_quadrature, RX,
-            grid_matrix, grid_weights, N_in)
+            grid_matrix, grid_weights, N_in, x_nodes,N)
     end
 end
 
 
 default_solver(::TrialNN_PDE_int) = Newton()
 
-struct TrialNN_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
+struct TrialNN_PDE_intCache{ST,RT,RX,D,NP,N} <: PDEIntegratorCache{ST,D}
     """
     RT = number of quadrature points in time
     RX = number of quadrature points in space
@@ -59,22 +61,31 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     nnx_quad_values::Array{ST}
 
     nn_t₀_quad_values::Array{ST}
+    nn_t₁_quad_values::Array{ST}
     nn_x₀_quad_values::Array{ST}
     nn_x₁_quad_values::Array{ST}
     nn_t₀x₀::Matrix{ST}
     nn_t₀x₁::Matrix{ST}
+    nn_t₁x₀::Matrix{ST}
+    nn_t₁x₁::Matrix{ST}
 
     nnt_t₀_quad_values::Array{ST}
+    nnt_t₁_quad_values::Array{ST}
     nnt_x₀_quad_values::Array{ST}
     nnt_x₁_quad_values::Array{ST}
     nnt_t₀x₀::Matrix{ST}
     nnt_t₀x₁::Matrix{ST}
+    nnt_t₁x₀::Matrix{ST}    
+    nnt_t₁x₁::Matrix{ST}
 
     nnx_t₀_quad_values::Array{ST}
+    nnx_t₁_quad_values::Array{ST}
     nnx_x₀_quad_values::Array{ST}
     nnx_x₁_quad_values::Array{ST}
     nnx_t₀x₀::Matrix{ST}
     nnx_t₀x₁::Matrix{ST}
+    nnx_t₁x₀::Matrix{ST}
+    nnx_t₁x₁::Matrix{ST}
 
     u_quad_values::Array{ST}
     v_quad_values::Array{ST}
@@ -95,24 +106,36 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     basis_nn_ps
     
     ics_t₀_quad_values::Matrix{ST}
+    ics_t₀_nodes_values::Matrix{ST}
     bcs_x₀_quad_values::Matrix{ST}
     bcs_x₁_quad_values::Matrix{ST}
-    bcs_t₀x₀_quad_values::Vector{ST}
-    bcs_t₀x₁_quad_values::Vector{ST}
 
+    bcs_t₀x₀::Vector{ST}
+    bcs_t₀x₁::Vector{ST}
+    bcs_t₁x₀::Vector{ST}
+    bcs_t₁x₁::Vector{ST}
+    
     icst_t₀_quad_values::Matrix{ST}
     bcst_x₀_quad_values::Matrix{ST}
     bcst_x₁_quad_values::Matrix{ST}
-    bcst_t₀x₀_quad_values::Vector{ST}
-    bcst_t₀x₁_quad_values::Vector{ST}
+    bcst_t₀x₀::Vector{ST}
+    bcst_t₀x₁::Vector{ST}
+    bcst_t₁x₀::Vector{ST}
+    bcst_t₁x₁::Vector{ST}
 
     icsx_t₀_quad_values::Matrix{ST}
     bcsx_x₀_quad_values::Matrix{ST}
     bcsx_x₁_quad_values::Matrix{ST}
-    bcsx_t₀x₀_quad_values::Vector{ST}
-    bcsx_t₀x₁_quad_values::Vector{ST}
+    bcsx_t₀x₀::Vector{ST}
+    bcsx_t₀x₁::Vector{ST}
+    bcsx_t₁x₀::Vector{ST}
+    bcsx_t₁x₁::Vector{ST}
+    
     current_step::Vector{Int}
-    function TrialNN_PDE_intCache{ST,RT,RX,D,NP}() where {ST,RT,RX,D,NP}
+
+    nn_t₁_nodes_values::Array{ST}
+    nn_t₀_nodes_values::Array{ST}
+    function TrialNN_PDE_intCache{ST,RT,RX,D,NP,N}() where {ST,RT,RX,D,NP,N}
         x = zeros(ST, NP) # in ELM, x is just the output layer parameters
 
         nn_quad_values = zeros(ST, D, RT, RX,NP)
@@ -120,22 +143,31 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
         nnx_quad_values = zeros(ST, D, RT, RX, NP)
 
         nn_t₀_quad_values = zeros(ST, D, RX, NP)
+        nn_t₁_quad_values = zeros(ST, D, RX, NP)
         nn_x₀_quad_values = zeros(ST, D, RT, NP)
         nn_x₁_quad_values = zeros(ST, D, RT, NP)
         nn_t₀x₀ = zeros(ST, D, NP)
         nn_t₀x₁ = zeros(ST, D, NP)
+        nn_t₁x₀ = zeros(ST, D, NP)
+        nn_t₁x₁ = zeros(ST, D, NP)
 
         nnt_t₀_quad_values = zeros(ST, D, RX, NP)
+        nnt_t₁_quad_values = zeros(ST, D, RX, NP)
         nnt_x₀_quad_values = zeros(ST, D, RT, NP)
         nnt_x₁_quad_values = zeros(ST, D, RT, NP)
         nnt_t₀x₀ = zeros(ST, D, NP)
         nnt_t₀x₁ = zeros(ST, D, NP)
+        nnt_t₁x₀ = zeros(ST, D, NP)
+        nnt_t₁x₁ = zeros(ST, D, NP)
 
         nnx_t₀_quad_values = zeros(ST, D, RX, NP)
+        nnx_t₁_quad_values = zeros(ST, D, RX, NP)
         nnx_x₀_quad_values = zeros(ST, D, RT, NP)
         nnx_x₁_quad_values = zeros(ST, D, RT, NP)
         nnx_t₀x₀ = zeros(ST, D, NP)
         nnx_t₀x₁ = zeros(ST, D, NP)
+        nnx_t₁x₀ = zeros(ST, D, NP)
+        nnx_t₁x₁ = zeros(ST, D, NP)
 
         u_quad_values = zeros(ST, D, RT, RX)
         v_quad_values = zeros(ST, D, RT, RX)
@@ -159,43 +191,66 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
         L4=(W=zeros(ST, NP, 100),b=zeros(ST, NP)),)
 
         ics_t₀_quad_values = zeros(ST, D, RX)
+        ics_t₀_nodes_values = zeros(ST, D, N)
         bcs_x₀_quad_values = zeros(ST, D, RT)
         bcs_x₁_quad_values = zeros(ST, D, RT)
-        bcs_t₀x₀_quad_values = zeros(ST, D)
-        bcs_t₀x₁_quad_values = zeros(ST, D)
+
+        bcs_t₀x₀ = zeros(ST, D)
+        bcs_t₀x₁ = zeros(ST, D)
+        bcs_t₁x₀ = zeros(ST, D)
+        bcs_t₁x₁ = zeros(ST, D)
 
         icst_t₀_quad_values = zeros(ST, D, RX)
         bcst_x₀_quad_values = zeros(ST, D, RT)
         bcst_x₁_quad_values = zeros(ST, D, RT)
-        bcst_t₀x₀_quad_values = zeros(ST, D)
-        bcst_t₀x₁_quad_values = zeros(ST, D)
+        bcst_t₀x₀ = zeros(ST, D)
+        bcst_t₀x₁ = zeros(ST, D)
+        bcst_t₁x₀ = zeros(ST, D)
+        bcst_t₁x₁ = zeros(ST, D)
 
         icsx_t₀_quad_values = zeros(ST, D, RX)
         bcsx_x₀_quad_values = zeros(ST, D, RT)
         bcsx_x₁_quad_values = zeros(ST, D, RT)
-        bcsx_t₀x₀_quad_values = zeros(ST, D)
-        bcsx_t₀x₁_quad_values = zeros(ST, D)
+        bcsx_t₀x₀ = zeros(ST, D)
+        bcsx_t₀x₁ = zeros(ST, D)
+        bcsx_t₁x₀ = zeros(ST, D)
+        bcsx_t₁x₁ = zeros(ST, D)
+
         current_step = zeros(1)
+
+        nn_t₁_nodes_values = zeros(ST, D, N, NP)
+        nn_t₀_nodes_values = zeros(ST, D, N, NP)
+
         new(x,
             nn_quad_values,nnt_quad_values,nnx_quad_values,
-            nn_t₀_quad_values,nn_x₀_quad_values,nn_x₁_quad_values,
+            nn_t₀_quad_values,nn_t₁_quad_values,
+            nn_x₀_quad_values,nn_x₁_quad_values,
             nn_t₀x₀,nn_t₀x₁,
-            nnt_t₀_quad_values,nnt_x₀_quad_values,nnt_x₁_quad_values,
+            nn_t₁x₀,nn_t₁x₁,
+            nnt_t₀_quad_values,nnt_t₁_quad_values,
+            nnt_x₀_quad_values,nnt_x₁_quad_values,
             nnt_t₀x₀,nnt_t₀x₁,
-            nnx_t₀_quad_values,nnx_x₀_quad_values,nnx_x₁_quad_values,
+            nnt_t₁x₀,nnt_t₁x₁,
+            nnx_t₀_quad_values,nnx_t₁_quad_values,
+            nnx_x₀_quad_values,nnx_x₁_quad_values,
             nnx_t₀x₀,nnx_t₀x₁,
+            nnx_t₁x₀,nnx_t₁x₁,
             u_quad_values,v_quad_values,w_quad_values,
             ∂L∂U_quad_values,∂L∂V_quad_values,∂L∂W_quad_values,
             ∂u∂θ_quad_values,∂v∂θ_quad_values,∂w∂θ_quad_values,
             ut₀_quad_values,ux₀_quad_values,ux₁_quad_values,
             basis_nn_ps,
-            ics_t₀_quad_values,bcs_x₀_quad_values,bcs_x₁_quad_values,
-            bcs_t₀x₀_quad_values,bcs_t₀x₁_quad_values,
+            ics_t₀_quad_values,ics_t₀_nodes_values,
+            bcs_x₀_quad_values,bcs_x₁_quad_values,
+            bcs_t₀x₀,bcs_t₀x₁,bcs_t₁x₀,bcs_t₁x₁,
             icst_t₀_quad_values,bcst_x₀_quad_values,bcst_x₁_quad_values,
-            bcst_t₀x₀_quad_values,bcst_t₀x₁_quad_values,
+            bcst_t₀x₀,bcst_t₀x₁,
+            bcst_t₁x₀,bcst_t₁x₁,
             icsx_t₀_quad_values,bcsx_x₀_quad_values,bcsx_x₁_quad_values,
-            bcsx_t₀x₀_quad_values,bcsx_t₀x₁_quad_values,
-            current_step
+            bcsx_t₀x₀,bcsx_t₀x₁,
+            bcsx_t₁x₀,bcsx_t₁x₁,
+            current_step,
+            nn_t₁_nodes_values,nn_t₀_nodes_values
             )
     end
 end
@@ -203,10 +258,10 @@ end
 nlsolution(cache::TrialNN_PDE_intCache) = cache.x
 
 function Cache{ST}(problem::PDEProblem, int::TrialNN_PDE_int; kwargs...) where {ST}
-    TrialNN_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.NP}(; kwargs...)
+    TrialNN_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.NP,int.N_nodes}(; kwargs...)
 end
 
-@inline GeometricIntegrators.Integrators.CacheType(ST, problem::PDEProblem, int::TrialNN_PDE_int) = TrialNN_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.NP}
+@inline GeometricIntegrators.Integrators.CacheType(ST, problem::PDEProblem, int::TrialNN_PDE_int) = TrialNN_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.NP,int.N_nodes}
 
 @inline function Base.getindex(c::TrialNN_PDE_intCache, ST::DataType)
     key = hash(Threads.threadid(), hash(ST))
@@ -281,8 +336,8 @@ function u_trial(t,x,tn,params,int,sol)
     PNN([t,x],params)[1] - T1NN(t,x,tn,params,int) + T2NN(t,x,tn,params,int) + C1(t,x,tn,params,int,sol) - C2(t,x,tn,params,int)
 end
 
-v_trial(t,x,tn,params,int) = Zygote.gradient(tt -> u_trial(tt,x,tn,params,int),t)[1]
-w_trial(t,x,tn,params,int) = Zygote.gradient(xx -> u_trial(t,xx,tn,params,int),x)[1]
+v_trial(t,x,tn,params,int,sol) = Zygote.gradient(tt -> u_trial(tt,x,tn,params,int,sol),t)[1]
+w_trial(t,x,tn,params,int,sol) = Zygote.gradient(xx -> u_trial(t,xx,tn,params,int,sol),x)[1]
 
 function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int})
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
@@ -292,7 +347,9 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int})
     local a,b = int.problem.xspan[1],int.problem.xspan[2]
     local PNN = int.method.basis.sol_network
     local BNN = int.method.basis.basis_network
-
+    local D = int.problem.D
+    local N_nodes = int.method.N_nodes
+    local x_nodes = int.method.x_nodes
     local current_step = sol.current_step
     local tn = (current_step-1)*h
     local exact_u = int.problem.exact_u
@@ -317,7 +374,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int})
     tx_in = rand(Random.seed!(1),2,5000)
     tx_in[2,:] .= xspan[1] .+ (xspan[2] - xspan[1]) * tx_in[2,:]
 
-    epochs = 1
+    epochs = 10000
     opt = GeometricMachineLearning.Optimizer(GeometricMachineLearning.AdamOptimizerWithDecay(epochs), PNN.params)
     λ = GeometricMachineLearning.GlobalSection(PNN.params)
     loss_history = []
@@ -359,46 +416,9 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int})
             C.x[:] = layer.W[:]
         end
     end
+    println("Initial guess training completed.")
+    println("Initial guess \n", C.x)
 
-    local RT = int.method.RT
-    local RX = int.method.RX
-    local D = int.problem.D
-    local x_quad_nodes = int.method.spatial_quadrature.nodes
-    local t_quad_nodes = int.method.time_quadrature.nodes
-
-    BNNt(t,x) = Zygote.jacobian(tt -> BNN([tt,x], BNN.params), t)
-    BNNx(t,x) = Zygote.jacobian(xx -> BNN([t,xx], BNN.params), x)
-    for d in 1:D
-        for rt in 1:RT
-            for rx in 1:RX
-                C.nn_quad_values[d,rt,rx,:] = BNN([t_quad_nodes[rt], x_quad_nodes[rx]], BNN.params)
-                #TODO:check if this is correct with cache parameters
-                C.nnt_quad_values[d,rt,rx,:] = BNNt(t_quad_nodes[rt], x_quad_nodes[rx])
-                C.nnx_quad_values[d,rt,rx,:] = BNNx(t_quad_nodes[rt], x_quad_nodes[rx])
-            end
-        end
-        for rx in 1:RX
-            C.nn_t₀_quad_values[d,rx,:] = BNN([0.0, x_quad_nodes[rx]], BNN.params)[1]
-            C.nnt_t₀_quad_values[d,rx,:] = BNNt(0.0, x_quad_nodes[rx])
-            C.nnx_t₀_quad_values[d,rx,:] = BNNx(0.0, x_quad_nodes[rx])
-        end
-
-        for rt in 1:RT
-            C.nn_x₀_quad_values[d,rt,:] = BNN([t_quad_nodes[rt], a], BNN.params)[1]
-            C.nn_x₁_quad_values[d,rt,:] = BNN([t_quad_nodes[rt], b], BNN.params)[1]
-            C.nnt_x₀_quad_values[d,rt,:] = BNNt(t_quad_nodes[rt], a)
-            C.nnt_x₁_quad_values[d,rt,:] = BNNt(t_quad_nodes[rt], b)
-            C.nnx_x₀_quad_values[d,rt,:] = BNNx(t_quad_nodes[rt], a)
-            C.nnx_x₁_quad_values[d,rt,:] = BNNx(t_quad_nodes[rt], b)
-        end
-
-        C.nn_t₀x₀[d,:] = BNN([0.0, a], BNN.params)
-        C.nn_t₀x₁[d,:] = BNN([0.0, b], BNN.params)
-        C.nnt_t₀x₀[d,:] = BNNt(0.0, a)
-        C.nnt_t₀x₁[d,:] = BNNt(0.0, b)
-        C.nnx_t₀x₀[d,:] = BNNx(0.0, a)
-        C.nnx_t₀x₁[d,:] = BNNx(0.0, b)
-    end
 
 end
 
@@ -411,35 +431,53 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:TrialNN_PDE_int})
     local ic_fun = int.problem.ics_function
     local bc_fun = int.problem.bcs_function
     local xspan = int.problem.xspan
+    local h = timestep(int)
+    local tn = (current_step-1)*h
+    local tn1 = current_step*h
+    local xstep = int.problem.xstep
+    local x_nodes = int.method.x_nodes
+
+    @show tn
+    @show tn1
+    @show current_step
+
     if current_step == 1
         for d in 1:D
             C.ics_t₀_quad_values[d,:] = ic_fun(x_quad_nodes).u
+            C.ics_t₀_nodes_values[d,:] = ic_fun(x_nodes).u
             C.icst_t₀_quad_values[d,:] = ic_fun(x_quad_nodes).v
             C.icsx_t₀_quad_values[d,:] = ic_fun(x_quad_nodes).w
         end
     else
         for d in 1:D
             C.ics_t₀_quad_values[d,:]  = sol.internal.u_quad_end_values[d,:]
+            C.ics_t₀_nodes_values[d,:] = sol.internal.u_nodes_end_values[d,:]
             C.icst_t₀_quad_values[d,:] = sol.internal.v_quad_end_values[d,:]
             C.icsx_t₀_quad_values[d,:] = sol.internal.w_quad_end_values[d,:]
         end
     end
 
     for d in 1:D
-        C.bcs_x₀_quad_values[d,:] = bc_fun(t_quad_nodes, xspan).bc₀.u
-        C.bcs_x₁_quad_values[d,:] = bc_fun(t_quad_nodes, xspan).bc₁.u
-        C.bcs_t₀x₀[d,:] = bc_fun(0.0, xspan).bc₀.u
-        C.bcs_t₀x₁[d,:] = bc_fun(0.0, xspan).bc₁.u
-    
-        C.bcst_x₀_quad_values[d,:] = bc_fun(t_quad_nodes, xspan).bc₀.v
-        C.bcst_x₁_quad_values[d,:] = bc_fun(t_quad_nodes, xspan).bc₁.v
-        C.bcst_t₀x₀[d,:] = bc_fun(0.0, xspan).bc₀.v
-        C.bcst_t₀x₁[d,:] = bc_fun(0.0, xspan).bc₁.v
+        C.bcs_x₀_quad_values[d,:] = bc_fun(tn .+ t_quad_nodes, xspan).bc₀.u
+        C.bcs_x₁_quad_values[d,:] = bc_fun(tn .+ t_quad_nodes, xspan).bc₁.u
+        C.bcs_t₀x₀[d] = bc_fun(tn, xspan).bc₀.u
+        C.bcs_t₀x₁[d] = bc_fun(tn, xspan).bc₁.u
+        C.bcs_t₁x₀[d] = bc_fun(tn1, xspan).bc₀.u
+        C.bcs_t₁x₁[d] = bc_fun(tn1, xspan).bc₁.u
 
-        C.bcsx_x₀_quad_values[d,:] = bc_fun(t_quad_nodes, xspan).bc₀.w
-        C.bcsx_x₁_quad_values[d,:] = bc_fun(t_quad_nodes, xspan).bc₁.w
-        C.bcsx_t₀x₀[d,:] = bc_fun(0.0, xspan).bc₀.w
-        C.bcsx_t₀x₁[d,:] = bc_fun(0.0, xspan).bc₁.w
+        C.bcst_x₀_quad_values[d,:] = bc_fun(tn .+ t_quad_nodes, xspan).bc₀.v
+        C.bcst_x₁_quad_values[d,:] = bc_fun(tn .+ t_quad_nodes, xspan).bc₁.v
+        C.bcst_t₀x₀[d] = bc_fun(tn, xspan).bc₀.v
+        C.bcst_t₀x₁[d] = bc_fun(tn, xspan).bc₁.v
+        C.bcst_t₁x₀[d] = bc_fun(tn1, xspan).bc₀.v
+        C.bcst_t₁x₁[d] = bc_fun(tn1, xspan).bc₁.v
+
+        C.bcsx_x₀_quad_values[d,:] = bc_fun(tn .+ t_quad_nodes, xspan).bc₀.w
+        C.bcsx_x₁_quad_values[d,:] = bc_fun(tn .+ t_quad_nodes, xspan).bc₁.w
+        C.bcsx_t₀x₀[d] = bc_fun(tn, xspan).bc₀.w
+        C.bcsx_t₀x₁[d] = bc_fun(tn, xspan).bc₁.w
+        C.bcsx_t₁x₀[d] = bc_fun(tn1, xspan).bc₀.w
+        C.bcsx_t₁x₁[d] = bc_fun(tn1, xspan).bc₁.w
     end
 end
 
@@ -519,6 +557,8 @@ end
 # ∂v∂θ_func(t,x,tn,dofs,int,sol) = Zygote.gradient(θ -> v_trial(t,x,tn,θ,int,sol), dofs)[1]
 # ∂w∂θ_func(t,x,tn,dofs,int,sol) = Zygote.gradient(θ -> w_trial(t,x,tn,θ,int,sol), dofs)[1]
 
+BNNt(t,x,BNN) = Zygote.jacobian(tt -> BNN([tt,x], BNN.params), t)[1]
+BNNx(t,x,BNN) = Zygote.jacobian(xx -> BNN([t,xx], BNN.params), x)[1]
 
 function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PDE_int}) where {ST}
     local problem_params = int.problem.lagrangian_system.params
@@ -535,11 +575,14 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
     local xspan = int.problem.xspan
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
     local C = cache(int,ST)
-
     local h = timestep(int)
     local current_step = sol.current_step
     local tn = (current_step - 1) * h
- 
+    local BNN = int.method.basis.basis_network
+    local a,b = int.problem.xspan[1],int.problem.xspan[2]
+    local x_nodes = int.method.x_nodes
+    local N_nodes = int.method.N_nodes
+
 
     # function nlls!(du, u, int::PDEIntegrator{<:TrialNN_PDE_int})
     #     local xspan = int.problem.xspan
@@ -573,74 +616,118 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
     #     C.done_initial_guess[1] = 1
     # end
 
-    # Reconstruct C1 part for u,v,W
+
     t1 = time()
+    for d in 1:D
+        for rt in 1:RT
+            for rx in 1:RX
+                C.nn_quad_values[d,rt,rx,:] = BNN([t_quad_nodes[rt], x_quad_nodes[rx]], BNN.params)
+                #TODO:check if this is correct with cache parameters
+                C.nnt_quad_values[d,rt,rx,:] = BNNt(t_quad_nodes[rt], x_quad_nodes[rx], BNN)
+                C.nnx_quad_values[d,rt,rx,:] = BNNx(t_quad_nodes[rt], x_quad_nodes[rx], BNN)
+            end
+        end
+        for rx in 1:RX
+            C.nn_t₁_quad_values[d,rx,:] = BNN([1.0, x_quad_nodes[rx]], BNN.params)
+            C.nn_t₀_quad_values[d,rx,:] = BNN([0.0, x_quad_nodes[rx]], BNN.params)
+
+            C.nnt_t₁_quad_values[d,rx,:] = BNNt(1.0, x_quad_nodes[rx], BNN)
+            C.nnt_t₀_quad_values[d,rx,:] = BNNt(0.0, x_quad_nodes[rx], BNN)
+
+            C.nnx_t₁_quad_values[d,rx,:] = BNNx(1.0, x_quad_nodes[rx], BNN)
+            C.nnx_t₀_quad_values[d,rx,:] = BNNx(0.0, x_quad_nodes[rx], BNN)
+        end
+
+
+        for rt in 1:RT
+            C.nn_x₀_quad_values[d,rt,:] = BNN([t_quad_nodes[rt], a], BNN.params)
+            C.nn_x₁_quad_values[d,rt,:] = BNN([t_quad_nodes[rt], b], BNN.params)
+            C.nnt_x₀_quad_values[d,rt,:] = BNNt(t_quad_nodes[rt], a, BNN)
+            C.nnt_x₁_quad_values[d,rt,:] = BNNt(t_quad_nodes[rt], b, BNN)
+            C.nnx_x₀_quad_values[d,rt,:] = BNNx(t_quad_nodes[rt], a, BNN)
+            C.nnx_x₁_quad_values[d,rt,:] = BNNx(t_quad_nodes[rt], b, BNN)
+        end
+
+        C.nn_t₀x₀[d,:] = BNN([0.0, a], BNN.params)
+        C.nn_t₀x₁[d,:] = BNN([0.0, b], BNN.params)
+        C.nn_t₁x₀[d,:] = BNN([1.0, a], BNN.params)
+        C.nn_t₁x₁[d,:] = BNN([1.0, b], BNN.params)
+
+        C.nnt_t₀x₀[d,:] = BNNt(0.0, a, BNN)
+        C.nnt_t₀x₁[d,:] = BNNt(0.0, b, BNN)
+        C.nnt_t₁x₀[d,:] = BNNt(1.0, a, BNN)
+        C.nnt_t₁x₁[d,:] = BNNt(1.0, b, BNN)
+
+        C.nnx_t₀x₀[d,:] = BNNx(0.0, a, BNN)
+        C.nnx_t₀x₁[d,:] = BNNx(0.0, b, BNN)
+        C.nnx_t₁x₀[d,:] = BNNx(1.0, a, BNN)
+        C.nnx_t₁x₁[d,:] = BNNx(1.0, b, BNN)
+
+        for i in 1:N_nodes
+            C.nn_t₁_nodes_values[d,i,:] = BNN([1.0, x_nodes[i]], BNN.params)
+        end
+
+    end
 
     for d in 1:D
         for rt in 1:RT
             for rx in 1:RX
                 C.∂u∂θ_quad_values[d,rt,rx,:] = C.nn_quad_values[d,rt,rx,:] 
-                - (x_quad_nodes[RX-rx] * C.nn_x₀_quad_values[d,rt,:] + x_quad_nodes[rx]*C.nn_x₁_quad_values[d,rt,:] + (t_quad_nodes[RT-rt] * C.nn_t₀_quad_values[d,rx,:]))
-                + (x_quad_nodes[RX-rx] * t_quad_nodes[RT-rt] * C.nn_t₀x₀[d,:] + x_quad_nodes[rx] * t_quad_nodes[RT-rt] * C.nn_t₀x₁[d,:])
+                - (x_quad_nodes[RX+1-rx] * C.nn_x₀_quad_values[d,rt,:] + x_quad_nodes[rx]*C.nn_x₁_quad_values[d,rt,:] + (t_quad_nodes[RT-rt+1] * C.nn_t₀_quad_values[d,rx,:]))
+                + (x_quad_nodes[RX+1-rx] * t_quad_nodes[RT-rt+1] * C.nn_t₀x₀[d,:] + x_quad_nodes[rx] * t_quad_nodes[RT-rt+1] * C.nn_t₀x₁[d,:])
                 
                 C.∂v∂θ_quad_values[d,rt,rx,:] = C.nnt_quad_values[d,rt,rx,:]
-                - (x_quad_nodes[RX-rx] * C.nnt_x₀_quad_values[d,rt,:] + x_quad_nodes[rx]*C.nnt_x₁_quad_values[d,rt,:] + (t_quad_nodes[RT-rt] * C.nnt_t₀_quad_values[d,rx,:]))
-                + (x_quad_nodes[RX-rx] * t_quad_nodes[RT-rt] * C.nnt_t₀x₀[d,:] + x_quad_nodes[rx] * t_quad_nodes[RT-rt] * C.nnt_t₀x₁[d,:])
+                - (x_quad_nodes[RX+1-rx] * C.nnt_x₀_quad_values[d,rt,:] + x_quad_nodes[rx]*C.nnt_x₁_quad_values[d,rt,:] + (t_quad_nodes[RT-rt+1] * C.nnt_t₀_quad_values[d,rx,:]))
+                + (x_quad_nodes[RX+1-rx] * t_quad_nodes[RT-rt+1] * C.nnt_t₀x₀[d,:] + x_quad_nodes[rx] * t_quad_nodes[RT-rt+1] * C.nnt_t₀x₁[d,:])
 
-                C.∂w∂θ_quad_values[d,rt,rx,:] = C.nnw_quad_values[d,rt,rx,:]
-                - (x_quad_nodes[RX-rx] * C.nnw_x₀_quad_values[d,rt,:] + x_quad_nodes[rx]*C.nnw_x₁_quad_values[d,rt,:] + (t_quad_nodes[RT-rt] * C.nnw_t₀_quad_values[d,rx,:]))
-                + (x_quad_nodes[RX-rx] * t_quad_nodes[RT-rt] * C.nnw_t₀x₀[d,:] + x_quad_nodes[rx] * t_quad_nodes[RT-rt] * C.nnw_t₀x₁[d,:])
+                C.∂w∂θ_quad_values[d,rt,rx,:] = C.nnx_quad_values[d,rt,rx,:]
+                - (x_quad_nodes[RX+1-rx] * C.nnx_x₀_quad_values[d,rt,:] + x_quad_nodes[rx]*C.nnx_x₁_quad_values[d,rt,:] + (t_quad_nodes[RT-rt+1] * C.nnx_t₀_quad_values[d,rx,:]))
+                + (x_quad_nodes[RX+1-rx] * t_quad_nodes[RT-rt+1] * C.nnx_t₀x₀[d,:] + x_quad_nodes[rx] * t_quad_nodes[RT-rt+1] * C.nnx_t₀x₁[d,:])
             end
         end
     end
-    t2 = time()
-    println("Time for computing ∂u/∂θ, ∂v/∂θ, ∂w/∂θ at quad points: ", t2 - t1)
+
     for d in 1:D
         for rt in 1:RT
             for rx in 1:RX
-                C.u_quad_values[d, rt, rx] = C.∂u∂θ_quad_values[d,rt,rx,:] * x 
-                + (x_quad_nodes[RX-rx] * C.bcs_x₀_quad_values[d,rt] + x_quad_nodes[rx] * C.bcs_x₁_quad_values[d,rt] + t_quad_nodes[RT-rt] * C.ics_t₀_quad_values[d,rx])
-                - (x_quad_nodes[RX-rx] * t_quad_nodes[RT-rt] * C.bcs_t₀x₀[d] + x_quad_nodes[rx] * t_quad_nodes[RT-rt] * C.bcs_t₀x₁[d])
+                C.u_quad_values[d, rt, rx] = C.∂u∂θ_quad_values[d,rt,rx,:]' * x 
+                + (x_quad_nodes[RX-rx+1] * C.bcs_x₀_quad_values[d,rt] + x_quad_nodes[rx] * C.bcs_x₁_quad_values[d,rt] + t_quad_nodes[RT-rt+1] * C.ics_t₀_quad_values[d,rx])
+                - (x_quad_nodes[RX-rx+1] * t_quad_nodes[RT-rt+1] * C.bcs_t₀x₀[d] + x_quad_nodes[rx] * t_quad_nodes[RT-rt+1] * C.bcs_t₀x₁[d])
 
                 C.v_quad_values[d, rt, rx] = C.∂v∂θ_quad_values[d,rt,rx,:]' * x
-                + (x_quad_nodes[RX-rx] * C.bcst_x₀_quad_values[d,rt] + x_quad_nodes[rx] * C.bcst_x₁_quad_values[d,rt] + t_quad_nodes[RT-rt] * C.icst_t₀_quad_values[d,rx])
-                - (x_quad_nodes[RX-rx] * t_quad_nodes[RT-rt] * C.bcst_t₀x₀[d] + x_quad_nodes[rx] * t_quad_nodes[RT-rt] * C.bcst_t₀x₁[d])
+                + (x_quad_nodes[RX-rx+1] * C.bcst_x₀_quad_values[d,rt] + x_quad_nodes[rx] * C.bcst_x₁_quad_values[d,rt] + t_quad_nodes[RT-rt+1] * C.icst_t₀_quad_values[d,rx])
+                - (x_quad_nodes[RX-rx+1] * t_quad_nodes[RT-rt+1] * C.bcst_t₀x₀[d] + x_quad_nodes[rx] * t_quad_nodes[RT-rt+1] * C.bcst_t₀x₁[d])
 
                 C.w_quad_values[d, rt, rx] = C.∂w∂θ_quad_values[d,rt,rx,:]' * x
-                + (x_quad_nodes[RX-rx] * C.bcsx_x₀_quad_values[d,rt] + x_quad_nodes[rx] * C.bcsx_x₁_quad_values[d,rt] + t_quad_nodes[RT-rt] * C.icsx_t₀_quad_values[d,rx])
-                - (x_quad_nodes[RX-rx] * t_quad_nodes[RT-rt] * C.bcsx_t₀x₀[d] + x_quad_nodes[rx] * t_quad_nodes[RT-rt] * C.bcsx_t₀x₁[d])              
+                + (x_quad_nodes[RX-rx+1] * C.bcsx_x₀_quad_values[d,rt] + x_quad_nodes[rx] * C.bcsx_x₁_quad_values[d,rt] + t_quad_nodes[RT-rt+1] * C.icsx_t₀_quad_values[d,rx])
+                - (x_quad_nodes[RX-rx+1] * t_quad_nodes[RT-rt+1] * C.bcsx_t₀x₀[d] + x_quad_nodes[rx] * t_quad_nodes[RT-rt+1] * C.bcsx_t₀x₁[d])
             end
         end
     end
-    t3 = time()
-    println("Time for computing u,v,w at quad points: ", t3 - t2)
 
-    for d in 1:D
-        for rx in 1:RX
-            C.ut₀_quad_values[d,rx] = C.nn_t₀_quad_values[d,rx,:]' * x 
-                - (x_quad_nodes[RX-rx] * C.nn_x₀_quad_values[d,rt,:]'*x + x_quad_nodes[rx]*C.nn_x₁_quad_values[d,rt,:]'*x + (t_quad_nodes[RT-rt] * C.nn_t₀_quad_values[d,rx,:]'*x))
-                + (x_quad_nodes[RX-rx] * t_quad_nodes[RT-rt] * C.nn_t₀x₀[d,:]'*x + x_quad_nodes[rx] * t_quad_nodes[RT-rt] * C.nn_t₀x₁[d,:]'*x)
-                + (x_quad_nodes[RX-rx] * C.bcs_x₀_quad_values[d,rt] + x_quad_nodes[rx] * C.bcs_x₁_quad_values[d,rt] + t_quad_nodes[RT-rt] * C.ics_t₀_quad_values[d,rx])
-                - (x_quad_nodes[RX-rx] * t_quad_nodes[RT-rt] * C.bcs_t₀x₀[d] + x_quad_nodes[rx] * t_quad_nodes[RT-rt] * C.bcs_t₀x₁[d])
-        end
+    # for d in 1:D
+    #     for rx in 1:RX
+    #         C.ut₀_quad_values[d,rx] = C.nn_t₀_quad_values[d,rx,:]' * x 
+    #             - (x_quad_nodes[RX-rx+1] * C.nn_x₀_quad_values[d,rt,:]'*x + x_quad_nodes[rx]*C.nn_x₁_quad_values[d,rt,:]'*x + (t_quad_nodes[RT-rt+1] * C.nn_t₀_quad_values[d,rx,:]'*x))
+    #             + (x_quad_nodes[RX-rx+1] * t_quad_nodes[RT-rt+1] * C.nn_t₀x₀[d,:]'*x + x_quad_nodes[rx] * t_quad_nodes[RT-rt+1] * C.nn_t₀x₁[d,:]'*x)
+    #             + (x_quad_nodes[RX-rx+1] * C.bcs_x₀_quad_values[d,rt] + x_quad_nodes[rx] * C.bcs_x₁_quad_values[d,rt] + t_quad_nodes[RT-rt+1] * C.ics_t₀_quad_values[d,rx])
+    #             - (x_quad_nodes[RX-rx+1] * t_quad_nodes[RT-rt+1] * C.bcs_t₀x₀[d] + x_quad_nodes[rx] * t_quad_nodes[RT-rt+1] * C.bcs_t₀x₁[d])
+    #     end
 
-        for rt in 1:RT
-            C.ux₀_quad_values[d,rx] =  C.nn_x₀_quad_values[d,rt,:]' * x 
-                - (x_quad_nodes[RX-rx] * C.nn_x₀_quad_values[d,rt,:]'*x + x_quad_nodes[rx]*C.nn_x₁_quad_values[d,rt,:]'*x + (t_quad_nodes[RT-rt] * C.nn_t₀_quad_values[d,rx,:]'*x))
-                + (x_quad_nodes[RX-rx] * t_quad_nodes[RT-rt] * C.nn_t₀x₀[d,:]'*x + x_quad_nodes[rx] * t_quad_nodes[RT-rt] * C.nn_t₀x₁[d,:]'*x)
-                + (x_quad_nodes[RX-rx] * C.bcs_x₀_quad_values[d,rt] + x_quad_nodes[rx] * C.bcs_x₁_quad_values[d,rt] + t_quad_nodes[RT-rt] * C.ics_t₀_quad_values[d,rx])
-                - (x_quad_nodes[RX-rx] * t_quad_nodes[RT-rt] * C.bcs_t₀x₀[d] + x_quad_nodes[rx] * t_quad_nodes[RT-rt] * C.bcs_t₀x₁[d])
+    #     for rt in 1:RT
+    #         C.ux₀_quad_values[d,rx] =  C.nn_x₀_quad_values[d,rt,:]' * x 
+    #             - (x_quad_nodes[RX-rx+1] * C.nn_x₀_quad_values[d,rt,:]'*x + x_quad_nodes[rx]*C.nn_x₁_quad_values[d,rt,:]'*x + (t_quad_nodes[RT-rt+1] * C.nn_t₀_quad_values[d,rx,:]'*x))
+    #             + (x_quad_nodes[RX-rx+1] * t_quad_nodes[RT-rt+1] * C.nn_t₀x₀[d,:]'*x + x_quad_nodes[rx] * t_quad_nodes[RT-rt+1] * C.nn_t₀x₁[d,:]'*x)
+    #             + (x_quad_nodes[RX-rx+1] * C.bcs_x₀_quad_values[d,rt] + x_quad_nodes[rx] * C.bcs_x₁_quad_values[d,rt] + t_quad_nodes[RT-rt+1] * C.ics_t₀_quad_values[d,rx])
+    #             - (x_quad_nodes[RX-rx+1] * t_quad_nodes[RT-rt+1] * C.bcs_t₀x₀[d] + x_quad_nodes[rx] * t_quad_nodes[RT-rt+1] * C.bcs_t₀x₁[d])
 
-            C.ux₁_quad_values[d,i] =  C.ux₁_quad_values[d,i] =  C.nn_x₀_quad_values[d,rt,:]' * x 
-                - (x_quad_nodes[RX-rx] * C.nn_x₀_quad_values[d,rt,:]'*x + x_quad_nodes[rx]*C.nn_x₁_quad_values[d,rt,:]'*x + (t_quad_nodes[RT-rt] * C.nn_t₀_quad_values[d,rx,:]'*x))
-                + (x_quad_nodes[RX-rx] * t_quad_nodes[RT-rt] * C.nn_t₀x₀[d,:]'*x + x_quad_nodes[rx] * t_quad_nodes[RT-rt] * C.nn_t₀x₁[d,:]'*x)
-                + (x_quad_nodes[RX-rx] * C.bcs_x₀_quad_values[d,rt] + x_quad_nodes[rx] * C.bcs_x₁_quad_values[d,rt] + t_quad_nodes[RT-rt] * C.ics_t₀_quad_values[d,rx])
-                - (x_quad_nodes[RX-rx] * t_quad_nodes[RT-rt] * C.bcs_t₀x₀[d] + x_quad_nodes[rx] * t_quad_nodes[RT-rt] * C.bcs_t₀x₁[d])
-        end
-    end
-
-    t4 = time()
-    println("Time for computing u,v,w at boundary quad points: ", t4 - t3)
+    #         C.ux₁_quad_values[d,i] =  C.nn_x₀_quad_values[d,rt,:]' * x 
+    #             - (x_quad_nodes[RX-rx+1] * C.nn_x₀_quad_values[d,rt,:]'*x + x_quad_nodes[rx]*C.nn_x₁_quad_values[d,rt,:]'*x + (t_quad_nodes[RT-rt+1] * C.nn_t₀_quad_values[d,rx,:]'*x))
+    #             + (x_quad_nodes[RX-rx+1] * t_quad_nodes[RT-rt+1] * C.nn_t₀x₀[d,:]'*x + x_quad_nodes[rx] * t_quad_nodes[RT-rt+1] * C.nn_t₀x₁[d,:]'*x)
+    #             + (x_quad_nodes[RX-rx+1] * C.bcs_x₀_quad_values[d,rt] + x_quad_nodes[rx] * C.bcs_x₁_quad_values[d,rt] + t_quad_nodes[RT-rt+1] * C.ics_t₀_quad_values[d,rx])
+    #             - (x_quad_nodes[RX-rx+1] * t_quad_nodes[RT-rt+1] * C.bcs_t₀x₀[d] + x_quad_nodes[rx] * t_quad_nodes[RT-rt+1] * C.bcs_t₀x₁[d])
+    #     end
+    # end
 
     for d in 1:D
         for i in 1:RT
@@ -652,7 +739,6 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
         end 
     end
     t5 = time()
-    println("Time for computing ∂L/∂U, ∂L/∂V, ∂L/∂W at quad points: ", t5 - t4)
     println("Total time for components! function: ", t5 - t1)
 end
 
@@ -682,7 +768,7 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{<:TrialNN_PDE_int}) wh
             b[p] = -z
         end
     end
-
+    println("In the end of residual! function, b = ", b)
 end
 
 function update!(sol_struct, int::PDEIntegrator{<:TrialNN_PDE_int})
@@ -693,33 +779,66 @@ function update!(sol_struct, int::PDEIntegrator{<:TrialNN_PDE_int})
     local x_quad_nodes = int.method.spatial_quadrature.nodes
     local RX = int.method.RX
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+    local current_step = sol_struct.current_step
+    local h = timestep(int)
     local tn = (current_step - 1) * h
+    local PNN = int.method.basis.sol_network
+    local BNN = int.method.basis.basis_network
+    local x_nodes = int.method.x_nodes
+    local N_nodes = int.method.N_nodes
+    local C = cache(int)
 
-    x_nodes = collect(xspan[1]:xstep:xspan[2])
-  
-    for (name, layer) in zip(keys(PNN.params), values(PNN.params))
-        if hasfield(typeof(layer), :b)
-            layer.W[:] = C.basis_nn_ps[name].W[:] 
-            layer.b[:] = C.basis_nn_ps[name].b[:]
-        else
-            # For layers without bias (e.g., output), just regenerate W
-            layer.W[:] = x
-        end
-    end
+    # for (name, layer) in zip(keys(PNN.params), values(PNN.params))
+    #     if hasfield(typeof(layer), :b)
+    #         layer.W[:] = BNN.params[name].W[:] 
+    #         layer.b[:] = BNN.params[name].b[:]
+    #     else
+    #         # For layers without bias (e.g., output), just regenerate W
+    #         layer.W[:] = x
+    #     end
+    # end
 
+    # for d in 1:D
+    #     for i in 1:N_nodes 
+    #         sol_struct.sol.u[sol_struct.current_step][i] = u_trial(1.0,x_nodes[i],tn,PNN.params,int,sol_struct)
+    #         sol_struct.sol.v[sol_struct.current_step][i] = v_trial(1.0,x_nodes[i],tn,PNN.params,int,sol_struct)
+    #         sol_struct.sol.w[sol_struct.current_step][i] = w_trial(1.0,x_nodes[i],tn,PNN.params,int,sol_struct)
+    #     end
+    #     for rx in 1:RX
+    #         sol_struct.internal.u_quad_end_values[d,rx] = u_trial(1.0,x_quad_nodes[rx],tn,PNN.params,int,sol_struct)
+    #         sol_struct.internal.v_quad_end_values[d,rx] = v_trial(1.0,x_quad_nodes[rx],tn,PNN.params,int,sol_struct)
+    #         sol_struct.internal.w_quad_end_values[d,rx] = w_trial(1.0,x_quad_nodes[rx],tn,PNN.params,int,sol_struct)
+    #     end
+    # end
+    
     for d in 1:D
-        for i in eachindex(x_nodes)
-            sol_struct.sol.u[sol_struct.current_step][i] = u_trial(1.0,x_nodes[i],tn,PNN.params,int)
-            sol_struct.sol.v[sol_struct.current_step][i] = v_trial(1.0,x_nodes[i],tn,PNN.params,int)
-            sol_struct.sol.w[sol_struct.current_step][i] = w_trial(1.0,x_nodes[i],tn,PNN.params,int)
+        for i in 1:N_nodes 
+            sol_struct.sol.u[sol_struct.current_step][i] = (C.nn_t₁_nodes_values[d,i,:]-  (x_nodes[N_nodes-i+1] * C.nn_t₁x₀[d,:] + x_nodes[i]*C.nn_t₁x₁[d,:]))' * x
+                + (x_nodes[N_nodes-i+1] * C.bcs_t₁x₀[d] + x_nodes[i] * C.bcs_t₁x₁[d])
         end
         for rx in 1:RX
-            sol_struct.internal.u_quad_end_values[d,rx] = u_trial(1.0,x_quad_nodes[rx],tn,PNN.params,int)
-            sol_struct.internal.v_quad_end_values[d,rx] = v_trial(1.0,x_quad_nodes[rx],tn,PNN.params,int)
-            sol_struct.internal.w_quad_end_values[d,rx] = w_trial(1.0,x_quad_nodes[rx],tn,PNN.params,int)
+            sol_struct.internal.u_quad_end_values[d,rx] = (C.nn_t₁_quad_values[d,rx,:]- (x_quad_nodes[RX-rx+1] * C.nn_t₁x₀[d,:] + x_quad_nodes[rx]*C.nn_t₁x₁[d,:]))' * x
+                + (x_quad_nodes[RX-rx+1] * C.bcs_t₁x₀[d] + x_quad_nodes[rx] * C.bcs_t₁x₁[d])
+
+
+            v_tem = C.nnt_t₁_quad_values[d,rx,:]
+                    - (x_quad_nodes[RX-rx+1] * C.nnt_t₁x₀[d,:] + x_quad_nodes[rx]*C.nnt_t₁x₁[d,:] - 1/h * C.nn_t₀_quad_values[d,rx,:])
+                    + (x_quad_nodes[RX-rx+1] * (- 1/h) *C.nn_t₀x₀[d,:] + x_quad_nodes[rx] * (- 1/h) * C.nn_t₀x₁[d,:])
+
+            sol_struct.internal.v_quad_end_values[d,rx] = v_tem' * x
+                + (x_quad_nodes[RX-rx+1] * C.bcst_t₁x₀[d] + x_quad_nodes[rx] * C.bcst_t₁x₁[d] - 1/h * C.ics_t₀_quad_values[d,rx])
+                - (x_quad_nodes[RX-rx+1] * (- 1/h) * C.bcst_t₀x₀[d] + x_quad_nodes[rx] * (- 1/h) * C.bcst_t₀x₁[d])
+
+            w_tem = C.nnx_t₁_quad_values[d,rx,:]
+            -(-1/x_domain * C.nn_t₁x₀[d,:] + x_quad_nodes[rx] * C.nnx_t₁x₀[d,:] + 1/x_domain * C.nn_t₁x₁[d,:] + x_quad_nodes[rx] * C.nnx_t₁x₁[d,:])
+
+            sol_struct.internal.w_quad_end_values[d,rx] = w_tem' * x
+                +((-1/x_domain) * C.bcs_t₁x₀[d] + x_quad_nodes[RX-rx+1] * C.bcsx_t₁x₀[d] + 1/x_domain * C.bcs_t₁x₁[d] + x_quad_nodes[rx] * C.bcsx_t₁x₁[d])
         end
     end
-    
+
+
+
     # copy internal variables from cache to solution
     sol_struct.t = sol_struct.current_step * timestep(int)
     # println("In the end of update! function, time = ", sol_struct.t)

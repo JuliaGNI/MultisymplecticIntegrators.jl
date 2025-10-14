@@ -11,8 +11,8 @@ using ForwardDiff
 # and just consider 1+1 now. 
 relu2 = x -> max(0, x) ^2
 u_network = Chain(
-    Dense(2, 20, relu2),
-    Dense(20, 1,identity,use_bias = false)
+    Dense(2, 1000, tanh),
+    Dense(1000, 1,identity,use_bias = false)
 )
 
 # GeometricIntegrators.Integrators.default_options(::NN_PDE_Integrator) = Options(

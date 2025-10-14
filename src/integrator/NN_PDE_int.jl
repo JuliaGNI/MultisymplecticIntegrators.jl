@@ -210,6 +210,36 @@ end
     end::CacheType(ST, c.problem, c.method)
 end
 
+# function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT,LT,BT,IPMT}}) where {T,MVT,LT,BT,IPMT<:ELM_LS}
+
+#     function nlls!(du, u, int::PDEIntegrator{<:NN_PDE_Integrator})
+#         local xspan = int.problem.xspan
+#         local c = int.problem.params.c
+#         local tn = (sol.current_step - 1) * timestep(int)
+#         local N_in = 2000
+
+#         tx_in = rand(Random.seed!(1),2,N_in)
+#         tx_in[2,:] .= xspan[1] .+ (xspan[2] - xspan[1]) * tx_in[2,:]
+
+#         for i in 1:N_in
+#             du[i] = v_trial(tx_in[1,i], tx_in[2,i], tn, u) + c * w_trial(tx_in[1,i], tx_in[2,i], tn, u)
+#         end
+#     end
+
+#     if C.done_initial_guess[1] == 0
+#         u0 = zeros(1,NP)
+#         prob = NonlinearLeastSquaresProblem(
+#         NonlinearFunction(nlls!, resid_prototype = zeros(N_in)), u0, int)
+#         println("Starting initial guess computation ...")
+#         t1 = time()
+#         u_sol = solve(prob,maxtime = 60,abstol = 1e-12, reltol = 1e-12).u
+#         (x == cache(int).x && eltype(x) == eltype(cache(int).x)) ? x[:] = u_sol : nothing
+#         println("Time for initial guess: ", time() - t1)
+#         print("initial guess parameters: ", x, "\n")
+#         C.done_initial_guess[1] = 1
+#     end
+# end
+
 
 function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT,LT,BT,IPMT}}) where {T,MVT,LT,BT,IPMT<:LSGD}
     local NP = int.method.basis.NP
