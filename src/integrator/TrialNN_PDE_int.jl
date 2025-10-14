@@ -399,7 +399,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int})
         epoch_loss /= num_samples
         push!(loss_history, epoch_loss)
         println("Epoch $epoch, MSE Loss: $epoch_loss")
-        if epoch_loss < 1e-5
+        if epoch_loss < 1e-6
             println("Early stopping at epoch $epoch with loss $epoch_loss")
             break
         end
