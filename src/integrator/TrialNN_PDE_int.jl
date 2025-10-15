@@ -185,10 +185,10 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP,N} <: PDEIntegratorCache{ST,D}
         ux₀_quad_values = zeros(ST, D, RT) # left boundary, i.e. x = 0
         ux₁_quad_values = zeros(ST, D, RT) # right boundary, i.e. x = L
 
-        basis_nn_ps = (L1=(W=zeros(ST, 100, 2), b=zeros(ST, 100)), 
-        L2=(W=zeros(ST, 100, 100),b=zeros(ST, 100)), 
-        L3=(W=zeros(ST, 100, 100),b=zeros(ST, 100)),
-        L4=(W=zeros(ST, NP, 100),b=zeros(ST, NP)),)
+        basis_nn_ps = (L1=(W=zeros(ST, NP, 2), b=zeros(ST, NP)), )
+        # L2=(W=zeros(ST, 100, 100),b=zeros(ST, 100)), 
+        # L3=(W=zeros(ST, 100, 100),b=zeros(ST, 100)),
+        # L4=(W=zeros(ST, NP, 100),b=zeros(ST, NP)),)
 
         ics_t₀_quad_values = zeros(ST, D, RX)
         ics_t₀_nodes_values = zeros(ST, D, N)

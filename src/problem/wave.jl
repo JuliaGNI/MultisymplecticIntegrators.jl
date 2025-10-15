@@ -21,14 +21,14 @@ module Wave
 
     const xstep = 0.01
     const xspan = (0.2, 0.8)
-    const c = 1.0 # wave speed square
+    const c = 0.5 # wave speed square
 
     const default_parameters = (
         c=1.0,
         A1 = 0.3,
-        A2 = 0.4,
+        A2 = 0.0,
         B1 = 0.2,
-        B2 = 0.5,
+        B2 = 0.0,
         l = 1.0,
     )
 

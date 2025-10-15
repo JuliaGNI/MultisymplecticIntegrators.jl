@@ -6,119 +6,138 @@ using Profile
 
 x_step = 0.01
 t_step = 0.3
-x_span = (-4, -1)
-lpde = MultiSymplectic.LinearTransport.lpdeproblem(tstep = t_step,tspan =(0.0,t_step),xspan = x_span,xstep = x_step)
+x_span = (0, 1)
+lpde = MultiSymplectic.Wave.lpdeproblem(tstep = t_step,tspan =(0.0,t_step),xspan = x_span,xstep = x_step)
 
-NP = 50
-basis_network = Chain(
-    Dense(2, 100, tanh),
-    Dense(100, 100, tanh,),
-    Dense(100, 100, tanh,),
-    Dense(100, NP, tanh),
-)
 
-PNN_basis = NeuralNetwork(basis_network)
+NN_width = 800
+PNN = NeuralNetwork(Chain(
+    Dense(2, NN_width, tanh),  # 2D input: [x, y]
+))
 
 u_network = Chain(
-    Dense(2, 100, tanh),
-    Dense(100, 100, tanh),
-    Dense(100, 100, tanh),
-    Dense(100, NP, tanh),
-    Dense(NP, 1,identity,use_bias = false),
+    Dense(2, NN_width, tanh),
+    Dense(NN_width, 1,identity,use_bias = false),
 )
 
 u_func = NeuralNetwork(u_network)
-trial_basis = Trial_Solution_Basis(PNN_basis,u_func,NP)
+u_func.params.L1.W[:] = PNN.params.L1.W[:]
+u_func.params.L1.b[:] = PNN.params.L1.b[:]
+u_func.params.L2.W[:] = u_sol
+
+
+
+trial_basis = Trial_Solution_Basis(PNN,u_func,NN_width)
 trial_int = TrialNN_PDE_int(trial_basis,xstep = x_step,xspan = x_span)
 
 trial_sol = MultiSymplectic.integrate(lpde,trial_int)
-lpde.exact_u.(0.3,collect(-4:0.01:-1))
+lpde.exact_u.(0.3,collect(-4:0.01:4))
 plot(trial_sol.sol.u[1], label = "t = 0.3")
-plot(lpde.exact_u.(0.0,collect(-4:0.01:-1)), label = "Exact")
+plot(lpde.exact_u.(0.0,collect(-1:0.01:1)), label = "Exact")
+
+wave_anim = @animate for (i, tt) in enumerate(0:0.1:2)
+    plot(lpde.exact_u.(tt,collect(-1:0.01:1)), label = "Exact")
+    
+    title!("t = $tt")
+    xlabel!("x")
+    ylabel!("u")
+end 
+gif(wave_anim, fps = 5)
 
 
-# NN_width = 250
-# PNN = NeuralNetwork(Chain(
-#     Dense(2, NN_width, tanh),
-# ))
+NN_width = 800
+PNN = NeuralNetwork(Chain(
+    Dense(2, NN_width, tanh),  # 2D input: [x, y]
+))
+u0 = rand(NN_width)
 # u0 = rand(NN_width)
 # u0' * PNN([0.0,-4.0])
 
-# a = 0
-# b = 1
-# x_domain = b - a
-# h = 1.0 
+a = 0
+b = 1
+x_domain = b - a
+h = 0.3
 
-# exact_u(t,x) = lpde.exact_u(t,x)
+exact_u(t,x) = lpde.exact_u(t,x)
 
-# #  Trial solution function construction
-# psi_L(x) = (b - x) / x_domain       # left 
-# psi_R(x) = (x - a) / x_domain       # right
-# phi_B(t) = (h - t) / h   # bottom
+#  Trial solution function construction
+psi_L(x) = (b - x) / x_domain       # left 
+psi_R(x) = (x - a) / x_domain       # right
+phi_B(t) = (h - t) / h   # bottom
 
-# function T1NN(t, x, dofs )
-#     return (b - x)  * dofs' * PNN([t,a] ) / x_domain +
-#         (x - a)  * dofs' * PNN([t,b]) / x_domain +
-#         (h - t)  * dofs' * PNN([0.0,x]) / h
-# end
+function T1NN(t, x, dofs )
+    return (b - x)  * dofs' * PNN([t,a] ) / x_domain +
+        (x - a)  * dofs' * PNN([t,b]) / x_domain +
+        (h - t)  * dofs' * PNN([0.0,x]) / h
+end
 
-# function T2NN(t, x, dofs)
-#     return (b - x)   * (h - t)  * dofs' * PNN([0.0,a]) / x_domain / h +
-#         (x - a)  * (h - t)  * dofs' * PNN([0.0,b]) / x_domain / h
-# end
+function T2NN(t, x, dofs)
+    return (b - x)   * (h - t)  * dofs' * PNN([0.0,a]) / x_domain / h +
+        (x - a)  * (h - t)  * dofs' * PNN([0.0,b]) / x_domain / h
+end
 
-# function C1(t, x)
-#     return (b - x)  * exact_u(t,a) / x_domain+
-#         (x - a)  * exact_u(t,b) / x_domain +
-#         (h - t)  * exact_u(0.0,x) / h
-# end
+function C1(t, x)
+    return (b - x)  * exact_u(t,a) / x_domain+
+        (x - a)  * exact_u(t,b) / x_domain +
+        (h - t)  * exact_u(0.0,x) / h
+end
 
-# function C2(t, x)
-#     return (b - x)  * (h - t) * exact_u(0,a) / x_domain / h +
-#         (x - a)  * (h - t) * exact_u(0,b) / x_domain / h
-# end
+function C2(t, x)
+    return (b - x)  * (h - t) * exact_u(0,a) / x_domain / h +
+        (x - a)  * (h - t) * exact_u(0,b) / x_domain / h
+end
 
 
-# u_trial(t,x,dofs) = dofs' * PNN([t,x]) - T1NN(t,x,dofs) + T2NN(t,x,dofs) + C1(t,x) - C2(t,x)
+u_trial(t,x,dofs) = dofs' * PNN([t,x]) - T1NN(t,x,dofs) + T2NN(t,x,dofs) + C1(t,x) - C2(t,x)
 
-# x_ls = collect(a:0.01:b)
-# t_ls = collect(0.0:0.01:h)
+x_ls = collect(a:0.01:b)
+t_ls = collect(0.0:0.01:h)
 
-# u_vals = [u_trial(ti,xi,u0) for ti in t_ls, xi in x_ls]
-# truth_vals = [exact_u(ti,xi) for ti in t_ls, xi in x_ls]
-# u_vals - truth_vals
+u_vals = [u_trial(ti,xi,u0) for ti in t_ls, xi in x_ls]
+truth_vals = [exact_u(ti,xi) for ti in t_ls, xi in x_ls]
+u_vals - truth_vals
 
 
 # v_trial(t,x,dofs) = Zygote.gradient(tt -> u_trial(tt,x,dofs),t)[1]
 # w_trial(t,x,dofs) = Zygote.gradient(xx -> u_trial(t,xx,dofs),x)[1]
 
-# N_in = 600
-# tx_in = rand(2,N_in)
+N_in = 1000
+tx_in = rand(2,N_in)
+tx_in[1,:] = tx_in[1,:] .* h
+tx_in[2,:] = a .+ x_domain * tx_in[2,:] 
+
 
 # utt(t,x,dofs) = ForwardDiff.derivative(tt -> ForwardDiff.derivative(ttt -> u_trial(ttt, x, dofs), tt), t)
 # uxx(t,x,dofs) = ForwardDiff.derivative(xx -> ForwardDiff.derivative(xxx -> u_trial(t, xxx, dofs), xx), x)
 
-# function nlls!(du, u, p)
-#     for i in 1:N_in
-#         t, x = tx_in[1,i], tx_in[2,i]
-#         # Second derivatives
-#         # Wave equation: ∂²u/∂t² - c²∂²u/∂x² = 0
-#         du[i] = utt(t,x,u) -  uxx(t,x,u)
-#     end
-# end
+function nlls!(du, u, p)
+    for i in 1:N_in
+        t, x = tx_in[1,i], tx_in[2,i]
+        # Second derivatives
+        # Wave equation: ∂²u/∂t² - c²∂²u/∂x² = 0
+        # du[i] = utt(t,x,u) -  uxx(t,x,u)
+        du[i] = u_trial(t,x,u) - exact_u(t,x)
+    end
+end
 
-# using NonlinearSolve
-# prob = NonlinearLeastSquaresProblem(
-# NonlinearFunction(nlls!, resid_prototype = zeros(N_in)), u0)
+using NonlinearSolve
+prob = NonlinearLeastSquaresProblem(
+NonlinearFunction(nlls!, resid_prototype = zeros(N_in)), u0)
 
-# @time u_sol = solve(prob,maxtime = 60).u
-# # (x == cache(int).x && eltype(x) == eltype(cache(int).x)) ? x[:] = u_sol : nothing
-# # println("Time for initial guess: ", time() - t1)
-# # print("initial guess parameters: ", x, "\n")
-# # C.done_initial_guess[1] = 1
+@time u_sol = solve(prob,maxtime = 60).u
 
-# u_sol' * PNN([0.0,-4.0])
+t_plot = 0:0.01:h
+x_plot = 0:0.01:1
+u_pred = [u_trial(t, x, u_sol) for t in t_plot, x in x_plot]
+u_exact = [exact_u(t, x) for t in t_plot, x in x_plot]
+error_plot = abs.(u_pred - u_exact)
 
+# Create plots
+p1 = surface(t_plot, x_plot, u_pred', title="Neural Network Solution", xlabel="t", ylabel="x_domain", zlabel="u")
+p2 = surface(t_plot, x_plot, u_exact', title="Exact Solution", xlabel="x", ylabel="y", zlabel="u")
+p3 = surface(t_plot, x_plot, error_plot', title="Absolute Error", xlabel="x", ylabel="y", zlabel="Error")
+
+plot(p1, p2, p3, layout=(1,3), size=(1500, 400))
 
 
 using MultiSymplectic
@@ -250,4 +269,9 @@ plot(p1, p2, p3, layout=(1,3), size=(1500, 400))
 
 # Print maximum error
 max_error = maximum(error_plot)
-println("\nMaximum absolute error: $max_error")
+println("\nMaximum absolute error: $max_error") 
+
+NP = 800
+@variables W1[2,1:NP] W2[1:NP] b[1:NP]
+@variables t x 
+nn(t,x) = W2' * tanh(W1[1,:] .*t + W1[2,:] .* x .+ b)
