@@ -21,7 +21,7 @@ struct NN_PDE_Integrator{T,MVT,LT,BT<:AbstractPDEBasis, IPMT<:InitialParametersM
     initial_guess_method::IPMT # :LSGD or :GroundTruth
     params_turbulance::Float64 # a small value to add to the parameters to avoid zeros in the system
     function NN_PDE_Integrator(basis; RT::Int = 6,RX::Int = 8,xspan::Tuple = (0.,1.0),tstep::T = 1.0, k_μ::Int = 4,k_λ₀_x::Int = 4,
-        μ::Symbol = :BSplineDirichlet,λ::Symbol= :BSplineDirichlet,nepochs = 1000,initial_guess_method::IPMT=:LSGD(),params_turbulance = 1e-7) where {T, IPMT}
+        μ::Symbol = :BSplineDirichlet,λ::Symbol= :BSplineDirichlet,nepochs = 1000,initial_guess_method::IPMT=LSGD(),params_turbulance = 1e-7) where {T, IPMT}
         
         if RT ==128 
             t_quadrature = GaussQuadrature128()

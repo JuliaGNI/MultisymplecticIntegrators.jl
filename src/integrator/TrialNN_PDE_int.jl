@@ -1,4 +1,4 @@
-struct TrialNN_PDE_int{BT<:AbstractPDEBasis} <: PDEMethod
+struct TrialNN_PDE_int{BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PDEMethod
     basis::BT
     time_quadrature
     RT::Int # Number of quadrature points in time
@@ -12,7 +12,10 @@ struct TrialNN_PDE_int{BT<:AbstractPDEBasis} <: PDEMethod
     N_in::Int # Inside the Domain
     x_nodes 
     N_nodes::Int # Number of spatial nodes
-    function TrialNN_PDE_int(trial_NN,;xstep,xspan, RT::Int=6, RX::Int=8, N_in::Int=600)
+
+    initial_guess_method::IPMT # :LSGD or :GroundTruth
+
+    function TrialNN_PDE_int(trial_NN,;xstep,xspan, RT::Int=6, RX::Int=8, N_in::Int=600, initial_guess_method::IPMT=ELM()) where {IPMT}
         if RT == 128
             t_quadrature = GaussQuadrature128()
         elseif RT == 64
@@ -36,10 +39,10 @@ struct TrialNN_PDE_int{BT<:AbstractPDEBasis} <: PDEMethod
 
         x_nodes = collect(xspan[1]:xstep:xspan[2])
         N = length(x_nodes)
-        new{typeof(trial_NN)}(trial_NN,
+        new{typeof(trial_NN),typeof(initial_guess_method)}(trial_NN,
             t_quadrature, RT,
             x_quadrature, RX,
-            grid_matrix, grid_weights, N_in, x_nodes,N)
+            grid_matrix, grid_weights, N_in, x_nodes,N,initial_guess_method)
     end
 end
 
@@ -374,7 +377,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int})
     tx_in = rand(Random.seed!(1),2,5000)
     tx_in[2,:] .= xspan[1] .+ (xspan[2] - xspan[1]) * tx_in[2,:]
 
-    epochs = 10000
+    epochs = 0
     opt = GeometricMachineLearning.Optimizer(GeometricMachineLearning.AdamOptimizerWithDecay(epochs), PNN.params)
     λ = GeometricMachineLearning.GlobalSection(PNN.params)
     loss_history = []
@@ -704,6 +707,7 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
             end
         end
     end
+    println("u at quadrature points: \n", C.u_quad_values[1,:,:])
 
     # for d in 1:D
     #     for rx in 1:RX
@@ -738,6 +742,8 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
             end
         end 
     end
+    println("∂L∂U_quad_values at quadrature points: \n", C.∂L∂U_quad_values[1,:,:])
+    error("Stop here for debug")
     t5 = time()
     println("Total time for components! function: ", t5 - t1)
 end
