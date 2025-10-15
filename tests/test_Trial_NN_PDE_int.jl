@@ -64,7 +64,16 @@ exact_u(t,x) = lpde.exact_u(t,x)
 psi_L(x) = (b - x) / x_domain       # left 
 psi_R(x) = (x - a) / x_domain       # right
 phi_B(t) = (h - t) / h   # bottom
+#  Trial solution function construction
+psi_L(x) = (b - x) / x_domain       # left 
+psi_R(x) = (x - a) / x_domain       # right
+phi_B(t) = (h - t) / h   # bottom
 
+function T1NN(t, x, dofs )
+    return (b - x)  * dofs' * PNN([t,a] ) / x_domain +
+        (x - a)  * dofs' * PNN([t,b]) / x_domain +
+        (h - t)  * dofs' * PNN([0.0,x]) / h
+end
 function T1NN(t, x, dofs )
     return (b - x)  * dofs' * PNN([t,a] ) / x_domain +
         (x - a)  * dofs' * PNN([t,b]) / x_domain +
@@ -75,13 +84,26 @@ function T2NN(t, x, dofs)
     return (b - x)   * (h - t)  * dofs' * PNN([0.0,a]) / x_domain / h +
         (x - a)  * (h - t)  * dofs' * PNN([0.0,b]) / x_domain / h
 end
+function T2NN(t, x, dofs)
+    return (b - x)   * (h - t)  * dofs' * PNN([0.0,a]) / x_domain / h +
+        (x - a)  * (h - t)  * dofs' * PNN([0.0,b]) / x_domain / h
+end
 
 function C1(t, x)
     return (b - x)  * exact_u(t,a) / x_domain+
         (x - a)  * exact_u(t,b) / x_domain +
         (h - t)  * exact_u(0.0,x) / h
 end
+function C1(t, x)
+    return (b - x)  * exact_u(t,a) / x_domain+
+        (x - a)  * exact_u(t,b) / x_domain +
+        (h - t)  * exact_u(0.0,x) / h
+end
 
+function C2(t, x)
+    return (b - x)  * (h - t) * exact_u(0,a) / x_domain / h +
+        (x - a)  * (h - t) * exact_u(0,b) / x_domain / h
+end
 function C2(t, x)
     return (b - x)  * (h - t) * exact_u(0,a) / x_domain / h +
         (x - a)  * (h - t) * exact_u(0,b) / x_domain / h
@@ -98,8 +120,8 @@ truth_vals = [exact_u(ti,xi) for ti in t_ls, xi in x_ls]
 u_vals - truth_vals
 
 
-# v_trial(t,x,dofs) = Zygote.gradient(tt -> u_trial(tt,x,dofs),t)[1]
-# w_trial(t,x,dofs) = Zygote.gradient(xx -> u_trial(t,xx,dofs),x)[1]
+v_trial(t,x,dofs) = Zygote.gradient(tt -> u_trial(tt,x,dofs),t)[1]
+w_trial(t,x,dofs) = Zygote.gradient(xx -> u_trial(t,xx,dofs),x)[1]
 
 N_in = 1000
 tx_in = rand(2,N_in)
@@ -107,8 +129,8 @@ tx_in[1,:] = tx_in[1,:] .* h
 tx_in[2,:] = a .+ x_domain * tx_in[2,:] 
 
 
-# utt(t,x,dofs) = ForwardDiff.derivative(tt -> ForwardDiff.derivative(ttt -> u_trial(ttt, x, dofs), tt), t)
-# uxx(t,x,dofs) = ForwardDiff.derivative(xx -> ForwardDiff.derivative(xxx -> u_trial(t, xxx, dofs), xx), x)
+utt(t,x,dofs) = ForwardDiff.derivative(tt -> ForwardDiff.derivative(ttt -> u_trial(ttt, x, dofs), tt), t)
+uxx(t,x,dofs) = ForwardDiff.derivative(xx -> ForwardDiff.derivative(xxx -> u_trial(t, xxx, dofs), xx), x)
 
 function nlls!(du, u, p)
     for i in 1:N_in
