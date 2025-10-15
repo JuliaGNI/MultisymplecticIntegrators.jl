@@ -11,23 +11,15 @@ x_span = (0, 1)
 lpde = MultiSymplectic.Wave.lpdeproblem(tstep = t_step,tspan =(0.0,t_step),xspan = x_span,xstep = x_step)
 
 
-NN_width = 1
+NN_width = 5
 PNN = NeuralNetwork(Chain(
     Dense(2, NN_width, tanh), 
 ))
 
-@benchmark Zygote.jacobian(t -> PNN([t,0.5]), 0.3)[1]
-Zygote.jacobian(x -> PNN([0.3,x]), 0.5)[1]
+# @benchmark Zygote.jacobian(t -> PNN([t,0.5]), 0.3)[1]
+# Zygote.jacobian(x -> PNN([0.3,x]), 0.5)[1]
 
-@benchmark PNN.params.L1.W[2] * (1-PNN([0.3,0.5])[1]^2) 
-
-
-
-
-
-
-
-
+# PNN.params.L1.W[2] * (1-PNN([0.3,0.5])[1]^2) 
 
 
 
@@ -37,14 +29,9 @@ u_network = Chain(
 )
 
 u_func = NeuralNetwork(u_network)
-u_func.params.L1.W[:] = PNN.params.L1.W[:]
-u_func.params.L1.b[:] = PNN.params.L1.b[:]
-u_func.params.L2.W[:] = u_sol
-
-
 
 trial_basis = Trial_Solution_Basis(PNN,u_func,NN_width)
-trial_int = TrialNN_PDE_int(trial_basis,xstep = x_step,xspan = x_span,initial_guess_method = ELM())
+trial_int = TrialNN_PDE_int(trial_basis,xstep = x_step,xspan = x_span,initial_guess_method = ELM(),RT = 3,RX = 4)
 
 trial_sol = MultiSymplectic.integrate(lpde,trial_int)
 
