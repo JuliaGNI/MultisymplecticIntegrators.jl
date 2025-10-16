@@ -10,11 +10,15 @@ t_step = 0.3
 x_span = (0, 1)
 lpde = MultiSymplectic.Wave.lpdeproblem(tstep = t_step,tspan =(0.0,t_step),xspan = x_span,xstep = x_step)
 
-
-NN_width = 5
+relu2(x) = max(0,x)^2
+NN_width = 800
 PNN = NeuralNetwork(Chain(
-    Dense(2, NN_width, tanh), 
+    Dense(2, NN_width, relu2), 
 ))
+
+# scale_params = 10
+# PNN.params.L1.W .*= scale_params
+# PNN.params.L1.b .*= scale_params
 
 # @benchmark Zygote.jacobian(t -> PNN([t,0.5]), 0.3)[1]
 # Zygote.jacobian(x -> PNN([0.3,x]), 0.5)[1]
@@ -24,16 +28,16 @@ PNN = NeuralNetwork(Chain(
 
 
 u_network = Chain(
-    Dense(2, NN_width, tanh),
+    Dense(2, NN_width, relu2),
     Dense(NN_width, 1,identity,use_bias = false),
 )
 
 u_func = NeuralNetwork(u_network)
 
 trial_basis = Trial_Solution_Basis(PNN,u_func,NN_width)
-trial_int = TrialNN_PDE_int(trial_basis,xstep = x_step,xspan = x_span,initial_guess_method = ELM(),RT = 3,RX = 4)
+trial_int = TrialNN_PDE_int(trial_basis,xstep = x_step,xspan = x_span,initial_guess_method = ELM(),RT = 4,RX = 12)
 
-trial_sol = MultiSymplectic.integrate(lpde,trial_int)
+trial_sol = MultiSymplectic.integrate(lpde,trial_int) 
 
 
 
@@ -65,31 +69,37 @@ phi_B(t) = (h - t) / h   # bottom
 function T1NN(t, x, dofs )
     return (b - x)  * dofs' * PNN([t,a] ) / x_domain +
         (x - a)  * dofs' * PNN([t,b]) / x_domain +
-        (h - t)  * dofs' * PNN([0.0,x]) / h
+        (h - h * t)  * dofs' * PNN([0.0,x]) / h
+end
+
+function T1NN(t, x)
+    return (b - x)  * W2 * tanh(W1[1]*t + W1[2]*a + bias) / x_domain +
+        (x - a)  * W2 * tanh(W1[1]*t + W1[2]*b + bias) / x_domain +
+        (h - h * t)  * W2 * tanh( W1[2]*x + bias) / h
 end
 
 function T2NN(t, x, dofs)
-    return (b - x)   * (h - t)  * dofs' * PNN([0.0,a]) / x_domain / h +
-        (x - a)  * (h - t)  * dofs' * PNN([0.0,b]) / x_domain / h
+    return (b - x)   * (h - h * t)  * dofs' * PNN([0.0,a]) / x_domain / h +
+        (x - a)  * (h - h * t)  * dofs' * PNN([0.0,b]) / x_domain / h
 end
 
 function C1(t, x)
     return (b - x)  * exact_u(t,a) / x_domain+
         (x - a)  * exact_u(t,b) / x_domain +
-        (h - t)  * exact_u(0.0,x) / h
+        (h - h * t)  * exact_u(0.0,x) / h
 end
 
 
 function C2(t, x)
-    return (b - x)  * (h - t) * exact_u(0,a) / x_domain / h +
-        (x - a)  * (h - t) * exact_u(0,b) / x_domain / h
+    return (b - x)  * (h - h * t) * exact_u(0,a) / x_domain / h +
+        (x - a)  * (h - h * t) * exact_u(0,b) / x_domain / h
 end
 
 u_trial(t,x,dofs) = dofs' * PNN([t,x]) - T1NN(t,x,dofs) + T2NN(t,x,dofs) + C1(t,x) - C2(t,x)
 
 # x_ls = collect(a:0.01:b)
 # t_ls = collect(0.0:0.01:h)
-
+# u0 = rand(NN_width)
 # u_vals = [u_trial(ti,xi,u0) for ti in t_ls, xi in x_ls]
 # truth_vals = [exact_u(ti,xi) for ti in t_ls, xi in x_ls]
 # u_vals - truth_vals
@@ -100,7 +110,7 @@ u_trial(t,x,dofs) = dofs' * PNN([t,x]) - T1NN(t,x,dofs) + T2NN(t,x,dofs) + C1(t,
 
 N_in = 1000
 tx_in = rand(2,N_in)
-tx_in[1,:] = tx_in[1,:] .* h
+tx_in[1,:] = tx_in[1,:] 
 tx_in[2,:] = a .+ x_domain * tx_in[2,:] 
 
 
