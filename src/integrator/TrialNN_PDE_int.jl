@@ -188,7 +188,8 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP,N} <: PDEIntegratorCache{ST,D}
         ux₀_quad_values = zeros(ST, D, RT) # left boundary, i.e. x = 0
         ux₁_quad_values = zeros(ST, D, RT) # right boundary, i.e. x = L
 
-        basis_nn_ps = (L1=(W=zeros(ST, NP, 2), b=zeros(ST, NP)), )
+        basis_nn_ps = (L1=(W=zeros(ST, NP, 2), b=zeros(ST, NP)), 
+        L2=(W=zeros(ST, 1, NP),))
         # L2=(W=zeros(ST, 100, 100),b=zeros(ST, 100)), 
         # L3=(W=zeros(ST, 100, 100),b=zeros(ST, 100)),
         # L4=(W=zeros(ST, NP, 100),b=zeros(ST, NP)),)
@@ -276,76 +277,77 @@ end
 end
 
 
-# function T1NN(t, x, tn, params,int)
-#     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
-#     local h = timestep(int)
-#     local a,b = int.problem.xspan[1],int.problem.xspan[2]
-#     local PNN = int.method.basis.basis_network
+function T1NN(t, x, tn, params,int)
+    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+    local h = timestep(int)
+    local a,b = int.problem.xspan[1],int.problem.xspan[2]
+    local PNN = int.method.basis.basis_network
 
-#     return (b - x) / x_domain * PNN([t,a],params)[1] +
-#        (x - a) / x_domain * PNN([t,b],params)[1] +
-#         (h - t) / h * PNN([0.0,x],params)[1]
-# end
+    return (b - x) / x_domain * PNN([t,a],params)[1] +
+       (x - a) / x_domain * PNN([t,b],params)[1] +
+        (h - h*t) / h * PNN([0.0,x],params)[1]
+end
 
-# function T2NN(t, x, tn, params,int)
-#     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
-#     local h = timestep(int)
-#     local a,b = int.problem.xspan[1],int.problem.xspan[2]
-#     local PNN = int.method.basis.basis_network
+function T2NN(t, x, tn, params,int)
+    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+    local h = timestep(int)
+    local a,b = int.problem.xspan[1],int.problem.xspan[2]
+    local PNN = int.method.basis.basis_network
 
-#     return (b - x) / x_domain  *(h - t) / h * PNN([0.0,a],params)[1] +
-#         (x - a) / x_domain * (h - t) / h * PNN([0.0,b],params)[1]
-# end
+    return (b - x) / x_domain  *(h - h*t) / h * PNN([0.0,a],params)[1] +
+        (x - a) / x_domain * (h - h*t) / h * PNN([0.0,b],params)[1]
+end
 
-# function C1(t, x, tn, params,int,sol)
-#     local xspan = int.problem.xspan
-#     local a,b = xspan[1],xspan[2]
-#     local x_domain = b-a
+function C1(t, x, tn, params,int,sol)
+    local xspan = int.problem.xspan
+    local a,b = xspan[1],xspan[2]
+    local x_domain = b-a
 
-#     local h = timestep(int)
-#     local PNN = int.method.basis.basis_network
-#     local current_step = sol.current_step
-#     local bc_fun = int.problem.bcs_function
-#     local ic_fun = int.problem.ics_function
+    local h = timestep(int)
+    local PNN = int.method.basis.basis_network
+    local current_step = sol.current_step
+    local bc_fun = int.problem.bcs_function
+    local ic_fun = int.problem.ics_function
 
-#     local previous_params = sol.internal.previous_params
+    local previous_params = sol.internal.previous_params
 
-#     if current_step == 1
-#         return (b - x) / x_domain * bc_fun(t, xspan).bc₀.u +
-#             (x - a) / x_domain * bc_fun(t, xspan).bc₁.u +
-#             (h - t) / h * ic_fun(x).u
-#     else
-#         return (b - x) / x_domain * bc_fun(t, xspan).bc₀.u +
-#             (x - a) / x_domain * bc_fun(t, xspan).bc₁.u +
-#             (h - t) / h * PNN([1.0,x],previous_params)[1]
-#     end
-# end
+    if current_step == 1
+        return (b - x) / x_domain * bc_fun(t, xspan).bc₀.u +
+            (x - a) / x_domain * bc_fun(t, xspan).bc₁.u +
+            (h - h*t) / h * ic_fun(x).u
+    else
+        return (b - x) / x_domain * bc_fun(t, xspan).bc₀.u +
+            (x - a) / x_domain * bc_fun(t, xspan).bc₁.u +
+            (h - h*t) / h * PNN([1.0,x],previous_params)[1]
+    end
+end
 
-# function C2(t, x, tn, params,int)
-#     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
-#     local a,b = int.problem.xspan[1],int.problem.xspan[2]
-#     local h = timestep(int)
-#     local bc_fun = int.problem.bcs_function
-#     local xspan = int.problem.xspan
+function C2(t, x, tn, params,int)
+    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+    local a,b = int.problem.xspan[1],int.problem.xspan[2]
+    local h = timestep(int)
+    local bc_fun = int.problem.bcs_function
+    local xspan = int.problem.xspan
 
-#     return (b - x)  * (h - t) * bc_fun(tn, xspan).bc₀.u / x_domain / h +
-#         (x - a)  * (h - t) * bc_fun(tn, xspan).bc₁.u / x_domain / h
-# end
+    return (b - x)  * (h - h*t) * bc_fun(tn, xspan).bc₀.u / x_domain / h +
+        (x - a)  * (h - h*t) * bc_fun(tn, xspan).bc₁.u / x_domain / h
+end
 
-# # u_trial(t,x,tn,params,int) = PNN([t,x],params)[1] - T1NN(t,x,tn,params,int) + T2NN(t,x,tn,params,int) + C1(t,x,tn,params,int) - C2(t,x,tn,params)
+# u_trial(t,x,tn,params,int) = PNN([t,x],params)[1] - T1NN(t,x,tn,params,int) + T2NN(t,x,tn,params,int) + C1(t,x,tn,params,int) - C2(t,x,tn,params)
 
-# function u_trial(t,x,tn,params,int,sol)
-#     local PNN = int.method.basis.sol_network
-#     PNN([t,x],params)[1] - T1NN(t,x,tn,params,int) + T2NN(t,x,tn,params,int) + C1(t,x,tn,params,int,sol) - C2(t,x,tn,params,int)
-# end
+function u_trial(t,x,tn,params,int,sol)
+    local PNN = int.method.basis.sol_network
+    PNN([t,x],params)[1] - T1NN(t,x,tn,params,int) + T2NN(t,x,tn,params,int) + C1(t,x,tn,params,int,sol) - C2(t,x,tn,params,int)
+end
 
-# v_trial(t,x,tn,params,int,sol) = Zygote.gradient(tt -> u_trial(tt,x,tn,params,int,sol),t)[1]
-# w_trial(t,x,tn,params,int,sol) = Zygote.gradient(xx -> u_trial(t,xx,tn,params,int,sol),x)[1]
+v_trial(t,x,tn,params,int,sol) = Zygote.gradient(tt -> u_trial(tt,x,tn,params,int,sol),t)[1]
+w_trial(t,x,tn,params,int,sol) = Zygote.gradient(xx -> u_trial(t,xx,tn,params,int,sol),x)[1]
 
 function mse_loss(params, tx_in, u_trial,int,sol)
     local current_step = sol.current_step
     local h = timestep(int)
     local tn = (current_step-1)*h
+    local exact_u = int.problem.exact_u
 
     loss = 0.0
     for i in 1:size(tx_in, 2)
@@ -381,8 +383,8 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int})
     tx_in = rand(Random.seed!(1),2,5000)
     tx_in[2,:] .= xspan[1] .+ (xspan[2] - xspan[1]) * tx_in[2,:]
 
-    epochs = 10000
-    opt = GeometricMachineLearning.Optimizer(GeometricMachineLearning.AdamOptimizerWithDecay(epochs), PNN.params)
+    epochs = 100
+    opt = GeometricMachineLearning.Optimizer(GeometricMachineLearning.AdamOptimizer(0.01), PNN.params)
     λ = GeometricMachineLearning.GlobalSection(PNN.params)
     loss_history = []
 
@@ -488,89 +490,90 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:TrialNN_PDE_int})
     end
 end
 
-#  Trial solution function construction
-psi_L(x) = (b - x) / x_domain       # left 
-psi_R(x) = (x - a) / x_domain       # right
-phi_B(t) = (h - t) / h   # bottom
+# #  Trial solution function construction
+# psi_L(x) = (b - x) / x_domain       # left 
+# psi_R(x) = (x - a) / x_domain       # right
+# phi_B(t) = (h - t) / h   # bottom
 
-function T1NN(t, x, tn, dofs, int)
-    local fixed_params = cache(int).basis_nn_ps
-    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
-    local h = timestep(int)
-    local a,b = int.problem.xspan[1],int.problem.xspan[2]
-    local PNN = int.method.basis.basis_network
+# function T1NN(t, x, tn, dofs, int)
+#     local fixed_params = cache(int).basis_nn_ps
+#     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+#     local h = timestep(int)
+#     local a,b = int.problem.xspan[1],int.problem.xspan[2]
+#     local BNN = int.method.basis.basis_network
 
-    return (b - x)  * dofs' * PNN([t,a], fixed_params) / x_domain +
-        (x - a)  * dofs' * PNN([t,b],fixed_params) / x_domain +
-        (h - h*t)  * dofs' * PNN([0,x],fixed_params) / h
-end
+#     return (b - x)  * dofs' * BNN([t,a], fixed_params) / x_domain +
+#         (x - a)  * dofs' * BNN([t,b],fixed_params) / x_domain +
+#         (h - h*t)  * dofs' * BNN([0,x],fixed_params) / h
+# end
 
-function T2NN(t, x, tn, dofs, int)
-    local fixed_params = cache(int).basis_nn_ps
-    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
-    local h = timestep(int)
-    local a,b = int.problem.xspan[1],int.problem.xspan[2]
-    local PNN = int.method.basis.basis_network
+# function T2NN(t, x, tn, dofs, int)
+#     local fixed_params = cache(int).basis_nn_ps
+#     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+#     local h = timestep(int)
+#     local a,b = int.problem.xspan[1],int.problem.xspan[2]
+#     local BNN = int.method.basis.basis_network
 
-    return (b - x)   * (h - h*t)  * dofs' * PNN([0.0,a],fixed_params) / x_domain / h +
-        (x - a)  * (h - h*t)  * dofs' * PNN([0.0,b],fixed_params)/ x_domain / h
-end
+#     return (b - x)   * (h - h*t)  * dofs' * BNN([0.0,a],fixed_params) / x_domain / h +
+#         (x - a)  * (h - h*t)  * dofs' * BNN([0.0,b],fixed_params)/ x_domain / h
+# end
 
-function C1(t, x, tn, dofs,int,sol)
-    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
-    local h = timestep(int)
-    local a,b = int.problem.xspan[1],int.problem.xspan[2]
-    local previous_params = sol.internal.previous_params
-    local PNN = int.method.basis.basis_network
-    local bc_fun = int.problem.bcs_function
-    local ic_fun = int.problem.ics_function
-    local current_step = sol.current_step
-    local xspan = int.problem.xspan
+# function C1(t, x, tn, dofs,int,sol)
+#     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+#     local h = timestep(int)
+#     local a,b = int.problem.xspan[1],int.problem.xspan[2]
+#     local previous_params = sol.internal.previous_params
+#     local PNN = int.method.basis.basis_network
+#     local bc_fun = int.problem.bcs_function
+#     local ic_fun = int.problem.ics_function
+#     local current_step = sol.current_step
+#     local xspan = int.problem.xspan
 
-    if current_step == 1
-        return (b - x)  * bc_fun(t, xspan).bc₀.u / x_domain+
-            (x - a)  * bc_fun(t, xspan).bc₁.u / x_domain +
-            (h - h*t)  * ic_fun(x).u / h
-    else
-        return (b - x)  * bc_fun(t, xspan).bc₀.u / x_domain +
-            (x - a)  * bc_fun(t, xspan).bc₁.u / x_domain +
-            (h - h*t) * sol.internal.x[current_step-1]' * PNN([1.0,x],previous_params) / h
-    end
-end
+#     if current_step == 1
+#         return (b - x)  * bc_fun(t, xspan).bc₀.u / x_domain+
+#             (x - a)  * bc_fun(t, xspan).bc₁.u / x_domain +
+#             (h - h*t)  * ic_fun(x).u / h
+#     else
+#         return (b - x)  * bc_fun(t, xspan).bc₀.u / x_domain +
+#             (x - a)  * bc_fun(t, xspan).bc₁.u / x_domain +
+#             (h - h*t) * sol.internal.x[current_step-1]' * PNN([1.0,x],previous_params) / h
+#     end
+# end
 
-function C2(t, x, tn, dofs,int)
-    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
-    local a,b = int.problem.xspan[1],int.problem.xspan[2]
-    local h = timestep(int)
-    local bc_fun = int.problem.bcs_function
-    local xspan = int.problem.xspan
-    return (b - x)  * (h - h*t) * bc_fun(tn, xspan).bc₀.u / x_domain / h +
-        (x - a)  * (h - h*t) * bc_fun(tn, xspan).bc₁.u / x_domain / h
-end
+# function C2(t, x, tn, dofs,int)
+#     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+#     local a,b = int.problem.xspan[1],int.problem.xspan[2]
+#     local h = timestep(int)
+#     local bc_fun = int.problem.bcs_function
+#     local xspan = int.problem.xspan
+#     return (b - x)  * (h - h*t) * bc_fun(tn, xspan).bc₀.u / x_domain / h +
+#         (x - a)  * (h - h*t) * bc_fun(tn, xspan).bc₁.u / x_domain / h
+# end
 
 
-# u_trial(t,x,tn,dofs,int) = sum(dofs .*PNN([t,x],fixed_params)) - T1NN(t,x,tn,dofs,int) + T2NN(t,x,tn,dofs,int) + C1(t,x,tn,dofs,int) - C2(t,x,tn,dofs,int)
+# # u_trial(t,x,tn,dofs,int) = sum(dofs .*PNN([t,x],fixed_params)) - T1NN(t,x,tn,dofs,int) + T2NN(t,x,tn,dofs,int) + C1(t,x,tn,dofs,int) - C2(t,x,tn,dofs,int)
 
-function u_trial(t,x,tn,dofs,int,sol)
-    local fixed_params = cache(int).basis_nn_ps
-    local PNN = int.method.basis.basis_network
-    return dofs' * PNN([t,x],fixed_params) - T1NN(t,x,tn,dofs,int) + T2NN(t,x,tn,dofs,int) + C1(t,x,tn,dofs,int,sol) - C2(t,x,tn,dofs,int)
-end
+# function u_trial(t,x,tn,dofs,int,sol)
+#     local fixed_params = cache(int).basis_nn_ps
+#     local BNN = int.method.basis.basis_network
+#     @show dofs
+#     return dofs' * BNN([t,x],fixed_params) - T1NN(t,x,tn,dofs,int) + T2NN(t,x,tn,dofs,int) + C1(t,x,tn,dofs,int,sol) - C2(t,x,tn,dofs,int)
+# end
 
-v_trial(t,x,tn,dofs,int,sol) = Zygote.gradient(tt -> u_trial(tt,x,tn,dofs,int,sol),t)[1]
-w_trial(t,x,tn,dofs,int,sol) = Zygote.gradient(xx -> u_trial(t,xx,tn,dofs,int,sol),x)[1]
+# v_trial(t,x,tn,dofs,int,sol) = Zygote.gradient(tt -> u_trial(tt,x,tn,dofs,int,sol),t)[1]
+# w_trial(t,x,tn,dofs,int,sol) = Zygote.gradient(xx -> u_trial(t,xx,tn,dofs,int,sol),x)[1]
 
-T1NNt(t,x,tn,dofs,int) = Zygote.gradient(tt -> T1NN(tt,x,tn,dofs,int),t)[1]
-T1NNx(t,x,tn,dofs,int) = Zygote.gradient(xx -> T1NN(t,xx,tn,dofs,int),x)[1]
+# T1NNt(t,x,tn,dofs,int) = Zygote.gradient(tt -> T1NN(tt,x,tn,dofs,int),t)[1]
+# T1NNx(t,x,tn,dofs,int) = Zygote.gradient(xx -> T1NN(t,xx,tn,dofs,int),x)[1]
 
-T2NNt(t,x,tn,dofs,int) = Zygote.gradient(tt -> T2NN(tt,x,tn,dofs,int),t)[1]
-T2NNx(t,x,tn,dofs,int) = Zygote.gradient(xx -> T2NN(t,xx,tn,dofs,int),x)[1]
+# T2NNt(t,x,tn,dofs,int) = Zygote.gradient(tt -> T2NN(tt,x,tn,dofs,int),t)[1]
+# T2NNx(t,x,tn,dofs,int) = Zygote.gradient(xx -> T2NN(t,xx,tn,dofs,int),x)[1]
 
-C1t(t,x,tn,dofs,int,sol) = Zygote.gradient(tt -> C1(tt,x,tn,dofs,int,sol),t)[1]
-C1x(t,x,tn,dofs,int,sol) = Zygote.gradient(xx -> C1(t,xx,tn,dofs,int,sol),x)[1]
+# C1t(t,x,tn,dofs,int,sol) = Zygote.gradient(tt -> C1(tt,x,tn,dofs,int,sol),t)[1]
+# C1x(t,x,tn,dofs,int,sol) = Zygote.gradient(xx -> C1(t,xx,tn,dofs,int,sol),x)[1]
 
-C2t(t,x,tn,dofs,int,sol) = Zygote.gradient(tt -> C2(tt,x,tn,dofs,int),t)[1]
-C2x(t,x,tn,dofs,int,sol) = Zygote.gradient(xx -> C2(t,xx,tn,dofs,int),x)[1]
+# C2t(t,x,tn,dofs,int,sol) = Zygote.gradient(tt -> C2(tt,x,tn,dofs,int),t)[1]
+# C2x(t,x,tn,dofs,int,sol) = Zygote.gradient(xx -> C2(t,xx,tn,dofs,int),x)[1]
 
 
 # ∂u∂θ_func(t,x,tn,dofs,int,sol) = Zygote.gradient(θ -> u_trial(t,x,tn,θ,int,sol), dofs)[1]
@@ -602,6 +605,7 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
     local a,b = int.problem.xspan[1],int.problem.xspan[2]
     local x_nodes = int.method.x_nodes
     local N_nodes = int.method.N_nodes
+    local PNN = int.method.basis.sol_network
 
 
     # function nlls!(du, u, int::PDEIntegrator{<:TrialNN_PDE_int})
@@ -753,14 +757,17 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
     # println("w at quadrature points: \n", C.w_quad_values[1,:,:])
 
 
+        # For layers without bias (e.g., output), just regenerate W
+    C.basis_nn_ps.L2.W[:] = x[:] 
+
     t1 = time()
 
     for d in 1:D
         for rt in 1:RT
             for rx in 1:RX
-                C.u_quad_values[d, rt, rx] = u_trial(t_quad_nodes[rt],x_quad_nodes[rx],tn,x,int,sol)
-                C.v_quad_values[d, rt, rx] = v_trial(t_quad_nodes[rt],x_quad_nodes[rx],tn,x,int,sol)
-                C.w_quad_values[d, rt, rx] = w_trial(t_quad_nodes[rt],x_quad_nodes[rx],tn,x,int,sol)
+                C.u_quad_values[d, rt, rx] = u_trial(t_quad_nodes[rt],x_quad_nodes[rx],tn,C.basis_nn_ps,int,sol)
+                C.v_quad_values[d, rt, rx] = v_trial(t_quad_nodes[rt],x_quad_nodes[rx],tn,C.basis_nn_ps,int,sol)
+                C.w_quad_values[d, rt, rx] = w_trial(t_quad_nodes[rt],x_quad_nodes[rx],tn,C.basis_nn_ps,int,sol)
             end
         end
     end
