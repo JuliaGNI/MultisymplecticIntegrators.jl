@@ -16,18 +16,18 @@ module Wave
     const D = 1
     const DX = 1
 
-    const tstep = 0.05
-    const tspan = (0.0, 5.0)
+    const tstep = 0.3
+    const tspan = (0.0, 3.0)
 
     const xstep = 0.01
-    const xspan = (0.2, 0.8)
+    const xspan = (0.0,1.0)
     const c = 0.5 # wave speed square
 
     const default_parameters = (
-        c=1.0,
-        A1 = 0.3,
+        c=0.5,
+        A1 = 0.8,
         A2 = 0.0,
-        B1 = 0.2,
+        B1 = 0.8,
         B2 = 0.0,
         l = 1.0,
     )

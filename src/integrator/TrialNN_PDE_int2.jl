@@ -64,7 +64,8 @@ struct TrialNN_intCache{ST,RT,RX,D,S,N} <: PDEIntegratorCache{ST,D}
         ∂u∂θ_quad_values = zeros(ST, D, RT, RX, S)
         ∂v∂θ_quad_values = zeros(ST, D, RT, RX, S)
         ∂w∂θ_quad_values = zeros(ST, D, RT, RX, S)
-        basis_nn_ps = (L1=(W=zeros(ST, S, 2), b=zeros(ST, S)), L2=(W=zeros(ST, 1, S),))
+
+        basis_nn_ps = (L1=(W=zeros(ST, S, 2), b=zeros(ST, S)), )
 
         new(x,
             u_quad_values, v_quad_values, w_quad_values,
@@ -92,26 +93,28 @@ end
     end::CacheType(ST, c.problem, c.method)
 end
 
-function T1NN(t, x, int)
+function T1NN_BNN(t, x, int)
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
     local a, b = int.problem.xspan[1], int.problem.xspan[2]
     local BNN = int.method.basis.basis_network
+    local BNN_ps = cache(int).basis_nn_ps
 
-    return (b - x) / x_domain * BNN([t, a])[1] +
-           (x - a) / x_domain * BNN([t, b])[1] +
-           (1 - t) * BNN([0.0, x])[1]
+    return (b - x) / x_domain * BNN([t, a],BNN_ps) +
+           (x - a) / x_domain * BNN([t, b],BNN_ps) +
+           (1 - t) * BNN([0.0, x],BNN_ps)
 end
 
-function T2NN(t, x, int)
+function T2NN_BNN(t, x, int)
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
     local a, b = int.problem.xspan[1], int.problem.xspan[2]
     local BNN = int.method.basis.basis_network
+    local BNN_ps = cache(int).basis_nn_ps
 
-    return (b - x) / x_domain * (1 - t) * BNN([0.0, a]) +
-           (x - a) / x_domain * (1 - t) * BNN([0.0, b])
+    return (b - x) / x_domain * (1 - t) * BNN([0.0, a],BNN_ps) +
+           (x - a) / x_domain * (1 - t) * BNN([0.0, b],BNN_ps)
 end
 
-function init_function(t, x, int, sol)
+function init_function_BNN(t, x, int, sol)
     local ic_fun = int.problem.ics_function
     local current_step = sol.current_step
 
@@ -122,7 +125,7 @@ function init_function(t, x, int, sol)
     end
 end
 
-function C1(t, x, int, sol)
+function C1_BNN(t, x, int, sol)
     local xspan = int.problem.xspan
     local a, b = xspan[1], xspan[2]
     local x_domain = b - a
@@ -133,7 +136,7 @@ function C1(t, x, int, sol)
            (1 - t) * init_function(t, x, int, sol)
 end
 
-function C2(t, x, int, sol)
+function C2_BNN(t, x, int, sol)
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
     local a, b = int.problem.xspan[1], int.problem.xspan[2]
     local bc_fun = int.problem.bcs_function
@@ -150,8 +153,13 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_int})
     local N_train = int.method.N_train
     local a, b = int.problem.xspan[1], int.problem.xspan[2]
     local exact_u = int.problem.exact_u
-    local BNN = int.method.basis.basis_network
     local h = timestep(int)
+    local NN_width = int.method.basis.NN_width
+
+    # Define a temporary network with same activation function and NN width
+    NN = NeuralNetwork(Chain(Dense(d, NN_width, activation_function),Dense(NN_width,1,identity,use_bias = false)))
+
+    # Prepare random training data.
     collocation_points = rand(2, N_train)
     collocation_points[2,:] = a .+ (b - a) * collocation_points[2,:]
 

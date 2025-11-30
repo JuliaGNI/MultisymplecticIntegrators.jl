@@ -29,7 +29,7 @@ nn_pde_basis = NetworkPDEBasis(u_network,:Fully)
 t_step = 0.02
 x_span = (0.5,0.6)
 nn_int = NN_PDE_Integrator(nn_pde_basis,RT = 4,RX = 4, xspan = x_span, tstep = t_step,μ =:BSplineDirichlet,λ =:BSplineDirichlet,
-                            k_μ = 4,k_λ₀_x = 4,nepochs= 1,initial_guess_method = GroundTruth(),params_turbulance = 1e-7)
+                            k_μ = 4,k_λ₀_x = 4,nepochs= 1,initial_guess_method = LSGD(),params_turbulance = 1e-7)
 lpde = MultiSymplectic.LinearTransport.lpdeproblem(tstep = t_step,tspan =(0.0,1.0),xspan = x_span)
 sol = MultiSymplectic.integrate(lpde,nn_int)
 

@@ -21,3 +21,4 @@ struct LSGD <: InitialParametersMethod end
 struct GroundTruth <: InitialParametersMethod end
 struct ELM <: InitialParametersMethod end
 struct PINN <: InitialParametersMethod end
+struct TrialOGA2D <: InitialParametersMethod end
