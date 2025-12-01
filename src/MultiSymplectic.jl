@@ -19,6 +19,7 @@ module MultiSymplectic
     using Zygote
     using Statistics
     using NonlinearSolve
+    using ForwardDiff
 
     # abstract types
     include("methods.jl")
