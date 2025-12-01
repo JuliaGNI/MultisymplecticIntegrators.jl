@@ -506,57 +506,57 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     Wsel = zeros(K, 2)
     Bsel = zeros(K)
 
-    # Build the desired internal PNN output on all quadrature nodes:
-    # desired = target + T1NN - T2NN - C1 + C2  (evaluated with current PNN.params)
-    desired = zeros(N)
-    for i in 1:N
-        t = quad_nodes[1,i]; x = quad_nodes[2,i]
-        desired[i] = exact_u(t, x) - u_trial(t, x, tn,C.basis_nn_ps,int,sol)
-    end
+    # # Build the desired internal PNN output on all quadrature nodes:
+    # # desired = target + T1NN - T2NN - C1 + C2  (evaluated with current PNN.params)
+    # desired = zeros(N)
+    # for i in 1:N
+    #     t = quad_nodes[1,i]; x = quad_nodes[2,i]
+    #     desired[i] = exact_u(t, x) - u_trial(t, x, tn,C.basis_nn_ps,int,sol)
+    # end
 
 
-    # Run OGA (orthogonal matching) on Φ_raw to approximate `desired`
-    residual = copy(desired)
+    # # Run OGA (orthogonal matching) on Φ_raw to approximate `desired`
+    # residual = copy(desired)
 
-    for k = 1:K
-        # compute correlations with residual (weighted)
-        corrs = zeros(M)
-        for i in 1:M
-            corrs[i] = abs(sum(Φ_raw[i, :] .* (residual .* quad_weights)))
-        end
-        idx = argmax(corrs)
-        push!(selected, idx)
+    # for k = 1:K
+    #     # compute correlations with residual (weighted)
+    #     corrs = zeros(M)
+    #     for i in 1:M
+    #         corrs[i] = abs(sum(Φ_raw[i, :] .* (residual .* quad_weights)))
+    #     end
+    #     idx = argmax(corrs)
+    #     push!(selected, idx)
 
-        # extract raw atom (already normalized) and orthogonalize (Gram-Schmidt)
-        φ = copy(Φ_raw[idx, :])
-        # if k > 1
-        #     for j in 1:(k-1)
-        #         φ .-= (dot(φ, B[:, j])) * B[:, j]
-        #     end
-        # end
-        # φnorm = norm(φ)
-        # if φnorm < 1e-12
-        #     println("atom collapsed at k=$k, idx=$idx; skipping")
-        #     continue
-        # end
-        # φ ./= φnorm
+    #     # extract raw atom (already normalized) and orthogonalize (Gram-Schmidt)
+    #     φ = copy(Φ_raw[idx, :])
+    #     # if k > 1
+    #     #     for j in 1:(k-1)
+    #     #         φ .-= (dot(φ, B[:, j])) * B[:, j]
+    #     #     end
+    #     # end
+    #     # φnorm = norm(φ)
+    #     # if φnorm < 1e-12
+    #     #     println("atom collapsed at k=$k, idx=$idx; skipping")
+    #     #     continue
+    #     # end
+    #     # φ ./= φnorm
 
-        # append to B
-        B = hcat(B, φ)
+    #     # append to B
+    #     B = hcat(B, φ)
 
-        # solve least-squares for coefficients in orthonormal basis
-        coeffs = B \ desired         # small system k×1 solved implicitly
-        # update residual
-        residual = desired - B * coeffs
+    #     # solve least-squares for coefficients in orthonormal basis
+    #     coeffs = B \ desired         # small system k×1 solved implicitly
+    #     # update residual
+    #     residual = desired - B * coeffs
 
-        # store selection params (note A_mat rows correspond to atoms prior to normalization,
-        # yet we normalized Φ_raw; we must store original (w,b) for a neuron consistent with A_mat)
-        Wsel[k, :] .= A_mat[idx, 1:2]
-        Bsel[k] = A_mat[idx, 3]
+    #     # store selection params (note A_mat rows correspond to atoms prior to normalization,
+    #     # yet we normalized Φ_raw; we must store original (w,b) for a neuron consistent with A_mat)
+    #     Wsel[k, :] .= A_mat[idx, 1:2]
+    #     Bsel[k] = A_mat[idx, 3]
 
-        coeffs_full[1:k] .= coeffs
-        # println("k=$k idx=$idx ‖residual‖=$(norm(residual))")
-    end
+    #     coeffs_full[1:k] .= coeffs
+    #     # println("k=$k idx=$idx ‖residual‖=$(norm(residual))")
+    # end
 
     # Write learned parameters into PNN.params safely:
     # zero-out PNN and fill first K neurons (rows 1:K)
@@ -567,36 +567,36 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     # assign W (each *row* of L1.W is a neuron's weight vector)
     # NOTE: check shape: I assume PNN.params.L1.W is (NN_width, 2)
 
-    # coeffs_full = [  1.8338047682565144,
-    # -0.9831503036292226,
-    # 1.1488301669975154,
-    # 0.20239775763143172,
-    # -2.159506067233422,
-    # -3.7744848142505725,
-    # -0.8211564469689531,
-    # 1.890129706224498,
-    # 2.424834623164859,
-    # -1.5329634886261065]           # coefficients to write into PNN L2
-    # Wsel =   [0.368125      0.929776
-    # 0.929776     -0.368125
-    # -0.957319     -0.289032
-    # -1.83697e-16  -1.0
-    # -0.653421      0.756995
-    # 0.684547      0.728969
-    # 0.368125     -0.929776
-    # -0.770513      0.637424
-    # -0.604599      0.79653
-    # 0.570714      0.821149]
-    # Bsel = [  3.141592653589793,
-    #     3.141592653589793,
-    #     3.141592653589793,
-    #     2.9112091923265417,
-    #     3.141592653589793,
-    #     -0.43982297150257105,
-    #     0.41887902047863906,
-    #     -0.1466076571675237,
-    #     -0.48171087355043496,
-    #     -0.25132741228718347]
+    coeffs_full = [  1.8338047682565144,
+    -0.9831503036292226,
+    1.1488301669975154,
+    0.20239775763143172,
+    -2.159506067233422,
+    -3.7744848142505725,
+    -0.8211564469689531,
+    1.890129706224498,
+    2.424834623164859,
+    -1.5329634886261065]           # coefficients to write into PNN L2
+    Wsel =   [0.368125      0.929776
+    0.929776     -0.368125
+    -0.957319     -0.289032
+    -1.83697e-16  -1.0
+    -0.653421      0.756995
+    0.684547      0.728969
+    0.368125     -0.929776
+    -0.770513      0.637424
+    -0.604599      0.79653
+    0.570714      0.821149]
+    Bsel = [  3.141592653589793,
+        3.141592653589793,
+        3.141592653589793,
+        2.9112091923265417,
+        3.141592653589793,
+        -0.43982297150257105,
+        0.41887902047863906,
+        -0.1466076571675237,
+        -0.48171087355043496,
+        -0.25132741228718347]
 
     for j = 1:K
         PNN.params.L1.W[j, :] .= Wsel[j, :]
@@ -789,26 +789,27 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
             end
         end
     end
-
-    # println(C.basis_nn_ps.L1.b[1:10])
-    # println("x[1:10]", x[1:10])
-    for d in 1:D
-        for i in 1:RT
-            for j in 1:RX#TODO what if RX is a Vector #t,x,tn,params,int,sol
-                # print(∂u∂θ(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],tn,C.basis_nn_ps,int,sol))
-                C.∂u∂θ_quad_values2[d, i, j, :] = ∂u∂θ(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],tn,C.basis_nn_ps,int,sol).L2.W[:]
-                C.∂v∂θ_quad_values2[d, i, j, :] = ∂v∂θ(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],tn,C.basis_nn_ps,int,sol).L2.W[:]
-                C.∂w∂θ_quad_values2[d, i, j, :] = ∂w∂θ(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],tn,C.basis_nn_ps,int,sol).L2.W[:]
-            end
-        end
-    end
-
-    @assert all(C.∂u∂θ_quad_values .≈ C.∂u∂θ_quad_values2)
-    @assert all(C.∂v∂θ_quad_values .≈ C.∂v∂θ_quad_values2)
-    @assert all(C.∂w∂θ_quad_values .≈ C.∂w∂θ_quad_values2)
-
     t2 = time()
-    println("Time for ∂u∂θ_quad_values computation: ", t2 - t1)
+    # println("Time for nn and ∂u∂θ_quad_values computation: ", t2 - t1)
+    # # println(C.basis_nn_ps.L1.b[1:10])
+    # # println("x[1:10]", x[1:10])
+    # for d in 1:D
+    #     for i in 1:RT
+    #         for j in 1:RX#TODO what if RX is a Vector #t,x,tn,params,int,sol
+    #             # print(∂u∂θ(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],tn,C.basis_nn_ps,int,sol))
+    #             C.∂u∂θ_quad_values2[d, i, j, :] = ∂u∂θ(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],tn,C.basis_nn_ps,int,sol).L2.W[:]
+    #             C.∂v∂θ_quad_values2[d, i, j, :] = ∂v∂θ(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],tn,C.basis_nn_ps,int,sol).L2.W[:]
+    #             C.∂w∂θ_quad_values2[d, i, j, :] = ∂w∂θ(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],tn,C.basis_nn_ps,int,sol).L2.W[:]
+    #         end
+    #     end
+    # end
+
+    # @assert all(C.∂u∂θ_quad_values .≈ C.∂u∂θ_quad_values2)
+    # @assert all(C.∂v∂θ_quad_values .≈ C.∂v∂θ_quad_values2)
+    # @assert all(C.∂w∂θ_quad_values .≈ C.∂w∂θ_quad_values2)
+
+    # t3 = time()
+    # println("Time for ∂u∂θ_quad_values computation: ", t3 - t2)
 
     for d in 1:D
         for rt in 1:RT
