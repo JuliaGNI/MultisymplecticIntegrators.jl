@@ -21,8 +21,8 @@ x_span = (0.0, 1.0)
 lpde = MultiSymplectic.Wave.lpdeproblem(tstep=t_step, tspan=(0.0, t_step), xspan=x_span, xstep=x_step)
 
 relu2(x) = max(0, x)^3
-# NN_width = 250
-NN_width = 10
+NN_width = 250
+# NN_width = 10
 
 trial_basis = Trial_Solution_Basis(NN_width, relu2)
 trial_int = TrialNN_PDE_int(trial_basis, xstep=x_step, xspan=x_span, initial_guess_method=TrialOGA2D(), RT=4, RX=12)

@@ -67,7 +67,9 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP,N} <: PDEIntegratorCache{ST,D}
     NP = number of parameters in the expression
     """
     x::Vector{ST}
-
+    W1::Array{ST}
+    bias1::Vector{ST}
+    
     nn_quad_values::Array{ST}
     nnt_quad_values::Array{ST}
     nnx_quad_values::Array{ST}
@@ -115,7 +117,7 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP,N} <: PDEIntegratorCache{ST,D}
     ∂v∂θ_quad_values2::Array{ST}
     ∂w∂θ_quad_values2::Array{ST}
     
-    basis_nn_ps
+    # basis_nn_ps
     
     ics_t₀_quad_values::Matrix{ST}
     ics_t₀_nodes_values::Matrix{ST}
@@ -149,6 +151,8 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP,N} <: PDEIntegratorCache{ST,D}
     nn_t₀_nodes_values::Array{ST}
     function TrialNN_PDE_intCache{ST,RT,RX,D,NP,N}() where {ST,RT,RX,D,NP,N}
         x = zeros(ST, NP) # in ELM, x is just the output layer parameters
+        W1 = zeros(ST, NP, D)
+        bias1 = zeros(ST, NP)
 
         nn_quad_values = zeros(ST, D, RT, RX,NP)
         nnt_quad_values = zeros(ST, D, RT, RX, NP)
@@ -197,8 +201,8 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP,N} <: PDEIntegratorCache{ST,D}
         ∂v∂θ_quad_values2 = zeros(ST, D, RT, RX, NP)
         ∂w∂θ_quad_values2 = zeros(ST, D, RT, RX, NP)
 
-        basis_nn_ps = (L1=(W=zeros(ST, NP, 2), b=zeros(ST, NP)), 
-        L2=(W=zeros(ST, 1, NP),))
+        # basis_nn_ps = (L1=(W=zeros(ST, NP, 2), b=zeros(ST, NP)), 
+        # L2=(W=zeros(ST, 1, NP),))
         # L2=(W=zeros(ST, 100, 100),b=zeros(ST, 100)), 
         # L3=(W=zeros(ST, 100, 100),b=zeros(ST, 100)),
         # L4=(W=zeros(ST, NP, 100),b=zeros(ST, NP)),)
@@ -234,7 +238,7 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP,N} <: PDEIntegratorCache{ST,D}
         nn_t₁_nodes_values = zeros(ST, D, N, NP)
         nn_t₀_nodes_values = zeros(ST, D, N, NP)
 
-        new(x,
+        new(x,W1,bias1,
             nn_quad_values,nnt_quad_values,nnx_quad_values,
             nn_t₀_quad_values,nn_t₁_quad_values,
             nn_x₀_quad_values,nn_x₁_quad_values,
@@ -252,7 +256,7 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP,N} <: PDEIntegratorCache{ST,D}
             ∂L∂U_quad_values,∂L∂V_quad_values,∂L∂W_quad_values,
             ∂u∂θ_quad_values,∂v∂θ_quad_values,∂w∂θ_quad_values,
             ∂u∂θ_quad_values2,∂v∂θ_quad_values2,∂w∂θ_quad_values2,
-            basis_nn_ps,
+            # basis_nn_ps,
             ics_t₀_quad_values,ics_t₀_nodes_values,
             bcs_x₀_quad_values,bcs_x₁_quad_values,
             bcs_t₀x₀,bcs_t₀x₁,bcs_t₁x₀,bcs_t₁x₁,
@@ -286,55 +290,77 @@ end
 end
 
 
-function T1NN(t, x, tn, params,int)
-    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
-    local h = timestep(int)
-    local a,b = int.problem.xspan[1],int.problem.xspan[2]
-    local PNN = int.method.basis.sol_network
+# function T1NN(t, x, tn, params,int)
+#     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+#     local h = timestep(int)
+#     local a,b = int.problem.xspan[1],int.problem.xspan[2]
+#     local PNN = int.method.basis.sol_network
 
-    return (b - x) / x_domain * PNN([t, a], params)[1] +
-           (x - a) / x_domain * PNN([t, b], params)[1] +
-           (h - h * t) / h * PNN([0.0, x], params)[1]
+#     return (b - x) / x_domain * PNN([t, a], params)[1] +
+#            (x - a) / x_domain * PNN([t, b], params)[1] +
+#            (h - h * t) / h * PNN([0.0, x], params)[1]
+# end
+
+# function T2NN(t, x, tn, params,int)
+#     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+#     local h = timestep(int)
+#     local a,b = int.problem.xspan[1],int.problem.xspan[2]
+#     local PNN = int.method.basis.sol_network
+
+#     return (b - x) / x_domain * (h - h * t) / h * PNN([0.0, a], params)[1] +
+#            (x - a) / x_domain * (h - h * t) / h * PNN([0.0, b], params)[1]
+# end
+
+
+function nn(t,x,W2,W1,bias1,int)
+    local activation = int.method.basis.activation_function
+    return sum( W2[i] * activation( W1[i,1]*t + W1[i,2]*x + bias1[i] ) for i in eachindex(W2) )
 end
 
-function T2NN(t, x, tn, params,int)
-    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
-    local h = timestep(int)
+function T1NN_manual(t, x, W2,W1,bias1,int)
     local a,b = int.problem.xspan[1],int.problem.xspan[2]
-    local PNN = int.method.basis.sol_network
+    local h = timestep(int)
+    local x_domain = b-a
 
-    return (b - x) / x_domain * (h - h * t) / h * PNN([0.0, a], params)[1] +
-           (x - a) / x_domain * (h - h * t) / h * PNN([0.0, b], params)[1]
+    return (b - x) / x_domain * nn(t, a, W2,W1,bias1,int) +
+           (x - a) / x_domain * nn(t, b, W2,W1,bias1,int) +
+           (h - h * t) / h * nn(0.0, x, W2,W1,bias1,int)
 end
 
-function C1(t, x, tn, params,int,sol)
+function T2NN_manual(t, x, W2,W1,bias1,int)
+    local a,b = int.problem.xspan[1],int.problem.xspan[2]
+    local h = timestep(int)
+    local x_domain = b-a
+
+    return (b - x) / x_domain * (h - h * t) / h * nn(0.0, a, W2,W1,bias1,int) +
+           (x - a) / x_domain * (h - h * t) / h * nn(0.0, b, W2,W1,bias1,int)
+end
+
+
+function C1(t, x, tn,int, sol)
     local xspan = int.problem.xspan
     local a,b = xspan[1],xspan[2]
     local x_domain = b-a
 
     local h = timestep(int)
-    local PNN = int.method.basis.sol_network
+    # local PNN = int.method.basis.sol_network
     local current_step = sol.current_step
     local bc_fun = int.problem.bcs_function
     local ic_fun = int.problem.ics_function
 
-    local previous_params = sol.internal.previous_params
-
+    # local previous_params = sol.internal.previous_params
     # if current_step == 1
-    #     return (b - x) / x_domain * bc_fun(t, xspan).bc₀.u +
-    #         (x - a) / x_domain * bc_fun(t, xspan).bc₁.u +
-    #         (h - h*t) / h * ic_fun(x).u
+        return (b - x) / x_domain * bc_fun(t, xspan).bc₀.u +
+            (x - a) / x_domain * bc_fun(t, xspan).bc₁.u +
+            (h - h*t) / h * ic_fun(x).u
     # else
     #     return (b - x) / x_domain * bc_fun(t, xspan).bc₀.u +
     #         (x - a) / x_domain * bc_fun(t, xspan).bc₁.u +
     #         (h - h*t) / h * PNN([1.0,x],previous_params)[1]
     # end
-    return (b - x) * bc_fun(t, xspan).bc₀.u / x_domain +
-        (x - a) * bc_fun(t, xspan).bc₁.u / x_domain +
-        (h - h * t) * ic_fun(x).u / h
 end
 
-function C2(t, x, tn, params,int)
+function C2(t, x, tn,int,sol)
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
     local a,b = int.problem.xspan[1],int.problem.xspan[2]
     local h = timestep(int)
@@ -345,24 +371,29 @@ function C2(t, x, tn, params,int)
         (x - a)  * (h - h*t) * bc_fun(tn, xspan).bc₁.u / x_domain / h
 end
 
-
+function u_trial(t, x, W2,W1,bias1,int,sol)
+    local current_step = sol.current_step
+    local h = timestep(int)
+    local tn = (current_step-1)*h
+    nn(t,x,W2,W1,bias1,int) - T1NN_manual(t, x, W2,W1,bias1,int) + T2NN_manual(t, x, W2,W1,bias1,int) + C1(t, x, tn,int, sol) - C2(t, x, tn, int, sol)
+end
 
 # u_trial(t,x,tn,params,int) = PNN([t,x],params)[1] - T1NN(t,x,tn,params,int) + T2NN(t,x,tn,params,int) + C1(t,x,tn,params,int) - C2(t,x,tn,params)
 
-function u_trial(t,x,tn,params,int,sol)
-    local PNN = int.method.basis.sol_network
-    PNN([t,x],params)[1] - T1NN(t,x,tn,params,int) + T2NN(t,x,tn,params,int) + C1(t,x,tn,params,int,sol) - C2(t,x,tn,params,int)
-end
+# function u_trial(t,x,tn,params,int,sol)
+#     local PNN = int.method.basis.sol_network
+#     PNN([t,x],params)[1] - T1NN(t,x,tn,params,int) + T2NN(t,x,tn,params,int) + C1(t,x,tn,params,int,sol) - C2(t,x,tn,params,int)
+# end
 
-v_trial(t,x,tn,params,int,sol) = Zygote.gradient(tt -> u_trial(tt,x,tn,params,int,sol),t)[1]
-w_trial(t,x,tn,params,int,sol) = Zygote.gradient(xx -> u_trial(t,xx,tn,params,int,sol),x)[1]
+v_trial(t, x, W2,W1,bias1,int,sol) = ForwardDiff.derivative(tt -> u_trial(tt,x,W2,W1,bias1,int,sol),t)[1]
+w_trial(t, x, W2,W1,bias1,int,sol) = ForwardDiff.derivative(xx -> u_trial(t,xx,W2,W1,bias1,int,sol),x)[1]
 
-BNNt(t,x,BNN) = Zygote.jacobian(tt -> BNN([tt,x], BNN.params), t)[1]
-BNNx(t,x,BNN) = Zygote.jacobian(xx -> BNN([t,xx], BNN.params), x)[1]
+# BNNt(t,x,BNN) = Zygote.jacobian(tt -> BNN([tt,x], BNN.params), t)[1]
+# BNNx(t,x,BNN) = Zygote.jacobian(xx -> BNN([t,xx], BNN.params), x)[1]
 
-∂u∂θ(t,x,tn,params,int,sol) = Zygote.gradient(p -> u_trial(t,x,tn,p,int,sol),params)[1]
-∂v∂θ(t,x,tn,params,int,sol) = Zygote.gradient(p -> v_trial(t,x,tn,p,int,sol),params)[1]
-∂w∂θ(t,x,tn,params,int,sol) = Zygote.gradient(p -> w_trial(t,x,tn,p,int,sol),params)[1]
+∂u∂W2(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> u_trial(t,x,p,W1,bias1,int,sol),W2)
+∂v∂W2(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> v_trial(t,x,p,W1,bias1,int,sol),W2)
+∂w∂W2(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> w_trial(t,x,p,W1,bias1,int,sol),W2)
 
 
 function mse_loss(params, tx_in, u_trial,int,sol)
@@ -463,7 +494,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     local K = int.method.basis.NP   
     local a,b = int.problem.xspan[1],int.problem.xspan[2]
     local exact_u = int.problem.exact_u
-    local PNN = int.method.basis.sol_network
+    # local PNN = int.method.basis.sol_network
     # Equidistant Quadrature / sampling grid
     nx = 40
     nt = 20
@@ -506,57 +537,57 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     Wsel = zeros(K, 2)
     Bsel = zeros(K)
 
-    # # Build the desired internal PNN output on all quadrature nodes:
-    # # desired = target + T1NN - T2NN - C1 + C2  (evaluated with current PNN.params)
-    # desired = zeros(N)
-    # for i in 1:N
-    #     t = quad_nodes[1,i]; x = quad_nodes[2,i]
-    #     desired[i] = exact_u(t, x) - u_trial(t, x, tn,C.basis_nn_ps,int,sol)
-    # end
+    # Build the desired internal PNN output on all quadrature nodes:
+    # desired = target + T1NN - T2NN - C1 + C2  (evaluated with current PNN.params)
+    desired = zeros(N)
+    for i in 1:N
+        t = quad_nodes[1,i]; x = quad_nodes[2,i]
+        desired[i] = exact_u(t, x) - u_trial(t, x, coeffs_full,Wsel,Bsel,int,sol)
+    end
 
 
-    # # Run OGA (orthogonal matching) on Φ_raw to approximate `desired`
-    # residual = copy(desired)
+    # Run OGA (orthogonal matching) on Φ_raw to approximate `desired`
+    residual = copy(desired)
 
-    # for k = 1:K
-    #     # compute correlations with residual (weighted)
-    #     corrs = zeros(M)
-    #     for i in 1:M
-    #         corrs[i] = abs(sum(Φ_raw[i, :] .* (residual .* quad_weights)))
-    #     end
-    #     idx = argmax(corrs)
-    #     push!(selected, idx)
+    for k = 1:K
+        # compute correlations with residual (weighted)
+        corrs = zeros(M)
+        for i in 1:M
+            corrs[i] = abs(sum(Φ_raw[i, :] .* (residual .* quad_weights)))
+        end
+        idx = argmax(corrs)
+        push!(selected, idx)
 
-    #     # extract raw atom (already normalized) and orthogonalize (Gram-Schmidt)
-    #     φ = copy(Φ_raw[idx, :])
-    #     # if k > 1
-    #     #     for j in 1:(k-1)
-    #     #         φ .-= (dot(φ, B[:, j])) * B[:, j]
-    #     #     end
-    #     # end
-    #     # φnorm = norm(φ)
-    #     # if φnorm < 1e-12
-    #     #     println("atom collapsed at k=$k, idx=$idx; skipping")
-    #     #     continue
-    #     # end
-    #     # φ ./= φnorm
+        # extract raw atom (already normalized) and orthogonalize (Gram-Schmidt)
+        φ = copy(Φ_raw[idx, :])
+        # if k > 1
+        #     for j in 1:(k-1)
+        #         φ .-= (dot(φ, B[:, j])) * B[:, j]
+        #     end
+        # end
+        # φnorm = norm(φ)
+        # if φnorm < 1e-12
+        #     println("atom collapsed at k=$k, idx=$idx; skipping")
+        #     continue
+        # end
+        # φ ./= φnorm
 
-    #     # append to B
-    #     B = hcat(B, φ)
+        # append to B
+        B = hcat(B, φ)
 
-    #     # solve least-squares for coefficients in orthonormal basis
-    #     coeffs = B \ desired         # small system k×1 solved implicitly
-    #     # update residual
-    #     residual = desired - B * coeffs
+        # solve least-squares for coefficients in orthonormal basis
+        coeffs = B \ desired         # small system k×1 solved implicitly
+        # update residual
+        residual = desired - B * coeffs
 
-    #     # store selection params (note A_mat rows correspond to atoms prior to normalization,
-    #     # yet we normalized Φ_raw; we must store original (w,b) for a neuron consistent with A_mat)
-    #     Wsel[k, :] .= A_mat[idx, 1:2]
-    #     Bsel[k] = A_mat[idx, 3]
+        # store selection params (note A_mat rows correspond to atoms prior to normalization,
+        # yet we normalized Φ_raw; we must store original (w,b) for a neuron consistent with A_mat)
+        Wsel[k, :] .= A_mat[idx, 1:2]
+        Bsel[k] = A_mat[idx, 3]
 
-    #     coeffs_full[1:k] .= coeffs
-    #     # println("k=$k idx=$idx ‖residual‖=$(norm(residual))")
-    # end
+        coeffs_full[1:k] .= coeffs
+        # println("k=$k idx=$idx ‖residual‖=$(norm(residual))")
+    end
 
     # Write learned parameters into PNN.params safely:
     # zero-out PNN and fill first K neurons (rows 1:K)
@@ -567,56 +598,50 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     # assign W (each *row* of L1.W is a neuron's weight vector)
     # NOTE: check shape: I assume PNN.params.L1.W is (NN_width, 2)
 
-    coeffs_full = [  1.8338047682565144,
-    -0.9831503036292226,
-    1.1488301669975154,
-    0.20239775763143172,
-    -2.159506067233422,
-    -3.7744848142505725,
-    -0.8211564469689531,
-    1.890129706224498,
-    2.424834623164859,
-    -1.5329634886261065]           # coefficients to write into PNN L2
-    Wsel =   [0.368125      0.929776
-    0.929776     -0.368125
-    -0.957319     -0.289032
-    -1.83697e-16  -1.0
-    -0.653421      0.756995
-    0.684547      0.728969
-    0.368125     -0.929776
-    -0.770513      0.637424
-    -0.604599      0.79653
-    0.570714      0.821149]
-    Bsel = [  3.141592653589793,
-        3.141592653589793,
-        3.141592653589793,
-        2.9112091923265417,
-        3.141592653589793,
-        -0.43982297150257105,
-        0.41887902047863906,
-        -0.1466076571675237,
-        -0.48171087355043496,
-        -0.25132741228718347]
+    # coeffs_full = [  1.8338047682565144,
+    # -0.9831503036292226,
+    # 1.1488301669975154,
+    # 0.20239775763143172,
+    # -2.159506067233422,
+    # -3.7744848142505725,
+    # -0.8211564469689531,
+    # 1.890129706224498,
+    # 2.424834623164859,
+    # -1.5329634886261065]           # coefficients to write into PNN L2
+    # Wsel =   [0.368125      0.929776
+    # 0.929776     -0.368125
+    # -0.957319     -0.289032
+    # -1.83697e-16  -1.0
+    # -0.653421      0.756995
+    # 0.684547      0.728969
+    # 0.368125     -0.929776
+    # -0.770513      0.637424
+    # -0.604599      0.79653
+    # 0.570714      0.821149]
+    # Bsel = [  3.141592653589793,
+    #     3.141592653589793,
+    #     3.141592653589793,
+    #     2.9112091923265417,
+    #     3.141592653589793,
+    #     -0.43982297150257105,
+    #     0.41887902047863906,
+    #     -0.1466076571675237,
+    #     -0.48171087355043496,
+    #     -0.25132741228718347]
 
     for j = 1:K
-        PNN.params.L1.W[j, :] .= Wsel[j, :]
-        PNN.params.L1.b[j] = Bsel[j]
-        PNN.params.L2.W[1,j] = coeffs_full[j]
-
-        C.basis_nn_ps.L1.W[j, :] .= Wsel[j, :]
-        C.basis_nn_ps.L1.b[j] = Bsel[j]
-        C.basis_nn_ps.L2.W[1, j] = coeffs_full[j]
-
+        C.W1[j, :] .= Wsel[j, :]
+        C.bias1[j] = Bsel[j]
         C.x[j] = coeffs_full[j]
     end
 
     target_vec = [exact_u(quad_nodes[1,i], quad_nodes[2,i]) for i in 1:N ]
-    approx_vec = [u_trial(quad_nodes[1,i], quad_nodes[2,i], tn,C.basis_nn_ps,int,sol)  for i in 1:N ]
+    approx_vec = [u_trial(quad_nodes[1,i], quad_nodes[2,i], C.x,C.W1,C.bias1,int,sol)  for i in 1:N ]
     err_vec = abs.(target_vec .- approx_vec)
     println("Max abs error after OGA initial guess: ", maximum(err_vec))
 
     println("OGA initial guess completed.")
-    @show C.basis_nn_ps.L2.W[1:10]
+    # @show C.basis_nn_ps.L2.W[1:10]
 
     # After updating params, we can continue outer loop to re-evaluate boundary terms if desired.
     # return selected,Wsel,Bsel,coeffs_full
@@ -696,127 +721,130 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
     local xspan = int.problem.xspan
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
     local C = cache(int,ST)
-    local h = timestep(int)
-    local current_step = sol.current_step
-    local tn = (current_step - 1) * h
-    local a,b = int.problem.xspan[1],int.problem.xspan[2]
-    local x_nodes = int.method.x_nodes
-    local N_nodes = int.method.N_nodes
-    local PNN = int.method.basis.sol_network
-    local BNN = int.method.basis.basis_network
+    # local h = timestep(int)
+    # local current_step = sol.current_step
+    # local tn = (current_step - 1) * h
+    # local a,b = int.problem.xspan[1],int.problem.xspan[2]
+    # local x_nodes = int.method.x_nodes
+    # local N_nodes = int.method.N_nodes
+    # local PNN = int.method.basis.sol_network
+    # local BNN = int.method.basis.basis_network
 
-    C.basis_nn_ps.L1.W[:] = PNN.params.L1.W[:]
-    C.basis_nn_ps.L1.b[:] = PNN.params.L1.b[:]
-    BNN.params.L1.W[:] = PNN.params.L1.W[:]
-    BNN.params.L1.b[:] = PNN.params.L1.b[:]
+    local W1 = cache(int).W1
+    local bias1 = cache(int).bias1
 
-    C.basis_nn_ps.L2.W[:] = x[:] 
+    # C.basis_nn_ps.L1.W[:] = PNN.params.L1.W[:]
+    # C.basis_nn_ps.L1.b[:] = PNN.params.L1.b[:]
+    # BNN.params.L1.W[:] = PNN.params.L1.W[:]
+    # BNN.params.L1.b[:] = PNN.params.L1.b[:]
+
+    # C.basis_nn_ps.L2.W[:] = x[:] 
     
-    t1 = time()
-    for d in 1:D
-        for rt in 1:RT
-            for rx in 1:RX
-                C.nn_quad_values[d,rt,rx,:] = BNN([t_quad_nodes[rt], x_quad_nodes[rx]], BNN.params)
-                #TODO:check if this is correct with cache parameters
-                C.nnt_quad_values[d,rt,rx,:] = BNNt(t_quad_nodes[rt], x_quad_nodes[rx], BNN)
-                C.nnx_quad_values[d,rt,rx,:] = BNNx(t_quad_nodes[rt], x_quad_nodes[rx], BNN)
-            end
-        end
-        for rx in 1:RX
-            C.nn_t₁_quad_values[d,rx,:] = BNN([1.0, x_quad_nodes[rx]], BNN.params)
-            C.nn_t₀_quad_values[d,rx,:] = BNN([0.0, x_quad_nodes[rx]], BNN.params)
+    # t1 = time()
+    # for d in 1:D
+    #     for rt in 1:RT
+    #         for rx in 1:RX
+    #             C.nn_quad_values[d,rt,rx,:] = BNN([t_quad_nodes[rt], x_quad_nodes[rx]], BNN.params)
+    #             #TODO:check if this is correct with cache parameters
+    #             C.nnt_quad_values[d,rt,rx,:] = BNNt(t_quad_nodes[rt], x_quad_nodes[rx], BNN)
+    #             C.nnx_quad_values[d,rt,rx,:] = BNNx(t_quad_nodes[rt], x_quad_nodes[rx], BNN)
+    #         end
+    #     end
+    #     for rx in 1:RX
+    #         C.nn_t₁_quad_values[d,rx,:] = BNN([1.0, x_quad_nodes[rx]], BNN.params)
+    #         C.nn_t₀_quad_values[d,rx,:] = BNN([0.0, x_quad_nodes[rx]], BNN.params)
 
-            C.nnt_t₁_quad_values[d,rx,:] = BNNt(1.0, x_quad_nodes[rx], BNN)
-            C.nnt_t₀_quad_values[d,rx,:] = BNNt(0.0, x_quad_nodes[rx], BNN)
+    #         C.nnt_t₁_quad_values[d,rx,:] = BNNt(1.0, x_quad_nodes[rx], BNN)
+    #         C.nnt_t₀_quad_values[d,rx,:] = BNNt(0.0, x_quad_nodes[rx], BNN)
 
-            C.nnx_t₁_quad_values[d,rx,:] = BNNx(1.0, x_quad_nodes[rx], BNN)
-            C.nnx_t₀_quad_values[d,rx,:] = BNNx(0.0, x_quad_nodes[rx], BNN)
-        end
+    #         C.nnx_t₁_quad_values[d,rx,:] = BNNx(1.0, x_quad_nodes[rx], BNN)
+    #         C.nnx_t₀_quad_values[d,rx,:] = BNNx(0.0, x_quad_nodes[rx], BNN)
+    #     end
 
 
-        for rt in 1:RT
-            C.nn_x₀_quad_values[d,rt,:] = BNN([t_quad_nodes[rt], a], BNN.params)
-            C.nn_x₁_quad_values[d,rt,:] = BNN([t_quad_nodes[rt], b], BNN.params)
-            C.nnt_x₀_quad_values[d,rt,:] = BNNt(t_quad_nodes[rt], a, BNN)
-            C.nnt_x₁_quad_values[d,rt,:] = BNNt(t_quad_nodes[rt], b, BNN)
-            C.nnx_x₀_quad_values[d,rt,:] = BNNx(t_quad_nodes[rt], a, BNN)
-            C.nnx_x₁_quad_values[d,rt,:] = BNNx(t_quad_nodes[rt], b, BNN)
-        end
+    #     for rt in 1:RT
+    #         C.nn_x₀_quad_values[d,rt,:] = BNN([t_quad_nodes[rt], a], BNN.params)
+    #         C.nn_x₁_quad_values[d,rt,:] = BNN([t_quad_nodes[rt], b], BNN.params)
+    #         C.nnt_x₀_quad_values[d,rt,:] = BNNt(t_quad_nodes[rt], a, BNN)
+    #         C.nnt_x₁_quad_values[d,rt,:] = BNNt(t_quad_nodes[rt], b, BNN)
+    #         C.nnx_x₀_quad_values[d,rt,:] = BNNx(t_quad_nodes[rt], a, BNN)
+    #         C.nnx_x₁_quad_values[d,rt,:] = BNNx(t_quad_nodes[rt], b, BNN)
+    #     end
 
-        C.nn_t₀x₀[d,:] = BNN([0.0, a], BNN.params)
-        C.nn_t₀x₁[d,:] = BNN([0.0, b], BNN.params)
-        C.nn_t₁x₀[d,:] = BNN([1.0, a], BNN.params)
-        C.nn_t₁x₁[d,:] = BNN([1.0, b], BNN.params)
+    #     C.nn_t₀x₀[d,:] = BNN([0.0, a], BNN.params)
+    #     C.nn_t₀x₁[d,:] = BNN([0.0, b], BNN.params)
+    #     C.nn_t₁x₀[d,:] = BNN([1.0, a], BNN.params)
+    #     C.nn_t₁x₁[d,:] = BNN([1.0, b], BNN.params)
 
-        C.nnt_t₀x₀[d,:] = BNNt(0.0, a, BNN)
-        C.nnt_t₀x₁[d,:] = BNNt(0.0, b, BNN)
-        C.nnt_t₁x₀[d,:] = BNNt(1.0, a, BNN)
-        C.nnt_t₁x₁[d,:] = BNNt(1.0, b, BNN)
+    #     C.nnt_t₀x₀[d,:] = BNNt(0.0, a, BNN)
+    #     C.nnt_t₀x₁[d,:] = BNNt(0.0, b, BNN)
+    #     C.nnt_t₁x₀[d,:] = BNNt(1.0, a, BNN)
+    #     C.nnt_t₁x₁[d,:] = BNNt(1.0, b, BNN)
 
-        C.nnx_t₀x₀[d,:] = BNNx(0.0, a, BNN)
-        C.nnx_t₀x₁[d,:] = BNNx(0.0, b, BNN)
-        C.nnx_t₁x₀[d,:] = BNNx(1.0, a, BNN)
-        C.nnx_t₁x₁[d,:] = BNNx(1.0, b, BNN)
+    #     C.nnx_t₀x₀[d,:] = BNNx(0.0, a, BNN)
+    #     C.nnx_t₀x₁[d,:] = BNNx(0.0, b, BNN)
+    #     C.nnx_t₁x₀[d,:] = BNNx(1.0, a, BNN)
+    #     C.nnx_t₁x₁[d,:] = BNNx(1.0, b, BNN)
 
-        for i in 1:N_nodes
-            C.nn_t₁_nodes_values[d,i,:] = BNN([1.0, x_nodes[i]], BNN.params)
-        end
+    #     for i in 1:N_nodes
+    #         C.nn_t₁_nodes_values[d,i,:] = BNN([1.0, x_nodes[i]], BNN.params)
+    #     end
 
-    end
+    # end
 
-    for d in 1:D
-        for rt in 1:RT
-            for rx in 1:RX
-                C.∂u∂θ_quad_values[d,rt,rx,:] = C.nn_quad_values[d,rt,rx,:]- 
-                    (x_quad_nodes[RX+1-rx] * C.nn_x₀_quad_values[d,rt,:] + 
-                    x_quad_nodes[rx]*C.nn_x₁_quad_values[d,rt,:] +  
-                    t_quad_nodes[RT-rt+1] * C.nn_t₀_quad_values[d,rx,:])+
-                    (x_quad_nodes[RX+1-rx] * t_quad_nodes[RT-rt+1] * C.nn_t₀x₀[d,:] + x_quad_nodes[rx] * t_quad_nodes[RT-rt+1] * C.nn_t₀x₁[d,:])
+    # for d in 1:D
+    #     for rt in 1:RT
+    #         for rx in 1:RX
+    #             C.∂u∂θ_quad_values[d,rt,rx,:] = C.nn_quad_values[d,rt,rx,:]- 
+    #                 (x_quad_nodes[RX+1-rx] * C.nn_x₀_quad_values[d,rt,:] + 
+    #                 x_quad_nodes[rx]*C.nn_x₁_quad_values[d,rt,:] +  
+    #                 t_quad_nodes[RT-rt+1] * C.nn_t₀_quad_values[d,rx,:])+
+    #                 (x_quad_nodes[RX+1-rx] * t_quad_nodes[RT-rt+1] * C.nn_t₀x₀[d,:] + x_quad_nodes[rx] * t_quad_nodes[RT-rt+1] * C.nn_t₀x₁[d,:])
                 
-                C.∂v∂θ_quad_values[d,rt,rx,:] = C.nnt_quad_values[d,rt,rx,:]-
-                    (x_quad_nodes[RX+1-rx] * C.nnt_x₀_quad_values[d,rt,:] + 
-                    x_quad_nodes[rx]*C.nnt_x₁_quad_values[d,rt,:] + 
-                    t_quad_nodes[RT-rt+1] * C.nnt_t₀_quad_values[d,rx,:] - C.nn_t₀_quad_values[d,rx,:])+
-                    (x_quad_nodes[RX+1-rx] * (t_quad_nodes[RT-rt+1] * C.nnt_t₀x₀[d,:] - C.nn_t₀x₀[d,:]) + 
-                     x_quad_nodes[rx] * (t_quad_nodes[RT-rt+1] * C.nnt_t₀x₁[d,:]-C.nn_t₀x₁[d,:]))
+    #             C.∂v∂θ_quad_values[d,rt,rx,:] = C.nnt_quad_values[d,rt,rx,:]-
+    #                 (x_quad_nodes[RX+1-rx] * C.nnt_x₀_quad_values[d,rt,:] + 
+    #                 x_quad_nodes[rx]*C.nnt_x₁_quad_values[d,rt,:] + 
+    #                 t_quad_nodes[RT-rt+1] * C.nnt_t₀_quad_values[d,rx,:] - C.nn_t₀_quad_values[d,rx,:])+
+    #                 (x_quad_nodes[RX+1-rx] * (t_quad_nodes[RT-rt+1] * C.nnt_t₀x₀[d,:] - C.nn_t₀x₀[d,:]) + 
+    #                  x_quad_nodes[rx] * (t_quad_nodes[RT-rt+1] * C.nnt_t₀x₁[d,:]-C.nn_t₀x₁[d,:]))
 
-                C.∂w∂θ_quad_values[d,rt,rx,:] = C.nnx_quad_values[d,rt,rx,:]-
-                    (x_quad_nodes[RX+1-rx] * C.nnx_x₀_quad_values[d,rt,:] - 1/x_domain * C.nn_x₀_quad_values[d,rt,:] + 
-                    1/x_domain * C.nn_x₁_quad_values[d,rt,:] + x_quad_nodes[rx]*C.nnx_x₁_quad_values[d,rt,:] + 
-                    (t_quad_nodes[RT-rt+1] * C.nnx_t₀_quad_values[d,rx,:]))+
-                    (t_quad_nodes[RT-rt+1] * (x_quad_nodes[RX+1-rx] *  C.nnx_t₀x₀[d,:] - 1/x_domain * C.nn_t₀x₀[d,:]) + 
-                    t_quad_nodes[RT-rt+1] * (x_quad_nodes[rx] *  C.nnx_t₀x₁[d,:] + 1/x_domain * C.nn_t₀x₁[d,:]))
-            end
-        end
-    end
+    #             C.∂w∂θ_quad_values[d,rt,rx,:] = C.nnx_quad_values[d,rt,rx,:]-
+    #                 (x_quad_nodes[RX+1-rx] * C.nnx_x₀_quad_values[d,rt,:] - 1/x_domain * C.nn_x₀_quad_values[d,rt,:] + 
+    #                 1/x_domain * C.nn_x₁_quad_values[d,rt,:] + x_quad_nodes[rx]*C.nnx_x₁_quad_values[d,rt,:] + 
+    #                 (t_quad_nodes[RT-rt+1] * C.nnx_t₀_quad_values[d,rx,:]))+
+    #                 (t_quad_nodes[RT-rt+1] * (x_quad_nodes[RX+1-rx] *  C.nnx_t₀x₀[d,:] - 1/x_domain * C.nn_t₀x₀[d,:]) + 
+    #                 t_quad_nodes[RT-rt+1] * (x_quad_nodes[rx] *  C.nnx_t₀x₁[d,:] + 1/x_domain * C.nn_t₀x₁[d,:]))
+    #         end
+    #     end
+    # end
     t2 = time()
     # println("Time for nn and ∂u∂θ_quad_values computation: ", t2 - t1)
     # # println(C.basis_nn_ps.L1.b[1:10])
     # # println("x[1:10]", x[1:10])
-    # for d in 1:D
-    #     for i in 1:RT
-    #         for j in 1:RX#TODO what if RX is a Vector #t,x,tn,params,int,sol
-    #             # print(∂u∂θ(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],tn,C.basis_nn_ps,int,sol))
-    #             C.∂u∂θ_quad_values2[d, i, j, :] = ∂u∂θ(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],tn,C.basis_nn_ps,int,sol).L2.W[:]
-    #             C.∂v∂θ_quad_values2[d, i, j, :] = ∂v∂θ(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],tn,C.basis_nn_ps,int,sol).L2.W[:]
-    #             C.∂w∂θ_quad_values2[d, i, j, :] = ∂w∂θ(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],tn,C.basis_nn_ps,int,sol).L2.W[:]
-    #         end
-    #     end
-    # end
+    for d in 1:D
+        for i in 1:RT
+            for j in 1:RX#TODO what if RX is a Vector #t,x,tn,params,int,sol
+                # print(∂u∂θ(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],tn,C.basis_nn_ps,int,sol))
+                C.∂u∂θ_quad_values[d, i, j, :] = ∂u∂W2(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],x,W1,bias1,int,sol)
+                C.∂v∂θ_quad_values[d, i, j, :] = ∂v∂W2(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],x,W1,bias1,int,sol)
+                C.∂w∂θ_quad_values[d, i, j, :] = ∂w∂W2(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],x,W1,bias1,int,sol)
+            end
+        end
+    end
 
     # @assert all(C.∂u∂θ_quad_values .≈ C.∂u∂θ_quad_values2)
     # @assert all(C.∂v∂θ_quad_values .≈ C.∂v∂θ_quad_values2)
     # @assert all(C.∂w∂θ_quad_values .≈ C.∂w∂θ_quad_values2)
 
-    # t3 = time()
-    # println("Time for ∂u∂θ_quad_values computation: ", t3 - t2)
+    t3 = time()
+    println("Time for ∂u∂θ_quad_values computation: ", t3 - t2)
 
     for d in 1:D
         for rt in 1:RT
             for rx in 1:RX
-                C.u_quad_values[d, rt, rx] = u_trial(t_quad_nodes[rt],x_quad_nodes[rx],tn,C.basis_nn_ps,int,sol)
-                C.v_quad_values[d, rt, rx] = v_trial(t_quad_nodes[rt],x_quad_nodes[rx],tn,C.basis_nn_ps,int,sol)
-                C.w_quad_values[d, rt, rx] = w_trial(t_quad_nodes[rt],x_quad_nodes[rx],tn,C.basis_nn_ps,int,sol)
+                C.u_quad_values[d, rt, rx] = u_trial(t_quad_nodes[rt],x_quad_nodes[rx],x,W1,bias1,int,sol)
+                C.v_quad_values[d, rt, rx] = v_trial(t_quad_nodes[rt],x_quad_nodes[rx],x,W1,bias1,int,sol)
+                C.w_quad_values[d, rt, rx] = w_trial(t_quad_nodes[rt],x_quad_nodes[rx],x,W1,bias1,int,sol)
             end
         end
     end
@@ -942,16 +970,20 @@ function update!(sol_struct, int::PDEIntegrator{<:TrialNN_PDE_int})
 end
 
 function internal_variables(int::PDEIntegrator{<:TrialNN_PDE_int}, problem::PDEProblem)
-    local PNN = int.method.basis.sol_network
     local RX = int.method.RX
     local D = problem.D
-
+    local NP = int.method.basis.NP
     # just define the shapes, and update in the above update function
     u_quad_end_values = zeros(D,RX)
     v_quad_end_values = zeros(D,RX)
     w_quad_end_values = zeros(D,RX)
 
-    return (previous_params = PNN.params,
+    W1 = zeros(NP, D)
+    W2 = zeros(NP)
+    bias2 = zeros(NP)
+    return (previous_W1 = W1,
+        previous_W2 = W2,
+        previous_bias2 = bias2,
         u_quad_end_values = u_quad_end_values,
         v_quad_end_values = v_quad_end_values,
         w_quad_end_values = w_quad_end_values
