@@ -18,22 +18,20 @@ GeometricIntegrators.Integrators.default_options(::TrialNN_PDE_int) = Options(
 x_step = 0.01
 t_step = 0.3
 x_span = (0.0, 1.0)
-lpde = MultiSymplectic.Wave.lpdeproblem(tstep=t_step, tspan=(0.0, t_step), xspan=x_span, xstep=x_step)
+lpde = MultiSymplectic.Wave.lpdeproblem(tstep=t_step, tspan=(0.0, 2*t_step), xspan=x_span, xstep=x_step)
 
-relu3(x) = max(0, x)^3
-NN_width = 200
-# NN_width = 5
+activation(x) = max(0, x)^3
+# NN_width = 150
+NN_width = 10
 
-trial_basis = Trial_Solution_Basis(NN_width, relu3)
+trial_basis = Trial_Solution_Basis(NN_width, activation)
 trial_int = TrialNN_PDE_int(trial_basis, xstep=x_step, xspan=x_span, initial_guess_method=TrialOGA2D(), RT=4, RX=12)
 
 trial_sol = MultiSymplectic.integrate(lpde, trial_int)
 
-
-
-# lpde.exact_u.(0.3, collect(-4:0.01:4))
-# plot(trial_sol.sol.u[1], label="t = 0.3")
-# plot(lpde.exact_u.(0.0, collect(-1:0.01:1)), label="Exact")
+lpde.exact_u.(t_step, collect(0:0.01:1))
+plot(trial_sol.sol.u[1], label="NN Solution at t = $t_step")
+plot!(lpde.exact_u.(0.0, collect(0:0.01:1)), label="Exact")
 
 # wave_anim = @animate for (i, tt) in enumerate(0:0.1:2)
 #     plot(lpde.exact_u.(tt, collect(-1:0.01:1)), label="Exact")

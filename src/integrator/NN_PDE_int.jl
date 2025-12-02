@@ -210,36 +210,6 @@ end
     end::CacheType(ST, c.problem, c.method)
 end
 
-# function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT,LT,BT,IPMT}}) where {T,MVT,LT,BT,IPMT<:ELM_LS}
-
-#     function nlls!(du, u, int::PDEIntegrator{<:NN_PDE_Integrator})
-#         local xspan = int.problem.xspan
-#         local c = int.problem.params.c
-#         local tn = (sol.current_step - 1) * timestep(int)
-#         local N_in = 2000
-
-#         tx_in = rand(Random.seed!(1),2,N_in)
-#         tx_in[2,:] .= xspan[1] .+ (xspan[2] - xspan[1]) * tx_in[2,:]
-
-#         for i in 1:N_in
-#             du[i] = v_trial(tx_in[1,i], tx_in[2,i], tn, u) + c * w_trial(tx_in[1,i], tx_in[2,i], tn, u)
-#         end
-#     end
-
-#     if C.done_initial_guess[1] == 0
-#         u0 = zeros(1,NP)
-#         prob = NonlinearLeastSquaresProblem(
-#         NonlinearFunction(nlls!, resid_prototype = zeros(N_in)), u0, int)
-#         println("Starting initial guess computation ...")
-#         t1 = time()
-#         u_sol = solve(prob,maxtime = 60,abstol = 1e-12, reltol = 1e-12).u
-#         (x == cache(int).x && eltype(x) == eltype(cache(int).x)) ? x[:] = u_sol : nothing
-#         println("Time for initial guess: ", time() - t1)
-#         print("initial guess parameters: ", x, "\n")
-#         C.done_initial_guess[1] = 1
-#     end
-# end
-
 
 function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT,LT,BT,IPMT}}) where {T,MVT,LT,BT,IPMT<:LSGD}
     local NP = int.method.basis.NP
@@ -299,72 +269,6 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT
 
 end
 
-# function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT,LT,BT,IPMT}}) where {T,MVT,LT,BT,IPMT<:GroundTruth}
-#     local NP = int.method.basis.NP
-#     local PNN = int.method.basis.u
-#     local optim_mode = int.method.basis.optim_mode
-#     local params_turbulance = int.method.params_turbulance
-
-#     PNN.params.L1.W[:,2] .= 1.0 
-#     PNN.params.L1.W[:,1] .= - 0.2
-#     PNN.params.L1.b[:] = [-0.0000, -0.2930, -0.5664, -0.1328, -0.7207, -0.3965, -0.4893, -0.6426]
-#     PNN.params.L2.W[:] = [0.3275,   52.7569,   -6.1713,   -1.7977,    6.4468, -153.8942,137.0191,  -34.2571]
-
-#     # copy the parameters to the cache
-#     if optim_mode == :Partially
-#         PNN.params[keys(PNN.params)[end]].W[:] = PNN.params[keys(PNN.params)[end]].W[:] .+ params_turbulance .* randn(Random.seed!(1),NP, 1)
-#         C.x[1:NP] = PNN.params[keys(PNN.params)[end]].W[:]
-#     elseif optim_mode == :Fully
-#         # Purtube the parameters a little bit to avoid zeros in the syste
-#         for (name, layer) in zip(keys(PNN.params), values(PNN.params))
-#             if hasfield(typeof(layer), :b)
-#                 layer.W[:] = layer.W[:] .+ params_turbulance .* randn(Random.seed!(1), size(layer.W[:]))
-#                 layer.b[:] = layer.b[:] .+ params_turbulance .* randn(Random.seed!(1), size(layer.b[:]))
-#             else
-#                 # For layers without bias (e.g., output), just regenerate W
-#                 layer.W[:] = layer.W[:] .+ params_turbulance .* randn(Random.seed!(2),size(layer.W[:]))
-#             end
-#         end
-#         C.x[1:NP]= flatten_params(PNN.params)
-#     end
-
-# end
-
-function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT,LT,BT,IPMT}}) where {T,MVT,LT,BT,IPMT<:GroundTruth}
-    local NP = int.method.basis.NP
-    local PNN = int.method.basis.u
-    local optim_mode = int.method.basis.optim_mode
-    local params_turbulance = int.method.params_turbulance
-
-    PNN.params.L1.W[:,2] .= [-1.0,1.0,-1.0,-1.0,1.0,1.0,-1.0,-1.0,1.0,-1.0,1.0,-1.0,-1.0,1.0,1.0,1.0,1.0,-1.0,-1.0,-1.0]
-    PNN.params.L1.W[:,1] .= - 0.2 * [-1.0,1.0,-1.0,-1.0,1.0,1.0,-1.0,-1.0,1.0,-1.0,1.0,-1.0,-1.0,1.0,1.0,1.0,1.0,-1.0,-1.0,-1.0]
-    PNN.params.L1.b[:] = [ 0.9995, -0.0000,  0.6479,  0.3423, -0.5156, -0.7178,  0.2222,  0.7964,
-        -0.4072,  0.4653, -0.2852,  0.5786,  0.1450, -0.3730, -0.4873, -0.6123,
-        -0.2559,  0.4321,  0.3091,  0.3911]
-    PNN.params.L2.W[:] = [-5.5742e+00,  1.1024e+01, -5.3139e+00, -4.0719e+00,  6.0699e+01,
-         -7.4047e-01, -9.1054e-01, -1.7195e-01, -1.5121e+02,  4.6744e+01,
-          2.2065e+01,  2.3221e+01,  1.1691e-01, -2.3493e+01,  1.2785e+02,
-         -3.6581e+01, -4.0092e+00, -4.0954e+01, -3.2466e+01,  8.3772e+00]
-
-    # copy the parameters to the cache
-    if optim_mode == :Partially
-        PNN.params[keys(PNN.params)[end]].W[:] = PNN.params[keys(PNN.params)[end]].W[:] .+ params_turbulance .* randn(Random.seed!(1),NP, 1)
-        C.x[1:NP] = PNN.params[keys(PNN.params)[end]].W[:]
-    elseif optim_mode == :Fully
-        # Purtube the parameters a little bit to avoid zeros in the syste
-        for (name, layer) in zip(keys(PNN.params), values(PNN.params))
-            if hasfield(typeof(layer), :b)
-                layer.W[:] = layer.W[:] .+ params_turbulance .* randn(size(layer.W[:]))
-                layer.b[:] = layer.b[:] .+ params_turbulance .* randn(size(layer.b[:]))
-            else
-                # For layers without bias (e.g., output), just regenerate W
-                layer.W[:] = layer.W[:] .+ params_turbulance .* randn(size(layer.W[:]))
-            end
-        end
-        C.x[1:NP]= flatten_params(PNN.params)
-    end
-
-end
 function initialize_bcs_ics!(sol,int::PDEIntegrator{<:NN_PDE_Integrator})
     local C = cache(int)
     local x_quad_nodes = int.method.spatial_quadrature.nodes
