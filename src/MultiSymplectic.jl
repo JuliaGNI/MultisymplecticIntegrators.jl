@@ -18,7 +18,6 @@ module MultiSymplectic
     import BSplineKit.SplineInterpolations:make_knots
     using Zygote
     using Statistics
-    using NonlinearSolve
     using ForwardDiff
 
     # abstract types
