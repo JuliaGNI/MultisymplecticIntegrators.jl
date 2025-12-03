@@ -1,6 +1,7 @@
 struct NetworkPDEBasis{OMT} <: AbstractPDEBasis
-    network_arch
-    
+    S
+    activation_function
+
     u
     v
     w    
@@ -11,13 +12,14 @@ struct NetworkPDEBasis{OMT} <: AbstractPDEBasis
 
     NP::Int
     optim_mode::OMT # :Partially or :Fully, whether to solve only last layer parameters or all the parameters in the neural network
-    function NetworkPDEBasis(u_network, optim_mode::OMT = :Partially) where {OMT} 
+    function NetworkPDEBasis(S, activation_function,optim_mode::OMT = :Partially; XT_dim = 2) where {OMT} 
+        u_network = Chain(Dense(XT_dim, S, activation_function,),Dense(S, 1,identity,use_bias = false))        
         sym_u = SymbolicNeuralNetworks.SymbolicNeuralNetwork(u_network)
-        u_func = AbstractNeuralNetworks.NeuralNetwork(u_network)
+        u_func = AbstractNeuralNetworks.NeuralNetwork(u_network,initializer = ZeroInitializer())
         if optim_mode == :Fully
             NP = AbstractNeuralNetworks.parameterlength(u_network)
         elseif optim_mode == :Partially
-            NP = size(u_func.params[keys(u_func.params)[end]].W, 2)
+            NP = S
         else
             error("Invalid optim_mode. Use :Partially or :Fully.")
         end
@@ -37,7 +39,7 @@ struct NetworkPDEBasis{OMT} <: AbstractPDEBasis
         ∂v∂P_func = SymbolicNeuralNetworks.build_nn_function(sym_∂v∂P, sym_u.params, sym_u.input)
         ∂w∂P_func = SymbolicNeuralNetworks.build_nn_function(sym_∂w∂P, sym_u.params, sym_u.input)
 
-        return new{OMT}(u_network,
+        return new{OMT}(S, activation_function,
             u_func, v_func, w_func,
             ∂u∂P_func, ∂v∂P_func, ∂w∂P_func,
             NP,optim_mode)

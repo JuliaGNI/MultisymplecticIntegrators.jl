@@ -286,12 +286,13 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     local K = int.method.basis.NP   
     local a,b = int.problem.xspan[1],int.problem.xspan[2]
     local exact_u = int.problem.exact_u
+    local t_quad_nodes = int.method.time_quadrature.nodes
+    local x_quad_nodes = int.method.spatial_quadrature.nodes
 
     # Equidistant Quadrature / sampling grid
-    nx = 40
-    nt = 20
-    # nx = 10
-    # nt = 10
+    # nx = 40
+    # nt = 20
+
     xs = range(a, b, length=nx)
     ts = range(0.0, h, length=nt)
 

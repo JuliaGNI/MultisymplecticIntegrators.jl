@@ -10,9 +10,11 @@ using ForwardDiff
 # by default, the first dimension is time, the second is space, 
 # and just consider 1+1 now. 
 relu2 = x -> max(0, x) ^2
+relu3 = x -> max(0, x) ^3
+
 u_network = Chain(
-    Dense(2, 1000, tanh),
-    Dense(1000, 1,identity,use_bias = false)
+    Dense(2, 100, relu3,),
+    Dense(100, 1,identity,use_bias = false)
 )
 
 # GeometricIntegrators.Integrators.default_options(::NN_PDE_Integrator) = Options(

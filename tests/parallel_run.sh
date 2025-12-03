@@ -16,12 +16,11 @@ run_configuration() {
     local Nw=$3
     local Nb=$4
 
-    local log_file="logs/h${h}_width${NN_width}_Nw${Nw}_Nb${Nb}.txt"
     # Print the activation for debugging
     echo "Running Julia script with Step Size: $h, NN_width: $NN_width, Nw: $Nw, Nb: $Nb"
 
     # Run the Julia script in the background
-    julia --project=. tests/test_Trial_NN_PDE_int.jl $h $NN_width $Nw $Nb > "$log_file" 2>&1 &
+    julia --project=. tests/test_Trial_NN_PDE_int.jl $h $NN_width $Nw $Nb &
 }
 
 # Loop through the activations
