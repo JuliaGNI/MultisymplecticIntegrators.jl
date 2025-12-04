@@ -286,12 +286,15 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     local K = int.method.basis.NP   
     local a,b = int.problem.xspan[1],int.problem.xspan[2]
     local exact_u = int.problem.exact_u
-    local t_quad_nodes = int.method.time_quadrature.nodes
-    local x_quad_nodes = int.method.spatial_quadrature.nodes
+    # local quad_nodes = int.method.grid_matrix
+    # local quad_weights = int.method.grid_weights
+
+    # quad_nodes_tuple = reshape(quad_nodes, :, 1)
+    # quad_weights = reshape(quad_weights, :, 1)
 
     # Equidistant Quadrature / sampling grid
-    # nx = 40
-    # nt = 20
+    nx = 40
+    nt = 20
 
     xs = range(a, b, length=nx)
     ts = range(0.0, h, length=nt)
@@ -300,10 +303,16 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     coords = [ (t,x) for t in ts, x in xs ]   # nt × nx array of tuples
     N = length(coords)
     quad_nodes = zeros(2, N)
+    # for i in 1:N
+    #     quad_nodes[1, i] = h * quad_nodes_tuple[i][1]
+    #     quad_nodes[2, i] = a + (b-a) * quad_nodes_tuple[i][2]
+    # end
+
     for i in 1:N
         quad_nodes[1, i] = coords[i][1]
         quad_nodes[2, i] = coords[i][2]
     end
+
 
     # simple uniform quadrature weights (you can switch to Simpson)
     quad_weights = fill(1.0/N, N)
