@@ -505,7 +505,7 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{<:TrialNN_PDE_int}) wh
                     z +=  quad_b[rt,rx] * 
                         ( x_domain * timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * C.∂u∂θ_quad_values[d,rt,rx,p]
                         + x_domain                 * C.∂L∂V_quad_values[d,rt,rx] * C.∂v∂θ_quad_values[d,rt,rx,p]
-                        + x_domain * timestep(int) * C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂θ_quad_values[d,rt,rx,p])
+                        +           timestep(int)  * C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂θ_quad_values[d,rt,rx,p])
                 end
             end
             b[p] = -z
