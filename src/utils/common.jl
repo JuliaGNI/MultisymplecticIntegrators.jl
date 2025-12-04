@@ -320,4 +320,92 @@ function create_tem_vector(ST::Type, D::Int,P_sizes::Vector{Int})
 end
 
 
+function spline2D_all_derivatives((Bt, Bx), (t, x))
+    # basis in t
+    it, bt = Bt(t)
+    it_d, btd = Bt(t, Derivative(1))   # N'(t)
 
+    # basis in x
+    ix, bx = Bx(x)
+    ix_d, bxd = Bx(x, Derivative(1))   # M'(x)
+
+    kt = order(Bt)
+    kx = order(Bx)
+
+    # allocate outputs
+    dSdc = zeros(length(Bt), length(Bx))
+    dVdc = similar(dSdc)
+    dWdc = similar(dSdc)
+
+    @inbounds for δx in 1:kx, δt in 1:kt
+        ii = it - δt + 1
+        jj = ix - δx + 1
+
+        # u(t,x)
+        dSdc[ii, jj] = bt[δt] * bx[δx]
+
+        # ∂u/∂t(t,x) 
+        dVdc[ii, jj] = btd[δt] * bx[δx]
+
+        # ∂u/∂x(t,x)
+        dWdc[ii, jj] = bt[δt] * bxd[δx]
+    end
+
+    return reshape(dSdc, :, ), reshape(dVdc, :, ), reshape(dWdc, :, )
+end
+
+using BSplineKit
+
+# ∂S/∂c
+function spline2D_coeff_derivatives((Bt, Bx), (t, x))
+    it, bt = Bt(t)
+    ix, bx = Bx(x)
+
+    kt = order(Bt)
+    kx = order(Bx)
+
+    dSdc = zeros(length(Bt), length(Bx))
+    @inbounds for δx in 1:kx, δt in 1:kt
+        ii = it - δt + 1
+        jj = ix - δx + 1
+        dSdc[ii, jj] = bt[δt] * bx[δx]
+    end
+    return reshape(dSdc, :, )
+end
+
+# ∂v/∂c = N'_i(t) * M_j(x) 
+function spline2D_coeff_derivatives_time((Bt, Bx), (t, x))
+    it, bt   = Bt(t)
+    it_d, btd = Bt(t, Derivative(1))  # N'(t)
+
+    ix, bx = Bx(x)
+
+    kt = order(Bt)
+    kx = order(Bx)
+
+    dVdc = zeros(length(Bt), length(Bx))
+    @inbounds for δx in 1:kx, δt in 1:kt
+        ii = it - δt + 1
+        jj = ix - δx + 1
+        dVdc[ii, jj] = btd[δt] * bx[δx]    # N'_i(t) * M_j(x)
+    end
+    return reshape(dVdc, :, )
+end
+
+# ∂w/∂c = N_i(t) * M'_j(x) 
+function spline2D_coeff_derivatives_space((Bt, Bx), (t, x))
+    it, bt = Bt(t)
+    ix, bx = Bx(x)
+    ix_d, bxd = Bx(x, Derivative(1))  # M'(x)
+
+    kt = order(Bt)
+    kx = order(Bx)
+
+    dWdc = zeros(length(Bt), length(Bx))
+    @inbounds for δx in 1:kx, δt in 1:kt
+        ii = it - δt + 1
+        jj = ix - δx + 1
+        dWdc[ii, jj] = bt[δt] * bxd[δx]    # N_i(t) * M'_j(x)
+    end
+    return reshape(dWdc, :, )
+end

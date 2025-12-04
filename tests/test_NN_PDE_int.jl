@@ -28,7 +28,7 @@ t_step = 0.1
 x_span = (0.0,1.0)
 nn_int = NN_PDE_Integrator(nn_pde_basis,RT = 4,RX = 16, xspan = x_span, tstep = t_step,μ =:BSplineDirichlet,λ =:BSplineDirichlet,
                             k_μ = 4,k_λ₀_x = 4,nepochs= 1,initial_guess_method = OGA2D())
-lpde = MultiSymplectic.LinearTransport.lpdeproblem(tstep = t_step,tspan =(0.0,t_step),xspan = x_span)
+lpde = MultiSymplectic.Wave.lpdeproblem(tstep = t_step,tspan =(0.0,t_step),xspan = x_span)
 
 log_file="logs/NN_pde.txt"
 open(log_file, "w") do io

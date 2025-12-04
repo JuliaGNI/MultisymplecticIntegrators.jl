@@ -296,8 +296,8 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     nx = 40
     nt = 20
 
-    xs = range(a, b, length=nx)
-    ts = range(0.0, h, length=nt)
+    xs = range(0.0, 1.0, length=nx)
+    ts = range(0.0, 1.0, length=nt)
 
     # build list of sample coords as 2×N matrix (t; x)
     coords = [ (t,x) for t in ts, x in xs ]   # nt × nx array of tuples
@@ -346,7 +346,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     desired = zeros(N)
     for i in 1:N
         t = quad_nodes[1,i]; x = quad_nodes[2,i]
-        desired[i] = exact_u(t, x) - u_trial(t, x, coeffs_full,Wsel,Bsel,int,sol)
+        desired[i] = exact_u(h * t, a + (b-a)* x) - u_trial(t, x, coeffs_full,Wsel,Bsel,int,sol)
     end
 
 

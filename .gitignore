@@ -1,3 +1,5 @@
 /logs
 /logs/*.txt
 /logs/*.png
+Manifest.toml
+Project.toml
