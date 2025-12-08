@@ -286,6 +286,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     local K = int.method.basis.NP   
     local a,b = int.problem.xspan[1],int.problem.xspan[2]
     local exact_u = int.problem.exact_u
+    local x_domain = b - a
     # local quad_nodes = int.method.grid_matrix
     # local quad_weights = int.method.grid_weights
 
@@ -316,7 +317,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
 
     # simple uniform quadrature weights (you can switch to Simpson)
     quad_weights = fill(1.0/N, N)
-    thetas = range(0, 2π, length=Nw+1)
+    thetas = range(-π, π, length=Nw+1)
     dirs = [ [cos(θ), sin(θ)] for θ in thetas ]  # length Nw+1
 
     biases = range(-π, π, length=Nb+1)       # larger bias range works well for sinusoids
@@ -348,7 +349,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
         t = quad_nodes[1,i]; x = quad_nodes[2,i]
         desired[i] = exact_u(h * t, a + (b-a)* x) - u_trial(t, x, coeffs_full,Wsel,Bsel,int,sol)
     end
-
+    @show desired
 
     # Run OGA (orthogonal matching) on Φ_raw to approximate `desired`
     residual = copy(desired)
@@ -379,7 +380,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
         Bsel[k] = A_mat[idx, 3]
 
         coeffs_full[1:k] .= coeffs
-        # println("k=$k idx=$idx ‖residual‖=$(norm(residual))")
+        println("k=$k idx=$idx ‖residual‖=$(norm(residual))")
     end
 
     #     coeffs_full = [  0.6326619468608073, 0.00884977239310545,
@@ -421,7 +422,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     end
     @show length(Set(selected)) == K  # number of unique selected atoms
 
-    target_vec = [exact_u(quad_nodes[1,i], quad_nodes[2,i]) for i in 1:N ]
+    target_vec = [exact_u(h*quad_nodes[1,i], a + x_domain * quad_nodes[2,i]) for i in 1:N ]
     approx_vec = [u_trial(quad_nodes[1,i], quad_nodes[2,i], C.x,C.W1,C.bias1,int,sol)  for i in 1:N ]
     err_vec = abs.(target_vec .- approx_vec)
     println("Max abs error after OGA initial guess: ", maximum(err_vec))
@@ -471,6 +472,22 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
     end
     t3 = time()
     # println("Time for u,v,w quad values computation: ", t3 - t2)
+
+    @show C.u_quad_values[1,1,:]
+    @show C.v_quad_values[1,1,:]
+    @show C.w_quad_values[1,1,:]
+
+    local exact_u = int.problem.exact_u
+    local exact_v = int.problem.exact_v
+    local exact_w = int.problem.exact_w
+    local quad_x_nodes = int.method.spatial_quadrature.nodes
+    local quad_t_nodes = int.method.time_quadrature.nodes
+    local h = timestep(int)
+    
+    @show exact_u.(h * quad_t_nodes[1], quad_x_nodes)
+    @show exact_v.(h * quad_t_nodes[1], quad_x_nodes)
+    @show exact_w.(h * quad_t_nodes[1], quad_x_nodes)
+
     # Compute ∂L/∂θ at quadrature points
     for d in 1:D
         for i in 1:RT

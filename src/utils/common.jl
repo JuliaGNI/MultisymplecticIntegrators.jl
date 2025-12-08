@@ -146,7 +146,14 @@ end
 GeometricIntegrators.Integrators.nlsolution(c::PDEIntegratorCache) = c.x
 
 Lagrangian_multiplier(::Val{:BSplineDirichlet},order::Integer,quad_nodes::Vector{Float64}) = BSplineDirichlet(order,quad_nodes)
-Lagrangian_multiplier(::Val{:Lagrange},order::Integer,quad_nodes::Vector{Float64}) = CompactBasisFunctions.Lagrange(quad_nodes)
+
+
+function Lagrangian_multiplier(::Val{:Lagrange},order::Integer,quad_nodes::Vector{Float64}) 
+    QGau = QuadratureRules.GaussLegendreQuadrature(order)
+    return CompactBasisFunctions.Lagrange(QGau.nodes)
+end
+
+
 function Lagrangian_multiplier(basis::Symbol, order::Integer, quad_nodes::Vector{Float64})
     if basis ∉ (:BSplineDirichlet, :Lagrange)
         error("Unsupported basis: $basis")
@@ -361,8 +368,8 @@ function spline2D_coeff_derivatives((Bt, Bx), (t, x))
     it, bt = Bt(t)
     ix, bx = Bx(x)
 
-    kt = order(Bt)
-    kx = order(Bx)
+    kt = BSplineKit.order(Bt)
+    kx = BSplineKit.order(Bx)
 
     dSdc = zeros(length(Bt), length(Bx))
     @inbounds for δx in 1:kx, δt in 1:kt
@@ -376,12 +383,12 @@ end
 # ∂v/∂c = N'_i(t) * M_j(x) 
 function spline2D_coeff_derivatives_time((Bt, Bx), (t, x))
     it, bt   = Bt(t)
-    it_d, btd = Bt(t, Derivative(1))  # N'(t)
+    it_d, btd = Bt(t, BSplineKit.Derivative(1))  # N'(t)
 
     ix, bx = Bx(x)
 
-    kt = order(Bt)
-    kx = order(Bx)
+    kt = BSplineKit.order(Bt)
+    kx = BSplineKit.order(Bx)
 
     dVdc = zeros(length(Bt), length(Bx))
     @inbounds for δx in 1:kx, δt in 1:kt
@@ -396,10 +403,10 @@ end
 function spline2D_coeff_derivatives_space((Bt, Bx), (t, x))
     it, bt = Bt(t)
     ix, bx = Bx(x)
-    ix_d, bxd = Bx(x, Derivative(1))  # M'(x)
+    ix_d, bxd = Bx(x, BSplineKit.Derivative(1))  # M'(x)
 
-    kt = order(Bt)
-    kx = order(Bx)
+    kt = BSplineKit.order(Bt)
+    kx = BSplineKit.order(Bx)
 
     dWdc = zeros(length(Bt), length(Bx))
     @inbounds for δx in 1:kx, δt in 1:kt

@@ -286,8 +286,8 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT
     # Equidistant Quadrature / sampling grid
     nx = 40
     nt = 20
-    xs = range(a, b, length=nx)
-    ts = range(0.0, h, length=nt)
+    xs = range(0.0,1.0, length=nx)
+    ts = range(0.0,1.0, length=nt)
 
     # build list of sample coords as 2×N matrix (t; x)
     coords = [ (t,x) for t in ts, x in xs ]   # nt × nx array of tuples
@@ -330,7 +330,7 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT
     desired = zeros(N)
     for i in 1:N
         t = quad_nodes[1,i]; x = quad_nodes[2,i]
-        desired[i] = exact_u(t, x) - u([t,x],C.sol_params)[1]
+        desired[i] = exact_u(h*t, a+(b-a)*x) - u([t,x],C.sol_params)[1]
     end
 
 
@@ -377,7 +377,7 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:NN_PDE_Integrator{T,MVT
     end
     @show length(Set(selected)) == K  # number of unique selected atoms
 
-    target_vec = [exact_u(quad_nodes[1,i], quad_nodes[2,i]) for i in 1:N ]
+    target_vec = [exact_u(h*quad_nodes[1,i], a+(b-a)*quad_nodes[2,i]) for i in 1:N ]
     approx_vec = [u(quad_nodes[:,i], C.sol_params)[1]  for i in 1:N ]
     err_vec = abs.(target_vec .- approx_vec)
     println("Max abs error after OGA initial guess: ", maximum(err_vec))
@@ -406,7 +406,7 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:NN_PDE_Integrator})
     local NP = int.method.basis.NP
     local xspan = int.problem.xspan
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
-
+    local S = int.method.basis.S
     for d in 1:D
         # println("update initial condition, current time = ", sol.t, "the initial condition is at time = ", sol.t - timestep(int))
 
@@ -414,7 +414,7 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:NN_PDE_Integrator})
             C.init_condition_t₀[d,:] .= ic_fun(xspan[1] .+ x_domain .* x_quad_nodes).u
         else
             # println("sol.internal.x[current_step-1][1:NP] = " , sol.internal.x[current_step-1][1:NP])
-            sol_params = (L1=(W=zeros(ST, S, 2), b=zeros(ST, S)),L2=(W=zeros(ST, 1, S),))
+            sol_params = (L1=(W=zeros(S, 2), b=zeros(S)),L2=(W=zeros(1, S),))
             sol_params.L1.W[:] = u[d].params.L1.W[:]
             sol_params.L1.b[:] = u[d].params.L1.b[:]
             sol_params.L2.W[:] = sol.internal.x[current_step-1][1:NP]
@@ -678,10 +678,8 @@ end
 
 function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT <: BSplineDirichlet,LT  <: BSplineDirichlet,BT,IT <: NN_PDE_Integrator{T, MVT, LT, BT}}
     local D = int.problem.D 
-    local D = int.problem.D 
     local RT = int.method.RT
     local RX = int.method.RX
-    local NP = int.method.basis.NP
     local NP = int.method.basis.NP
 
     local quad_b = int.method.grid_weights
@@ -694,14 +692,14 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT 
 
     current_idx = 1
     for d in 1:D 
-        for p in 1:NP[d]
+        for p in 1:NP
             z = zero(ST)
             for rt in 1:RT
                 for rx in 1:RX
                     z +=  quad_b[rt,rx] * 
                         ( x_domain * timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * C.∂u∂P_quad_values[d][rt, rx,p]
                         + x_domain                 * C.∂L∂V_quad_values[d,rt,rx] * C.∂v∂P_quad_values[d][rt, rx,p]
-                        + x_domain * timestep(int) * C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂P_quad_values[d][rt, rx,p])
+                        +            timestep(int) * C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂P_quad_values[d][rt, rx,p])
                 end
             end
             for rx in 1:RX

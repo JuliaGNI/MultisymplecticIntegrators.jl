@@ -19,6 +19,7 @@ module MultiSymplectic
     using Zygote
     using Statistics
     using ForwardDiff
+    using Infiltrator
 
     # abstract types
     include("methods.jl")
@@ -45,7 +46,7 @@ module MultiSymplectic
     export SindyPDEBasis    
 
     include("basis/BSplineBasis.jl")
-    export BSplineDirichlet
+    export BSplineDirichlet, BSpline2D
 
     include("basis/Network_PDE_Basis.jl")
     export NetworkPDEBasis
@@ -68,6 +69,10 @@ module MultiSymplectic
     
     include("integrator/TrialNN_PDE_int.jl")
     export TrialNN_PDE_int
+
+    include("integrator/Galerkin_Bspline_int.jl")
+    export Galerkin_Bspline_Integrator
+    
     #problems
     include("problem/sine_Gordon.jl")
     export SineGordon

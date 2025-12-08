@@ -16,7 +16,7 @@ using Base
 # Nb = parse(Int,ARGS[4])
 
 t_step = 0.1
-NN_width = 25
+NN_width = 140
 Nw = 500
 Nb = 500
 
@@ -35,7 +35,7 @@ x_span = (0.0, 1.0)
 lpde = MultiSymplectic.Wave.lpdeproblem(tstep=t_step, tspan=(0.0, 2*t_step), xspan=x_span, xstep=x_step)
 
 activation(x) = max(0, x)^3
-trial_basis = Trial_Solution_Basis(NN_width, tanh)
+trial_basis = Trial_Solution_Basis(NN_width, activation)
 
 for rt in [12,]
     for rx in [36,]

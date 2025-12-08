@@ -25,7 +25,7 @@ Base.length(Basis::BSplineDirichlet) = Base.length(Basis.b)
 
 
 # serve as the approximation function inside domain for comparision
-struct BSpline2D{T} <: AbstractPDEBasis
+struct BSpline2D <: AbstractPDEBasis
     k::Int
     xs 
     ts
@@ -39,17 +39,17 @@ struct BSpline2D{T} <: AbstractPDEBasis
     Nbasis_x::Int
     Nbasis_t::Int
     S::Int # total number of basis functions
-    function BSpline2D(k,;tstep = 0.1,xstep = 0.1) # tstep and xstep are used to generate the knots, not the same as the problem domain steps
+    function BSpline2D(k,;tstep = 0.1,xstep = 0.05) # tstep and xstep are used to generate the knots, not the same as the problem domain steps
         xs = 0.0:xstep:1.0 
         ts = 0.0:tstep:1.0
 
         # Create B-spline knots based on interpolation points (uses an internal function)
-        knots_x = SplineInterpolations.make_knots(xs, k, nothing)
-        knots_t = SplineInterpolations.make_knots(ts, k, nothing)
+        knots_x = SplineInterpolations.make_knots(xs, BSplineOrder(k), nothing)
+        knots_t = SplineInterpolations.make_knots(ts, BSplineOrder(k), nothing)
 
         # Create B-spline bases
-        Bx = BSplineBasis(k, knots_x; augment = Val(false))
-        Bt = BSplineBasis(k, knots_t; augment = Val(false))
+        Bx = BSplineBasis(BSplineOrder(k), knots_x; augment = Val(false))
+        Bt = BSplineBasis(BSplineOrder(k), knots_t; augment = Val(false))
 
         # Create and factorise interpolation matrices
         Cx = lu!(collocation_matrix(Bx, xs))
@@ -58,7 +58,7 @@ struct BSpline2D{T} <: AbstractPDEBasis
         NNbasis_x = length(Bx)
         NNbasis_t = length(Bt)
         S = NNbasis_x * NNbasis_t
-        return new{T}(k, xs, ts, Cx, Ct, Bx, Bt, NNbasis_x, NNbasis_t, S)
+        return new(k, xs, ts, Cx, Ct, Bx, Bt, NNbasis_x, NNbasis_t, S)
     end
 
 end
