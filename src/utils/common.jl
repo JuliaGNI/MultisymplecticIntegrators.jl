@@ -146,12 +146,8 @@ end
 GeometricIntegrators.Integrators.nlsolution(c::PDEIntegratorCache) = c.x
 
 Lagrangian_multiplier(::Val{:BSplineDirichlet},order::Integer,quad_nodes::Vector{Float64}) = BSplineDirichlet(order,quad_nodes)
+Lagrangian_multiplier(::Val{:Lagrange},order::Integer,quad_nodes::Vector{Float64}) = CompactBasisFunctions.Lagrange(quad_nodes)
 
-
-function Lagrangian_multiplier(::Val{:Lagrange},order::Integer,quad_nodes::Vector{Float64}) 
-    QGau = QuadratureRules.GaussLegendreQuadrature(order)
-    return CompactBasisFunctions.Lagrange(QGau.nodes)
-end
 
 
 function Lagrangian_multiplier(basis::Symbol, order::Integer, quad_nodes::Vector{Float64})
