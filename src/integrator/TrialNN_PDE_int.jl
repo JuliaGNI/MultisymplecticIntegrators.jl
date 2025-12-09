@@ -484,9 +484,9 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
     local quad_t_nodes = int.method.time_quadrature.nodes
     local h = timestep(int)
     
-    @show exact_u.(h * quad_t_nodes[1], quad_x_nodes)
-    @show exact_v.(h * quad_t_nodes[1], quad_x_nodes)
-    @show exact_w.(h * quad_t_nodes[1], quad_x_nodes)
+    @show C.u_quad_values[1,1,:] .- exact_u.(h * quad_t_nodes[1], quad_x_nodes)
+    @show (C.v_quad_values[1,1,:] / h) .- exact_v.(h * quad_t_nodes[1], quad_x_nodes)
+    @show C.w_quad_values[1,1,:] .- exact_w.(h * quad_t_nodes[1], quad_x_nodes)
 
     # Compute ∂L/∂θ at quadrature points
     for d in 1:D
@@ -499,6 +499,7 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
         end 
     end
     t4 = time()
+    @infiltrate
     # println("Time for ∂L∂U,V,W quad values computation: ", t4 - t3)
 end
 
@@ -529,6 +530,7 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{<:TrialNN_PDE_int}) wh
         end
     end
     # println("In the end of residual! function, b = ", b)
+    @infiltrate
 end
 
 function update!(sol_struct, int::PDEIntegrator{<:TrialNN_PDE_int})

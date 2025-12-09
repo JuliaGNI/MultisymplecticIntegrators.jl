@@ -197,9 +197,9 @@ struct Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S} <: PDEIntegratorCache{ST,D
     boundary_condition_x₁::Matrix{ST}
     function Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S}() where {ST,RT,RX,D,S}
         # x = zeros(ST, NP + 2 * D * RX + 2* D * DX * RT ) # TODO: how to deal with RX being a vector/
-        # x = zeros(ST,S + D * RX +2* D * RT) # params, λ₀_x_coes,μ₀_t_coes,μ₁_t_coes
+        x = zeros(ST,S + D * RX +2* D * RT) # params, λ₀_x_coes,μ₀_t_coes,μ₁_t_coes
         # TODO:consider when DX is a vector
-        x = zeros(ST,S)
+        # x = zeros(ST,S)
         u_quad_values = zeros(ST, D, RT, RX)
         v_quad_values = zeros(ST, D, RT, RX)
         w_quad_values = zeros(ST, D, RT, RX)
@@ -509,24 +509,24 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:Galerkin_B
 
     end
 
-    # (x == cache(int).x && eltype(x) == eltype(cache(int).x)) ? post_initial_guess!(cache(int),sol,int,int.method) : nothing
+    (x == cache(int).x && eltype(x) == eltype(cache(int).x)) ? post_initial_guess!(cache(int),sol,int,int.method) : nothing
 
-    # for d in 1:D
-    #     C.λ₀_x_coes[d,:] = x[S+1:S+RX]
-    #     C.μ₀_t_coes[d,:] = x[S+RX+1:S+RX+RT]
-    #     C.μ₁_t_coes[d,:] = x[S+RX+RT+1:S+RX+2*RT]
-    # end
+    for d in 1:D
+        C.λ₀_x_coes[d,:] = x[S+1:S+RX]
+        C.μ₀_t_coes[d,:] = x[S+RX+1:S+RX+RT]
+        C.μ₁_t_coes[d,:] = x[S+RX+RT+1:S+RX+2*RT]
+    end
 
-    # for d in 1:D
-    #     for rx in 1:RX
-    #         C.λ₀_quad_values[d,rx] = sum([C.λ₀_x_coes[d,i] * mλ₀_x[i,rx]  for i in 1:RX])
-    #     end
+    for d in 1:D
+        for rx in 1:RX
+            C.λ₀_quad_values[d,rx] = sum([C.λ₀_x_coes[d,i] * mλ₀_x[i,rx]  for i in 1:RX])
+        end
 
-    #     for rt in 1:RT
-    #         C.μ₀_quad_values[d,rt] = sum([C.μ₀_t_coes[d,i]*mμ_t[i,rt] for i in 1:RT]) 
-    #         C.μ₁_quad_values[d,rt] = sum([C.μ₁_t_coes[d,i]*mμ_t[i,rt] for i in 1:RT])
-    #     end
-    # end
+        for rt in 1:RT
+            C.μ₀_quad_values[d,rt] = sum([C.μ₀_t_coes[d,i]*mμ_t[i,rt] for i in 1:RT]) 
+            C.μ₁_quad_values[d,rt] = sum([C.μ₁_t_coes[d,i]*mμ_t[i,rt] for i in 1:RT])
+        end
+    end
     # @infiltrate
 end
 
@@ -561,17 +561,17 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT 
                         + timestep(int)            * C.∂L∂W_quad_values[d,rt,rx] * w_coll_mat[p, rt, rx])
                 end
             end
-            # for rx in 1:RX
-            #     z+= x_domain * brx[rx] * (C.λ₀_quad_values[d,rx] * ut₀_basis_quad_values[p,rx]) #- C.λ₁_quad_values[d,rx] * C.∂u∂P_t₁_quad_values[d, rx]
-            # end
-            # for rt in 1:RT
-            #     z+= timestep(int)* brt[rt] * (C.μ₀_quad_values[d,rt] * ux₀_basis_quad_values[p,rt] - C.μ₁_quad_values[d,rt] * ux₁_basis_quad_values[p,rt])
-            # end
+            for rx in 1:RX
+                z+= x_domain * brx[rx] * (C.λ₀_quad_values[d,rx] * ut₀_basis_quad_values[p,rx]) #- C.λ₁_quad_values[d,rx] * C.∂u∂P_t₁_quad_values[d, rx]
+            end
+            for rt in 1:RT
+                z+= timestep(int)* brt[rt] * (C.μ₀_quad_values[d,rt] * ux₀_basis_quad_values[p,rt] - C.μ₁_quad_values[d,rt] * ux₁_basis_quad_values[p,rt])
+            end
             b[current_idx] = z 
             current_idx += 1
         end
     end
-    # @infiltrate
+    # @infiltrate 
     @assert current_idx == S + 1 "Wrong indexing in residual computation"
 
     for d in 1:D
@@ -603,7 +603,7 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT 
             b[S + D * RX + D * RT + (d - 1) * RT + i] = z
         end
     end
-    # @infiltrate
+    @infiltrate
 end
 
 
@@ -647,23 +647,23 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT 
 
     @assert current_idx == S + 1 "Wrong indexing in residual computation"
 
-    # for d in 1:D
-    #     for rx in 1:RX
-    #         b[S + (d - 1) * RX + rx] = x_domain * brx[rx] * (C.ut₀_quad_values[d, rx] - C.init_condition_t₀[d, rx])
-    #     end
-    # end
+    for d in 1:D
+        for rx in 1:RX
+            b[S + (d - 1) * RX + rx] = x_domain * brx[rx] * (C.ut₀_quad_values[d, rx] - C.init_condition_t₀[d, rx])
+        end
+    end
 
-    # for d in 1:D
-    #     for rt in 1:RT
-    #         b[S+ D * RX+(d-1)*RT+rt]= timestep(int) *brt[rt]*(C.ux₀_quad_values[d,rt] - C.boundary_condition_x₀[d,rt])
-    #     end
-    # end
+    for d in 1:D
+        for rt in 1:RT
+            b[S+ D * RX+(d-1)*RT+rt]= timestep(int) *brt[rt]*(C.ux₀_quad_values[d,rt] - C.boundary_condition_x₀[d,rt])
+        end
+    end
 
-    # for d in 1:D
-    #     for rt in 1:RT
-    #         b[S+ D * RX+ D * RT + (d-1)*RT+rt]= timestep(int) *brt[rt]*(C.ux₁_quad_values[d,rt] - C.boundary_condition_x₁[d,rt])
-    #     end
-    # end
+    for d in 1:D
+        for rt in 1:RT
+            b[S+ D * RX+ D * RT + (d-1)*RT+rt]= timestep(int) *brt[rt]*(C.ux₁_quad_values[d,rt] - C.boundary_condition_x₁[d,rt])
+        end
+    end
     # @infiltrate
     @show b
 end

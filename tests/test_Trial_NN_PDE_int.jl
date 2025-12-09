@@ -16,7 +16,7 @@ using Base
 # Nb = parse(Int,ARGS[4])
 
 t_step = 0.1
-NN_width = 140
+NN_width = 40
 Nw = 500
 Nb = 500
 
@@ -31,39 +31,44 @@ GeometricIntegrators.Integrators.default_options(::TrialNN_PDE_int) = Options(
 
 
 x_step = 0.01
-x_span = (0.0, 1.0)
+x_span = (0.3, 0.8)
 lpde = MultiSymplectic.Wave.lpdeproblem(tstep=t_step, tspan=(0.0, 2*t_step), xspan=x_span, xstep=x_step)
 
-activation(x) = max(0, x)^3
+activation = tanh
 trial_basis = Trial_Solution_Basis(NN_width, activation)
+rt = 12
+rx = 36
+# for rt in [12,]
+#     for rx in [36,]
+        # log_file="logs/h$(t_step)_width$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx).txt"
+        # open(log_file, "w") do io
+        #     redirect_stdout(io) do
+println("Start RT = $rt, RX = $rx")
+trial_int = TrialNN_PDE_int(trial_basis, xstep=x_step, xspan=x_span, initial_guess_method=TrialOGA2D(), RT=rt, RX=rx,Nw = Nw, Nb=Nb)
+trial_sol = MultiSymplectic.integrate(lpde, trial_int)
 
-for rt in [12,]
-    for rx in [36,]
-        log_file="logs/h$(t_step)_width$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx).txt"
-        open(log_file, "w") do io
-            redirect_stdout(io) do
-                println("Start RT = $rt, RX = $rx")
-                trial_int = TrialNN_PDE_int(trial_basis, xstep=x_step, xspan=x_span, initial_guess_method=TrialOGA2D(), RT=rt, RX=rx,Nw = Nw, Nb=Nb)
-                trial_sol = MultiSymplectic.integrate(lpde, trial_int)
+# (u_trial(grid_matrix[1,1][1] , xspan[1] + x_domain* grid_matrix[1,1][2]+ 3eps(),x,W1,bias1,int,sol) - u_trial(grid_matrix[1,1][1] , xspan[1] + x_domain* grid_matrix[1,1][2]- 3eps(),x,W1,bias1,int,sol)) / 6eps()
 
-                # prepare x values for plotting
-                x_plot = collect(x_span[1]:x_step:x_span[2])
 
-                # First subplot: NN vs exact at t = h (t_step)
-                p1 = plot(trial_sol.sol.u[1], label="NN Solution", title="t = $t_step", xlabel="x", ylabel="u")
-                plot!(p1, lpde.exact_u.(t_step, x_plot), label="Exact")
 
-                # Second subplot: NN vs exact at t = 2h (2*t_step)
-                p2 = plot(trial_sol.sol.u[2], label="NN Solution", title="t = $(2*t_step)", xlabel="x", ylabel="u")
-                plot!(p2, lpde.exact_u.(2*t_step, x_plot), label="Exact")
+# prepare x values for plotting
+x_plot = collect(x_span[1]:x_step:x_span[2])
 
-                # Combine into a 1x2 layout and save
-                plot(p1, p2, layout=(1,2), size=(1000,400))
-                savefig("logs/h$(t_step)_NNwidth$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx).png")
-            end
-        end
-    end
-end
+# First subplot: NN vs exact at t = h (t_step)
+p1 = plot(trial_sol.sol.u[1], label="NN Solution", title="t = $t_step", xlabel="x", ylabel="u")
+plot!(p1, lpde.exact_u.(t_step, x_plot), label="Exact")
+
+# Second subplot: NN vs exact at t = 2h (2*t_step)
+p2 = plot(trial_sol.sol.u[2], label="NN Solution", title="t = $(2*t_step)", xlabel="x", ylabel="u")
+plot!(p2, lpde.exact_u.(2*t_step, x_plot), label="Exact")
+
+# Combine into a 1x2 layout and save
+plot(p1, p2, layout=(1,2), size=(1000,400))
+savefig("logs/h$(t_step)_NNwidth$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx).png")
+        #     end
+        # end
+#     end
+# end
 
 
 
