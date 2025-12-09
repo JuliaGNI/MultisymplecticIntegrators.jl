@@ -153,11 +153,11 @@ function C1(t, x, tn,int, sol)
     local W2 = sol.internal.previous_W2
 
     if current_step == 1   
-        return (b - x) * exact_u(t, a) / x_domain +
-           (x - a) * exact_u(t, b) / x_domain +
+        return (b - x) * exact_u(h*t, a) / x_domain +
+           (x - a) * exact_u(h*t, b) / x_domain +
            (h - h * t) * exact_u(tn, x) / h
     else
-        return (b - x) * exact_u(t, a) / x_domain +(x - a) * exact_u(t, b) / x_domain + (h - h * t) * NN(t, x, W2,W1,bias1,int) / h
+        return (b - x) * exact_u(tn+h*t, a) / x_domain +(x - a) * exact_u(tn+h*t, b) / x_domain + (h - h * t) * NN(1.0, x, W2,W1,bias1,int) / h
                                 
     end
 end
@@ -179,14 +179,14 @@ function u_trial(t, x, W2,W1,bias1,int,sol)
     NN(t,x,W2,W1,bias1,int) - T1NN_manual(t, x, W2,W1,bias1,int) + T2NN_manual(t, x, W2,W1,bias1,int) + C1(t, x, tn,int, sol) - C2(t, x, tn, int, sol)
 end
 
-v_trial_zygote(t, x, W2,W1,bias1,int,sol) = Zygote.gradient(tt -> u_trial(tt,x,W2,W1,bias1,int,sol),t)[1]
+v_trial_zygote(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * Zygote.gradient(tt -> u_trial(tt,x,W2,W1,bias1,int,sol),t)[1]
 w_trial_zygote(t, x, W2,W1,bias1,int,sol) = Zygote.gradient(xx -> u_trial(t,xx,W2,W1,bias1,int,sol),x)[1]
 
 v_trial(t, x, W2,W1,bias1,int,sol) = ForwardDiff.derivative(tt -> u_trial(tt,x,W2,W1,bias1,int,sol),t)[1]
 w_trial(t, x, W2,W1,bias1,int,sol) = ForwardDiff.derivative(xx -> u_trial(t,xx,W2,W1,bias1,int,sol),x)[1]
 
 ∂u∂W2(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> u_trial(t,x,p,W1,bias1,int,sol),W2)
-∂v∂W2(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> v_trial(t,x,p,W1,bias1,int,sol),W2)
+∂v∂W2(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * ForwardDiff.gradient(p -> v_trial(t,x,p,W1,bias1,int,sol),W2)
 ∂w∂W2(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> w_trial(t,x,p,W1,bias1,int,sol),W2)
 
 
@@ -297,7 +297,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     nx = 40
     nt = 20
 
-    xs = range(0.0, 1.0, length=nx)
+    xs = range(a, b, length=nx)
     ts = range(0.0, 1.0, length=nt)
 
     # build list of sample coords as 2×N matrix (t; x)
@@ -347,7 +347,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     desired = zeros(N)
     for i in 1:N
         t = quad_nodes[1,i]; x = quad_nodes[2,i]
-        desired[i] = exact_u(h * t, a + (b-a)* x) - u_trial(t, x, coeffs_full,Wsel,Bsel,int,sol)
+        desired[i] = exact_u(h * t, x) - u_trial(t, x, coeffs_full,Wsel,Bsel,int,sol)
     end
     @show desired
 
@@ -422,7 +422,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     end
     @show length(Set(selected)) == K  # number of unique selected atoms
 
-    target_vec = [exact_u(h*quad_nodes[1,i], a + x_domain * quad_nodes[2,i]) for i in 1:N ]
+    target_vec = [exact_u(h*quad_nodes[1,i], quad_nodes[2,i]) for i in 1:N ]
     approx_vec = [u_trial(quad_nodes[1,i], quad_nodes[2,i], C.x,C.W1,C.bias1,int,sol)  for i in 1:N ]
     err_vec = abs.(target_vec .- approx_vec)
     println("Max abs error after OGA initial guess: ", maximum(err_vec))
@@ -480,13 +480,13 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
     local exact_u = int.problem.exact_u
     local exact_v = int.problem.exact_v
     local exact_w = int.problem.exact_w
-    local quad_x_nodes = int.method.spatial_quadrature.nodes
-    local quad_t_nodes = int.method.time_quadrature.nodes
+    local x_quad_nodes = int.method.spatial_quadrature.nodes
+    local t_quad_nodes = int.method.time_quadrature.nodes
     local h = timestep(int)
     
-    @show C.u_quad_values[1,1,:] .- exact_u.(h * quad_t_nodes[1], quad_x_nodes)
-    @show (C.v_quad_values[1,1,:] / h) .- exact_v.(h * quad_t_nodes[1], quad_x_nodes)
-    @show C.w_quad_values[1,1,:] .- exact_w.(h * quad_t_nodes[1], quad_x_nodes)
+    @show C.u_quad_values[1,1,:] .- exact_u.(h * t_quad_nodes[1], x_quad_nodes)
+    @show (C.v_quad_values[1,1,:] / h) .- exact_v.(h * t_quad_nodes[1], x_quad_nodes)
+    @show C.w_quad_values[1,1,:] .- exact_w.(h * t_quad_nodes[1], x_quad_nodes)
 
     # Compute ∂L/∂θ at quadrature points
     for d in 1:D
