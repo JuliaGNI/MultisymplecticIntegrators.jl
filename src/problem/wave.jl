@@ -16,8 +16,8 @@ module Wave
     const D = 1
     const DX = 1
 
-    const tstep = 0.3
-    const tspan = (0.0, 3.0)
+    const timestep = 0.3
+    const timespan = (0.0, 3.0)
 
     const xstep = 0.01
     const xspan = (0.0,1.0)
@@ -66,17 +66,17 @@ module Wave
     end
 
     function initial_condition(x::Float64)
-        u₀ = exact_u(tspan[1], x)
-        v₀ = exact_v(tspan[1], x)
-        w₀ = exact_w(tspan[1], x)
+        u₀ = exact_u(timespan[1], x)
+        v₀ = exact_v(timespan[1], x)
+        w₀ = exact_w(timespan[1], x)
         return (u=u₀, v=v₀, w=w₀)
     end
 
     function initial_condition(x::Vector{Float64})
 
-        u₀ = [exact_u(tspan[1], xi) for xi in x]
-        v₀ = [exact_v(tspan[1], xi) for xi in x]
-        w₀ = [exact_w(tspan[1], xi) for xi in x]
+        u₀ = [exact_u(timespan[1], xi) for xi in x]
+        v₀ = [exact_v(timespan[1], xi) for xi in x]
+        w₀ = [exact_w(timespan[1], xi) for xi in x]
         return (u=u₀, v=v₀, w=w₀)
     end
 
@@ -125,10 +125,10 @@ module Wave
         1 / 2 * (c * v[1]^2 + w[1]^2)  
     end
 
-    function lpdeproblem(; lagrangian_function=lagrangian, initial_condition_function=initial_condition, boundary_condition_function=boundary_condition, tspan=tspan, tstep::Float64=tstep, xspan::Tuple=xspan, xstep::Float64=xstep, params=default_parameters,
+    function lpdeproblem(; lagrangian_function=lagrangian, initial_condition_function=initial_condition, boundary_condition_function=boundary_condition, timespan=timespan, timestep::Float64=timestep, xspan::Tuple=xspan, xstep::Float64=xstep, params=default_parameters,
         exact_u = exact_u, exact_v = exact_v, exact_w = exact_w)
-        # @assert tstep^2 < c * xstep^2 "tstep^2 < c*xstep^2 must hold for CFL condition"
-        @assert tspan[1] < tspan[2] "tspan must be increasing"
+        # @assert timestep^2 < c * xstep^2 "timestep^2 < c*xstep^2 must hold for CFL condition"
+        @assert timespan[1] < timespan[2] "timespan must be increasing"
         @assert xspan[1] < xspan[2] "xspan must be increasing"
 
         t, x, U, V, W = LPDE_variables(1, 1) # U,V,W does not have t,x dependence 
@@ -137,7 +137,7 @@ module Wave
         x_nodes = collect(xspan[1]:xstep:xspan[2])
         ics = initial_condition_function(x_nodes)
 
-        LPDEProblem(lag_sys, initial_condition_function, boundary_condition_function, ics, tspan, tstep, xspan, xstep, params,exact_u,exact_v,exact_w)
+        LPDEProblem(lag_sys, initial_condition_function, boundary_condition_function, ics, timespan, timestep, xspan, xstep, params,exact_u,exact_v,exact_w)
     end
 
 end

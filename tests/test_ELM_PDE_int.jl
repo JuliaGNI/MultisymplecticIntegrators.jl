@@ -1,4 +1,4 @@
-using GeometricIntegrators
+# using GeometricIntegrators
 using QuadratureRules
 using MultiSymplectic
 using AbstractNeuralNetworks

@@ -1,13 +1,19 @@
-struct LPDEProblem <: PDEProblem
+struct LPDE{invType <: OptionalInvariants,
+    parType <: OptionalParameters,
+    perType <: OptionalPeriodicity} <: GeometricEquation{invType,parType,perType} end
+
+# const LPDEProblem = EquationProblem{LPDE} ? 
+
+struct LPDEProblem{superType<:GeometricEquation,TT} <: GeometricProblem{superType}
     lagrangian_system
     D::Int
     ics_function::Function
     bcs_function::Function
     
-    ics_values::NamedTuple
+    ics::NamedTuple
 
-    tspan::Tuple{Float64, Float64}
-    tstep::Float64
+    timespan::Tuple{TT, TT}
+    timestep::TT
 
     xspan::Tuple{Float64, Float64}
     xstep::Float64
@@ -20,7 +26,8 @@ struct LPDEProblem <: PDEProblem
     exact_w
     least_squares_assemble
     function LPDEProblem(lag_sys,ics_function,bcs_function,ics_values,tspan, tstep, xspan, xstep, params,exact_u,exact_v,exact_w,least_squares_assemble = nothing;internal = nothing)
-        new(
+        superType = LPDE
+        new{superType, typeof(tstep)}(
             lag_sys,
             lag_sys.D,
             ics_function,
@@ -40,6 +47,10 @@ struct LPDEProblem <: PDEProblem
     end
 end
 
-datatype(problem::LPDEProblem) = eltype(problem.ics_values.u)
-timestep(problem::LPDEProblem) = problem.tstep
+datatype(problem::LPDEProblem) = eltype(problem.ics.u)
+timetype(problem::LPDEProblem) = typeof(problem.timestep)
+timestep(problem::LPDEProblem) = problem.timestep
 spacestep(problem::LPDEProblem) = problem.xstep
+timespan(problem::LPDEProblem) = problem.timespan
+periodicity(problem::LPDEProblem) = (u = NullPeriodicity(), v = NullPeriodicity(), w = NullPeriodicity())
+initial_conditions(problem::LPDEProblem) = problem.ics

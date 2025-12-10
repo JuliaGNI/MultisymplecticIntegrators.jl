@@ -1,8 +1,15 @@
 module MultiSymplectic
 
     using GeometricIntegrators
-    import GeometricIntegrators.Integrators: default_solver, default_iguess,default_options,initsolver,datatype
-    import GeometricIntegrators.Integrators: CacheDict, Cache,cache, caches,CacheType,solver
+    using GeometricBase
+    using GeometricIntegratorsBase
+    import GeometricIntegratorsBase: default_solver,default_options,initsolver,CacheDict,Cache,cache,CacheType,NoInitialGuess
+    import GeometricBase: datatype,timetype #,solver
+    import GeometricBase: initialtime, finaltime, timespan, timestep,periodicity, NullPeriodicity
+    import GeometricEquations:GeometricProblem,initial_conditions
+    using GeometricSolutions:GeometricSolution
+
+    # import GeometricIntegrators.Integrators: caches,
     using Symbolics
     using AbstractNeuralNetworks
     using SymbolicNeuralNetworks

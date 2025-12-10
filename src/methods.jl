@@ -1,17 +1,22 @@
-using GeometricIntegrators:GeometricMethod
+using GeometricIntegratorsBase:GeometricMethod
 abstract type PDEMethod <: GeometricMethod end
 
-using GeometricIntegrators:AbstractProblem
+using GeometricBase:AbstractProblem
 abstract type PDEProblem <: AbstractProblem end
 
-using GeometricIntegrators:IntegratorCache
+
+using GeometricEquations: GeometricEquation
+using GeometricBase:OptionalInvariants,OptionalParameters,OptionalPeriodicity
+
+
+using GeometricIntegratorsBase:IntegratorCache
 abstract type PDEIntegratorCache{DT,D} <: IntegratorCache{DT,D} end
 
-using GeometricIntegrators:AbstractIntegrator
+using GeometricBase:AbstractIntegrator
 abstract type AbstractPDEIntegrator <: AbstractIntegrator end
 
-# using GeometricSolutions:AbstractSolution
-abstract type AbstractPDESolution end #<: AbstractSolution
+# using GeometricBase:AbstractSolution
+# abstract type AbstractPDESolution <: AbstractSolution end
 
 # using CompactBasisFunctions: Basis
 abstract type AbstractPDEBasis end #<: Basis 

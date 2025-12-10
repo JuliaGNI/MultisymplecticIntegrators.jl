@@ -2,7 +2,7 @@
 
 julia_version = "1.12.2"
 manifest_format = "2.0"
-project_hash = "d2c7c4f7c1e60c15d80d287f0049d3f00420cce0"
+project_hash = "c2d8aa5e792a31c8c0098fbeac5ddd35a6f7bd42"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "8b2b045b22740e4be20654175cc38291d48539db"
@@ -723,33 +723,41 @@ uuid = "14197337-ba66-59df-a3e3-ca00e7dcff7a"
 version = "0.3.19"
 
 [[deps.GeometricBase]]
-git-tree-sha1 = "b30e4ea43ae5e58f29adc9182f613238beeb1b1a"
+git-tree-sha1 = "7381ca94ea5ea4d535b7c7decc32d2142a9e301d"
 uuid = "9a0b12b7-583b-4f04-aa1f-d8551b6addc9"
-version = "0.11.2"
+version = "0.12.4"
 
 [[deps.GeometricEquations]]
 deps = ["GeometricBase", "Parameters", "Random"]
-git-tree-sha1 = "50cc97d516a806e716f4585857fc0ca3a7e6ffdf"
+git-tree-sha1 = "5c6a38cf068fff676b30925cd15025fddfa85861"
 uuid = "c85262ba-a08a-430a-b926-d29770767bf2"
-version = "0.19.1"
+version = "0.20.3"
 
 [[deps.GeometricIntegrators]]
-deps = ["CompactBasisFunctions", "Documenter", "ForwardDiff", "GenericLinearAlgebra", "GeometricBase", "GeometricEquations", "GeometricSolutions", "LinearAlgebra", "OffsetArrays", "Parameters", "PrettyTables", "ProgressMeter", "QuadratureRules", "Reexport", "RungeKutta", "SharedArrays", "SimpleSolvers", "StaticArrays", "Test"]
-git-tree-sha1 = "c3a12ff4b453dbf76732f7db1e7a9dc6f098f937"
+deps = ["CompactBasisFunctions", "Documenter", "ForwardDiff", "GenericLinearAlgebra", "GeometricBase", "GeometricEquations", "GeometricIntegratorsBase", "GeometricSolutions", "LinearAlgebra", "OffsetArrays", "Parameters", "PrettyTables", "ProgressMeter", "QuadratureRules", "Reexport", "RungeKutta", "SharedArrays", "SimpleSolvers", "StaticArrays", "Test"]
+git-tree-sha1 = "5c81aafed1ae570da29858aeb7526087bd98a269"
 uuid = "dcce2d33-59f6-5b8d-9047-0defad88ae06"
-version = "0.14.11"
+version = "0.15.1"
+
+[[deps.GeometricIntegratorsBase]]
+deps = ["GeometricBase", "GeometricEquations", "GeometricSolutions", "LinearAlgebra", "OffsetArrays", "SimpleSolvers", "Unicode"]
+git-tree-sha1 = "d0e6e782948c6f14f3575a8a05296489d1f07b80"
+uuid = "71212ab4-08a2-48eb-a02b-4cbad0e9c44a"
+version = "0.1.6"
 
 [[deps.GeometricMachineLearning]]
 deps = ["AbstractNeuralNetworks", "BandedMatrices", "ChainRules", "ChainRulesCore", "ChainRulesTestUtils", "Distances", "ForwardDiff", "GeometricBase", "GeometricEquations", "GeometricSolutions", "HDF5", "InteractiveUtils", "KernelAbstractions", "LazyArrays", "LinearAlgebra", "NNlib", "Printf", "ProgressMeter", "Random", "SafeTestsets", "SparseArrays", "StatsBase", "SymbolicNeuralNetworks", "Symbolics", "TimerOutputs", "UpdateJulia", "Zygote", "ZygoteRules"]
-git-tree-sha1 = "c6afd102a21159649228a5c2e5ddd6a013f3d42d"
+git-tree-sha1 = "ac3dd40e8aa9caf3eeec2dd7d1ed3daa72a78d5d"
+repo-rev = "main"
+repo-url = "https://github.com/JuliaGNI/GeometricMachineLearning.jl.git"
 uuid = "194d25b2-d3f5-49f0-af24-c124f4aa80cc"
 version = "0.4.5"
 
 [[deps.GeometricSolutions]]
-deps = ["GeometricBase", "GeometricEquations", "OffsetArrays", "Test"]
-git-tree-sha1 = "fdceaa23714f3274faaaf8d0dc3cf6835f67c1bc"
+deps = ["GeometricBase", "GeometricEquations", "LinearAlgebra", "OffsetArrays", "Test"]
+git-tree-sha1 = "4214d97aebda431ac1fc2773d05b104551ca47c7"
 uuid = "7843afe4-64f4-4df4-9231-049495c56661"
-version = "0.5.1"
+version = "0.5.9"
 
 [[deps.GettextRuntime_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Libiconv_jll"]
@@ -1274,7 +1282,7 @@ uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 version = "2025.5.20"
 
 [[deps.MultiSymplectic]]
-deps = ["AbstractNeuralNetworks", "BSplineKit", "BenchmarkTools", "CompactBasisFunctions", "ForwardDiff", "GeometricEquations", "GeometricIntegrators", "GeometricMachineLearning", "GeometricSolutions", "Infiltrator", "IterTools", "LinearAlgebra", "Parameters", "Plots", "QuadratureRules", "Random", "SimpleSolvers", "Statistics", "SymbolicNeuralNetworks", "Symbolics", "Unitful", "Zygote"]
+deps = ["AbstractNeuralNetworks", "BSplineKit", "BenchmarkTools", "CompactBasisFunctions", "ForwardDiff", "GeometricEquations", "GeometricIntegrators", "GeometricIntegratorsBase", "GeometricMachineLearning", "GeometricSolutions", "Infiltrator", "IterTools", "LinearAlgebra", "Parameters", "Plots", "QuadratureRules", "Random", "SimpleSolvers", "Statistics", "SymbolicNeuralNetworks", "Symbolics", "Unitful", "Zygote"]
 path = "."
 uuid = "287958db-332d-4045-951c-e8138db0f134"
 version = "0.1.0"
