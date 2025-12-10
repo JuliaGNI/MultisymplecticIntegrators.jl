@@ -52,7 +52,7 @@ end
 
 default_solver(::TrialNN_PDE_int) = Newton()
 
-struct TrialNN_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
+struct TrialNN_PDE_intCache{ST,RT,RX,D,S,NP} <: PDEIntegratorCache{ST,D}
     """
     RT = number of quadrature points in time
     RX = number of quadrature points in space
@@ -60,6 +60,7 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     NP = number of parameters in the expression
     """
     x::Vector{ST}
+    W2::Vector{ST}
     W1::Matrix{ST}
     bias1::Vector{ST}
 
@@ -74,10 +75,12 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     ∂u∂θ_quad_values::Array{ST}
     ∂v∂θ_quad_values::Array{ST}
     ∂w∂θ_quad_values::Array{ST}
-    function TrialNN_PDE_intCache{ST,RT,RX,D,NP}() where {ST,RT,RX,D,NP}
+    function TrialNN_PDE_intCache{ST,RT,RX,D,S,NP}() where {ST,RT,RX,D,S,NP}
         x = zeros(ST, NP) # in ELM, x is just the output layer parameters
-        W1 = zeros(ST, NP, 2)
-        bias1 = zeros(ST, NP)
+        
+        W2 = zeros(ST, S)
+        W1 = zeros(ST, S, 2)
+        bias1 = zeros(ST, S)
 
         u_quad_values = zeros(ST, D, RT, RX)
         v_quad_values = zeros(ST, D, RT, RX)
@@ -91,7 +94,8 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
         ∂v∂θ_quad_values = zeros(ST, D, RT, RX, NP)
         ∂w∂θ_quad_values = zeros(ST, D, RT, RX, NP)
 
-        new(x,W1,bias1,
+        new(x,
+            W2,W1,bias1,
             u_quad_values,v_quad_values,w_quad_values,
             ∂L∂U_quad_values,∂L∂V_quad_values,∂L∂W_quad_values,
             ∂u∂θ_quad_values,∂v∂θ_quad_values,∂w∂θ_quad_values,
@@ -188,6 +192,14 @@ w_trial(t, x, W2,W1,bias1,int,sol) = ForwardDiff.derivative(xx -> u_trial(t,xx,W
 ∂u∂W2(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> u_trial(t,x,p,W1,bias1,int,sol),W2)
 ∂v∂W2(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * ForwardDiff.gradient(p -> v_trial(t,x,p,W1,bias1,int,sol),W2)
 ∂w∂W2(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> w_trial(t,x,p,W1,bias1,int,sol),W2)
+
+∂u∂W1(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> u_trial(t,x,W2,p,bias1,int,sol),W1)
+∂v∂W1(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * ForwardDiff.gradient(p -> v_trial(t,x,W2,p,bias1,int,sol),W1)
+∂w∂W1(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> w_trial(t,x,W2,p,bias1,int,sol),W1)
+
+∂u∂bias1(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> u_trial(t,x,W2,W1,p,int,sol),bias1)
+∂v∂bias1(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * ForwardDiff.gradient(p -> v_trial(t,x,W2,W1,p,int,sol),bias1)
+∂w∂bias1(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> w_trial(t,x,W2,W1,p,int,sol),bias1)
 
 
 function mse_loss(params, tx_in, u_trial,int,sol)
@@ -444,10 +456,11 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
     local xspan = int.problem.xspan
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
     local C = cache(int,ST)
-
+    local S = int.method.basis.S
     local W1 = cache(int).W1
     local bias1 = cache(int).bias1
-
+    local W2 = cache(int).W2
+    
     t2 = time()
     for d in 1:D
         for i in 1:RT
@@ -473,10 +486,6 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
     t3 = time()
     # println("Time for u,v,w quad values computation: ", t3 - t2)
 
-    @show C.u_quad_values[1,1,:]
-    @show C.v_quad_values[1,1,:]
-    @show C.w_quad_values[1,1,:]
-
     local exact_u = int.problem.exact_u
     local exact_v = int.problem.exact_v
     local exact_w = int.problem.exact_w
@@ -484,9 +493,9 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
     local t_quad_nodes = int.method.time_quadrature.nodes
     local h = timestep(int)
     
-    @show C.u_quad_values[1,1,:] .- exact_u.(h * t_quad_nodes[1], x_quad_nodes)
-    @show (C.v_quad_values[1,1,:] / h) .- exact_v.(h * t_quad_nodes[1], x_quad_nodes)
-    @show C.w_quad_values[1,1,:] .- exact_w.(h * t_quad_nodes[1], x_quad_nodes)
+    @show C.u_quad_values[1,1,:] .- exact_u.(h * t_quad_nodes[1], xspan[1] .+ x_domain .* x_quad_nodes)
+    @show C.v_quad_values[1,1,:] .- exact_v.(h * t_quad_nodes[1], xspan[1] .+ x_domain .* x_quad_nodes)
+    @show C.w_quad_values[1,1,:] .- exact_w.(h * t_quad_nodes[1], xspan[1] .+ x_domain .* x_quad_nodes)
 
     # Compute ∂L/∂θ at quadrature points
     for d in 1:D
@@ -499,7 +508,7 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:TrialNN_PD
         end 
     end
     t4 = time()
-    @infiltrate
+    # @infiltrate
     # println("Time for ∂L∂U,V,W quad values computation: ", t4 - t3)
 end
 
@@ -523,14 +532,15 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{<:TrialNN_PDE_int}) wh
                     z +=  quad_b[rt,rx] * 
                         ( x_domain * timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * C.∂u∂θ_quad_values[d,rt,rx,p]
                         + x_domain                 * C.∂L∂V_quad_values[d,rt,rx] * C.∂v∂θ_quad_values[d,rt,rx,p]
-                        +           timestep(int)  * C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂θ_quad_values[d,rt,rx,p])
+                        + x_domain * timestep(int)  * C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂θ_quad_values[d,rt,rx,p])
                 end
             end
             b[p] = -z
         end
     end
     # println("In the end of residual! function, b = ", b)
-    @infiltrate
+    # @infiltrate
+    @show b
 end
 
 function update!(sol_struct, int::PDEIntegrator{<:TrialNN_PDE_int})
