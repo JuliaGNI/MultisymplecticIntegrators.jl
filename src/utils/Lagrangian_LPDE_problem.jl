@@ -54,3 +54,4 @@ spacestep(problem::LPDEProblem) = problem.xstep
 timespan(problem::LPDEProblem) = problem.timespan
 periodicity(problem::LPDEProblem) = (u = NullPeriodicity(), v = NullPeriodicity(), w = NullPeriodicity())
 initial_conditions(problem::LPDEProblem) = problem.ics
+parameters(problem::LPDEProblem) = problem.params

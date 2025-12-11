@@ -256,12 +256,12 @@ end
 
 nlsolution(cache::Galerkin_Bspline_IntegratorCache) = cache.x
 
-function Cache{ST}(problem::PDEProblem, int::Galerkin_Bspline_Integrator; kwargs...) where {ST}
+function Cache{ST}(problem::LPDEProblem, int::Galerkin_Bspline_Integrator; kwargs...) where {ST}
     Galerkin_Bspline_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.S}(; kwargs...)
 end
 
 #{ST,RT,RX,D,NP}(NP) where {ST,RT,RX,D,NP}
-@inline GeometricIntegrators.Integrators.CacheType(ST, problem::PDEProblem, int::Galerkin_Bspline_Integrator) = Galerkin_Bspline_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.S}
+@inline GeometricIntegrators.Integrators.CacheType(ST, problem::LPDEProblem, int::Galerkin_Bspline_Integrator) = Galerkin_Bspline_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.S}
 
 @inline function Base.getindex(c::Galerkin_Bspline_IntegratorCache, ST::DataType)
     key = hash(Threads.threadid(), hash(ST))

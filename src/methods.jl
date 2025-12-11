@@ -1,8 +1,8 @@
 using GeometricIntegratorsBase:GeometricMethod
 abstract type PDEMethod <: GeometricMethod end
 
-using GeometricBase:AbstractProblem
-abstract type PDEProblem <: AbstractProblem end
+# using GeometricBase:AbstractProblem
+# abstract type PDEProblem <: AbstractProblem end
 
 
 using GeometricEquations: GeometricEquation

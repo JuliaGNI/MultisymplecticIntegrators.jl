@@ -32,7 +32,7 @@ Nb = 5
 
 x_step = 0.01
 x_span = (0.3, 0.8)
-lpde = MultiSymplectic.Wave.lpdeproblem(tstep=t_step, tspan=(0.0, t_step), xspan=x_span, xstep=x_step)
+lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=(0.0, t_step), xspan=x_span, xstep=x_step)
 
 relu3(x) = max(0.0,x)^3
 activation = tanh

@@ -193,12 +193,12 @@ end
 
 nlsolution(cache::Sindy_PDE_IntegratorCache) = cache.x
 
-function Cache{ST}(problem::PDEProblem, int::Sindy_PDE_Integrator; kwargs...) where {ST}
+function Cache{ST}(problem::LPDEProblem, int::Sindy_PDE_Integrator; kwargs...) where {ST}
     Sindy_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.symbolic_expr_basis.NP}(int.symbolic_expr_basis.P_sizes; kwargs...)
 end
 
 #{ST,RT,RX,D,NP}(P_sizes) where {ST,RT,RX,D,NP}
-@inline GeometricIntegrators.Integrators.CacheType(ST, problem::PDEProblem, int::Sindy_PDE_Integrator) = Sindy_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.symbolic_expr_basis.NP}
+@inline GeometricIntegrators.Integrators.CacheType(ST, problem::LPDEProblem, int::Sindy_PDE_Integrator) = Sindy_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.symbolic_expr_basis.NP}
 
 @inline function Base.getindex(c::Sindy_PDE_IntegratorCache, ST::DataType)
     key = hash(Threads.threadid(), hash(ST))

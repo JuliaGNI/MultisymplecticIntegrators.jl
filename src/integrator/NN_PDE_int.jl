@@ -196,12 +196,12 @@ end
 
 nlsolution(cache::NN_PDE_IntegratorCache) = cache.x
 
-function Cache{ST}(problem::PDEProblem, int::NN_PDE_Integrator; kwargs...) where {ST}
+function Cache{ST}(problem::LPDEProblem, int::NN_PDE_Integrator; kwargs...) where {ST}
     NN_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.NP,int.basis.S}(; kwargs...)
 end
 
 #{ST,RT,RX,D,NP}(NP) where {ST,RT,RX,D,NP}
-@inline GeometricIntegrators.Integrators.CacheType(ST, problem::PDEProblem, int::NN_PDE_Integrator) = NN_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.NP,int.basis.S}
+@inline GeometricIntegrators.Integrators.CacheType(ST, problem::LPDEProblem, int::NN_PDE_Integrator) = NN_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.NP,int.basis.S}
 
 @inline function Base.getindex(c::NN_PDE_IntegratorCache, ST::DataType)
     key = hash(Threads.threadid(), hash(ST))

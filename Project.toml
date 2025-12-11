@@ -32,6 +32,3 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 GeometricMachineLearning = {rev = "main", url = "https://github.com/JuliaGNI/GeometricMachineLearning.jl.git"}
 
 [compat]
-GeometricBase = "0.12.4"
-GeometricIntegratorsBase = "0.1.6"
-GeometricMachineLearning = "0.4.5"

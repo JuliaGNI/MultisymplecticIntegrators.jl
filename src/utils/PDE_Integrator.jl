@@ -1,6 +1,6 @@
 struct PDEIntegrator{
     MT<:PDEMethod,
-    PT<:PDEProblem,
+    PT<:LPDEProblem,
     CT<:CacheDict{PT,MT},
     ST <: Union{NonlinearSolver,SolverMethod}} <: AbstractPDEIntegrator 
     
@@ -10,7 +10,7 @@ struct PDEIntegrator{
     solver::ST
 end
 
-function PDEIntegrator(problem::PDEProblem,
+function PDEIntegrator(problem::LPDEProblem,
     integratormethod::PDEMethod,
     solvermethod::NewtonMethod,
     options = default_options(),
@@ -22,7 +22,7 @@ function PDEIntegrator(problem::PDEProblem,
 end
 
 function PDEIntegrator(
-    problem::PDEProblem,
+    problem::LPDEProblem,
     method::PDEMethod;
     solver = default_solver(method),
     kwargs...
@@ -30,7 +30,7 @@ function PDEIntegrator(
     PDEIntegrator(problem, method, solver; kwargs...)
 end
 
-initmethod(method::PDEMethod, problem::PDEProblem) = method
+initmethod(method::PDEMethod, problem::LPDEProblem) = method
 problem(integrator::PDEIntegrator) = integrator.problem
 caches(int::PDEIntegrator) = int.caches
 cache(int::PDEIntegrator, DT) = caches(int)[DT]
@@ -38,15 +38,16 @@ cache(int::PDEIntegrator) = cache(int, datatype(problem(int)))
 nlsolution(int::PDEIntegrator) = nlsolution(cache(int))
 solver(int::PDEIntegrator) = int.solver
 timestep(int::PDEIntegrator) = timestep(problem(int))
+method(int::PDEIntegrator) = int.method
 
 
-function integrate(problem::PDEProblem, method::PDEMethod; kwargs...)
+function integrate(problem::LPDEProblem, method::PDEMethod; kwargs...)
     integrator = PDEIntegrator(problem, method; kwargs...)
     integrate(integrator)
 end
 
 function integrate(integrator::AbstractPDEIntegrator)
-    sol = GeometricSolution(problem(integrator),internal = internal_variables(integrator,problem(integrator)))
+    sol = GeometricSolution(problem(integrator)) #,internal = internal_variables(integrator,problem(integrator)
     integrate!(sol, integrator)
 end
 
@@ -55,7 +56,7 @@ function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator)
     return sol
 end
 
-function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator, n₁::Int, n₂::Int)
+function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator, n₁::Int, n₂::Int;kwargs...)
     # check time steps range for consistency
     @assert n₁ ≥ 1
     @assert n₂ ≥ n₁
@@ -65,18 +66,21 @@ function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator, n₁::In
     solstep = solutionstep(int, sol[n₁-1])
     # loop over time steps
     for n in n₁:n₂
-        println("start integrating step = ", sol.current_step, "current time = ", sol.t)
-        
-        prior_initial_guess!(cache(int),sol,int)
-        initialize_bcs_ics!(sol,int)
+        sol[n] = integrate!(solstep, int)
 
-        # integrate one step and copy solution from cache to solution
-        integrate_step!(sol, int)
-        println("finish integrating step  = ", sol.current_step, "current time = ", sol.t)
 
     end
 
     return sol
+end
+
+function integrate!(solstep::SolutionStep, int::AbstractPDEIntegrator)
+    prior_initial_guess!(cache(int),solstep,int)
+
+    initialize_bcs_ics!(solstep,int)
+
+    # integrate one step and copy solution from cache to solution
+    integrate_step!(solstep, int)
 end
 
 
@@ -103,7 +107,7 @@ function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol, int::Abstr
     residual!(b, sol, sol.params, int)
 end
 
-function internal_variables(int,problem::PDEProblem)
+function internal_variables(int,problem::LPDEProblem)
     local x = cache(int).x
     ntime = Int((problem.tspan[2] - problem.tspan[1]) / problem.tstep)
     xx = (x, ntuple( _ -> zeros(size(x)...), ntime)...)

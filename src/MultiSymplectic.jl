@@ -3,7 +3,8 @@ module MultiSymplectic
     using GeometricIntegrators
     using GeometricBase
     using GeometricIntegratorsBase
-    import GeometricIntegratorsBase: default_solver,default_options,initsolver,CacheDict,Cache,cache,CacheType,NoInitialGuess
+    import GeometricIntegratorsBase: default_solver,default_options,initsolver,CacheDict,Cache,cache,CacheType,NoInitialGuess,solutionstep
+    import GeometricIntegratorsBase: problem,method,parameters
     import GeometricBase: datatype,timetype #,solver
     import GeometricBase: initialtime, finaltime, timespan, timestep,periodicity, NullPeriodicity
     import GeometricEquations:GeometricProblem,initial_conditions
@@ -30,19 +31,19 @@ module MultiSymplectic
 
     # abstract types
     include("methods.jl")
-    export PDEMethod, PDEProblem, PDEIntegratorCache, AbstractPDEIntegrator, GeometricPDESolution
+    export PDEMethod, PDEIntegratorCache, AbstractPDEIntegrator, GeometricPDESolution
     export InitialParametersMethod, LSGD, ELM, PINN, TrialOGA2D, OGA2D
     # utils
     include("utils/common.jl")
     export LPDE_variables,symbolize,substitute_parameters,Lagrangian_multiplier
 
-    include("utils/Lagrangian_PDE_problem.jl")
+    include("utils/Lagrangian_LPDE_problem.jl")
     export LPDEProblem
 
-    include("utils/Lagrangian_PDE_solution.jl")
-    export LPDE_solution
+    # include("utils/Lagrangian_PDE_solution.jl")
+    # export LPDE_solution
     
-    include("utils/Lagrangian_PDE_system.jl")
+    include("utils/Lagrangian_LPDE_system.jl")
     export LPDESystem
 
     include("utils/PDE_Integrator.jl")

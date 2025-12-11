@@ -105,12 +105,11 @@ end
 
 nlsolution(cache::TrialNN_PDE_intCache) = cache.x
 
-function Cache{ST}(problem::PDEProblem, int::TrialNN_PDE_int; kwargs...) where {ST}
+function Cache{ST}(problem::LPDEProblem, int::TrialNN_PDE_int; kwargs...) where {ST}
     TrialNN_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.S,int.basis.NP}(; kwargs...)
 end
 
-@inline GeometricIntegrators.Integrators.CacheType(ST, problem::PDEProblem, int::TrialNN_PDE_int) = TrialNN_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.S,int.basis.NP}
-
+@inline GeometricIntegrators.Integrators.CacheType(ST, problem::LPDEProblem, int::TrialNN_PDE_int) = TrialNN_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.S,int.basis.NP}
 @inline function Base.getindex(c::TrialNN_PDE_intCache, ST::DataType)
     key = hash(Threads.threadid(), hash(ST))
     if haskey(c.caches, key)
@@ -603,7 +602,7 @@ function update!(sol_struct, int::PDEIntegrator{<:TrialNN_PDE_int})
     # println("In the end of update! function, time = ", sol_struct.t)
 end
 
-function internal_variables(int::PDEIntegrator{<:TrialNN_PDE_int}, problem::PDEProblem)
+function internal_variables(int::PDEIntegrator{<:TrialNN_PDE_int}, problem::LPDEProblem)
     local NP = int.method.basis.NP
 
     W1 = zeros(NP, 2)

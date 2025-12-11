@@ -123,11 +123,11 @@ end
 
 nlsolution(cache::ELM_PDE_intCache) = cache.x
 
-function Cache{ST}(problem::PDEProblem, int::ELM_PDE_int; kwargs...) where {ST}
+function Cache{ST}(problem::LPDEProblem, int::ELM_PDE_int; kwargs...) where {ST}
     ELM_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.NP}(; kwargs...)
 end
 
-@inline GeometricIntegrators.Integrators.CacheType(ST, problem::PDEProblem, int::ELM_PDE_int) = ELM_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.NP}
+@inline GeometricIntegrators.Integrators.CacheType(ST, problem::LPDEProblem, int::ELM_PDE_int) = ELM_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.NP}
 
 @inline function Base.getindex(c::ELM_PDE_intCache, ST::DataType)
     key = hash(Threads.threadid(), hash(ST))
@@ -351,7 +351,7 @@ function update!(sol_struct, int::PDEIntegrator{<:ELM_PDE_int})
     # println("In the end of update! function, time = ", sol_struct.t)
 end
 
-function internal_variables(int::PDEIntegrator{<:ELM_PDE_int},problem::PDEProblem)
+function internal_variables(int::PDEIntegrator{<:ELM_PDE_int},problem::LPDEProblem)
     local x = cache(int).x
     local init_condition_t₀ = cache(int).init_condition_t₀
     ntime = Int((problem.tspan[2] - problem.tspan[1]) / problem.tstep)
