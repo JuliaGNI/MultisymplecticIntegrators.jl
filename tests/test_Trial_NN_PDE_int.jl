@@ -17,8 +17,8 @@ using Base
 
 t_step = 0.1
 NN_width = 2
-Nw = 5
-Nb = 5
+Nw = 500
+Nb = 500
 
 # GeometricIntegrators.Integrators.default_options(::TrialNN_PDE_int) = Options(
 #     x_reltol = 2eps(),
@@ -37,15 +37,15 @@ lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=(0.0, t_step),
 relu3(x) = max(0.0,x)^3
 activation = tanh
 trial_basis = Trial_Solution_Basis(NN_width, activation)
-rt = 2
-rx = 3
+rt = 12
+rx = 36
 # for rt in [12,]
 #     for rx in [36,]
 
-# log_file="logs/h$(t_step)_width$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx)$(activation)_full.txt"
-# open(log_file, "w") do io
-#         redirect_stdout(io) do
-#                 println("Start RT = $rt, RX = $rx")
+log_file="logs/h$(t_step)_width$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx)$(activation)_full.txt"
+open(log_file, "w") do io
+        redirect_stdout(io) do
+                println("Start RT = $rt, RX = $rx")
                 trial_int = TrialNN_PDE_int(trial_basis, xstep=x_step, xspan=x_span, initial_guess_method=TrialOGA2D(), RT=rt, RX=rx,Nw = Nw, Nb=Nb)
                 trial_sol = MultiSymplectic.integrate(lpde, trial_int)
 
@@ -57,8 +57,8 @@ rx = 3
                 plot!(p1, lpde.exact_u.(t_step, x_plot), label="Exact")
 
                 savefig("logs/h$(t_step)_NNwidth$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx)$(activation)_full.png")
-#         end
-# end
+        end
+end
 # (u_trial(grid_matrix[1,1][1] , xspan[1] + x_domain* grid_matrix[1,1][2]+ 3eps(),x,W1,bias1,int,sol) - u_trial(grid_matrix[1,1][1] , xspan[1] + x_domain* grid_matrix[1,1][2]- 3eps(),x,W1,bias1,int,sol)) / 6eps()
 
 
@@ -561,8 +561,3 @@ savefig("logs/h$(t_step)_NNwidth$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx)$(act
 
 # plot(ds_loss)
 # plot(ls_loss)
-
-using MultiSymplectic
-using GeometricSolutions:GeometricSolution
-lpde = MultiSymplectic.Wave.lpdeproblem(timestep = 0.1,timespan =(0.0,10.0),xspan = (0.0,1.0))
-sol= GeometricSolution(lpde)

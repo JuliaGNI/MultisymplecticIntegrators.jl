@@ -12,12 +12,12 @@ end
 
 function PDEIntegrator(problem::LPDEProblem,
     integratormethod::PDEMethod,
-    solvermethod::NewtonMethod,
-    options = default_options(),
+    solvermethod::NewtonMethod;
     method = initmethod(integratormethod, problem),
     caches = CacheDict(problem, method),
-    solver = initsolver(solvermethod, method, caches)
+    options...
 )
+    solver = initsolver(solvermethod, method, caches; (length(options) == 0 ? default_options(integratormethod) : options)...)
     PDEIntegrator(problem,integratormethod, caches, solver)
 end
 
@@ -39,7 +39,9 @@ nlsolution(int::PDEIntegrator) = nlsolution(cache(int))
 solver(int::PDEIntegrator) = int.solver
 timestep(int::PDEIntegrator) = timestep(problem(int))
 method(int::PDEIntegrator) = int.method
-
+_state(a::Vector{TT}) where {TT} = zeros(TT,length(a))
+_vectorfield(a::Vector{TT}) where TT = missing
+nlsolution(int::PDEIntegratorCache) = cache(int).x
 
 function integrate(problem::LPDEProblem, method::PDEMethod; kwargs...)
     integrator = PDEIntegrator(problem, method; kwargs...)
@@ -79,14 +81,16 @@ function integrate!(solstep::SolutionStep, int::AbstractPDEIntegrator)
 
     initialize_bcs_ics!(solstep,int)
 
+    copy_internal_variables!(solstep, cache(int))
+
     # integrate one step and copy solution from cache to solution
-    integrate_step!(solstep, int)
+    integrate_step!(current(solstep), history(solstep), parameters(solstep), int)
 end
 
 
-function integrate_step!(sol_struct, int::AbstractPDEIntegrator)
+function integrate_step!(sol, history, params, int::AbstractPDEIntegrator)
     # call nonlinear solver
-    solve!(solver(int), cache(int).x, (sol_struct.sol,sol_struct.params,int))
+    solve!(nlsolution(int), solver(int), (sol,params,int))
 
     # print solver status
     # println(status(solver))
@@ -98,13 +102,13 @@ function integrate_step!(sol_struct, int::AbstractPDEIntegrator)
     update!(sol, int)
 end
 
-function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol, int::AbstractPDEIntegrator) where {ST}
+function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol, params, int::AbstractPDEIntegrator) where {ST}
     # check that x and b are compatible
     @assert axes(x) == axes(b)
 
-    components!(x, sol, sol.params, int)
+    components!(x, sol, params, int)
 
-    residual!(b, sol, sol.params, int)
+    residual!(b, sol, params, int)
 end
 
 function internal_variables(int,problem::LPDEProblem)

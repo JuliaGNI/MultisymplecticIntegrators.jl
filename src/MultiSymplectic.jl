@@ -4,8 +4,9 @@ module MultiSymplectic
     using GeometricBase
     using GeometricIntegratorsBase
     import GeometricIntegratorsBase: default_solver,default_options,initsolver,CacheDict,Cache,cache,CacheType,NoInitialGuess,solutionstep
-    import GeometricIntegratorsBase: problem,method,parameters
-    import GeometricBase: datatype,timetype #,solver
+    import GeometricIntegratorsBase: problem,method,parameters,SolverMethod,history, solver,residual!,copy_internal_variables!,internal
+    import GeometricIntegratorsBase: _state, _vectorfield, compute_vectorfields!,_extrapolate!,internal_variables,nlsolution
+    import GeometricBase: datatype,timetype
     import GeometricBase: initialtime, finaltime, timespan, timestep,periodicity, NullPeriodicity
     import GeometricEquations:GeometricProblem,initial_conditions
     using GeometricSolutions:GeometricSolution

@@ -27,6 +27,7 @@ struct LPDEProblem{superType<:GeometricEquation,TT} <: GeometricProblem{superTyp
     least_squares_assemble
     function LPDEProblem(lag_sys,ics_function,bcs_function,ics_values,tspan, tstep, xspan, xstep, params,exact_u,exact_v,exact_w,least_squares_assemble = nothing;internal = nothing)
         superType = LPDE
+        # ics_values = merge((t = tspan[begin],), ics_values)
         new{superType, typeof(tstep)}(
             lag_sys,
             lag_sys.D,
@@ -53,5 +54,7 @@ timestep(problem::LPDEProblem) = problem.timestep
 spacestep(problem::LPDEProblem) = problem.xstep
 timespan(problem::LPDEProblem) = problem.timespan
 periodicity(problem::LPDEProblem) = (u = NullPeriodicity(), v = NullPeriodicity(), w = NullPeriodicity())
-initial_conditions(problem::LPDEProblem) = problem.ics
+initial_conditions(problem::LPDEProblem) = merge((t = problem.timespan[begin],), problem.ics)
 parameters(problem::LPDEProblem) = problem.params
+compute_vectorfields!(vecfield, sol, prob::LPDEProblem) = nothing
+_extrapolate!(newsol, oldsol, problem::LPDEProblem, extrap) = nothing

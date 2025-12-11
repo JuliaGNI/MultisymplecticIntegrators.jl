@@ -143,8 +143,6 @@ function lagrangianPDE_derivatives(t,x,u,v,w)
     return (Dt, Dx, Du, Dv, Dw)
 end
 
-GeometricIntegrators.Integrators.nlsolution(c::PDEIntegratorCache) = c.x
-
 Lagrangian_multiplier(::Val{:BSplineDirichlet},order::Integer,quad_nodes::Vector{Float64}) = BSplineDirichlet(order,quad_nodes)
 Lagrangian_multiplier(::Val{:Lagrange},order::Integer,quad_nodes::Vector{Float64}) = CompactBasisFunctions.Lagrange(quad_nodes)
 
