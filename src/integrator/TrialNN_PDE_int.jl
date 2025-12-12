@@ -188,23 +188,46 @@ function u_trial(t, x, W2,W1,bias1,int,sol)
     NN(t,x,W2,W1,bias1,int) - T1NN_manual(t, x, W2,W1,bias1,int) + T2NN_manual(t, x, W2,W1,bias1,int) + C1(t, x, tn,int) - C2(t, x, tn, int)
 end
 
+function u_trial(t,x,all_params::Vector{ST},int,sol) where ST
+    local S = int.method.basis.s
+
+    W2 = zeros(ST, S)
+    W1 = zeros(ST, S, 2)
+    bias1 = zeros(ST, S)
+
+    W2 = all_params[1:S]
+    W1[:,1] = all_params[S+1:2*S] 
+    W1[:,2] = all_params[2*S+1:3*S]
+    bias1 = all_params[3*S+1:4*S]
+    return u_trial(t,x,W2,W1,bias1,int,sol)
+end
+
 v_trial_zygote(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * Zygote.gradient(tt -> u_trial(tt,x,W2,W1,bias1,int,sol),t)[1]
 w_trial_zygote(t, x, W2,W1,bias1,int,sol) = Zygote.gradient(xx -> u_trial(t,xx,W2,W1,bias1,int,sol),x)[1]
 
-v_trial(t, x, W2,W1,bias1,int,sol) = ForwardDiff.derivative(tt -> u_trial(tt,x,W2,W1,bias1,int,sol),t)[1]
+v_trial(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * ForwardDiff.derivative(tt -> u_trial(tt,x,W2,W1,bias1,int,sol),t)[1]
 w_trial(t, x, W2,W1,bias1,int,sol) = ForwardDiff.derivative(xx -> u_trial(t,xx,W2,W1,bias1,int,sol),x)[1]
 
-∂u∂W2(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> u_trial(t,x,p,W1,bias1,int,sol),W2)
-∂v∂W2(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * ForwardDiff.gradient(p -> v_trial(t,x,p,W1,bias1,int,sol),W2)
-∂w∂W2(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> w_trial(t,x,p,W1,bias1,int,sol),W2)
+v_trial(t,x,params,int,sol) = (1 / timestep(int)) * ForwardDiff.derivative(tt -> u_trial(tt,x,params,int,sol),t)[1]
+w_trial(t,x,params,int,sol) = ForwardDiff.derivative(xx -> u_trial(t,xx,params,int,sol),x)[1]
 
-∂u∂W1(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> u_trial(t,x,W2,p,bias1,int,sol),W1)
-∂v∂W1(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * ForwardDiff.gradient(p -> v_trial(t,x,W2,p,bias1,int,sol),W1)
-∂w∂W1(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> w_trial(t,x,W2,p,bias1,int,sol),W1)
+∂u∂p(t,x,params,int,sol) = ForwardDiff.gradient(p -> u_trial(t,x,p,int,sol),params)
+∂v∂p(t,x,params,int,sol) = (1 / timestep(int)) * ForwardDiff.gradient(p -> v_trial(t,x,p,int,sol),params)
+∂w∂p(t,x,params,int,sol) = ForwardDiff.gradient(p -> w_trial(t,x,p,int,sol),params)
 
-∂u∂bias1(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> u_trial(t,x,W2,W1,p,int,sol),bias1)
-∂v∂bias1(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * ForwardDiff.gradient(p -> v_trial(t,x,W2,W1,p,int,sol),bias1)
-∂w∂bias1(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> w_trial(t,x,W2,W1,p,int,sol),bias1)
+# ∂u∂W2(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> u_trial(t,x,p,W1,bias1,int,sol),W2)
+# ∂v∂W2(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * ForwardDiff.gradient(p -> v_trial(t,x,p,W1,bias1,int,sol),W2)
+# ∂w∂W2(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> w_trial(t,x,p,W1,bias1,int,sol),W2)
+
+# ∂u∂W1(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> u_trial(t,x,W2,p,bias1,int,sol),W1)
+# ∂v∂W1(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * ForwardDiff.gradient(p -> v_trial(t,x,W2,p,bias1,int,sol),W1)
+# ∂w∂W1(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> w_trial(t,x,W2,p,bias1,int,sol),W1)
+
+# ∂u∂bias1(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> u_trial(t,x,W2,W1,p,int,sol),bias1)
+# ∂v∂bias1(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * ForwardDiff.gradient(p -> v_trial(t,x,W2,W1,p,int,sol),bias1)
+# ∂w∂bias1(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> w_trial(t,x,W2,W1,p,int,sol),bias1)
+
+
 
 
 function mse_loss(params, tx_in, u_trial,int,sol)
@@ -387,38 +410,6 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
         println("s=$s idx=$idx ‖residual‖=$(norm(residual))")
     end
 
-    #     coeffs_full = [  0.6326619468608073, 0.00884977239310545,
-    #   0.4315366403167107,
-    #  -0.23097264827234718,
-    #  -0.8639062057531923,
-    #  -0.34446633136732313,
-    #  -0.33641779690674506,
-    #   0.12898418624582633,
-    #   0.34569861714766936,
-    #  -0.27813745808117274]
-
-    #     Wsel = [  0.368125      0.929776
-    #   0.929776     -0.368125
-    #  -0.957319     -0.289032
-    #  -1.83697e-16  -1.0
-    #  -0.653421      0.756995
-    #   0.684547      0.728969
-    #   0.368125     -0.929776
-    #  -0.770513      0.637424
-    #  -0.604599      0.79653
-    #   0.570714      0.821149]
-
-    #   Bsel = [  3.141592653589793,
-    #   3.141592653589793,
-    #   3.141592653589793,
-    #   2.9112091923265417,
-    #   3.141592653589793,
-    #  -0.43982297150257105,
-    #   0.41887902047863906,
-    #  -0.1466076571675237,
-    #  -0.48171087355043496,
-    #  -0.25132741228718347]
-
     for j = 1:S
         C.W1[j, :] .= Wsel[j, :]
         C.bias1[j] = Bsel[j]
@@ -468,27 +459,27 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Tr
     local bias1 = cache(int,ST).bias1
     local W2 = cache(int,ST).W2
 
-    # Unpack parameters from x into W2, W1, bias1
-    W2 = x[1:S]
-    W1[:,1] = x[S+1:2*S] 
-    W1[:,2] = x[2*S+1:3*S]
-    bias1 = x[3*S+1:4*S]
+    # # Unpack parameters from x into W2, W1, bias1
+    # W2 = x[1:S]
+    # W1[:,1] = x[S+1:2*S] 
+    # W1[:,2] = x[2*S+1:3*S]
+    # bias1 = x[3*S+1:4*S]
 
     t2 = time()
     for d in 1:D
         for i in 1:RT
             for j in 1:RX 
-                C.∂u∂θ_quad_values[d, i, j, 1:S] = ∂u∂W2(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],W2,cache(int).W1,cache(int).bias1,int,sol)
-                C.∂v∂θ_quad_values[d, i, j, 1:S] = ∂v∂W2(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],W2,cache(int).W1,cache(int).bias1,int,sol)
-                C.∂w∂θ_quad_values[d, i, j, 1:S] = ∂w∂W2(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],W2,cache(int).W1,cache(int).bias1,int,sol)
+                C.∂u∂θ_quad_values[d, i, j, :] = ∂u∂p(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],x,int,sol)
+                C.∂v∂θ_quad_values[d, i, j, :] = ∂v∂p(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],x,int,sol)
+                C.∂w∂θ_quad_values[d, i, j, :] = ∂w∂(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],x,int,sol)
 
-                C.∂u∂θ_quad_values[d, i, j, S+1:3*S] = reshape(∂u∂W1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,W1,cache(int).bias1,int,sol),:,1)
-                C.∂v∂θ_quad_values[d, i, j, S+1:3*S] = reshape(∂v∂W1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,W1,cache(int).bias1,int,sol),:,1)
-                C.∂w∂θ_quad_values[d, i, j, S+1:3*S] = reshape(∂w∂W1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,W1,cache(int).bias1,int,sol),:,1)
+                # C.∂u∂θ_quad_values[d, i, j, S+1:3*S] = reshape(∂u∂W1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,W1,cache(int).bias1,int,sol),:,1)
+                # C.∂v∂θ_quad_values[d, i, j, S+1:3*S] = reshape(∂v∂W1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,W1,cache(int).bias1,int,sol),:,1)
+                # C.∂w∂θ_quad_values[d, i, j, S+1:3*S] = reshape(∂w∂W1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,W1,cache(int).bias1,int,sol),:,1)
 
-                C.∂u∂θ_quad_values[d, i, j, 3*S+1:end] = ∂u∂bias1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,cache(int).W1,bias1,int,sol)
-                C.∂v∂θ_quad_values[d, i, j, 3*S+1:end] = ∂v∂bias1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,cache(int).W1,bias1,int,sol)
-                C.∂w∂θ_quad_values[d, i, j, 3*S+1:end] = ∂w∂bias1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,cache(int).W1,bias1,int,sol)
+                # C.∂u∂θ_quad_values[d, i, j, 3*S+1:end] = ∂u∂bias1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,cache(int).W1,bias1,int,sol)
+                # C.∂v∂θ_quad_values[d, i, j, 3*S+1:end] = ∂v∂bias1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,cache(int).W1,bias1,int,sol)
+                # C.∂w∂θ_quad_values[d, i, j, 3*S+1:end] = ∂w∂bias1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,cache(int).W1,bias1,int,sol)
             end
         end
     end
@@ -501,8 +492,8 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Tr
     for d in 1:D
         for rt in 1:RT
             for rx in 1:RX
-                C.u_quad_values[d, rt, rx] = u_trial(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2],W2,W1,bias1,int,sol)
-                C.v_quad_values[d, rt, rx] = v_trial_zygote(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2],W2,W1,bias1,int,sol)
+                C.u_quad_values[d, rt, rx] = u_trial(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2],x,int,sol)
+                C.v_quad_values[d, rt, rx] = v_trial_zygote(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2],x,int,sol)
                 C.w_quad_values[d, rt, rx] = w_trial_zygote(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2],W2,W1,bias1,int,sol)
             end
         end
@@ -606,7 +597,8 @@ function internal_variables(method::TrialNN_PDE_int, problem::LPDEProblem)
     W1 = zeros(NP, 2)
     W2 = zeros(NP)
     bias1 = zeros(NP)
-    return (previous_W1 = W1,previous_bias1 = bias1,
+    return (previous_W1 = W1,
+        previous_bias1 = bias1,
         previous_W2 = W2,
         )
 end
