@@ -116,14 +116,14 @@ struct Galerkin_Bspline_Integrator{T,MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
         μ₁_t = Lagrangian_multiplier(μ,k_μ,tstep .* t_quadrature.nodes)
         λ₀_x = Lagrangian_multiplier(λ,k_λ₀_x,xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes)
 
-        mλ₀_x = zeros(RX, RX)
-        mμ_t = zeros(RT, RT)
+        mλ₀_x = zeros(k_λ₀_x, RX)
+        mμ_t = zeros(k_μ, RT)
 
-        for i in 1:RX
+        for i in 1:k_λ₀_x
             mλ₀_x[i,:] = λ₀_x.b[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes)
         end
     
-        for i in 1:RT
+        for i in 1:k_μ
             mμ_t[i,:] = μ₀_t.b[i].(tstep .* t_quadrature.nodes)
         end
 
@@ -261,7 +261,7 @@ function Cache{ST}(problem::LPDEProblem, int::Galerkin_Bspline_Integrator; kwarg
 end
 
 #{ST,RT,RX,D,NP}(NP) where {ST,RT,RX,D,NP}
-@inline GeometricIntegrators.Integrators.CacheType(ST, problem::LPDEProblem, int::Galerkin_Bspline_Integrator) = Galerkin_Bspline_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.S}
+@inline CacheType(ST, problem::LPDEProblem, int::Galerkin_Bspline_Integrator) = Galerkin_Bspline_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.S}
 
 @inline function Base.getindex(c::Galerkin_Bspline_IntegratorCache, ST::DataType)
     key = hash(Threads.threadid(), hash(ST))

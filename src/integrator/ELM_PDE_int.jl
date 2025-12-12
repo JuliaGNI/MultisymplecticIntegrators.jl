@@ -127,7 +127,7 @@ function Cache{ST}(problem::LPDEProblem, int::ELM_PDE_int; kwargs...) where {ST}
     ELM_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.NP}(; kwargs...)
 end
 
-@inline GeometricIntegrators.Integrators.CacheType(ST, problem::LPDEProblem, int::ELM_PDE_int) = ELM_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.NP}
+@inline CacheType(ST, problem::LPDEProblem, int::ELM_PDE_int) = ELM_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.NP}
 
 @inline function Base.getindex(c::ELM_PDE_intCache, ST::DataType)
     key = hash(Threads.threadid(), hash(ST))

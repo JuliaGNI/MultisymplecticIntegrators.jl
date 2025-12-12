@@ -1,5 +1,4 @@
 using MultiSymplectic
-using GeometricIntegrators
 using Infiltrator
 spline_basis = BSpline2D(3)
 spline_int = Galerkin_Bspline_Integrator(spline_basis)

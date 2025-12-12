@@ -20,7 +20,7 @@ module LinearTransport
     using BSplineKit
     using AbstractNeuralNetworks
     using Zygote
-    using GeometricIntegrators.Integrators:cache
+
     const D = 1
     const DX = 1
 

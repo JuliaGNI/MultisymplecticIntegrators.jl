@@ -1,4 +1,3 @@
-using GeometricIntegrators
 using QuadratureRules
 using MultiSymplectic
 using AbstractNeuralNetworks
@@ -14,7 +13,7 @@ relu2 = x -> max(0, x) ^2
 relu3 = x -> max(0, x) ^3
 
 
-# GeometricIntegrators.Integrators.default_options(::NN_PDE_Integrator) = Options(
+# default_options(::NN_PDE_Integrator) = Options(
 #     x_reltol = 8eps(),
 #     x_suctol = 2eps(),
 #     f_abstol = 8eps(),

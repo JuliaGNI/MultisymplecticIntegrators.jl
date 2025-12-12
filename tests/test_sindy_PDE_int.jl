@@ -1,4 +1,3 @@
-using GeometricIntegrators
 using QuadratureRules
 using MultiSymplectic
 using Symbolics

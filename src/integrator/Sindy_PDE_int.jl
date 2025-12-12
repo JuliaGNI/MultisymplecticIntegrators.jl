@@ -198,7 +198,7 @@ function Cache{ST}(problem::LPDEProblem, int::Sindy_PDE_Integrator; kwargs...) w
 end
 
 #{ST,RT,RX,D,NP}(P_sizes) where {ST,RT,RX,D,NP}
-@inline GeometricIntegrators.Integrators.CacheType(ST, problem::LPDEProblem, int::Sindy_PDE_Integrator) = Sindy_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.symbolic_expr_basis.NP}
+@inline CacheType(ST, problem::LPDEProblem, int::Sindy_PDE_Integrator) = Sindy_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.symbolic_expr_basis.NP}
 
 @inline function Base.getindex(c::Sindy_PDE_IntegratorCache, ST::DataType)
     key = hash(Threads.threadid(), hash(ST))
@@ -639,12 +639,3 @@ function update!(sol_struct, int::PDEIntegrator{<:Sindy_PDE_Integrator})
     # println("In the end of update! function, time = ", sol_struct.t)
 end
 
-
-# GeometricIntegrators.Integrators.default_options(::Sindy_PDE_Integrator) = Options(
-#     x_reltol = 8eps(),
-#     x_suctol = 2eps(),
-#     f_abstol = 8eps(),
-#     f_reltol = 8eps(),
-#     f_suctol = 2eps(),
-#     max_iterations = 10,
-# )

@@ -10,7 +10,6 @@ CompactBasisFunctions = "a09551c4-f815-4143-809e-dd1986753ba7"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 GeometricBase = "9a0b12b7-583b-4f04-aa1f-d8551b6addc9"
 GeometricEquations = "c85262ba-a08a-430a-b926-d29770767bf2"
-GeometricIntegrators = "dcce2d33-59f6-5b8d-9047-0defad88ae06"
 GeometricIntegratorsBase = "71212ab4-08a2-48eb-a02b-4cbad0e9c44a"
 GeometricMachineLearning = "194d25b2-d3f5-49f0-af24-c124f4aa80cc"
 GeometricSolutions = "7843afe4-64f4-4df4-9231-049495c56661"
@@ -30,5 +29,7 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [sources]
 GeometricMachineLearning = {rev = "main", url = "https://github.com/JuliaGNI/GeometricMachineLearning.jl.git"}
+SimpleSolvers = {path = "/home/IPP-AD/lize/SimpleSolvers.jl"}
 
 [compat]
+SimpleSolvers = "0.6.2"

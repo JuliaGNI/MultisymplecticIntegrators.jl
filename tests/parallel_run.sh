@@ -26,8 +26,8 @@ run_configuration() {
 # Loop through the activations
 for h in {0.1,0.3}; do # ,
     for width in {150,200,250}; do #  
-        for Nw in {300,400}; do # 
-            for Nb in {300,400}; do # 
+        for Nw in {500,600}; do # 
+            for Nb in {500,600}; do # 
                 run_configuration $h $width $Nw $Nb
             done
         done

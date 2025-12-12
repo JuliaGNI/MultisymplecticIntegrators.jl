@@ -77,14 +77,19 @@ function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator, n₁::In
 end
 
 function integrate!(solstep::SolutionStep, int::AbstractPDEIntegrator)
+    reset!(solstep, timestep(int))
+
     prior_initial_guess!(cache(int),solstep,int)
 
     initialize_bcs_ics!(solstep,int)
 
-    copy_internal_variables!(solstep, cache(int))
-
+    copy_internal_variables!(cache(int),solstep)
     # integrate one step and copy solution from cache to solution
     integrate_step!(current(solstep), history(solstep), parameters(solstep), int)
+
+    copy_internal_variables!(solstep,cache(int))
+
+    return solstep
 end
 
 

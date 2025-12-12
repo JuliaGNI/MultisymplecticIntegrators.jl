@@ -34,7 +34,7 @@ module Wave
 
     function exact_u(t,x;params = default_parameters)
         @unpack c, A1, A2, B1, B2, l = params
-        (A1 * cos((pi*c*t)/l) + B1 * sin((pi*c*t)/l + pi/6)) * sin((pi*x)/l) + (A2 * cos((2*pi*c*t)/l) + B2 * sin((2*pi*c*t)/l + pi/6)) * sin((2*pi*x)/l) + 0.5
+        (A1 * cos((pi*c*t)/l) + B1 * sin((pi*c*t)/l + pi/6)) * sin((pi*x)/l) + (A2 * cos((2*pi*c*t)/l) + B2 * sin((2*pi*c*t)/l + pi/6)) * sin((2*pi*x)/l)
     end
 
     function exact_v(t,x;params = default_parameters)
