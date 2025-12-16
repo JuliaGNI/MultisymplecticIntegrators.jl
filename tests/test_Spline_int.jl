@@ -9,7 +9,7 @@ GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator) = (
     max_iterations = 2,
 )
 
-xspan = (0.3, 0.8)
+xspan = (0.3, 0.7)
 spline_basis = BSpline2D(4,xspan = xspan)
 spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan)
 lpde = MultiSymplectic.Wave.lpdeproblem(timestep=0.3, timespan=(0.0, 0.3), xspan=xspan, xstep=0.01)

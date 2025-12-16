@@ -357,7 +357,9 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Co
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
     local lag_params = int.problem.lagrangian_system.params
 
-    
+    u_truth_mat = similar(C.u_quad_values)
+    v_truth_mat = similar(C.v_quad_values)
+    w_truth_mat = similar(C.w_quad_values)
     # interior values at quadrature points
     for d in 1:D
         for i in 1:RT
@@ -365,6 +367,10 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Co
                 C.u_quad_values[d, i, j] = sum(x[1:S] .* int.method.u_collocation_mat[:, i, j])
                 C.v_quad_values[d, i, j] = sum(x[1:S] .* int.method.v_collocation_mat[:, i, j]) / h 
                 C.w_quad_values[d, i, j] = sum(x[1:S] .* int.method.w_collocation_mat[:, i, j])
+
+                u_truth_mat[d, i, j] = int.problem.exact_u.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                v_truth_mat[d, i, j] = int.problem.exact_v.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                w_truth_mat[d, i, j] = int.problem.exact_w.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
             end
         end
     end
@@ -380,6 +386,13 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Co
     @show C.v_quad_values[1,1,:] .- exact_v.(h * t_quad_nodes[1], xspan[1] .+ x_domain .* x_quad_nodes)
     @show C.w_quad_values[1,1,:] .- exact_w.(h * t_quad_nodes[1], xspan[1] .+ x_domain .* x_quad_nodes)
 
+    @show maximum(abs.(C.u_quad_values .- u_truth_mat))
+    @show maximum(abs.(C.v_quad_values .- v_truth_mat))
+    @show maximum(abs.(C.w_quad_values .- w_truth_mat))
+
+    ∂L∂U_truth_mat = similar(C.∂L∂U_quad_values)
+    ∂L∂V_truth_mat = similar(C.∂L∂V_quad_values)
+    ∂L∂W_truth_mat = similar(C.∂L∂W_quad_values)
 
     for d in 1:D
         for i in 1:RT
@@ -387,9 +400,18 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Co
                 C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
                 C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
                 C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
+
+                ∂L∂U_truth_mat[d, i, j] = ∂L∂U[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
+                ∂L∂V_truth_mat[d, i, j] = ∂L∂V[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
+                ∂L∂W_truth_mat[d, i, j] = ∂L∂W[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
             end
         end 
     end
+
+    @show maximum(abs.(C.∂L∂U_quad_values .- ∂L∂U_truth_mat))
+    @show maximum(abs.(C.∂L∂V_quad_values .- ∂L∂V_truth_mat))
+    @show maximum(abs.(C.∂L∂W_quad_values .- ∂L∂W_truth_mat))
+
 
     # boundary values at quadrature points
     for d in 1:D
@@ -433,7 +455,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Co
             C.μ₁_quad_values[d,rt] = sum([C.μ₁_t_coes[d,i]*mμ_t[i,rt] for i in 1:k_μ_t])
         end
     end
-    # @infiltrate
+    @infiltrate
 end
 
 function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<:Constraint_Bspline_Integrator})
