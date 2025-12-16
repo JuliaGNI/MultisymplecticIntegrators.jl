@@ -1,9 +1,10 @@
 using MultiSymplectic
 using Infiltrator
-spline_basis = BSpline2D(3)
-spline_int = Galerkin_Bspline_Integrator(spline_basis)
-lpde = MultiSymplectic.Wave.lpdeproblem(tstep=0.3, tspan=(0.0, 0.3), xspan=(0.3, 1.3), xstep=0.01)
 
+xspan = (0.3, 0.8)
+spline_basis = BSpline2D(3,xspan = xspan)
+spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan)
+lpde = MultiSymplectic.Wave.lpdeproblem(timestep=0.3, timespan=(0.0, 0.3), xspan=xspan, xstep=0.01)
 
 log_file="logs/SplineInt.txt"
 open(log_file, "w") do io

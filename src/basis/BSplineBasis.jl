@@ -9,7 +9,8 @@ struct BSplineDirichlet{T}
 
     Bspline
     b #  basis functions 
-    function BSplineDirichlet(k::Int,x::AbstractVector{T}) where T
+    function BSplineDirichlet(k::Int) where T
+        x = 0:1/(k-1):1
         t = make_knots(x,BSplineOrder(k),nothing) # nothing is the bc,default is Dirichlet
         B = BSplineBasis(BSplineOrder(k), t;augment = Val(false))
         basis_fct = []
@@ -39,8 +40,8 @@ struct BSpline2D <: AbstractPDEBasis
     Nbasis_x::Int
     Nbasis_t::Int
     S::Int # total number of basis functions
-    function BSpline2D(k,;tstep = 0.1,xstep = 0.05) # tstep and xstep are used to generate the knots, not the same as the problem domain steps
-        xs = 0.0:xstep:1.0 
+    function BSpline2D(k,;xspan = (0.0,1.0),tstep = 0.05,xstep = 0.02) # tstep and xstep are used to generate the knots, not the same as the problem domain steps
+        xs = xspan[1]:xstep:xspan[2]
         ts = 0.0:tstep:1.0
 
         # Create B-spline knots based on interpolation points (uses an internal function)

@@ -143,17 +143,17 @@ function lagrangianPDE_derivatives(t,x,u,v,w)
     return (Dt, Dx, Du, Dv, Dw)
 end
 
-Lagrangian_multiplier(::Val{:BSplineDirichlet},order::Integer,quad_nodes::Vector{Float64}) = BSplineDirichlet(order,quad_nodes)
-function Lagrangian_multiplier(::Val{:Lagrange},order::Integer,quad_nodes::Vector{Float64}) 
+Lagrangian_multiplier(::Val{:BSplineDirichlet},order::Integer) = BSplineDirichlet(order)
+function Lagrangian_multiplier(::Val{:Lagrange},order::Integer) 
     QGau = QuadratureRules.GaussLegendreQuadrature(order)
     CompactBasisFunctions.Lagrange(QGau.nodes)
 end
 
-function Lagrangian_multiplier(basis::Symbol, order::Integer, quad_nodes::Vector{Float64})
+function Lagrangian_multiplier(basis::Symbol, order::Integer)
     if basis ∉ (:BSplineDirichlet, :Lagrange)
         error("Unsupported basis: $basis")
     end
-    Lagrangian_multiplier(Val(basis), order, quad_nodes)
+    Lagrangian_multiplier(Val(basis), order)
 end
 
 
@@ -311,6 +311,21 @@ function create_boundary_derivative_vector(ST::Type, D::Int,R::Int,P_sizes::Vect
         push!(mat, zeros(ST, R, P_sizes[d]))
     end
     return mat
+end
+
+function eval_spline2D(coefs::AbstractMatrix, (Bx, By), (x, y))
+    i, bx = Bx(x)  # evaluate B-spline basis at point x
+    j, by = By(y)
+    kx = BSplineKit.order(Bx)
+    ky = BSplineKit.order(By)
+    val = zero(eltype(coefs))  # spline evaluated at (x, y)
+    for δj ∈ 1:ky, δi ∈ 1:kx
+        coef = coefs[i - δi + 1, j - δj + 1]
+        bi = bx[δi]
+        bj = by[δj]
+        val += coef * bi * bj
+    end
+    val
 end
 
 function create_tem_vector(ST::Type, D::Int,P_sizes::Vector{Int})

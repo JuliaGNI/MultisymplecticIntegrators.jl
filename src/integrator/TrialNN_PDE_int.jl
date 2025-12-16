@@ -394,6 +394,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
         end
         idx = argmax(corrs)
         push!(selected, idx)
+        length(Set(selected)) == s ? nothing : println("Warning: atom repeated at k=$s, idx=$idx")
 
         # extract raw atom (already normalized) and orthogonalize (Gram-Schmidt)
         φ = copy(Φ_raw[idx, :])

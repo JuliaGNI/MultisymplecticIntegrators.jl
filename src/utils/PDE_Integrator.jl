@@ -70,6 +70,15 @@ function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator, n₁::In
     for n in n₁:n₂
         sol[n] = integrate!(solstep, int)
 
+        havenan = false
+        for s in current(solstep)
+            havenan = havenan || any(isnan, s)
+        end
+
+        if havenan
+            @warn "Solver encountered NaNs in solution at timestep n=$(n)."
+            break
+        end
 
     end
 
@@ -84,7 +93,7 @@ function integrate!(solstep::SolutionStep, int::AbstractPDEIntegrator)
     initialize_bcs_ics!(solstep,int)
 
     copy_internal_variables!(cache(int),solstep)
-    # integrate one step and copy solution from cache to solution
+
     integrate_step!(current(solstep), history(solstep), parameters(solstep), int)
 
     copy_internal_variables!(solstep,cache(int))
@@ -116,7 +125,7 @@ function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol, params, in
     residual!(b, sol, params, int)
 end
 
-function internal_variables(int,problem::LPDEProblem)
+function internal_variables(int::AbstractPDEIntegrator,problem::LPDEProblem)
     local x = cache(int).x
     ntime = Int((problem.tspan[2] - problem.tspan[1]) / problem.tstep)
     xx = (x, ntuple( _ -> zeros(size(x)...), ntime)...)

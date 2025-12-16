@@ -12,23 +12,23 @@
 # Function to run the Julia script with the specified activation function
 run_configuration() {
     local h=$1
-    local NN_width=$2
+    local rt=$2
     local Nw=$3
     local Nb=$4
 
     # Print the activation for debugging
-    echo "Running Julia script with Step Size: $h, NN_width: $NN_width, Nw: $Nw, Nb: $Nb"
+    echo "Running Julia script with Step Size: $h, RT: $rt, Nw: $Nw, Nb: $Nb"
 
     # Run the Julia script in the background
-    julia --project=. tests/test_Trial_NN_PDE_int.jl $h $NN_width $Nw $Nb &
+    julia --project=. tests/test_Trial_NN_PDE_int.jl $h $rt $Nw $Nb &
 }
 
 # Loop through the activations
 for h in {0.1,0.3}; do # ,
-    for width in {150,200,250}; do #  
+    for rt in {12,24}; do #  
         for Nw in {500,600}; do # 
             for Nb in {500,600}; do # 
-                run_configuration $h $width $Nw $Nb
+                run_configuration $h $rt $Nw $Nb
             done
         done
     done
