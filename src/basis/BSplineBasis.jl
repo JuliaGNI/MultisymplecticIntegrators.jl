@@ -56,10 +56,10 @@ struct BSpline2D <: AbstractPDEBasis
         Cx = lu!(collocation_matrix(Bx, xs))
         Ct = lu!(collocation_matrix(Bt, ts))
 
-        NNbasis_x = length(Bx)
-        NNbasis_t = length(Bt)
-        S = NNbasis_x * NNbasis_t
-        return new(k, xs, ts, Cx, Ct, Bx, Bt, NNbasis_x, NNbasis_t, S)
+        Nbasis_x = length(Bx)
+        Nbasis_t = length(Bt)
+        S = Nbasis_x * Nbasis_t
+        return new(k, xs, ts, Cx, Ct, Bx, Bt, Nbasis_x, Nbasis_t, S)
     end
 
 end

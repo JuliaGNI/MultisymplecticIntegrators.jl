@@ -39,7 +39,7 @@ trial_basis = Trial_Solution_Basis(NN_width, activation)
 for rx in [16,32,64]
         log_file="logs/h$(t_step)_width$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx)$(activation)_full.txt"
         open(log_file, "w") do io
-                redirect_stdout(io) do
+                redirect_stdio(stdout=log_file, stderr=log_file) do
                         println("Start RT = $rt, RX = $rx")
                         trial_int = TrialNN_PDE_int(trial_basis, xstep=x_step, xspan=x_span, initial_guess_method=TrialOGA2D(), RT=rt, RX=rx,Nw = Nw, Nb=Nb)
                         trial_sol = MultiSymplectic.integrate(lpde, trial_int)
