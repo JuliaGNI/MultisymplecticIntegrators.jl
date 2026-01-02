@@ -1,6 +1,6 @@
 """
     Wave equation
-    c* u_tt - u_xx = 0
+    u_tt -  c^2 * u_xx = 0
 """
 
 
@@ -117,12 +117,12 @@ module Wave
     # Lagrangian and Hamiltonian density
     function lagrangian(t, x, u, v, w, params)
         @unpack c, A1, A2, B1, B2, l = params
-        1 / 2 * (c * v[1]^2 - w[1]^2)
+        1 / 2 * (v[1]^2 - c^2 * w[1]^2)
     end
 
     function hamiltonian(t, x, u, v, w, params)
         @unpack c, A1, A2, B1, B2, l = params
-        1 / 2 * (c * v[1]^2 + w[1]^2)  
+        1 / 2 * (v[1]^2 + c^2 * w[1]^2)  
     end
 
     function lpdeproblem(; lagrangian_function=lagrangian, initial_condition_function=initial_condition, boundary_condition_function=boundary_condition, timespan=timespan, timestep::Float64=timestep, xspan::Tuple=xspan, xstep::Float64=xstep, params=default_parameters,

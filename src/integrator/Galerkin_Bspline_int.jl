@@ -15,9 +15,9 @@ struct Galerkin_Bspline_Integrator{T,MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
     μ₁_t::MVT
 
     k_λ_x::Int
-    λ₀_x::LT
+    λ_x::LT
 
-    mλ₀_x # λ₀_x evaluated at quadrature points
+    mλ_x # λ_x evaluated at quadrature points
     mμ_t
 
     u_collocation_mat
@@ -38,7 +38,7 @@ struct Galerkin_Bspline_Integrator{T,MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
     wx₀_basis_quad_values
     wx₁_basis_quad_values
 
-    function Galerkin_Bspline_Integrator(basis; RT::Int = 16,RX::Int = 32,xspan::Tuple = (0.,1.0),tstep::T = 1.0, k_μ_t::Int = 4,k_λ_x::Int = 4,
+    function Galerkin_Bspline_Integrator(basis; RT::Int = 8,RX::Int = 8,xspan::Tuple = (0.,1.0),tstep::T = 1.0, k_μ_t::Int = 4,k_λ_x::Int = 4,
         μ::Symbol = :Lagrange,λ::Symbol= :Lagrange) where {T}
 
         if RT ==128 
@@ -112,28 +112,28 @@ struct Galerkin_Bspline_Integrator{T,MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
 
 
         # Construct Lagrangian multipliers, defined on [0,1] and need to be scaled carefully when used
-        μ₀_t = Lagrangian_multiplier(μ,k_μ_t)
-        μ₁_t = Lagrangian_multiplier(μ,k_μ_t)
-        λ₀_x = Lagrangian_multiplier(λ,k_λ_x)
+        λ_x = Lagrangian_multiplier(λ,k_λ_x,xspan[1],xspan[2])
+        μ₀_t = Lagrangian_multiplier(μ,k_μ_t,0.0,1.0)
+        μ₁_t = Lagrangian_multiplier(μ,k_μ_t,0.0,1.0)
 
-        mλ₀_x = zeros(k_λ_x, RX)
+        mλ_x = zeros(k_λ_x, RX)
         mμ_t = zeros(k_μ_t, RT)
 
         for i in 1:k_λ_x
-            mλ₀_x[i,:] = λ₀_x.b[i].(x_quadrature.nodes)
+            mλ_x[i,:] = λ_x.b[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes)
         end
     
         for i in 1:k_μ_t
             mμ_t[i,:] = μ₀_t.b[i].(t_quadrature.nodes)
         end
 
-        new{T,typeof(μ₀_t),typeof(λ₀_x),typeof(basis)}(basis, 
+        new{T,typeof(μ₀_t),typeof(λ_x),typeof(basis)}(basis, 
             t_quadrature, RT,
             x_quadrature, RX,
             grid_matrix, grid_weights,
             k_μ_t, μ₀_t, μ₁_t,
-            k_λ_x,λ₀_x, #λ₁_x,
-            mλ₀_x, mμ_t,
+            k_λ_x,λ_x, #λ₁_x,
+            mλ_x, mμ_t,
             u_collocation_matrix, v_collocation_matrix, w_collocation_matrix,
             ut₀_basis_quad_values,ut₁_basis_quad_values,
             vt₀_basis_quad_values,vt₁_basis_quad_values,
@@ -166,10 +166,12 @@ struct Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S,k_μ_t,k_λ_x} <: PDEIntegr
     ∂L∂W_quad_values::Array{ST}
 
     λ₀_x_coes::Matrix{ST}
+    λ₁_x_coes::Matrix{ST}
     μ₀_t_coes::Matrix{ST}
     μ₁_t_coes::Matrix{ST}
 
     λ₀_quad_values::Matrix{ST} 
+    λ₁_quad_values::Matrix{ST}
     μ₀_quad_values::Matrix{ST}
     μ₁_quad_values::Matrix{ST} 
 
@@ -192,12 +194,27 @@ struct Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S,k_μ_t,k_λ_x} <: PDEIntegr
     wx₀_quad_values::Matrix{ST}
     wx₁_quad_values::Matrix{ST}
 
+    ics_ut₀_quad_values::Matrix{ST}
+    ics_vt₀_quad_values::Matrix{ST}
+    ics_wt₀_quad_values::Matrix{ST}
+
+    bc_ux₀_quad_values::Matrix{ST}
+    bc_vx₀_quad_values::Matrix{ST}
+    bc_wx₀_quad_values::Matrix{ST}
+
+    bc_ux₁_quad_values::Matrix{ST}
+    bc_vx₁_quad_values::Matrix{ST}
+    bc_wx₁_quad_values::Matrix{ST}
+
+
     init_condition_t₀::Matrix{ST}
     boundary_condition_x₀::Matrix{ST}
     boundary_condition_x₁::Matrix{ST}
+    flag_done_initial_guess::Vector{ST}
+
     function Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S,k_μ_t,k_λ_x}() where {ST,RT,RX,D,S,k_μ_t,k_λ_x}
         # x = zeros(ST, NP + 2 * D * RX + 2* D * DX * RT ) # TODO: how to deal with RX being a vector/
-        x = zeros(ST,S + D * k_λ_x +2* D * k_μ_t) # params, λ₀_x_coes,μ₀_t_coes,μ₁_t_coes
+        x = zeros(ST,S + D * k_λ_x + 2 * D * k_μ_t) # params, λ_x_coes,μ₀_t_coes,μ₁_t_coes
         # TODO:consider when DX is a vector
         # x = zeros(ST,S)
         u_quad_values = zeros(ST, D, RT, RX)
@@ -209,10 +226,12 @@ struct Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S,k_μ_t,k_λ_x} <: PDEIntegr
         ∂L∂W_quad_values = zeros(ST, D, RT, RX)
 
         λ₀_x_coes = zeros(ST, D, k_λ_x)
+        λ₁_x_coes = zeros(ST, D, k_λ_x)
         μ₀_t_coes = zeros(ST, D, k_μ_t)
         μ₁_t_coes = zeros(ST, D, k_μ_t)
 
         λ₀_quad_values = zeros(ST, D, RX) 
+        λ₁_quad_values = zeros(ST, D, RX)
         μ₀_quad_values = zeros(ST, D, RT) 
         μ₁_quad_values = zeros(ST, D, RT) 
 
@@ -235,21 +254,37 @@ struct Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S,k_μ_t,k_λ_x} <: PDEIntegr
         wx₀_quad_values = zeros(ST,D,RT)
         wx₁_quad_values = zeros(ST,D,RT)
 
+        ics_ut₀_quad_values = zeros(ST,D,RX)
+        ics_vt₀_quad_values = zeros(ST,D,RX)
+        ics_wt₀_quad_values = zeros(ST,D,RX)
+
+        bc_ux₀_quad_values = zeros(ST,D,RT)
+        bc_vx₀_quad_values = zeros(ST,D,RT)
+        bc_wx₀_quad_values = zeros(ST,D,RT)
+
+        bc_ux₁_quad_values = zeros(ST,D,RT)
+        bc_vx₁_quad_values = zeros(ST,D,RT)
+        bc_wx₁_quad_values = zeros(ST,D,RT)
+
         init_condition_t₀ = zeros(ST, D, RX)
         boundary_condition_x₀ = zeros(ST, D, RT)
         boundary_condition_x₁ = zeros(ST, D, RT)
-
+        flag_done_initial_guess = zeros(ST, 1)
         
         new(x,
             u_quad_values, v_quad_values, w_quad_values,
             ∂L∂U_quad_values, ∂L∂V_quad_values, ∂L∂W_quad_values,
-            λ₀_x_coes, μ₀_t_coes,μ₁_t_coes, 
-            λ₀_quad_values, μ₀_quad_values, μ₁_quad_values,
+            λ₀_x_coes, λ₁_x_coes,μ₀_t_coes, μ₁_t_coes,
+            λ₀_quad_values,λ₁_quad_values, μ₀_quad_values, μ₁_quad_values,
             ∂u∂P_t₀_quad_values, ∂u∂P_t₁_quad_values, ∂u∂P_x₀_quad_values, ∂u∂P_x₁_quad_values,
             ut₀_quad_values, ut₁_quad_values,vt₀_quad_values, vt₁_quad_values,wt₀_quad_values, wt₁_quad_values,
             ux₀_quad_values, ux₁_quad_values,vx₀_quad_values, vx₁_quad_values,wx₀_quad_values, wx₁_quad_values,
+            ics_ut₀_quad_values, ics_vt₀_quad_values, ics_wt₀_quad_values,
+            bc_ux₀_quad_values, bc_vx₀_quad_values, bc_wx₀_quad_values,
+            bc_ux₁_quad_values, bc_vx₁_quad_values, bc_wx₁_quad_values,
             init_condition_t₀, 
             boundary_condition_x₀, boundary_condition_x₁,
+            flag_done_initial_guess
             )
     end
 end
@@ -287,6 +322,10 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:Galerkin_Bspline_Integrato
 
         if tn == 0.0
             C.init_condition_t₀[d,:] .= ic_fun(xspan[1] .+ x_domain .* x_quad_nodes).u
+
+            C.ics_ut₀_quad_values[d,:] .= ic_fun(xspan[1] .+ x_domain .* x_quad_nodes).u
+            C.ics_vt₀_quad_values[d,:] .= ic_fun(xspan[1] .+ x_domain .* x_quad_nodes).v
+            C.ics_wt₀_quad_values[d,:] .= ic_fun(xspan[1] .+ x_domain .* x_quad_nodes).w
         else
             nothing
             # # println("sol.internal.x[current_step-1][1:NP] = " , sol.internal.x[current_step-1][1:NP])
@@ -305,6 +344,14 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:Galerkin_Bspline_Integrato
         for i in 1:RT
             C.boundary_condition_x₀[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₀.u
             C.boundary_condition_x₁[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₁.u
+
+            C.bc_ux₀_quad_values[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₀.u
+            C.bc_vx₀_quad_values[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₀.v
+            C.bc_wx₀_quad_values[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₀.w
+
+            C.bc_ux₁_quad_values[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₁.u
+            C.bc_vx₁_quad_values[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₁.v
+            C.bc_wx₁_quad_values[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₁.w
         end
         # println("left boundary condition = " , C.boundary_condition_x₀[d,:])
     end
@@ -317,6 +364,9 @@ copy_internal_variables!(solstep::SolutionStep,C::Galerkin_Bspline_IntegratorCac
 
 function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integrator})
     local exact_u = int.problem.exact_u
+    local exact_v = int.problem.exact_v
+    local exact_w = int.problem.exact_w
+
     local xs = int.method.basis.xs
     local ts = int.method.basis.ts # t \in [0, 1.0]
 
@@ -336,46 +386,65 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
     local RT = int.method.RT
     local RX = int.method.RX
 
-    fdata = exact_u.(h .* ts, xs') # fdata[i,j] = exact_u(h .* ts[i], xs[j])
+    udata = exact_u.(h .* ts, xs') # fdata[i,j] = exact_u(h .* ts[i], xs[j])
+    vdata = exact_v.(h .* ts, xs')
+    wdata = exact_w.(h .* ts, xs')
 
     # 2D B-spline coefficients (output)
-    coefs = similar(fdata)
-    # @infiltrate
+    coefs = similar(udata)
 
     # Solve linear systems
     for j ∈ eachindex(xs)
-        @views ldiv!(coefs[:, j], Ct, fdata[:, j])
+        @views ldiv!(coefs[:, j], Ct, udata[:, j])
     end
     for i ∈ eachindex(ts)
         @views ldiv!(Cx, coefs[i, :])
     end
 
-    bspline_approx = similar(fdata)
+    u_approx = similar(udata)
+    v_approx = similar(vdata)
+    w_approx = similar(wdata)
     # Verification: evaluate 2D spline at data points
     for m ∈ eachindex(ts), n ∈ eachindex(xs)
         t = ts[m]
         x = xs[n]
-        bspline_approx[m, n] = eval_spline2D(coefs, (Bt, Bx), (t, x))
+        u_approx[m, n] = eval_spline2D(coefs, (Bt, Bx), (t, x))
+        v_approx[m, n] = eval_spline2D_dt(coefs, (Bt, Bx), (t, x)) / h
+        w_approx[m, n] = eval_spline2D_dx(coefs, (Bt, Bx), (t, x))
     end
 
     # println("Error Matrix between exact solution and B-spline approximation at grid points:")
-    # @show bspline_approx .- fdata
-    println("Max error in initial guess: ", maximum(abs.(fdata .- bspline_approx)))
+    # @show u_approx .- fdata
+    println("Max error in initial guess for u: ", maximum(abs.(udata .- u_approx)))
+    println("Max error in initial guess for v: ", maximum(abs.(vdata .- v_approx))) 
+    println("Max error in initial guess for w: ", maximum(abs.(wdata .- w_approx)))
 
-    bspline_quad_approx = zeros(RT, RX)
-    f_quad_value = zeros(RT, RX)
+    u_quad_value = zeros(RT, RX)
+    v_quad_value = zeros(RT, RX)
+    w_quad_value = zeros(RT, RX)
+
+    u_quad_approx = zeros(RT, RX)
+    v_quad_approx = zeros(RT, RX)
+    w_quad_approx = zeros(RT, RX)
     for ti in 1:RT
         for xi in 1:RX
             tt = grid_matrix[ti,xi][1]
             xx = a + (b - a) * grid_matrix[ti,xi][2]
-            bspline_quad_approx[ti,xi] = eval_spline2D(coefs, (Bt, Bx), (tt, xx))
-            f_quad_value[ti,xi] = exact_u(h * tt, xx)
+
+            u_quad_approx[ti,xi] = eval_spline2D(coefs, (Bt, Bx), (tt, xx))
+            v_quad_approx[ti,xi] = eval_spline2D_dt(coefs, (Bt, Bx), (tt, xx)) / h
+            w_quad_approx[ti,xi] = eval_spline2D_dx(coefs, (Bt, Bx), (tt, xx))
+
+            u_quad_value[ti,xi] = exact_u(h * tt, xx)
+            v_quad_value[ti,xi] = exact_v(h * tt, xx)
+            w_quad_value[ti,xi] = exact_w(h * tt, xx)
         end
     end
 
     # println("Error Matrix between exact solution and B-spline approximation at quadrature points:")
-    # @show bspline_quad_approx .- f_quad_value
-    println("Max error in initial guess at quadrature points: ", maximum(abs.(f_quad_value .- bspline_quad_approx)))
+    println("Max error in initial guess at quadrature points for u: ", maximum(abs.(u_quad_value .- u_quad_approx)))
+    println("Max error in initial guess at quadrature points for v: ", maximum(abs.(v_quad_value .- v_quad_approx)))
+    println("Max error in initial guess at quadrature points for w: ", maximum(abs.(w_quad_value .- w_quad_approx)))
 
     C.x[1:S] = reshape(coefs, :, 1)
     # @infiltrate
@@ -411,9 +480,9 @@ function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Ga
         end
     
         tem_x = xspan[1] .+ x_domain .* x_quad_nodes
-        λ₀_x = interpolate(tem_x, tem_t₀_∂L∂V, BSplineOrder(k_λ_x))
+        λ_x = interpolate(tem_x, tem_t₀_∂L∂V, BSplineOrder(k_λ_x))
         for i in 1:RX
-            C.x[S + (d - 1) * RX + i] = λ₀_x.spline.coefs[i]
+            C.x[S + (d - 1) * RX + i] = λ_x.spline.coefs[i]
         end
 
         tem_x₀_∂L∂W = zeros(RT)
@@ -442,7 +511,7 @@ end
 
 function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Galerkin_Bspline_Integrator},int_method::Galerkin_Bspline_Integrator{T,MVT,LT,BT}) where {T,MVT<:Lagrange,LT<:Lagrange,BT}
     local S = int_method.basis.S
-    local λ₀_x = int_method.λ₀_x
+    local λ_x = int_method.λ_x
     local k_λ_x = int_method.k_λ_x
     local h = timestep(int)
     local μ₀_t = int_method.μ₀_t
@@ -454,38 +523,15 @@ function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Ga
     local params = int.problem.lagrangian_system.params
 
     local basis = int_method.basis
-
-    ut₀_basis_quad_values_tem = zeros(S,k_λ_x)
-    vt₀_basis_quad_values_tem = zeros(S,k_λ_x)
-    wt₀_basis_quad_values_tem = zeros(S,k_λ_x)
-
-    ux₀_basis_quad_values_tem = zeros(S,k_μ_t)
-    ux₁_basis_quad_values_tem = zeros(S,k_μ_t)
-    vx₀_basis_quad_values_tem = zeros(S,k_μ_t)
-    vx₁_basis_quad_values_tem = zeros(S,k_μ_t)
-    wx₀_basis_quad_values_tem = zeros(S,k_μ_t)
-    wx₁_basis_quad_values_tem = zeros(S,k_μ_t)
-
-    for rx in 1:k_λ_x
-        xx = xspan[1] .+ (xspan[2] - xspan[1]) * λ₀_x.x[rx]
-        ut₀_basis_quad_values_tem[:,rx] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
-        vt₀_basis_quad_values_tem[:,rx] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
-        wt₀_basis_quad_values_tem[:,rx] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
-    end
-
-    for rt in 1:k_μ_t
-        tt = μ₀_t.x[rt]
-        ux₀_basis_quad_values_tem[:,rt] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
-        ux₁_basis_quad_values_tem[:,rt] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
-        vx₀_basis_quad_values_tem[:,rt] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
-        vx₁_basis_quad_values_tem[:,rt] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
-        wx₀_basis_quad_values_tem[:,rt] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
-        wx₁_basis_quad_values_tem[:,rt] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
-    end
+    local Nbasis_x = int_method.basis.Nbasis_x
+    local Nbasis_t = int_method.basis.Nbasis_t
 
     ut₀_quad_values_tem = zeros(k_λ_x)
+    ut₁_quad_values_tem = zeros(k_λ_x)
     vt₀_quad_values_tem = zeros(k_λ_x)
+    vt₁_quad_values_tem = zeros(k_λ_x)
     wt₀_quad_values_tem = zeros(k_λ_x)
+    wt₁_quad_values_tem = zeros(k_λ_x)
 
     ux₀_quad_values_tem = zeros(k_μ_t)
     ux₁_quad_values_tem = zeros(k_μ_t)
@@ -494,32 +540,94 @@ function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Ga
     wx₀_quad_values_tem = zeros(k_μ_t)
     wx₁_quad_values_tem = zeros(k_μ_t)
 
+    coefs = reshape(internal_coes, Nbasis_t, Nbasis_x)
 
     for rx in 1:k_λ_x
-        ut₀_quad_values_tem[rx] = sum(internal_coes .* ut₀_basis_quad_values_tem[:,rx])
-        vt₀_quad_values_tem[rx] = sum(internal_coes .* vt₀_basis_quad_values_tem[:,rx]) /h 
-        wt₀_quad_values_tem[rx] = sum(internal_coes .* wt₀_basis_quad_values_tem[:,rx])
+        xx = λ_x.x[rx]
+        ut₀_quad_values_tem[rx] = eval_spline2D(coefs, (basis.Basis_t, basis.Basis_x), (0.0, xx))
+        ut₁_quad_values_tem[rx] = eval_spline2D(coefs, (basis.Basis_t, basis.Basis_x), (1.0, xx))
+        vt₀_quad_values_tem[rx] = eval_spline2D_dt(coefs, (basis.Basis_t, basis.Basis_x), (0.0, xx)) /h 
+        vt₁_quad_values_tem[rx] = eval_spline2D_dt(coefs, (basis.Basis_t, basis.Basis_x), (1.0, xx)) /h
+        wt₀_quad_values_tem[rx] = eval_spline2D_dx(coefs, (basis.Basis_t, basis.Basis_x), (0.0, xx))
+        wt₁_quad_values_tem[rx] = eval_spline2D_dx(coefs, (basis.Basis_t, basis.Basis_x), (1.0, xx))
     end
 
     for rt in 1:k_μ_t
-        ux₀_quad_values_tem[rt] = sum(internal_coes .* ux₀_basis_quad_values_tem[:,rt])
-        ux₁_quad_values_tem[rt] = sum(internal_coes .* ux₁_basis_quad_values_tem[:,rt])
-        vx₀_quad_values_tem[rt] = sum(internal_coes .* vx₀_basis_quad_values_tem[:,rt])/h
-        vx₁_quad_values_tem[rt] = sum(internal_coes .* vx₁_basis_quad_values_tem[:,rt])/h
-        wx₀_quad_values_tem[rt] = sum(internal_coes .* wx₀_basis_quad_values_tem[:,rt])
-        wx₁_quad_values_tem[rt] = sum(internal_coes .* wx₁_basis_quad_values_tem[:,rt])
+        tt = μ₀_t.x[rt]
+        ux₀_quad_values_tem[rt] = eval_spline2D(coefs, (basis.Basis_t, basis.Basis_x), (tt, xspan[1]))
+        ux₁_quad_values_tem[rt] = eval_spline2D(coefs, (basis.Basis_t, basis.Basis_x), (tt, xspan[2]))
+        vx₀_quad_values_tem[rt] = eval_spline2D_dt(coefs, (basis.Basis_t, basis.Basis_x), (tt, xspan[1]))/h
+        vx₁_quad_values_tem[rt] = eval_spline2D_dt(coefs, (basis.Basis_t, basis.Basis_x), (tt, xspan[2]))/h
+        wx₀_quad_values_tem[rt] = eval_spline2D_dx(coefs, (basis.Basis_t, basis.Basis_x), (tt, xspan[1]))
+        wx₁_quad_values_tem[rt] = eval_spline2D_dx(coefs, (basis.Basis_t, basis.Basis_x), (tt, xspan[2]))
     end
 
     for d in 1:D
         for rx in 1:k_λ_x
-            C.x[S + (d - 1) * k_λ_x + rx] = lag_sys.∂L∂V[d](ut₀_quad_values_tem[rx], vt₀_quad_values_tem[rx], wt₀_quad_values_tem[rx], params)
+            C.x[S + (d - 1) * k_λ_x + rx] = lag_sys.∂L∂V[d](ut₁_quad_values_tem[rx], vt₁_quad_values_tem[rx], wt₁_quad_values_tem[rx], params)
+            # C.x[S + D * k_λ_x + (d - 1) * k_λ_x + rx] = lag_sys.∂L∂V[d](ut₁_quad_values_tem[rx], vt₁_quad_values_tem[rx], wt₁_quad_values_tem[rx], params)
         end
 
         for rt in 1:k_μ_t
             C.x[S + D * k_λ_x + (d - 1) * k_μ_t + rt] = lag_sys.∂L∂W[d](ux₀_quad_values_tem[rt], vx₀_quad_values_tem[rt], wx₀_quad_values_tem[rt], params)
-            C.x[S + D * k_λ_x + D * k_μ_t + (d - 1) * k_μ_t + rt] = lag_sys.∂L∂W[d](ux₁_quad_values_tem[rt], vx₁_quad_values_tem[rt], wx₁_quad_values_tem[rt], params)
+            C.x[S + D * k_λ_x + + D * k_μ_t + (d - 1) * k_μ_t + rt] = lag_sys.∂L∂W[d](ux₁_quad_values_tem[rt], vx₁_quad_values_tem[rt], wx₁_quad_values_tem[rt], params)
         end
     end
+
+    local exact_u = int.problem.exact_u
+    local exact_v = int.problem.exact_v
+    local exact_w = int.problem.exact_w
+    ut₀_truth_quad = zeros(k_λ_x)
+    ut₁_truth_quad = zeros(k_λ_x)
+    vt₁_truth_quad = zeros(k_λ_x)
+    vt₀_truth_quad = zeros(k_λ_x)
+    wt₀_truth_quad = zeros(k_λ_x)
+    wt₁_truth_quad = zeros(k_λ_x)
+    
+
+    ux₀_truth_quad = zeros(k_μ_t)
+    ux₁_truth_quad = zeros(k_μ_t)
+    vx₀_truth_quad = zeros(k_μ_t)
+    vx₁_truth_quad = zeros(k_μ_t)
+    wx₀_truth_quad = zeros(k_μ_t)
+    wx₁_truth_quad = zeros(k_μ_t)
+
+    for rx in 1:k_λ_x
+        xx = λ_x.x[rx]
+        ut₀_truth_quad[rx] = exact_u.(sol_struct.t - timestep(int), xx)
+        ut₁_truth_quad[rx] = exact_u.(sol_struct.t, xx)
+        vt₀_truth_quad[rx] = exact_v.(sol_struct.t - timestep(int), xx)
+        vt₁_truth_quad[rx] = exact_v.(sol_struct.t, xx)
+        wt₀_truth_quad[rx] = exact_w.(sol_struct.t - timestep(int), xx)
+        wt₁_truth_quad[rx] = exact_w.(sol_struct.t, xx)
+    end
+
+    for rt in 1:k_μ_t
+        tt = μ₀_t.x[rt]
+        ux₀_truth_quad[rt] = exact_u.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[1])
+        ux₁_truth_quad[rt] = exact_u.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[2])
+        vx₀_truth_quad[rt] = exact_v.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[1])
+        vx₁_truth_quad[rt] = exact_v.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[2])
+        wx₀_truth_quad[rt] = exact_w.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[1])
+        wx₁_truth_quad[rt] = exact_w.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[2])
+    end
+
+    @show maximum(abs.(ut₀_quad_values_tem .- ut₀_truth_quad))
+    @show maximum(abs.(vt₀_quad_values_tem .- vt₀_truth_quad))
+    @show maximum(abs.(wt₀_quad_values_tem .- wt₀_truth_quad))
+    @show maximum(abs.(ut₁_quad_values_tem .- ut₁_truth_quad))
+    @show maximum(abs.(vt₁_quad_values_tem .- vt₁_truth_quad))
+    @show maximum(abs.(wt₁_quad_values_tem .- wt₁_truth_quad))
+
+    @show maximum(abs.(ux₀_quad_values_tem .- ux₀_truth_quad))
+    @show maximum(abs.(vx₀_quad_values_tem .- vx₀_truth_quad))
+    @show maximum(abs.(wx₀_quad_values_tem .- wx₀_truth_quad))
+    @show maximum(abs.(ux₁_quad_values_tem .- ux₁_truth_quad))
+    @show maximum(abs.(vx₁_quad_values_tem .- vx₁_truth_quad))
+    @show maximum(abs.(wx₁_quad_values_tem .- wx₁_truth_quad))
+
+    C.flag_done_initial_guess[1] = 1.0
+    # @infiltrate
 end
 
 function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Galerkin_Bspline_Integrator}) where {ST}
@@ -543,7 +651,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     local lag_params = int.problem.lagrangian_system.params
     local k_λ_x = int.method.k_λ_x
     local k_μ_t = int.method.k_μ_t
-    local mλ₀_x = int.method.mλ₀_x
+    local mλ_x = int.method.mλ_x
     local mμ_t = int.method.mμ_t
     
 
@@ -571,10 +679,6 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     local x_quad_nodes = int.method.spatial_quadrature.nodes
     local t_quad_nodes = int.method.time_quadrature.nodes
     local h = timestep(int)
-    
-    @show C.u_quad_values[1,1,:] .- exact_u.(h * t_quad_nodes[1], xspan[1] .+ x_domain .* x_quad_nodes)
-    @show C.v_quad_values[1,1,:] .- exact_v.(h * t_quad_nodes[1], xspan[1] .+ x_domain .* x_quad_nodes)
-    @show C.w_quad_values[1,1,:] .- exact_w.(h * t_quad_nodes[1], xspan[1] .+ x_domain .* x_quad_nodes)
 
     @show maximum(abs.(C.u_quad_values .- u_truth_mat))
     @show maximum(abs.(C.v_quad_values .- v_truth_mat))
@@ -594,6 +698,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
                 ∂L∂U_truth_mat[d, i, j] = ∂L∂U[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
                 ∂L∂V_truth_mat[d, i, j] = ∂L∂V[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
                 ∂L∂W_truth_mat[d, i, j] = ∂L∂W[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
+
             end
         end 
     end
@@ -601,6 +706,25 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     @show maximum(abs.(C.∂L∂U_quad_values .- ∂L∂U_truth_mat))
     @show maximum(abs.(C.∂L∂V_quad_values .- ∂L∂V_truth_mat))
     @show maximum(abs.(C.∂L∂W_quad_values .- ∂L∂W_truth_mat))
+
+    # C.∂L∂U_quad_values .= ∂L∂U_truth_mat
+    # C.∂L∂V_quad_values .= ∂L∂V_truth_mat
+    # C.∂L∂W_quad_values .= ∂L∂W_truth_mat
+
+
+    ut₀_quad_values_truth = similar(C.ut₀_quad_values)
+    ut₁_quad_values_truth = similar(C.ut₁_quad_values)
+    vt₀_quad_values_truth = similar(C.vt₀_quad_values)
+    vt₁_quad_values_truth = similar(C.vt₁_quad_values)
+    wt₀_quad_values_truth = similar(C.wt₀_quad_values)
+    wt₁_quad_values_truth = similar(C.wt₁_quad_values)
+
+    ux₀_quad_values_truth = similar(C.ux₀_quad_values)
+    ux₁_quad_values_truth = similar(C.ux₁_quad_values)
+    vx₀_quad_values_truth = similar(C.vx₀_quad_values)
+    vx₁_quad_values_truth = similar(C.vx₁_quad_values)
+    wx₀_quad_values_truth = similar(C.wx₀_quad_values)
+    wx₁_quad_values_truth = similar(C.wx₁_quad_values)
 
     # boundary values at quadrature points
     for d in 1:D
@@ -613,6 +737,15 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
 
             C.wt₀_quad_values[d,j] = sum(x[1:S] .* int.method.wt₀_basis_quad_values[:,j])
             C.wt₁_quad_values[d,j] = sum(x[1:S] .* int.method.wt₁_basis_quad_values[:,j])
+
+            ut₀_quad_values_truth[d,j] = exact_u.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
+            ut₁_quad_values_truth[d,j] = exact_u.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
+
+            vt₀_quad_values_truth[d,j] = exact_v.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
+            vt₁_quad_values_truth[d,j] = exact_v.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
+
+            wt₀_quad_values_truth[d,j] = exact_w.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
+            wt₁_quad_values_truth[d,j] = exact_w.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
         end
 
         for i in 1:RT
@@ -622,106 +755,139 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
             C.vx₁_quad_values[d,i] = sum(x[1:S] .* int.method.vx₁_basis_quad_values[:,i])/ h
             C.wx₀_quad_values[d,i] = sum(x[1:S] .* int.method.wx₀_basis_quad_values[:,i]) 
             C.wx₁_quad_values[d,i] = sum(x[1:S] .* int.method.wx₁_basis_quad_values[:,i]) 
+
+            ux₀_quad_values_truth[d,i] = exact_u.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
+            ux₁_quad_values_truth[d,i] = exact_u.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
+            vx₀_quad_values_truth[d,i] = exact_v.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
+            vx₁_quad_values_truth[d,i] = exact_v.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
+            wx₀_quad_values_truth[d,i] = exact_w.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
+            wx₁_quad_values_truth[d,i] = exact_w.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
         end
 
     end
 
-    (x == cache(int).x && eltype(x) == eltype(cache(int).x)) ? post_initial_guess!(x[1:S], cache(int),sol,int,int.method) : nothing
+    @show maximum(abs.(C.ut₀_quad_values .- ut₀_quad_values_truth))
+    @show maximum(abs.(C.ut₁_quad_values .- ut₁_quad_values_truth))
+
+    @show maximum(abs.(C.vt₀_quad_values .- vt₀_quad_values_truth))
+    @show maximum(abs.(C.vt₁_quad_values .- vt₁_quad_values_truth))
+
+    @show maximum(abs.(C.wt₀_quad_values .- wt₀_quad_values_truth))
+    @show maximum(abs.(C.wt₁_quad_values .- wt₁_quad_values_truth))
+
+    @show maximum(abs.(C.ux₀_quad_values .- ux₀_quad_values_truth))
+    @show maximum(abs.(C.ux₁_quad_values .- ux₁_quad_values_truth))
+
+    @show maximum(abs.(C.vx₀_quad_values .- vx₀_quad_values_truth))
+    @show maximum(abs.(C.vx₁_quad_values .- vx₁_quad_values_truth))
+
+    @show maximum(abs.(C.wx₀_quad_values .- wx₀_quad_values_truth))
+    @show maximum(abs.(C.wx₁_quad_values .- wx₁_quad_values_truth))
+
+
+    cache(int).flag_done_initial_guess[1] == 0.0 ? post_initial_guess!(x[1:S], cache(int),sol,int,int.method) : nothing
 
     for d in 1:D
-        C.λ₀_x_coes[d,:] = x[S+1:S+k_λ_x]
+        C.λ₁_x_coes[d,:] = x[S+1:S+k_λ_x]
         C.μ₀_t_coes[d,:] = x[S+k_λ_x+1:S+k_λ_x+k_μ_t]
         C.μ₁_t_coes[d,:] = x[S+k_λ_x+k_μ_t+1:S+k_λ_x+2*k_μ_t]
     end
 
     for d in 1:D
         for rx in 1:RX
-            C.λ₀_quad_values[d,rx] = sum([C.λ₀_x_coes[d,i] * mλ₀_x[i,rx]  for i in 1:k_λ_x])
+            C.λ₀_quad_values[d,rx] = ∂L∂V[d](C.ics_ut₀_quad_values[d,rx], C.ics_vt₀_quad_values[d,rx],C.ics_wt₀_quad_values[d,rx], lag_params)
+            C.λ₁_quad_values[d,rx] = sum(C.λ₁_x_coes[d,:] .* mλ_x[:,rx])
         end
 
         for rt in 1:RT
-            C.μ₀_quad_values[d,rt] = sum([C.μ₀_t_coes[d,i]*mμ_t[i,rt] for i in 1:k_μ_t]) 
-            C.μ₁_quad_values[d,rt] = sum([C.μ₁_t_coes[d,i]*mμ_t[i,rt] for i in 1:k_μ_t])
+            C.μ₀_quad_values[d,rt] = sum(C.μ₀_t_coes[d,:] .* mμ_t[:,rt]) 
+            C.μ₁_quad_values[d,rt] = sum(C.μ₁_t_coes[d,:] .* mμ_t[:,rt])
         end
     end
-    @infiltrate
-end
+    @show maximum(abs.(C.λ₁_quad_values[1,:] .- exact_v.(h, xspan[1] .+ x_domain .* x_quad_nodes)))
+    @show maximum(abs.(0.25 .* C.bc_wx₀_quad_values .+ C.μ₀_quad_values))
+    @show maximum(abs.(0.25 .* C.bc_wx₁_quad_values .+ C.μ₁_quad_values))
 
-function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{IT}) where {ST, T, MVT <: BSplineDirichlet,LT <: BSplineDirichlet,BT,IT <: Galerkin_Bspline_Integrator{T, MVT, LT, BT},}
-    local D = int.problem.D 
-    local RT = int.method.RT
-    local RX = int.method.RX
-    local quad_b = int.method.grid_weights
-    local C = cache(int,ST)
-    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
-    local brx = int.method.spatial_quadrature.weights
-    local brt = int.method.time_quadrature.weights
-    local mλ₀_x = int.method.mλ₀_x
-    local mμ_t = int.method.mμ_t
-    local S = int.method.basis.S
-    local u_coll_mat = int.method.u_collocation_mat
-    local v_coll_mat = int.method.v_collocation_mat
-    local w_coll_mat = int.method.w_collocation_mat
-    local ut₀_basis_quad_values = int.method.ut₀_basis_quad_values
-    local ux₀_basis_quad_values = int.method.ux₀_basis_quad_values
-    local ux₁_basis_quad_values = int.method.ux₁_basis_quad_values
-
-    current_idx = 1
-    for d in 1:D 
-        for p in 1:S
-            z = zero(ST)
-            for rt in 1:RT
-                for rx in 1:RX
-                    z +=  quad_b[rt,rx] * 
-                        ( x_domain * timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * u_coll_mat[p, rt, rx]
-                        + x_domain                 * C.∂L∂V_quad_values[d,rt,rx] * v_coll_mat[p, rt, rx]
-                        + x_domain * timestep(int) * C.∂L∂W_quad_values[d,rt,rx] * w_coll_mat[p, rt, rx])
-                end
-            end
-            for rx in 1:RX
-                z+= x_domain * brx[rx] * (C.λ₀_quad_values[d,rx] * ut₀_basis_quad_values[p,rx]) #- C.λ₁_quad_values[d,rx] * C.∂u∂P_t₁_quad_values[d, rx]
-            end
-            for rt in 1:RT
-                z+= timestep(int)* brt[rt] * (C.μ₀_quad_values[d,rt] * ux₀_basis_quad_values[p,rt] - C.μ₁_quad_values[d,rt] * ux₁_basis_quad_values[p,rt])
-            end
-            b[current_idx] = z 
-            current_idx += 1
-        end
-    end
-    # @infiltrate 
-    @assert current_idx == S + 1 "Wrong indexing in residual computation"
-
-    for d in 1:D
-        for i in 1:RX
-            z = zero(ST)
-            for rx in 1:RX
-                z += x_domain * brx[rx] * mλ₀_x[i,rx] * (C.ut₀_quad_values[d, rx] - C.init_condition_t₀[d, rx])
-            end
-            b[S + (d - 1) * RX + i] = z
-        end
-    end
-
-    for d in 1:D
-        for i in 1:RT
-            z = zero(ST)
-            for rt in 1:RT
-                z += timestep(int) *brt[rt] * mμ_t[i,rt] *(C.ux₀_quad_values[d,rt] - C.boundary_condition_x₀[d,rt])
-            end
-            b[S + D * RX + (d - 1) * RT + i] = z
-        end
-    end
-
-    for d in 1:D
-        for i in 1:RT
-            z = zero(ST)
-            for rt in 1:RT
-                z += timestep(int) *brt[rt] * mμ_t[i,rt] *(C.boundary_condition_x₁[d,rt] - C.ux₁_quad_values[d,rt])
-            end
-            b[S + D * RX + D * RT + (d - 1) * RT + i] = z
-        end
-    end
+    # @show x 
     # @infiltrate
 end
+
+# function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{IT}) where {ST, T, MVT <: BSplineDirichlet,LT <: BSplineDirichlet,BT,IT <: Galerkin_Bspline_Integrator{T, MVT, LT, BT},}
+#     local D = int.problem.D 
+#     local RT = int.method.RT
+#     local RX = int.method.RX
+#     local quad_b = int.method.grid_weights
+#     local C = cache(int,ST)
+#     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+#     local brx = int.method.spatial_quadrature.weights
+#     local brt = int.method.time_quadrature.weights
+#     local mλ_x = int.method.mλ_x
+#     local mμ_t = int.method.mμ_t
+#     local S = int.method.basis.S
+#     local u_coll_mat = int.method.u_collocation_mat
+#     local v_coll_mat = int.method.v_collocation_mat
+#     local w_coll_mat = int.method.w_collocation_mat
+#     local ut₀_basis_quad_values = int.method.ut₀_basis_quad_values
+#     local ut₁_basis_quad_values = int.method.ut₁_basis_quad_values
+#     local ux₀_basis_quad_values = int.method.ux₀_basis_quad_values
+#     local ux₁_basis_quad_values = int.method.ux₁_basis_quad_values
+
+#     current_idx = 1
+#     for d in 1:D 
+#         for p in 1:S
+#             z = zero(ST)
+#             for rt in 1:RT
+#                 for rx in 1:RX
+#                     z +=  quad_b[rt,rx] * 
+#                         ( x_domain * timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * u_coll_mat[p, rt, rx]
+#                         + x_domain                 * C.∂L∂V_quad_values[d,rt,rx] * v_coll_mat[p, rt, rx]
+#                         + x_domain * timestep(int) * C.∂L∂W_quad_values[d,rt,rx] * w_coll_mat[p, rt, rx])
+#                 end
+#             end
+#             for rx in 1:RX
+#                 z+= x_domain * brx[rx] * (C.λ₀_quad_values[d,rx] * ut₀_basis_quad_values[p,rx] - C.λ₁_quad_values[d,rx] * ut₁_basis_quad_values[p,rx])
+#             end
+#             for rt in 1:RT
+#                 z+= timestep(int)* brt[rt] * (C.μ₀_quad_values[d,rt] * ux₀_basis_quad_values[p,rt] - C.μ₁_quad_values[d,rt] * ux₁_basis_quad_values[p,rt])
+#             end
+#             b[current_idx] = z 
+#             current_idx += 1
+#         end
+#     end
+#     # @infiltrate 
+#     @assert current_idx == S + 1 "Wrong indexing in residual computation"
+
+#     for d in 1:D
+#         for i in 1:k_λ_x
+#             z = zero(ST)
+#             for rx in 1:RX
+#                 z += x_domain * brx[rx] * mλ_x[i,rx] * (C.ut₀_quad_values[d, rx] - C.init_condition_t₀[d, rx])
+#             end
+#             b[S + (d - 1) * RX + i] = z
+#         end
+#     end
+
+#     for d in 1:D
+#         for i in 1:k_μ_t
+#             z = zero(ST)
+#             for rt in 1:RT
+#                 z += timestep(int) *brt[rt] * mμ_t[i,rt] *(C.ux₀_quad_values[d,rt] - C.boundary_condition_x₀[d,rt])
+#             end
+#             b[S + D * RX + (d - 1) * RT + i] = z
+#         end
+#     end
+
+#     for d in 1:D
+#         for i in 1:k_μ_t
+#             z = zero(ST)
+#             for rt in 1:RT
+#                 z += timestep(int) *brt[rt] * mμ_t[i,rt] *(C.boundary_condition_x₁[d,rt] - C.ux₁_quad_values[d,rt])
+#             end
+#             b[S + D * RX + D * RT + (d - 1) * RT + i] = z
+#         end
+#     end
+#     # @infiltrate
+# end
 
 function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{IT}) where {ST, T, MVT <: Lagrange,LT <: Lagrange,BT,IT <: Galerkin_Bspline_Integrator{T, MVT, LT, BT}}
     local D = int.problem.D 
@@ -739,32 +905,35 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{IT}) where {ST
     local S = int.method.basis.S
     local k_λ_x = int.method.k_λ_x
     local k_μ_t = int.method.k_μ_t
-    local mλ₀_x = int.method.mλ₀_x
+    local mλ_x = int.method.mλ_x
     local mμ_t = int.method.mμ_t
     local ut₀_basis_quad_values = int.method.ut₀_basis_quad_values
+    local ut₁_basis_quad_values = int.method.ut₁_basis_quad_values
     local ux₀_basis_quad_values = int.method.ux₀_basis_quad_values
     local ux₁_basis_quad_values = int.method.ux₁_basis_quad_values
 
     current_idx = 1
     for d in 1:D 
         for p in 1:S
-            z = zero(ST)
+            z_in = zero(ST)
             for rt in 1:RT
                 for rx in 1:RX
-                    z +=  quad_b[rt,rx] * 
+                    z_in +=  quad_b[rt,rx] * 
                         ( x_domain * timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * u_coll_mat[p, rt, rx]
                         + x_domain                 * C.∂L∂V_quad_values[d,rt,rx] * v_coll_mat[p, rt, rx]
                         + x_domain * timestep(int) * C.∂L∂W_quad_values[d,rt,rx] * w_coll_mat[p, rt, rx])
                 end
             end
+            # println(z_in)
+            z_bd = zero(ST)
             for rx in 1:RX
-                z+= x_domain * brx[rx] * (C.λ₀_quad_values[d,rx] * ut₀_basis_quad_values[p,rx]) #- C.λ₁_quad_values[d,rx] * C.∂u∂P_t₁_quad_values[d, rx]
+                z_bd += x_domain * brx[rx] * (C.λ₀_quad_values[d,rx] * ut₀_basis_quad_values[p,rx] - C.λ₁_quad_values[d,rx] * ut₁_basis_quad_values[p,rx])
             end
             for rt in 1:RT
-                z+= timestep(int)* brt[rt] * (C.μ₀_quad_values[d,rt] * ux₀_basis_quad_values[p,rt] - C.μ₁_quad_values[d,rt] * ux₁_basis_quad_values[p,rt])
+                z_bd += timestep(int)* brt[rt] * (C.μ₀_quad_values[d,rt] * ux₀_basis_quad_values[p,rt] - C.μ₁_quad_values[d,rt] * ux₁_basis_quad_values[p,rt])
             end
-
-            b[current_idx] = -z # TODO: check the sign
+            # println(z_bd)
+            b[current_idx] = -(z_in + z_bd) # TODO: check the sign
             current_idx += 1
         end
     end
@@ -775,7 +944,7 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{IT}) where {ST
         for p in 1:k_λ_x
             z = zero(ST)
             for rx in 1:RX
-                z += x_domain * brx[rx] * mλ₀_x[p,rx] * (C.ut₀_quad_values[d, rx] - C.init_condition_t₀[d, rx])
+                z += x_domain * brx[rx] * mλ_x[p,rx] * (C.ut₀_quad_values[d, rx] - C.init_condition_t₀[d, rx])
             end
             b[S + (d - 1) * k_λ_x + p] = - z
         end
@@ -812,23 +981,18 @@ function update!(sol, int::PDEIntegrator{<:Galerkin_Bspline_Integrator})
     local S = int.method.basis.S
     local Basis_t = int.method.basis.Basis_t
     local Basis_x = int.method.basis.Basis_x
-
+    local h = timestep(int)
+    local Nbasis_x = int.method.basis.Nbasis_x
+    local Nbasis_t = int.method.basis.Nbasis_t
+    
     x_nodes = collect(xspan[1]:xstep:xspan[2])
-    ubasis_x_nodes_values = zeros(S, length(x_nodes))
-    vbasis_x_nodes_values = zeros(S, length(x_nodes))
-    wbasis_x_nodes_values = zeros(S, length(x_nodes))
-
-    for i in eachindex(x_nodes)
-        ubasis_x_nodes_values[:,i] = spline2D_coeff_derivatives((Basis_t, Basis_x),(0.0 ,x_nodes[i])) # bottom
-        vbasis_x_nodes_values[:,i] = spline2D_coeff_derivatives_time((Basis_t, Basis_x),(0.0 ,x_nodes[i])) # bottom
-        wbasis_x_nodes_values[:,i] = spline2D_coeff_derivatives_space((Basis_t, Basis_x),(0.0 ,x_nodes[i])) # bottom
-    end
+    coefs = reshape(x[1:S], Nbasis_t, Nbasis_x)
 
     for d in 1:D
         for i in eachindex(x_nodes)
-            sol.u[i] = sum(x[1:S] .* ubasis_x_nodes_values[:,i])
-            sol.v[i] = sum(x[1:S] .* vbasis_x_nodes_values[:,i])
-            sol.w[i] = sum(x[1:S] .* wbasis_x_nodes_values[:,i])
+            sol.u[i] = eval_spline2D(coefs, (Basis_t, Basis_x), (1.0, x_nodes[i]))
+            sol.v[i] = eval_spline2D_dt(coefs, (Basis_t, Basis_x), (1.0, x_nodes[i])) /h
+            sol.w[i] = eval_spline2D_dx(coefs, (Basis_t, Basis_x), (1.0, x_nodes[i]))
         end
     end
 

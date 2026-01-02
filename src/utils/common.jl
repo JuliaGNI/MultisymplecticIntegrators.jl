@@ -143,17 +143,17 @@ function lagrangianPDE_derivatives(t,x,u,v,w)
     return (Dt, Dx, Du, Dv, Dw)
 end
 
-Lagrangian_multiplier(::Val{:BSplineDirichlet},order::Integer) = BSplineDirichlet(order)
-function Lagrangian_multiplier(::Val{:Lagrange},order::Integer) 
+Lagrangian_multiplier(::Val{:BSplineDirichlet},order::Integer,a,b) = BSplineDirichlet(order,a,b)
+function Lagrangian_multiplier(::Val{:Lagrange},order::Integer,a,b) 
     QGau = QuadratureRules.GaussLegendreQuadrature(order)
-    CompactBasisFunctions.Lagrange(QGau.nodes)
+    CompactBasisFunctions.Lagrange(a .+ (b - a) .* QGau.nodes)
 end
 
-function Lagrangian_multiplier(basis::Symbol, order::Integer)
+function Lagrangian_multiplier(basis::Symbol, order::Integer,a,b)
     if basis ∉ (:BSplineDirichlet, :Lagrange)
         error("Unsupported basis: $basis")
     end
-    Lagrangian_multiplier(Val(basis), order)
+    Lagrangian_multiplier(Val(basis), order,a,b)
 end
 
 
@@ -313,17 +313,48 @@ function create_boundary_derivative_vector(ST::Type, D::Int,R::Int,P_sizes::Vect
     return mat
 end
 
-function eval_spline2D(coefs::AbstractMatrix, (Bx, By), (x, y))
-    i, bx = Bx(x)  # evaluate B-spline basis at point x
-    j, by = By(y)
+function eval_spline2D(coefs::AbstractMatrix, (Bt, Bx), (t, x))
+    it, bt = Bt(t)
+    ix, bx = Bx(x)
+
+    kt = BSplineKit.order(Bt)
     kx = BSplineKit.order(Bx)
-    ky = BSplineKit.order(By)
-    val = zero(eltype(coefs))  # spline evaluated at (x, y)
-    for δj ∈ 1:ky, δi ∈ 1:kx
-        coef = coefs[i - δi + 1, j - δj + 1]
-        bi = bx[δi]
-        bj = by[δj]
-        val += coef * bi * bj
+    val = zero(eltype(coefs))  # spline evaluated at (t, x)
+    for δx ∈ 1:kx, δt ∈ 1:kt
+        coef = coefs[it - δt + 1, ix - δx + 1]
+        val += coef * bt[δt] * bx[δx]
+    end
+    val
+end
+
+function eval_spline2D_dt(coefs::AbstractMatrix, (Bt, Bx), (t, x))
+    it, bt = Bt(t)
+    it_d, btd = Bt(t, BSplineKit.Derivative(1))  # N'(t)
+
+    ix, bx = Bx(x)
+
+    kt = BSplineKit.order(Bt)
+    kx = BSplineKit.order(Bx)
+    val = zero(eltype(coefs))  # spline evaluated at (t, x)
+    for δx ∈ 1:kx, δt ∈ 1:kt
+        coef = coefs[it - δt + 1, ix - δx + 1]
+        val += coef * btd[δt] * bx[δx]
+    end
+    val
+end
+
+function eval_spline2D_dx(coefs::AbstractMatrix, (Bt, Bx), (t, x))
+    it, bt = Bt(t)
+
+    ix, bx = Bx(x)
+    ix_d, bxd = Bx(x, BSplineKit.Derivative(1))   # M'(x)
+
+    kt = BSplineKit.order(Bt)
+    kx = BSplineKit.order(Bx)
+    val = zero(eltype(coefs))  # spline evaluated at (t, x)
+    for δx ∈ 1:kx, δt ∈ 1:kt
+        coef = coefs[it - δt + 1, ix - δx + 1]
+        val += coef * bt[δt] * bxd[δx]
     end
     val
 end
@@ -340,11 +371,11 @@ end
 function spline2D_all_derivatives((Bt, Bx), (t, x))
     # basis in t
     it, bt = Bt(t)
-    it_d, btd = Bt(t, Derivative(1))   # N'(t)
+    it_d, btd = Bt(t, BSplineKit.Derivative(1))   # N'(t)
 
     # basis in x
     ix, bx = Bx(x)
-    ix_d, bxd = Bx(x, Derivative(1))   # M'(x)
+    ix_d, bxd = Bx(x, BSplineKit.Derivative(1))   # M'(x)
 
     kt = order(Bt)
     kx = order(Bx)
