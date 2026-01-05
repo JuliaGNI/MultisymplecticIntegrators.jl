@@ -2,30 +2,27 @@
 Basis for Lagrangian multipliers at the boundary, for 1D.
 """
 
-struct BSplineDirichlet{T} 
+struct BSplineDirichlet 
     k::Int # order
-    x::AbstractVector{T} # vector to generate knots
-    t::AbstractVector{T} # knots from BSplineKit, was optimized
+    Nbasis::Int # number of basis
+    x::AbstractVector # vector to generate knots
+    t::AbstractVector # knots from BSplineKit, was optimized
 
-    Bspline
     b #  basis functions 
-    function BSplineDirichlet(k::Int,a,b) where T
-        x = a:(b - a)/(k-1):b
-        t = make_knots(x,BSplineOrder(k),nothing) # nothing is the bc,default is Dirichlet
+    function BSplineDirichlet(Nbasis::Int,k,a,b)
+        x = a:(b - a)/(Nbasis-1):b
+        t = make_knots(x,BSplineOrder(k),nothing) # nothing is the bc,default option is Dirichlet
         B = BSplineBasis(BSplineOrder(k), t;augment = Val(false))
-        basis_fct = []
-        for i in eachindex(B)
-            push!(basis_fct, B[i])
-        end
 
-        return new{T}(k, x, t, B, basis_fct)
+        @assert Nbasis == length(B) "Number of basis functions does not match Nbasis"
+        return new(k, Nbasis, x, t, B)
     end
 end
 
-Base.length(Basis::BSplineDirichlet) = Base.length(Basis.b)
+Base.length(Basis::BSplineDirichlet) = Basis.Nbasis
 
 
-# serve as the approximation function inside domain for comparision
+# serve as the approximation function inside domain
 struct BSpline2D <: AbstractPDEBasis
     k::Int
     xs 

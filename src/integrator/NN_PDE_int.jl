@@ -435,7 +435,7 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:NN_PDE_Integrator})
 
 end
 
-function post_initial_guess!(C,sol_struct,int::PDEIntegrator{<:NN_PDE_Integrator},int_method::NN_PDE_Integrator{T,MVT,LT,BT, IPMT}) where {T,MVT<:BSplineDirichlet{T},LT<:BSplineDirichlet{T},BT,IPMT}
+function post_initial_guess!(C,sol_struct,int::PDEIntegrator{<:NN_PDE_Integrator},int_method::NN_PDE_Integrator{T,MVT,LT,BT, IPMT}) where {T,MVT<:BSplineDirichlet,LT<:BSplineDirichlet,BT,IPMT}
     local NP = int_method.basis.NP
     local RT = int_method.RT
     local RX = int_method.RX

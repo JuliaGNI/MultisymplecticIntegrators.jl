@@ -143,17 +143,17 @@ function lagrangianPDE_derivatives(t,x,u,v,w)
     return (Dt, Dx, Du, Dv, Dw)
 end
 
-Lagrangian_multiplier(::Val{:BSplineDirichlet},order::Integer,a,b) = BSplineDirichlet(order,a,b)
-function Lagrangian_multiplier(::Val{:Lagrange},order::Integer,a,b) 
-    QGau = QuadratureRules.GaussLegendreQuadrature(order)
+Lagrangian_multiplier(::Val{:BSplineDirichlet},Nbasis::Integer,k,a,b) = BSplineDirichlet(Nbasis,k,a,b)
+function Lagrangian_multiplier(::Val{:Lagrange},Nbasis,k::Integer,a,b) 
+    QGau = QuadratureRules.GaussLegendreQuadrature(Nbasis)
     CompactBasisFunctions.Lagrange(a .+ (b - a) .* QGau.nodes)
 end
 
-function Lagrangian_multiplier(basis::Symbol, order::Integer,a,b)
+function Lagrangian_multiplier(basis::Symbol, Nbasis::Int, order::Integer,a,b)
     if basis ∉ (:BSplineDirichlet, :Lagrange)
         error("Unsupported basis: $basis")
     end
-    Lagrangian_multiplier(Val(basis), order,a,b)
+    Lagrangian_multiplier(Val(basis), Nbasis,order,a,b)
 end
 
 

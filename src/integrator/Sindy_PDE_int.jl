@@ -1,4 +1,4 @@
-struct Sindy_PDE_Integrator{T,MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
+struct Sindy_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
 
     symbolic_expr_basis::BT
     time_quadrature
@@ -16,10 +16,10 @@ struct Sindy_PDE_Integrator{T,MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
     k_λ₀_x::Int
     λ₀_x::LT
 
-    init_w::Vector{T}
+    init_w::Vector
     mλ₀_x
     mμ_t
-    function Sindy_PDE_Integrator(basis,init_w::Vector{T};RT::Int = 6,RX::Int = 8,xspan::Tuple = (0.,1.0),tstep::Float64 = 1.0, k_μ::Int = 4,k_λ₀_x::Int = 4,μ::Symbol = :BSplineDirichlet,λ::Symbol= :BSplineDirichlet) where {T}
+    function Sindy_PDE_Integrator(basis,init_w::Vector;RT::Int = 6,RX::Int = 8,xspan::Tuple = (0.,1.0),tstep::Float64 = 1.0, k_μ::Int = 4,k_λ₀_x::Int = 4,μ::Symbol = :BSplineDirichlet,λ::Symbol= :BSplineDirichlet)
         
         if RT ==128 
             t_quadrature = GaussQuadrature128()
@@ -55,7 +55,7 @@ struct Sindy_PDE_Integrator{T,MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
             mμ_t[i,:] = μ₀_t.b[i].(tstep .* t_quadrature.nodes)
         end
 
-        new{T,typeof(μ₀_t),typeof(λ₀_x),typeof(basis)}(basis, t_quadrature, RT,
+        new{typeof(μ₀_t),typeof(λ₀_x),typeof(basis)}(basis, t_quadrature, RT,
             x_quadrature, RX,
             grid_matrix, grid_weights,
             k_μ, μ₀_t, μ₁_t,
@@ -264,7 +264,7 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:Sindy_PDE_Integrator})
 
 end
 
-function post_initial_guess!(C,sol_struct,int::PDEIntegrator{<:Sindy_PDE_Integrator},int_method::Sindy_PDE_Integrator{T,MVT,LT,BT}) where {T,MVT<:BSplineDirichlet{T},LT<:BSplineDirichlet{T},BT}
+function post_initial_guess!(C,sol_struct,int::PDEIntegrator{<:Sindy_PDE_Integrator},int_method::Sindy_PDE_Integrator{MVT,LT,BT}) where {MVT<:BSplineDirichlet,LT<:BSplineDirichlet,BT}
     local NP = int_method.symbolic_expr_basis.NP
     local RT = int_method.RT
     local RX = int_method.RX
@@ -323,7 +323,7 @@ function post_initial_guess!(C,sol_struct,int::PDEIntegrator{<:Sindy_PDE_Integra
     end
 end
 
-function post_initial_guess!(C,sol_struct,int::PDEIntegrator{<:Sindy_PDE_Integrator},int_method::Sindy_PDE_Integrator{T,MVT,LT,BT}) where {T,MVT<:Lagrange,LT<:Lagrange,BT}
+function post_initial_guess!(C,sol_struct,int::PDEIntegrator{<:Sindy_PDE_Integrator},int_method::Sindy_PDE_Integrator{MVT,LT,BT}) where {MVT<:Lagrange,LT<:Lagrange,BT}
     local NP = int_method.symbolic_expr_basis.NP
     local RT = int_method.RT
     local RX = int_method.RX
@@ -474,7 +474,7 @@ function components!(x::AbstractVector{ST}, sol, int::PDEIntegrator{<:Sindy_PDE_
 end
 
 
-function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT <: BSplineDirichlet,LT  <: BSplineDirichlet,BT,IT <: Sindy_PDE_Integrator{T, MVT, LT, BT}}
+function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST, MVT <: BSplineDirichlet,LT  <: BSplineDirichlet,BT,IT <: Sindy_PDE_Integrator{MVT, LT, BT}}
     local D = int.problem.D 
     local D = int.problem.D 
     local RT = int.method.RT
@@ -548,7 +548,7 @@ function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT 
 end
 
 
-function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST,T, MVT <: Lagrange,LT  <: Lagrange,BT,IT <: Sindy_PDE_Integrator{T, MVT, LT, BT}}
+function residual!(b::Vector{ST}, sol, int::PDEIntegrator{IT}) where {ST, MVT <: Lagrange,LT  <: Lagrange,BT,IT <: Sindy_PDE_Integrator{MVT, LT, BT}}
     local D = int.problem.D 
     local RT = int.method.RT
     local RX = int.method.RX
