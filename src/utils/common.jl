@@ -156,7 +156,70 @@ function Lagrangian_multiplier(basis::Symbol, Nbasis::Int, order::Integer,a,b)
     Lagrangian_multiplier(Val(basis), Nbasis,order,a,b)
 end
 
+function initialize_bcs_ics!(sol,int::PDEIntegrator)
+    local C = cache(int)
+    local x_quad_nodes = int.method.spatial_quadrature.nodes
+    local t_quad_nodes = int.method.time_quadrature.nodes
+    local D = int.problem.D
+    local RT = int.method.RT
+    local ic_fun = int.problem.ics_function
+    local tn = sol.t - timestep(int)
+    local bc_fun = int.problem.bcs_function
+    local xspan = int.problem.xspan
+    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+    for d in 1:D
+        # println("update initial condition, current time = ", sol.t, "the initial condition is at time = ", sol.t - timestep(int))
 
+        if tn == 0.0
+            C.init_condition_t₀[d,:] .= ic_fun(xspan[1] .+ x_domain .* x_quad_nodes).u
+
+            C.ics_ut₀_quad_values[d,:] .= ic_fun(xspan[1] .+ x_domain .* x_quad_nodes).u
+            C.ics_vt₀_quad_values[d,:] .= ic_fun(xspan[1] .+ x_domain .* x_quad_nodes).v
+            C.ics_wt₀_quad_values[d,:] .= ic_fun(xspan[1] .+ x_domain .* x_quad_nodes).w
+        else
+            C.init_condition_t₀[d,:] = internal(sol).ut₁_quad_values[d,:]
+
+            C.ics_ut₀_quad_values[d,:] = internal(sol).ut₁_quad_values[d,:]
+            C.ics_vt₀_quad_values[d,:] = internal(sol).vt₁_quad_values[d,:]
+            C.ics_wt₀_quad_values[d,:] = internal(sol).wt₁_quad_values[d,:]
+        end
+
+        for i in 1:RT
+            C.boundary_condition_x₀[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₀.u
+            C.boundary_condition_x₁[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₁.u
+
+            C.bc_ux₀_quad_values[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₀.u
+            C.bc_vx₀_quad_values[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₀.v
+            C.bc_wx₀_quad_values[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₀.w
+
+            C.bc_ux₁_quad_values[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₁.u
+            C.bc_vx₁_quad_values[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₁.v
+            C.bc_wx₁_quad_values[d,i] = bc_fun(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i],xspan).bc₁.w
+        end
+        # println("left boundary condition = " , C.boundary_condition_x₀[d,:])
+    end
+
+end
+
+function internal_variables(method::PDEMethod, problem::LPDEProblem)
+    local D = problem.D
+    local RX = method.RX
+
+    ut₁_quad_values = zeros(D,RX)
+    vt₁_quad_values = zeros(D,RX)
+    wt₁_quad_values = zeros(D,RX)
+    
+    return (ut₁_quad_values = ut₁_quad_values,
+        vt₁_quad_values = vt₁_quad_values,
+        wt₁_quad_values = wt₁_quad_values,
+        )
+end
+
+function copy_internal_variables!(solstep::SolutionStep,C::PDEIntegratorCache)
+    haskey(internal(solstep), :ut₁_quad_values) && copyto!(internal(solstep).ut₁_quad_values,C.ut₁_quad_values)
+    haskey(internal(solstep), :vt₁_quad_values) && copyto!(internal(solstep).vt₁_quad_values,C.vt₁_quad_values)
+    haskey(internal(solstep), :wt₁_quad_values) && copyto!(internal(solstep).wt₁_quad_values,C.wt₁_quad_values)
+end
 
 # flat = flatten_params(pnn.params)
 # reconstructed = reconstruct_params(flat, pnn.params)

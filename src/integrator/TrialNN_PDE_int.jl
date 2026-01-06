@@ -427,7 +427,6 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     C.x[2*S+1:3*S] = Wsel[:,2]
     C.x[3*S+1:4*S] = Bsel[:]
 
-
     @show length(Set(selected)) == S  # number of unique selected atoms
 
     target_vec = [exact_u(h*quad_nodes[1,i], quad_nodes[2,i]) for i in 1:N ]

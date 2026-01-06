@@ -33,9 +33,6 @@ module MultiSymplectic
     include("methods.jl")
     export PDEMethod, PDEIntegratorCache, AbstractPDEIntegrator, GeometricPDESolution
     export InitialParametersMethod, LSGD, ELM, PINN, TrialOGA2D, OGA2D
-    # utils
-    include("utils/common.jl")
-    export LPDE_variables,symbolize,substitute_parameters,Lagrangian_multiplier
 
     include("utils/Lagrangian_LPDE_problem.jl")
     export LPDEProblem
@@ -48,7 +45,11 @@ module MultiSymplectic
 
     include("utils/PDE_Integrator.jl")
     export PDEIntegrator
-
+    
+    # utils
+    include("utils/common.jl")
+    export LPDE_variables,symbolize,substitute_parameters,Lagrangian_multiplier
+    export initialize_bcs_ics!
     # basis
     include("basis/Sindy_PDE_basis.jl")
     export SindyPDEBasis    

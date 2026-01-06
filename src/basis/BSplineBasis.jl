@@ -10,7 +10,9 @@ struct BSplineDirichlet
 
     b #  basis functions 
     function BSplineDirichlet(Nbasis::Int,k,a,b)
+        QGau = QuadratureRules.GaussLegendreQuadrature(Nbasis)
         x = a:(b - a)/(Nbasis-1):b
+        # x = a .+ (b-a) .* QGau.nodes
         t = make_knots(x,BSplineOrder(k),nothing) # nothing is the bc,default option is Dirichlet
         B = BSplineBasis(BSplineOrder(k), t;augment = Val(false))
 

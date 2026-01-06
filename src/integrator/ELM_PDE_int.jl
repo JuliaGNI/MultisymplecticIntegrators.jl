@@ -42,7 +42,7 @@ struct ELM_PDE_int{BT<:AbstractPDEBasis} <: PDEMethod
 end
 
 
-default_solver(::ELM_PDE_int) = Newton()
+default_solver(::ELM_PDE_int) = NewtonMethod()
 
 struct ELM_PDE_intCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     """

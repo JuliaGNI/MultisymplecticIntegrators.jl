@@ -65,7 +65,7 @@ struct Sindy_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
     end 
 end
 
-default_solver(::Sindy_PDE_Integrator) = Newton()
+default_solver(::Sindy_PDE_Integrator) = NewtonMethod()
 
 struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP} <: PDEIntegratorCache{ST,D}
     """
