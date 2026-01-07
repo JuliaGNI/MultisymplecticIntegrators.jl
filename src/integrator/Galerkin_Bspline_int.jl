@@ -40,9 +40,11 @@ struct Galerkin_Bspline_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
     wx₀_basis_quad_values
     wx₁_basis_quad_values
 
+    show_status
     function Galerkin_Bspline_Integrator(basis; RT::Int = 8,RX::Int = 8,xspan::Tuple = (0.,1.0), 
         Nbasis_μ_t::Int = 10,k_μ_t::Int = 4,μ::Symbol = :BSplineDirichlet,
-        Nbasis_λ_x::Int = 10,k_λ_x::Int = 3,λ::Symbol = :BSplineDirichlet)
+        Nbasis_λ_x::Int = 10,k_λ_x::Int = 3,λ::Symbol = :BSplineDirichlet,
+        show_status = false)
 
         if RT ==128 
             t_quadrature = GaussQuadrature128()
@@ -143,7 +145,8 @@ struct Galerkin_Bspline_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
             wt₀_basis_quad_values,wt₁_basis_quad_values,
             ux₀_basis_quad_values,ux₁_basis_quad_values,
             vx₀_basis_quad_values,vx₁_basis_quad_values,
-            wx₀_basis_quad_values,wx₁_basis_quad_values
+            wx₀_basis_quad_values,wx₁_basis_quad_values,
+            show_status
             )
     end 
 end
@@ -318,11 +321,10 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
     local grid_matrix = int.method.grid_matrix
     local RT = int.method.RT
     local RX = int.method.RX
+    local show_status = int.method.show_status
 
     udata = exact_u.(h .* ts, xs') # fdata[i,j] = exact_u(h .* ts[i], xs[j])
-    vdata = exact_v.(h .* ts, xs')
-    wdata = exact_w.(h .* ts, xs')
-
+    
     # 2D B-spline coefficients (output)
     coefs = similar(udata)
 
@@ -333,53 +335,63 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
     for i ∈ eachindex(ts)
         @views ldiv!(Cx, coefs[i, :])
     end
-
-    u_approx = similar(udata)
-    v_approx = similar(vdata)
-    w_approx = similar(wdata)
-    # Verification: evaluate 2D spline at data points
-    for m ∈ eachindex(ts), n ∈ eachindex(xs)
-        t = ts[m]
-        x = xs[n]
-        u_approx[m, n] = eval_spline2D(coefs, (Bt, Bx), (t, x))
-        v_approx[m, n] = eval_spline2D_dt(coefs, (Bt, Bx), (t, x)) / h
-        w_approx[m, n] = eval_spline2D_dx(coefs, (Bt, Bx), (t, x))
-    end
-
-    # println("Error Matrix between exact solution and B-spline approximation at grid points:")
-    # @show u_approx .- fdata
-    println("Max error in initial guess for u: ", maximum(abs.(udata .- u_approx)))
-    println("Max error in initial guess for v: ", maximum(abs.(vdata .- v_approx))) 
-    println("Max error in initial guess for w: ", maximum(abs.(wdata .- w_approx)))
-
-    u_quad_value = zeros(RT, RX)
-    v_quad_value = zeros(RT, RX)
-    w_quad_value = zeros(RT, RX)
-
-    u_quad_approx = zeros(RT, RX)
-    v_quad_approx = zeros(RT, RX)
-    w_quad_approx = zeros(RT, RX)
-    for ti in 1:RT
-        for xi in 1:RX
-            tt = grid_matrix[ti,xi][1]
-            xx = a + (b - a) * grid_matrix[ti,xi][2]
-
-            u_quad_approx[ti,xi] = eval_spline2D(coefs, (Bt, Bx), (tt, xx))
-            v_quad_approx[ti,xi] = eval_spline2D_dt(coefs, (Bt, Bx), (tt, xx)) / h
-            w_quad_approx[ti,xi] = eval_spline2D_dx(coefs, (Bt, Bx), (tt, xx))
-
-            u_quad_value[ti,xi] = exact_u(h * tt, xx)
-            v_quad_value[ti,xi] = exact_v(h * tt, xx)
-            w_quad_value[ti,xi] = exact_w(h * tt, xx)
-        end
-    end
-
-    # println("Error Matrix between exact solution and B-spline approximation at quadrature points:")
-    println("Max error in initial guess at quadrature points for u: ", maximum(abs.(u_quad_value .- u_quad_approx)))
-    println("Max error in initial guess at quadrature points for v: ", maximum(abs.(v_quad_value .- v_quad_approx)))
-    println("Max error in initial guess at quadrature points for w: ", maximum(abs.(w_quad_value .- w_quad_approx)))
-
     C.x[1:S] = reshape(coefs, :, 1)
+
+    if show_status
+        u_approx = similar(udata)
+        v_approx = similar(vdata)
+        w_approx = similar(wdata)
+        # Verification: evaluate 2D spline at data points
+        for m ∈ eachindex(ts), n ∈ eachindex(xs)
+            t = ts[m]
+            x = xs[n]
+            u_approx[m, n] = eval_spline2D(coefs, (Bt, Bx), (t, x))
+            v_approx[m, n] = eval_spline2D_dt(coefs, (Bt, Bx), (t, x)) / h
+            w_approx[m, n] = eval_spline2D_dx(coefs, (Bt, Bx), (t, x))
+        end
+
+        u_quad_approx = zeros(RT, RX)
+        v_quad_approx = zeros(RT, RX)
+        w_quad_approx = zeros(RT, RX)
+        for ti in 1:RT
+            for xi in 1:RX
+                tt = grid_matrix[ti,xi][1]
+                xx = a + (b - a) * grid_matrix[ti,xi][2]
+
+                u_quad_approx[ti,xi] = eval_spline2D(coefs, (Bt, Bx), (tt, xx))
+                v_quad_approx[ti,xi] = eval_spline2D_dt(coefs, (Bt, Bx), (tt, xx)) / h
+                w_quad_approx[ti,xi] = eval_spline2D_dx(coefs, (Bt, Bx), (tt, xx))
+            end
+        end
+
+   
+
+        u_quad_value = zeros(RT, RX)
+        v_quad_value = zeros(RT, RX)
+        w_quad_value = zeros(RT, RX)
+        for ti in 1:RT
+            for xi in 1:RX
+                tt = grid_matrix[ti,xi][1]
+                xx = a + (b - a) * grid_matrix[ti,xi][2]
+
+                u_quad_value[ti,xi] = exact_u(h * tt, xx)
+                v_quad_value[ti,xi] = exact_v(h * tt, xx)
+                w_quad_value[ti,xi] = exact_w(h * tt, xx)
+            end
+        end
+
+        println("Error Matrix between exact solution and B-spline approximation at grid points:")
+        # @show u_approx .- fdata
+        println("Max error in initial guess for u: ", maximum(abs.(udata .- u_approx)))
+        println("Max error in initial guess for v: ", maximum(abs.(vdata .- v_approx))) 
+        println("Max error in initial guess for w: ", maximum(abs.(wdata .- w_approx)))
+
+        println("Error Matrix between exact solution and B-spline approximation at quadrature points:")
+        println("Max error in initial guess at quadrature points for u: ", maximum(abs.(u_quad_value .- u_quad_approx)))
+        println("Max error in initial guess at quadrature points for v: ", maximum(abs.(v_quad_value .- v_quad_approx)))
+        println("Max error in initial guess at quadrature points for w: ", maximum(abs.(w_quad_value .- w_quad_approx)))
+    end
+
     # @infiltrate
 end
 
@@ -389,94 +401,12 @@ function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Ga
     local D = int.problem.D 
     local lag_sys = int.problem.lagrangian_system.functions
     local params = int.problem.lagrangian_system.params
-    local xspan = int.problem.xspan
-    local x_quad_nodes = int_method.spatial_quadrature.nodes
-    local Nbasis_x = int_method.basis.Nbasis_x
-    local Nbasis_t = int_method.basis.Nbasis_t
     local Nbasis_λ_x = int_method.Nbasis_λ_x
     local Nbasis_μ_t = int_method.Nbasis_μ_t
-    local λ_x = int_method.λ_x
-    local μ₀_t = int_method.μ₀_t
     local mλ_x = int_method.mλ_x
     local mμ_t = int_method.mμ_t
-
-    local k_λ_x = int_method.k_λ_x
-    local k_μ_t = int_method.k_μ_t
-    local basis = int_method.basis
-    local h = timestep(int)
-    local t_quad_nodes = int_method.time_quadrature.nodes
-    local a, b = int.problem.xspan[1], int.problem.xspan[2]
-    local x_domain = b - a 
     local S = int_method.basis.S
 
-
-    coefs = reshape(internal_coes, Nbasis_t, Nbasis_x)
-
-    ut₀_quad_values_tem = zeros(Nbasis_λ_x)
-    ut₁_quad_values_tem = zeros(Nbasis_λ_x)
-    vt₀_quad_values_tem = zeros(Nbasis_λ_x)
-    vt₁_quad_values_tem = zeros(Nbasis_λ_x)
-    wt₀_quad_values_tem = zeros(Nbasis_λ_x)
-    wt₁_quad_values_tem = zeros(Nbasis_λ_x)
-
-    ux₀_quad_values_tem = zeros(Nbasis_μ_t)
-    ux₁_quad_values_tem = zeros(Nbasis_μ_t)
-    vx₀_quad_values_tem = zeros(Nbasis_μ_t)
-    vx₁_quad_values_tem = zeros(Nbasis_μ_t)
-    wx₀_quad_values_tem = zeros(Nbasis_μ_t)
-    wx₁_quad_values_tem = zeros(Nbasis_μ_t)
-
-    λ_quad_points = QuadratureRules.GaussLegendreQuadrature(Nbasis_λ_x).nodes
-    λ_quad_points = a .+ (b - a) .* λ_quad_points
-
-    for rx in 1:Nbasis_λ_x
-        xx = λ_quad_points[rx]
-        ut₀_quad_values_tem[rx] = eval_spline2D(coefs, (basis.Basis_t, basis.Basis_x), (0.0, xx))
-        ut₁_quad_values_tem[rx] = eval_spline2D(coefs, (basis.Basis_t, basis.Basis_x), (1.0, xx))
-        vt₀_quad_values_tem[rx] = eval_spline2D_dt(coefs, (basis.Basis_t, basis.Basis_x), (0.0, xx)) /h 
-        vt₁_quad_values_tem[rx] = eval_spline2D_dt(coefs, (basis.Basis_t, basis.Basis_x), (1.0, xx)) /h
-        wt₀_quad_values_tem[rx] = eval_spline2D_dx(coefs, (basis.Basis_t, basis.Basis_x), (0.0, xx))
-        wt₁_quad_values_tem[rx] = eval_spline2D_dx(coefs, (basis.Basis_t, basis.Basis_x), (1.0, xx))
-    end
-
-    μ_quad_points = QuadratureRules.GaussLegendreQuadrature(Nbasis_μ_t).nodes
-    for rt in 1:Nbasis_μ_t
-        tt = μ_quad_points[rt]
-        ux₀_quad_values_tem[rt] = eval_spline2D(coefs, (basis.Basis_t, basis.Basis_x), (tt, xspan[1]))
-        ux₁_quad_values_tem[rt] = eval_spline2D(coefs, (basis.Basis_t, basis.Basis_x), (tt, xspan[2]))
-        vx₀_quad_values_tem[rt] = eval_spline2D_dt(coefs, (basis.Basis_t, basis.Basis_x), (tt, xspan[1]))/h
-        vx₁_quad_values_tem[rt] = eval_spline2D_dt(coefs, (basis.Basis_t, basis.Basis_x), (tt, xspan[2]))/h
-        wx₀_quad_values_tem[rt] = eval_spline2D_dx(coefs, (basis.Basis_t, basis.Basis_x), (tt, xspan[1]))
-        wx₁_quad_values_tem[rt] = eval_spline2D_dx(coefs, (basis.Basis_t, basis.Basis_x), (tt, xspan[2]))
-    end
-
-    # for d in 1:D
-    #     tem_t₁_∂L∂V = zeros(Nbasis_λ_x)
-    #     for rx in 1:Nbasis_λ_x
-    #         tem_t₁_∂L∂V[rx] = lag_sys.∂L∂V[d](ut₁_quad_values_tem[rx], vt₁_quad_values_tem[rx], wt₁_quad_values_tem[rx], params)
-    #     end
-    #     λ_x_tem = interpolate(λ_quad_points, tem_t₁_∂L∂V, BSplineOrder(k_λ_x))
-
-    #     for rx in 1:Nbasis_λ_x
-    #         C.x[S + (d - 1) * Nbasis_λ_x + rx] = λ_x_tem.spline.coefs[rx]
-    #         # C.x[S + D * k_λ_x + (d - 1) * k_λ_x + rx] = lag_sys.∂L∂V[d](ut₁_quad_values_tem[rx], vt₁_quad_values_tem[rx], wt₁_quad_values_tem[rx], params)
-    #     end
-
-    #     tem_x₀_∂L∂W = zeros(Nbasis_μ_t)
-    #     tem_x₁_∂L∂W = zeros(Nbasis_μ_t)
-    #     for rt in 1:Nbasis_μ_t
-    #         tem_x₀_∂L∂W[rt] = lag_sys.∂L∂W[d](ux₀_quad_values_tem[rt], vx₀_quad_values_tem[rt], wx₀_quad_values_tem[rt], params)
-    #         tem_x₁_∂L∂W[rt] = lag_sys.∂L∂W[d](ux₁_quad_values_tem[rt], vx₁_quad_values_tem[rt], wx₁_quad_values_tem[rt], params)
-    #     end
-    #     μ₀_t_tem = interpolate(μ_quad_points, tem_x₀_∂L∂W, BSplineOrder(k_μ_t))
-    #     μ₁_t_tem = interpolate(μ_quad_points, tem_x₁_∂L∂W, BSplineOrder(k_μ_t))
-
-    #     for rt in 1:Nbasis_μ_t
-    #         C.x[S + D * Nbasis_λ_x + (d - 1) * Nbasis_μ_t + rt] = μ₀_t_tem.spline.coefs[rt]
-    #         C.x[S + D * Nbasis_λ_x + + D * Nbasis_μ_t + (d - 1) * Nbasis_μ_t + rt] = μ₁_t_tem.spline.coefs[rt]
-    #     end
-    # end
-    
     for d in 1:D
         tem_t₁_∂L∂V = zeros(RX)
         for rx in 1:RX
@@ -486,7 +416,6 @@ function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Ga
 
         for rx in 1:Nbasis_λ_x
             C.x[S + (d - 1) * Nbasis_λ_x + rx] = λ_x_tem[rx]
-            # C.x[S + D * k_λ_x + (d - 1) * k_λ_x + rx] = lag_sys.∂L∂V[d](ut₁_quad_values_tem[rx], vt₁_quad_values_tem[rx], wt₁_quad_values_tem[rx], params)
         end
 
         tem_x₀_∂L∂W = zeros(RT)
@@ -505,7 +434,6 @@ function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Ga
     end
 
     C.flag_done_initial_guess[1] = 1.0
-
 end
 
 function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Galerkin_Bspline_Integrator},int_method::Galerkin_Bspline_Integrator{MVT,LT,BT}) where {MVT<:Lagrange,LT<:Lagrange,BT}
@@ -524,6 +452,7 @@ function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Ga
     local basis = int_method.basis
     local Nbasis_x = int_method.basis.Nbasis_x
     local Nbasis_t = int_method.basis.Nbasis_t
+    local show_status = int.method.show_status
 
     ut₀_quad_values_tem = zeros(Nbasis_λ_x)
     ut₁_quad_values_tem = zeros(Nbasis_λ_x)
@@ -573,57 +502,59 @@ function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Ga
         end
     end
 
-    local exact_u = int.problem.exact_u
-    local exact_v = int.problem.exact_v
-    local exact_w = int.problem.exact_w
-    ut₀_truth_quad = zeros(Nbasis_λ_x)
-    ut₁_truth_quad = zeros(Nbasis_λ_x)
-    vt₁_truth_quad = zeros(Nbasis_λ_x)
-    vt₀_truth_quad = zeros(Nbasis_λ_x)
-    wt₀_truth_quad = zeros(Nbasis_λ_x)
-    wt₁_truth_quad = zeros(Nbasis_λ_x)
-    
+    if show_status
+        local exact_u = int.problem.exact_u
+        local exact_v = int.problem.exact_v
+        local exact_w = int.problem.exact_w
+        ut₀_truth_quad = zeros(Nbasis_λ_x)
+        ut₁_truth_quad = zeros(Nbasis_λ_x)
+        vt₁_truth_quad = zeros(Nbasis_λ_x)
+        vt₀_truth_quad = zeros(Nbasis_λ_x)
+        wt₀_truth_quad = zeros(Nbasis_λ_x)
+        wt₁_truth_quad = zeros(Nbasis_λ_x)
+        
 
-    ux₀_truth_quad = zeros(Nbasis_μ_t)
-    ux₁_truth_quad = zeros(Nbasis_μ_t)
-    vx₀_truth_quad = zeros(Nbasis_μ_t)
-    vx₁_truth_quad = zeros(Nbasis_μ_t)
-    wx₀_truth_quad = zeros(Nbasis_μ_t)
-    wx₁_truth_quad = zeros(Nbasis_μ_t)
+        ux₀_truth_quad = zeros(Nbasis_μ_t)
+        ux₁_truth_quad = zeros(Nbasis_μ_t)
+        vx₀_truth_quad = zeros(Nbasis_μ_t)
+        vx₁_truth_quad = zeros(Nbasis_μ_t)
+        wx₀_truth_quad = zeros(Nbasis_μ_t)
+        wx₁_truth_quad = zeros(Nbasis_μ_t)
 
-    for rx in 1:Nbasis_λ_x
-        xx = λ_x.x[rx]
-        ut₀_truth_quad[rx] = exact_u.(sol_struct.t - timestep(int), xx)
-        ut₁_truth_quad[rx] = exact_u.(sol_struct.t, xx)
-        vt₀_truth_quad[rx] = exact_v.(sol_struct.t - timestep(int), xx)
-        vt₁_truth_quad[rx] = exact_v.(sol_struct.t, xx)
-        wt₀_truth_quad[rx] = exact_w.(sol_struct.t - timestep(int), xx)
-        wt₁_truth_quad[rx] = exact_w.(sol_struct.t, xx)
+        for rx in 1:Nbasis_λ_x
+            xx = λ_x.x[rx]
+            ut₀_truth_quad[rx] = exact_u.(sol_struct.t - timestep(int), xx)
+            ut₁_truth_quad[rx] = exact_u.(sol_struct.t, xx)
+            vt₀_truth_quad[rx] = exact_v.(sol_struct.t - timestep(int), xx)
+            vt₁_truth_quad[rx] = exact_v.(sol_struct.t, xx)
+            wt₀_truth_quad[rx] = exact_w.(sol_struct.t - timestep(int), xx)
+            wt₁_truth_quad[rx] = exact_w.(sol_struct.t, xx)
+        end
+
+        for rt in 1:Nbasis_μ_t
+            tt = μ₀_t.x[rt]
+            ux₀_truth_quad[rt] = exact_u.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[1])
+            ux₁_truth_quad[rt] = exact_u.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[2])
+            vx₀_truth_quad[rt] = exact_v.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[1])
+            vx₁_truth_quad[rt] = exact_v.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[2])
+            wx₀_truth_quad[rt] = exact_w.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[1])
+            wx₁_truth_quad[rt] = exact_w.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[2])
+        end
+
+        @show maximum(abs.(ut₀_quad_values_tem .- ut₀_truth_quad))
+        @show maximum(abs.(vt₀_quad_values_tem .- vt₀_truth_quad))
+        @show maximum(abs.(wt₀_quad_values_tem .- wt₀_truth_quad))
+        @show maximum(abs.(ut₁_quad_values_tem .- ut₁_truth_quad))
+        @show maximum(abs.(vt₁_quad_values_tem .- vt₁_truth_quad))
+        @show maximum(abs.(wt₁_quad_values_tem .- wt₁_truth_quad))
+
+        @show maximum(abs.(ux₀_quad_values_tem .- ux₀_truth_quad))
+        @show maximum(abs.(vx₀_quad_values_tem .- vx₀_truth_quad))
+        @show maximum(abs.(wx₀_quad_values_tem .- wx₀_truth_quad))
+        @show maximum(abs.(ux₁_quad_values_tem .- ux₁_truth_quad))
+        @show maximum(abs.(vx₁_quad_values_tem .- vx₁_truth_quad))
+        @show maximum(abs.(wx₁_quad_values_tem .- wx₁_truth_quad))
     end
-
-    for rt in 1:Nbasis_μ_t
-        tt = μ₀_t.x[rt]
-        ux₀_truth_quad[rt] = exact_u.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[1])
-        ux₁_truth_quad[rt] = exact_u.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[2])
-        vx₀_truth_quad[rt] = exact_v.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[1])
-        vx₁_truth_quad[rt] = exact_v.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[2])
-        wx₀_truth_quad[rt] = exact_w.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[1])
-        wx₁_truth_quad[rt] = exact_w.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[2])
-    end
-
-    @show maximum(abs.(ut₀_quad_values_tem .- ut₀_truth_quad))
-    @show maximum(abs.(vt₀_quad_values_tem .- vt₀_truth_quad))
-    @show maximum(abs.(wt₀_quad_values_tem .- wt₀_truth_quad))
-    @show maximum(abs.(ut₁_quad_values_tem .- ut₁_truth_quad))
-    @show maximum(abs.(vt₁_quad_values_tem .- vt₁_truth_quad))
-    @show maximum(abs.(wt₁_quad_values_tem .- wt₁_truth_quad))
-
-    @show maximum(abs.(ux₀_quad_values_tem .- ux₀_truth_quad))
-    @show maximum(abs.(vx₀_quad_values_tem .- vx₀_truth_quad))
-    @show maximum(abs.(wx₀_quad_values_tem .- wx₀_truth_quad))
-    @show maximum(abs.(ux₁_quad_values_tem .- ux₁_truth_quad))
-    @show maximum(abs.(vx₁_quad_values_tem .- vx₁_truth_quad))
-    @show maximum(abs.(wx₁_quad_values_tem .- wx₁_truth_quad))
 
     C.flag_done_initial_guess[1] = 1.0
     # @infiltrate
@@ -655,10 +586,8 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     local exact_u = int.problem.exact_u
     local exact_v = int.problem.exact_v
     local exact_w = int.problem.exact_w
+    local show_status = int.method.show_status
 
-    u_truth_mat = similar(C.u_quad_values)
-    v_truth_mat = similar(C.v_quad_values)
-    w_truth_mat = similar(C.w_quad_values)
     # interior values at quadrature points
     for d in 1:D
         for i in 1:RT
@@ -666,26 +595,9 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
                 C.u_quad_values[d, i, j] = sum(x[1:S] .* int.method.u_collocation_mat[:, i, j])
                 C.v_quad_values[d, i, j] = sum(x[1:S] .* int.method.v_collocation_mat[:, i, j]) / h 
                 C.w_quad_values[d, i, j] = sum(x[1:S] .* int.method.w_collocation_mat[:, i, j])
-
-                u_truth_mat[d, i, j] = exact_u.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
-                v_truth_mat[d, i, j] = exact_v.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
-                w_truth_mat[d, i, j] = exact_w.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
             end
         end
     end
-
-
-    local x_quad_nodes = int.method.spatial_quadrature.nodes
-    local t_quad_nodes = int.method.time_quadrature.nodes
-    local h = timestep(int)
-
-    @show maximum(abs.(C.u_quad_values .- u_truth_mat))
-    @show maximum(abs.(C.v_quad_values .- v_truth_mat))
-    @show maximum(abs.(C.w_quad_values .- w_truth_mat))
-
-    ∂L∂U_truth_mat = similar(C.∂L∂U_quad_values)
-    ∂L∂V_truth_mat = similar(C.∂L∂V_quad_values)
-    ∂L∂W_truth_mat = similar(C.∂L∂W_quad_values)
 
     for d in 1:D
         for i in 1:RT
@@ -693,58 +605,19 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
                 C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
                 C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
                 C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
-
-                ∂L∂U_truth_mat[d, i, j] = ∂L∂U[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
-                ∂L∂V_truth_mat[d, i, j] = ∂L∂V[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
-                ∂L∂W_truth_mat[d, i, j] = ∂L∂W[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
-
             end
         end 
     end
-
-    @show maximum(abs.(C.∂L∂U_quad_values .- ∂L∂U_truth_mat))
-    @show maximum(abs.(C.∂L∂V_quad_values .- ∂L∂V_truth_mat))
-    @show maximum(abs.(C.∂L∂W_quad_values .- ∂L∂W_truth_mat))
-
-    # C.∂L∂U_quad_values .= ∂L∂U_truth_mat
-    # C.∂L∂V_quad_values .= ∂L∂V_truth_mat
-    # C.∂L∂W_quad_values .= ∂L∂W_truth_mat
-
-
-    ut₀_quad_values_truth = similar(C.ut₀_quad_values)
-    ut₁_quad_values_truth = similar(C.ut₁_quad_values)
-    vt₀_quad_values_truth = similar(C.vt₀_quad_values)
-    vt₁_quad_values_truth = similar(C.vt₁_quad_values)
-    wt₀_quad_values_truth = similar(C.wt₀_quad_values)
-    wt₁_quad_values_truth = similar(C.wt₁_quad_values)
-
-    ux₀_quad_values_truth = similar(C.ux₀_quad_values)
-    ux₁_quad_values_truth = similar(C.ux₁_quad_values)
-    vx₀_quad_values_truth = similar(C.vx₀_quad_values)
-    vx₁_quad_values_truth = similar(C.vx₁_quad_values)
-    wx₀_quad_values_truth = similar(C.wx₀_quad_values)
-    wx₁_quad_values_truth = similar(C.wx₁_quad_values)
 
     # boundary values at quadrature points
     for d in 1:D
         for j in 1:RX
             C.ut₀_quad_values[d,j] = sum(x[1:S] .* int.method.ut₀_basis_quad_values[:,j])
             C.ut₁_quad_values[d,j] = sum(x[1:S] .* int.method.ut₁_basis_quad_values[:,j])
-
             C.vt₀_quad_values[d,j] = sum(x[1:S] .* int.method.vt₀_basis_quad_values[:,j]) / h
             C.vt₁_quad_values[d,j] = sum(x[1:S] .* int.method.vt₁_basis_quad_values[:,j]) / h
-
             C.wt₀_quad_values[d,j] = sum(x[1:S] .* int.method.wt₀_basis_quad_values[:,j])
             C.wt₁_quad_values[d,j] = sum(x[1:S] .* int.method.wt₁_basis_quad_values[:,j])
-
-            ut₀_quad_values_truth[d,j] = exact_u.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
-            ut₁_quad_values_truth[d,j] = exact_u.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
-
-            vt₀_quad_values_truth[d,j] = exact_v.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
-            vt₁_quad_values_truth[d,j] = exact_v.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
-
-            wt₀_quad_values_truth[d,j] = exact_w.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
-            wt₁_quad_values_truth[d,j] = exact_w.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
         end
 
         for i in 1:RT
@@ -754,37 +627,12 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
             C.vx₁_quad_values[d,i] = sum(x[1:S] .* int.method.vx₁_basis_quad_values[:,i])/ h
             C.wx₀_quad_values[d,i] = sum(x[1:S] .* int.method.wx₀_basis_quad_values[:,i]) 
             C.wx₁_quad_values[d,i] = sum(x[1:S] .* int.method.wx₁_basis_quad_values[:,i]) 
-
-            ux₀_quad_values_truth[d,i] = exact_u.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
-            ux₁_quad_values_truth[d,i] = exact_u.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
-            vx₀_quad_values_truth[d,i] = exact_v.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
-            vx₁_quad_values_truth[d,i] = exact_v.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
-            wx₀_quad_values_truth[d,i] = exact_w.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
-            wx₁_quad_values_truth[d,i] = exact_w.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
         end
-
     end
 
-    @show maximum(abs.(C.ut₀_quad_values .- ut₀_quad_values_truth))
-    @show maximum(abs.(C.ut₁_quad_values .- ut₁_quad_values_truth))
-
-    @show maximum(abs.(C.vt₀_quad_values .- vt₀_quad_values_truth))
-    @show maximum(abs.(C.vt₁_quad_values .- vt₁_quad_values_truth))
-
-    @show maximum(abs.(C.wt₀_quad_values .- wt₀_quad_values_truth))
-    @show maximum(abs.(C.wt₁_quad_values .- wt₁_quad_values_truth))
-
-    @show maximum(abs.(C.ux₀_quad_values .- ux₀_quad_values_truth))
-    @show maximum(abs.(C.ux₁_quad_values .- ux₁_quad_values_truth))
-
-    @show maximum(abs.(C.vx₀_quad_values .- vx₀_quad_values_truth))
-    @show maximum(abs.(C.vx₁_quad_values .- vx₁_quad_values_truth))
-
-    @show maximum(abs.(C.wx₀_quad_values .- wx₀_quad_values_truth))
-    @show maximum(abs.(C.wx₁_quad_values .- wx₁_quad_values_truth))
-
+    # initial guess for the coefficients of Lagrangian multipliers
     cache(int).flag_done_initial_guess[1] == 0.0 ? post_initial_guess!(x[1:S], cache(int),sol,int,int.method) : nothing
-
+    
     for d in 1:D
         C.λ₁_x_coes[d,:] = x[S+1:S+Nbasis_λ_x]
         C.μ₀_t_coes[d,:] = x[S+Nbasis_λ_x+1:S+Nbasis_λ_x+Nbasis_μ_t]
@@ -802,12 +650,100 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
             C.μ₁_quad_values[d,rt] = sum(C.μ₁_t_coes[d,:] .* mμ_t[:,rt])
         end
     end
-    @show maximum(abs.(C.λ₁_quad_values[1,:] .- exact_v.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes)))
-    @show maximum(abs.(0.25 .* C.bc_wx₀_quad_values .+ C.μ₀_quad_values))
-    @show maximum(abs.(0.25 .* C.bc_wx₁_quad_values .+ C.μ₁_quad_values))
 
-    # @show x 
-    # @infiltrate
+    if show_status
+        u_truth_mat = similar(C.u_quad_values)
+        v_truth_mat = similar(C.v_quad_values)
+        w_truth_mat = similar(C.w_quad_values)
+        # interior values at quadrature points
+        for d in 1:D
+            for i in 1:RT
+                for j in 1:RX
+                    u_truth_mat[d, i, j] = exact_u.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                    v_truth_mat[d, i, j] = exact_v.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                    w_truth_mat[d, i, j] = exact_w.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                end
+            end
+        end
+
+        @show maximum(abs.(C.u_quad_values .- u_truth_mat))
+        @show maximum(abs.(C.v_quad_values .- v_truth_mat))
+        @show maximum(abs.(C.w_quad_values .- w_truth_mat))
+
+        ∂L∂U_truth_mat = similar(C.∂L∂U_quad_values)
+        ∂L∂V_truth_mat = similar(C.∂L∂V_quad_values)
+        ∂L∂W_truth_mat = similar(C.∂L∂W_quad_values)
+        for d in 1:D
+            for i in 1:RT
+                for j in 1:RX
+                    ∂L∂U_truth_mat[d, i, j] = ∂L∂U[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
+                    ∂L∂V_truth_mat[d, i, j] = ∂L∂V[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
+                    ∂L∂W_truth_mat[d, i, j] = ∂L∂W[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
+
+                end
+            end 
+        end
+        @show maximum(abs.(C.∂L∂U_quad_values .- ∂L∂U_truth_mat))
+        @show maximum(abs.(C.∂L∂V_quad_values .- ∂L∂V_truth_mat))
+        @show maximum(abs.(C.∂L∂W_quad_values .- ∂L∂W_truth_mat))
+
+        ut₀_quad_values_truth = similar(C.ut₀_quad_values)
+        ut₁_quad_values_truth = similar(C.ut₁_quad_values)
+        vt₀_quad_values_truth = similar(C.vt₀_quad_values)
+        vt₁_quad_values_truth = similar(C.vt₁_quad_values)
+        wt₀_quad_values_truth = similar(C.wt₀_quad_values)
+        wt₁_quad_values_truth = similar(C.wt₁_quad_values)
+
+        ux₀_quad_values_truth = similar(C.ux₀_quad_values)
+        ux₁_quad_values_truth = similar(C.ux₁_quad_values)
+        vx₀_quad_values_truth = similar(C.vx₀_quad_values)
+        vx₁_quad_values_truth = similar(C.vx₁_quad_values)
+        wx₀_quad_values_truth = similar(C.wx₀_quad_values)
+        wx₁_quad_values_truth = similar(C.wx₁_quad_values)
+
+        for d in 1:D
+            for j in 1:RX
+                ut₀_quad_values_truth[d,j] = exact_u.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
+                ut₁_quad_values_truth[d,j] = exact_u.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
+                vt₀_quad_values_truth[d,j] = exact_v.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
+                vt₁_quad_values_truth[d,j] = exact_v.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
+                wt₀_quad_values_truth[d,j] = exact_w.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
+                wt₁_quad_values_truth[d,j] = exact_w.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
+            end
+
+            for i in 1:RT
+                ux₀_quad_values_truth[d,i] = exact_u.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
+                ux₁_quad_values_truth[d,i] = exact_u.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
+                vx₀_quad_values_truth[d,i] = exact_v.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
+                vx₁_quad_values_truth[d,i] = exact_v.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
+                wx₀_quad_values_truth[d,i] = exact_w.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
+                wx₁_quad_values_truth[d,i] = exact_w.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
+            end
+        end
+
+        @show maximum(abs.(C.ut₀_quad_values .- ut₀_quad_values_truth))
+        @show maximum(abs.(C.ut₁_quad_values .- ut₁_quad_values_truth))
+
+        @show maximum(abs.(C.vt₀_quad_values .- vt₀_quad_values_truth))
+        @show maximum(abs.(C.vt₁_quad_values .- vt₁_quad_values_truth))
+
+        @show maximum(abs.(C.wt₀_quad_values .- wt₀_quad_values_truth))
+        @show maximum(abs.(C.wt₁_quad_values .- wt₁_quad_values_truth))
+
+        @show maximum(abs.(C.ux₀_quad_values .- ux₀_quad_values_truth))
+        @show maximum(abs.(C.ux₁_quad_values .- ux₁_quad_values_truth))
+
+        @show maximum(abs.(C.vx₀_quad_values .- vx₀_quad_values_truth))
+        @show maximum(abs.(C.vx₁_quad_values .- vx₁_quad_values_truth))
+
+        @show maximum(abs.(C.wx₀_quad_values .- wx₀_quad_values_truth))
+        @show maximum(abs.(C.wx₁_quad_values .- wx₁_quad_values_truth))
+
+
+        @show maximum(abs.(C.λ₁_quad_values[1,:] .- exact_v.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes)))
+        @show maximum(abs.(0.25 .* C.bc_wx₀_quad_values .+ C.μ₀_quad_values))
+        @show maximum(abs.(0.25 .* C.bc_wx₁_quad_values .+ C.μ₁_quad_values))
+    end
 end
 
 
@@ -833,8 +769,8 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<: Galerkin_Bs
     local ut₁_basis_quad_values = int.method.ut₁_basis_quad_values
     local ux₀_basis_quad_values = int.method.ux₀_basis_quad_values
     local ux₁_basis_quad_values = int.method.ux₁_basis_quad_values
+    local show_status = int,method.show_status
 
-    current_idx = 1
     for d in 1:D 
         for p in 1:S
             z_in = zero(ST)
@@ -855,12 +791,9 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<: Galerkin_Bs
                 z_bd += timestep(int)* brt[rt] * (C.μ₀_quad_values[d,rt] * ux₀_basis_quad_values[p,rt] - C.μ₁_quad_values[d,rt] * ux₁_basis_quad_values[p,rt])
             end
             # println(z_bd)
-            b[current_idx] = -(z_in + z_bd) # TODO: check the sign
-            current_idx += 1
+            b[p] = -(z_in + z_bd)
         end
     end
-
-    @assert current_idx == S + 1 "Wrong indexing in residual computation"
 
     for d in 1:D
         for p in 1:Nbasis_λ_x
@@ -891,8 +824,10 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<: Galerkin_Bs
             b[S + D * Nbasis_λ_x + D * Nbasis_μ_t + (d - 1) * Nbasis_μ_t + p] = - z
         end
     end
-    # @infiltrate
-    @show b
+
+    if show_status
+        @show b
+    end
 end
 
 function update!(sol, int::PDEIntegrator{<:Galerkin_Bspline_Integrator})
