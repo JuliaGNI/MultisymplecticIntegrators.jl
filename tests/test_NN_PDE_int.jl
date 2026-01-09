@@ -23,12 +23,12 @@ GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
     max_iterations = 100,
 )
 
-S = 100
-nn_pde_basis = NetworkPDEBasis(S,relu3,:Fully)
-xspan = (0.3,0.8)
+S = 150
+nn_pde_basis = NetworkPDEBasis(S,relu3,:Partially) # Partially, Fully
+xspan = (0.0,1.0)
 
 nn_int = NN_PDE_Integrator(nn_pde_basis,RT = 64,RX = 64, xspan = xspan, μ =:BSplineDirichlet,λ =:BSplineDirichlet,
-k_μ_t = 4,k_λ_x = 4,nepochs= 1,initial_guess_method = OGA2D())
+k_μ_t = 4,k_λ_x = 4,nepochs= 1,initial_guess_method = OGA2D(), show_status=true)
 
 t_step = 0.3
 lpde = MultiSymplectic.Wave.lpdeproblem(timestep=0.3, timespan =(0.0,t_step),xspan = xspan)
@@ -61,3 +61,12 @@ open(log_file, "w") do io
     end
 end
 
+
+S = 100
+u_network = Chain(
+    Dense(2, 100, tanh),
+    Dense(100, 100, tanh),
+    Dense(100, S, tanh)
+)
+
+nn_elm_basis = NN_Basis(u_network, S)

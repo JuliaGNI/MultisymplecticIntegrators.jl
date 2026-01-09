@@ -216,6 +216,7 @@ function internal_variables(method::PDEMethod, problem::LPDEProblem)
 end
 
 function copy_internal_variables!(solstep::SolutionStep,C::PDEIntegratorCache)
+    # copy internal variables from cache to internal,
     haskey(internal(solstep), :ut₁_quad_values) && copyto!(internal(solstep).ut₁_quad_values,C.ut₁_quad_values)
     haskey(internal(solstep), :vt₁_quad_values) && copyto!(internal(solstep).vt₁_quad_values,C.vt₁_quad_values)
     haskey(internal(solstep), :wt₁_quad_values) && copyto!(internal(solstep).wt₁_quad_values,C.wt₁_quad_values)
@@ -519,4 +520,12 @@ function spline2D_coeff_derivatives_space((Bt, Bx), (t, x))
         dWdc[ii, jj] = bt[δt] * bxd[δx]    # N_i(t) * M'_j(x)
     end
     return reshape(dWdc, :, )
+end
+
+
+function vector_hessian(f, x)
+    S = length(f(x))
+    D = length(x)
+    out = ForwardDiff.jacobian(x -> ForwardDiff.jacobian(f, x), x)
+    return reshape(out, S, D, D)  # return a 3D array where out[i, j, k] = ∂²f_i / ∂x_j ∂x_k
 end

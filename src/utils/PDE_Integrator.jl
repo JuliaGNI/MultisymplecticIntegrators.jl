@@ -88,15 +88,19 @@ end
 function integrate!(solstep::SolutionStep, int::AbstractPDEIntegrator)
     reset!(solstep, timestep(int))
 
-    prior_initial_guess!(cache(int),solstep,int)
-
     initialize_bcs_ics!(solstep,int)
 
+    prior_initial_guess!(cache(int),solstep,int)
+
+    # copy internal variables from solution step to cache
     copy_internal_variables!(cache(int),solstep)
 
     integrate_step!(current(solstep), history(solstep), parameters(solstep), int)
 
+    # copy internal variables from cache to solution step
     copy_internal_variables!(solstep,cache(int))
+
+    cache(int).flag_done_initial_guess[1] != 0.0 ? cache(int).flag_done_initial_guess[1] = 0.0 : nothing 
 
     return solstep
 end
@@ -123,11 +127,4 @@ function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol, params, in
     components!(x, sol, params, int)
 
     residual!(b, sol, params, int)
-end
-
-function internal_variables(int::AbstractPDEIntegrator,problem::LPDEProblem)
-    local x = cache(int).x
-    ntime = Int((problem.tspan[2] - problem.tspan[1]) / problem.tstep)
-    xx = (x, ntuple( _ -> zeros(size(x)...), ntime)...)
-    return (x = xx,)
 end

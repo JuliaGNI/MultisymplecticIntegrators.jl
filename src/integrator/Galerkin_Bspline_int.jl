@@ -207,7 +207,6 @@ struct Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S,Nbasis_μ_t,Nbasis_λ_x} <:
     bc_vx₁_quad_values::Matrix{ST}
     bc_wx₁_quad_values::Matrix{ST}
 
-
     init_condition_t₀::Matrix{ST}
     boundary_condition_x₀::Matrix{ST}
     boundary_condition_x₁::Matrix{ST}
@@ -364,8 +363,6 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
             end
         end
 
-   
-
         u_quad_value = zeros(RT, RX)
         v_quad_value = zeros(RT, RX)
         w_quad_value = zeros(RT, RX)
@@ -436,7 +433,7 @@ function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Ga
     C.flag_done_initial_guess[1] = 1.0
 end
 
-function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Galerkin_Bspline_Integrator},int_method::Galerkin_Bspline_Integrator{MVT,LT,BT}) where {MVT<:Lagrange,LT<:Lagrange,BT}
+function post_initial_guess!(internal_coes, C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integrator},int_method::Galerkin_Bspline_Integrator{MVT,LT,BT}) where {MVT<:Lagrange,LT<:Lagrange,BT}
     local S = int_method.basis.S
     local λ_x = int_method.λ_x
     local Nbasis_λ_x = int_method.Nbasis_λ_x
@@ -523,22 +520,22 @@ function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Ga
 
         for rx in 1:Nbasis_λ_x
             xx = λ_x.x[rx]
-            ut₀_truth_quad[rx] = exact_u.(sol_struct.t - timestep(int), xx)
-            ut₁_truth_quad[rx] = exact_u.(sol_struct.t, xx)
-            vt₀_truth_quad[rx] = exact_v.(sol_struct.t - timestep(int), xx)
-            vt₁_truth_quad[rx] = exact_v.(sol_struct.t, xx)
-            wt₀_truth_quad[rx] = exact_w.(sol_struct.t - timestep(int), xx)
-            wt₁_truth_quad[rx] = exact_w.(sol_struct.t, xx)
+            ut₀_truth_quad[rx] = exact_u.(sol.t - timestep(int), xx)
+            ut₁_truth_quad[rx] = exact_u.(sol.t, xx)
+            vt₀_truth_quad[rx] = exact_v.(sol.t - timestep(int), xx)
+            vt₁_truth_quad[rx] = exact_v.(sol.t, xx)
+            wt₀_truth_quad[rx] = exact_w.(sol.t - timestep(int), xx)
+            wt₁_truth_quad[rx] = exact_w.(sol.t, xx)
         end
 
         for rt in 1:Nbasis_μ_t
             tt = μ₀_t.x[rt]
-            ux₀_truth_quad[rt] = exact_u.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[1])
-            ux₁_truth_quad[rt] = exact_u.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[2])
-            vx₀_truth_quad[rt] = exact_v.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[1])
-            vx₁_truth_quad[rt] = exact_v.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[2])
-            wx₀_truth_quad[rt] = exact_w.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[1])
-            wx₁_truth_quad[rt] = exact_w.(sol_struct.t - timestep(int) + timestep(int)* tt, xspan[2])
+            ux₀_truth_quad[rt] = exact_u.(sol.t - timestep(int) + timestep(int)* tt, xspan[1])
+            ux₁_truth_quad[rt] = exact_u.(sol.t - timestep(int) + timestep(int)* tt, xspan[2])
+            vx₀_truth_quad[rt] = exact_v.(sol.t - timestep(int) + timestep(int)* tt, xspan[1])
+            vx₁_truth_quad[rt] = exact_v.(sol.t - timestep(int) + timestep(int)* tt, xspan[2])
+            wx₀_truth_quad[rt] = exact_w.(sol.t - timestep(int) + timestep(int)* tt, xspan[1])
+            wx₁_truth_quad[rt] = exact_w.(sol.t - timestep(int) + timestep(int)* tt, xspan[2])
         end
 
         @show maximum(abs.(ut₀_quad_values_tem .- ut₀_truth_quad))
@@ -769,7 +766,7 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<: Galerkin_Bs
     local ut₁_basis_quad_values = int.method.ut₁_basis_quad_values
     local ux₀_basis_quad_values = int.method.ux₀_basis_quad_values
     local ux₁_basis_quad_values = int.method.ux₁_basis_quad_values
-    local show_status = int,method.show_status
+    local show_status = int.method.show_status
 
     for d in 1:D 
         for p in 1:S
@@ -852,6 +849,6 @@ function update!(sol, int::PDEIntegrator{<:Galerkin_Bspline_Integrator})
             sol.w[i] = eval_spline2D_dx(coefs, (Basis_t, Basis_x), (1.0, x_nodes[i]))
         end
     end
-
+    
 end
 

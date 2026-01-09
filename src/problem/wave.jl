@@ -12,6 +12,7 @@ module Wave
     using LinearAlgebra
     using Symbolics
     using MultiSymplectic
+    using Infiltrator
 
     const D = 1
     const DX = 1
@@ -126,7 +127,7 @@ module Wave
     end
 
     function lpdeproblem(; lagrangian_function=lagrangian, initial_condition_function=initial_condition, boundary_condition_function=boundary_condition, timespan=timespan, timestep::Float64=timestep, xspan::Tuple=xspan, xstep::Float64=xstep, params=default_parameters,
-        exact_u = exact_u, exact_v = exact_v, exact_w = exact_w)
+        exact_u = exact_u, exact_v = exact_v, exact_w = exact_w,least_squares_assemble = problem_matrix_assemble)
         # @assert timestep^2 < c * xstep^2 "timestep^2 < c*xstep^2 must hold for CFL condition"
         @assert timespan[1] < timespan[2] "timespan must be increasing"
         @assert xspan[1] < xspan[2] "xspan must be increasing"
@@ -137,7 +138,59 @@ module Wave
         x_nodes = collect(xspan[1]:xstep:xspan[2])
         ics = initial_condition_function(x_nodes)
 
-        LPDEProblem(lag_sys, initial_condition_function, boundary_condition_function, ics, timespan, timestep, xspan, xstep, params,exact_u,exact_v,exact_w)
+        LPDEProblem(lag_sys, initial_condition_function, boundary_condition_function, ics, timespan, timestep, xspan, xstep, params,exact_u,exact_v,exact_w,least_squares_assemble)
+    end
+
+    function problem_matrix_assemble(C,int::PDEIntegrator{<:ELM_PDE_int},sol)
+        local RT = int.method.RT
+        local RX = int.method.RX
+        local NP = int.method.basis.NP
+        local u_func = int.method.basis.u
+        local show_status = int.method.show_status
+        local h = int.problem.timestep
+        local tn = sol.t - h
+        local xspan = int.problem.xspan
+        local x_domain = xspan[2] - xspan[1]
+        local exact_u = int.problem.exact_u
+        local t_quad_nodes = int.method.time_quadrature.nodes
+        local x_quad_nodes = int.method.spatial_quadrature.nodes
+
+        utt_basis_quad_values = zeros(RT*RX, NP);
+        uxx_basis_quad_values = zeros(RT*RX, NP);
+
+        for rt in 1:RT
+            for rx in 1:RX
+                    hess = vector_hessian(u_func,[t_quad_nodes[rt], xspan[1] + x_domain * x_quad_nodes[rx]])
+                    utt_basis_quad_values[(rt-1)*RX + rx, :] = hess[:,1,1]
+                    uxx_basis_quad_values[(rt-1)*RX + rx, :] = hess[:,2,2]
+            end
+        end
+
+        C.system_matrix[1:RT * RX, :] = utt_basis_quad_values -  c^2 * uxx_basis_quad_values
+        C.system_matrix[RT * RX + 1:RT * RX + RX, :] = C.ut₀_basis_quad_values
+        C.system_matrix[RT * RX + RX + 1:RT * RX + RX + RT, :] = C.ux₀_basis_quad_values
+        C.system_matrix[RT * RX + RX + RT + 1:RT * RX + RX + 2 * RT, :] = C.ux₁_basis_quad_values
+
+        C.system_rhs[RT * RX + 1:RT * RX + RX] = C.init_condition_t₀[1,:]'
+        C.system_rhs[RT * RX + RX + 1:RT * RX + RX + RT] = C.boundary_condition_x₀[1,:]'
+        C.system_rhs[RT * RX + RX + RT + 1:RT * RX + RX + 2 * RT] = C.boundary_condition_x₁[1,:]'
+    
+        C.x[1:NP] = C.system_matrix \ C.system_rhs
+
+
+        if show_status
+            @show C.x[1:NP]
+            elm_pred = zeros(Float64, RT, RX)
+            truth = zeros(Float64, RT, RX)
+            for rt in 1:RT
+                for rx in 1:RX
+                    elm_pred[rt, rx] = sum(C.x[1:NP] .* C.u_basis_quad_values[1, :, rt, rx])
+                    truth[rt, rx] = exact_u(tn + h * t_quad_nodes[rt], xspan[1] + x_domain * x_quad_nodes[rx])
+                end
+            end
+            @show maximum(abs.(elm_pred - truth))
+            @infiltrate
+        end
     end
 
 end

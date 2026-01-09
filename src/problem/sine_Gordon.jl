@@ -34,17 +34,17 @@ module SineGordon
 
     function exact_u(t,x;params = default_parameters)
         @unpack c, velocity, γ = params
-        4 * atan(exp(γ * (x - velocity * t)))
+        c * atan(exp(γ * (x - velocity * t)))
     end
 
     function exact_v(t,x;params = default_parameters)
         @unpack c, velocity, γ = params
-        (-4 * γ * velocity * exp(γ * (x - velocity * t))) / (1 + exp(γ * (x - velocity * t))^2)
+        (-c * γ * velocity * exp(γ * (x - velocity * t))) / (1 + exp(γ * (x - velocity * t))^2)
     end
 
     function exact_w(t,x;params = default_parameters)
         @unpack c, velocity, γ = params
-        (4 * γ * exp(γ * (x - velocity * t))) / (1 + exp(γ * (x - velocity * t))^2)
+        (c * γ * exp(γ * (x - velocity * t))) / (1 + exp(γ * (x - velocity * t))^2)
     end
 
     function exact_solution(t::Float64, x::Float64)
@@ -115,19 +115,19 @@ module SineGordon
     end
 
 
-    function lagrangian(t, x, u, v, w, params)
-        @unpack c = params
+    function lagrangian(t, x, u, v, w, params = default_parameters)
+        @unpack c, velocity, γ = params
         1 / 2 * (c * v[1]^2 - w[1]^2) + (1 + cos(u[1]))
     end
 
-    function hamiltonian(t, x, u, v, w, params)
-        @unpack c = params
+    function hamiltonian(t, x, u, v, w, params = default_parameters)
+        @unpack c, velocity, γ = params
         1 / 2 * (c * v[1]^2 + w[1]^2) - (1 + cos(u[1]))
     end
 
     function lpdeproblem(; lagrangian_function=lagrangian, initial_condition_function=initial_condition, boundary_condition_function=boundary_condition, timespan=tspan, timestep::Float64=tstep, xspan::Tuple=xspan, xstep::Float64=xstep, params=default_parameters,
         exact_u = exact_u, exact_v = exact_v, exact_w = exact_w)
-        @unpack c = params
+        @unpack c, velocity, γ = params
         # @assert tstep^2 < c * xstep^2 "tstep^2 < c*xstep^2 must hold for CFL condition"
         @assert timespan[1] < timespan[2] "timespan must be increasing"
         @assert xspan[1] < xspan[2] "xspan must be increasing"

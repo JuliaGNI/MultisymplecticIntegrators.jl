@@ -49,7 +49,7 @@ module MultiSymplectic
     # utils
     include("utils/common.jl")
     export LPDE_variables,symbolize,substitute_parameters,Lagrangian_multiplier
-    export initialize_bcs_ics!
+    export initialize_bcs_ics!,vector_hessian
     # basis
     include("basis/Sindy_PDE_basis.jl")
     export SindyPDEBasis    

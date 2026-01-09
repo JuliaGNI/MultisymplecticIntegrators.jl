@@ -201,7 +201,7 @@ module LinearTransport
         local C = cache(int)
         local RT = int.method.RT
         local RX = int.method.RX
-
+        local NP = int.method.basis.NP
         C.system_matrix[1:RT * RX, :] = C.v_basis_quad_values .+ c * C.w_basis_quad_values
         C.system_matrix[RT * RX + 1:RT * RX + RX, :] = C.ut₀_basis_quad_values
         C.system_matrix[RT * RX + RX + 1:RT * RX + RX + RT, :] = C.ux₀_basis_quad_values
@@ -210,6 +210,9 @@ module LinearTransport
         C.system_rhs[RT * RX + 1:RT * RX + RX] = C.init_condition_t₀[1,:]'
         C.system_rhs[RT * RX + RX + 1:RT * RX + RX + RT] = C.boundary_condition_x₀[1,:]'
         C.system_rhs[RT * RX + RX + RT + 1:RT * RX + RX + 2 * RT] = C.boundary_condition_x₁[1,:]'
+    
+        C.x[1:NP] = C.system_matrix \ C.system_rhs
+        return 
     end
 
 end
