@@ -22,15 +22,17 @@ struct ELM_PDE_int{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <:
     mλ_x # λ_x evaluated at quadrature points
     mμ_t
 
-    nepochs::Int
     initial_guess_method::IPMT # :LSGD or :GroundTruth
+
+    nepochs::Int
+    GD_lr::Float64
 
     show_status::Bool
     function ELM_PDE_int(basis; RT::Int=6, RX::Int=8,
         xspan::Tuple = (0.,1.0), 
         Nbasis_μ_t::Int = 10,k_μ_t::Int = 4,μ::Symbol = :BSplineDirichlet,
         Nbasis_λ_x::Int = 10,k_λ_x::Int = 3,λ::Symbol = :BSplineDirichlet,
-        nepochs::Int = 1000,
+        nepochs::Int = 100,GD_lr::Float64 = 0.0001,
         initial_guess_method::IPMT = LSGD(), # ELM()
         show_status = false) where {IPMT,}
 
@@ -77,7 +79,8 @@ struct ELM_PDE_int{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <:
             Nbasis_μ_t,k_μ_t, μ₀_t, μ₁_t,
             Nbasis_λ_x,k_λ_x,λ_x,
             mλ_x, mμ_t,
-            nepochs, initial_guess_method,
+            initial_guess_method,
+            nepochs, GD_lr,
             show_status)
     end
 end
@@ -285,10 +288,10 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int{MVT,LT,BT
     local t_quad_nodes = int.method.time_quadrature.nodes
     local x_quad_nodes = int.method.spatial_quadrature.nodes
     local grid_matrix = int.method.grid_matrix
-    local nn_params = int.method.basis.u.params
-    local v_basis_func = int.method.basis.v
-    local w_basis_func = int.method.basis.w
-    local u_basis_func = int.method.basis.u
+    local nn_params = int.method.basis.u_basis.params
+    local v_basis_func = int.method.basis.v_basis
+    local w_basis_func = int.method.basis.w_basis
+    local u_basis_func = int.method.basis.u_basis
 
     for d in 1:D
         for rx in 1:RX
@@ -338,57 +341,129 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int{MVT,LT,BT
     local NP = int.method.basis.NP
     local RT = int.method.RT
     local RX = int.method.RX
-    local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+    local xspan = int.problem.xspan
+    local x_domain = xspan[2] - xspan[1]
     local NN = int.method.basis.network_arch
     local PNN = int.method.basis.u
     local nepochs = int.method.nepochs
-    local optim_mode = int.method.basis.optim_mode
+    local exact_u = int.problem.exact_u
+    local h = timestep(int)
+    local show_status = int.method.show_status
+    local GD_lr = int.method.GD_lr
+    local D = int.problem.D
+    local u_basis_func = int.method.basis.u_basis
 
     network_inputs, _ = construct_quadrature_grid_with_boundary([RT, RX])
-    labels = int.problem.exact_u.(sol.t .- timestep(int) .+ timestep(int) .* network_inputs[1, :], int.problem.xspan[1] .+ x_domain .* network_inputs[2, :])
-    labels = reshape(labels, 1, :) # labels should be a matrix with one row and multiple columns
-
-    # initialize the parameters and train with LSGD
-    for (name, layer) in zip(keys(PNN.params), values(PNN.params))
-        in_size = size(layer.W, 2)
-        out_size = size(layer.W, 1)
-        if hasfield(typeof(layer), :b)
-            layer.W[:], layer.b[:] = box_init_plain(in_size, out_size)
-        else
-            # For layers without bias (e.g., output), just regenerate W
-            layer.W[:], _ = box_init_plain(in_size, out_size)
-        end
-    end
+    network_inputs[2,:] .= xspan[1] .+ x_domain .* network_inputs[2, :]
+    labels = exact_u.(sol.t .- h .+ h .* network_inputs[1, :],network_inputs[2, :])
+    labels = reshape(labels, 1, :) 
 
     tem_ps = PNN.params[keys(PNN.params)[1:end-1]]
-    opt = GeometricMachineLearning.Optimizer(GeometricMachineLearning.GradientOptimizer(0.0005), tem_ps)
+    opt = GeometricMachineLearning.Optimizer(GeometricMachineLearning.GradientOptimizer(GD_lr), tem_ps)
     err = 0
     λ = GeometricMachineLearning.GlobalSection(tem_ps)
 
+    ls_err = zeros(nepochs)
+    gd_err = zeros(nepochs)
+    ls_max_err = zeros(nepochs)
+    gd_max_err = zeros(nepochs)
+
     for ep in 1:nepochs
-        Φ = AbstractNeuralNetworks.Chain(NN.layers[1:end-1]...)(network_inputs, tem_ps)
-        # Φ = NN(network_inputs, PNN.params)
-        # PNN.params.L3.W[:] = labels/Φ
-        PNN.params[keys(PNN.params)[end]].W[:] = (Φ' \ labels')'
-        gs = Zygote.gradient(p -> lsgd_loss(network_inputs, labels, NN, p), PNN.params)[1]
         tem_ps = PNN.params[keys(PNN.params)[1:end-1]]
+        gs = Zygote.gradient(p -> lsgd_loss(network_inputs, labels, PNN, p), PNN.params)[1]
         tem_gs = gs[keys(gs)[1:end-1]]
         GeometricMachineLearning.optimization_step!(opt, λ, tem_ps, tem_gs)
-        err = lsgd_loss(network_inputs, labels, NN, PNN.params)
-        if err < 5e-8
-            print("\n final loss: $err by $ep epochs")
+        
+        if show_status
+            gd_err[ep] = lsgd_loss(network_inputs, labels, PNN, PNN.params)
+            print("\n loss after gradient: $gd_err[ep] by $ep epochs")
+            
+            NN_output = PNN(network_inputs, PNN.params)
+            gd_max_err[ep] = maximum(abs.(labels .- NN_output))
+            println("max error :",gd_max_err[ep])
+        end
+
+        Φ = AbstractNeuralNetworks.Chain(PNN.model.layers[1:end-1]...)(network_inputs, tem_ps)
+        PNN.params[keys(PNN.params)[end]].W[:] = (Φ' \ labels')'
+
+        if show_status
+            ls_err[ep] = lsgd_loss(network_inputs, labels, PNN, PNN.params)
+            print("\n loss after least square: $(ls_err[ep]) by $ep epochs")
+
+            NN_output = PNN(network_inputs, PNN.params)
+            ls_max_err[ep] = maximum(abs.(labels .- NN_output))
+            println("max error :",ls_max_err[ep])
+        end
+
+        if ls_max_err[ep] <1e-7
+            print("\n final max error : $(ls_max_err[ep]) by $ep epochs")
             break
         elseif ep == nepochs
             print("\n final loss: $err by $ep epochs")
         end
     end
 
-    # copy the parameters to the cache
-    if optim_mode == :Partially
-        C.x[1:NP] = PNN.params[keys(PNN.params)[end]].W[:]
-    elseif optim_mode == :Fully
-        C.x[1:NP] = flatten_params(PNN.params)
+    if show_status
+        pic = plot(
+            plot(1:nepochs, gd_err, title="Gradient Descent Loss"),
+            plot(1:nepochs, ls_err, title="Least Square Loss"),
+            plot(1:nepochs, gd_max_err, title="Gradient Descent Max Error"),
+            plot(1:nepochs, ls_max_err, title="Least Square Max Error"),
+            layout=(2,2), size=(1000, 800)
+        )
+        savefig(pic, "logs/elm_training_loss.pdf")
+
+        x_ls = collect(xspan[1]:0.01:xspan[2])
+        t_ls = collect(0:0.01:1.0)
+
+        u_ls = [lpde.exact_u(h*t, x) for x in x_ls, t in t_ls]
+        u_pred_ls = [PNN([t, x], PNN.params)[1] for x in x_ls, t in t_ls]
+        pic2 = plot(
+            surface(x_ls, t_ls, u_ls', title="Exact Solution", xlabel="x", ylabel="t", zlabel="u"),
+            surface(x_ls, t_ls, u_pred_ls', title="Predicted Solution", xlabel="x", ylabel="t", zlabel="u"),
+            surface(x_ls, t_ls, abs.(u_ls .- u_pred_ls)', title="Absolute Error", xlabel="x", ylabel="t", zlabel="|u - u_pred|"),
+            layout=(1,3), size=(1000, 400)
+        )
+        savefig(pic2, "logs/elm_training_solution.pdf")
     end
+    # copy the parameters to the cache
+    C.x[1:NP] = PNN.params[keys(PNN.params)[end]].W[:]
+
+    #copy PNN parameters into u,v,w basis
+    for (name, layer) in zip(keys(u_basis_func.params), values(u_basis_func.params))
+        layer.W[:], layer.b[:] = PNN.params[name].W[:], PNN.params[name].b[:]
+    end
+
+    # precompute basis function values at quadrature points
+    for d in 1:D
+        for rx in 1:RX
+            C.ut₀_basis_quad_values[d,rx, :] = u_basis_func([0.0, xspan[1] + x_domain * x_quad_nodes[rx]], nn_params)
+            C.ut₁_basis_quad_values[d,rx, :] = u_basis_func([1.0, xspan[1] + x_domain * x_quad_nodes[rx]], nn_params)
+            C.vt₀_basis_quad_values[d,rx, :] = v_basis_func([0.0, xspan[1] + x_domain * x_quad_nodes[rx]], nn_params)
+            C.vt₁_basis_quad_values[d,rx, :] = v_basis_func([1.0, xspan[1] + x_domain * x_quad_nodes[rx]], nn_params)
+            C.wt₀_basis_quad_values[d,rx, :] = w_basis_func([0.0, xspan[1] + x_domain * x_quad_nodes[rx]], nn_params)
+            C.wt₁_basis_quad_values[d,rx, :] = w_basis_func([1.0, xspan[1] + x_domain * x_quad_nodes[rx]], nn_params)
+        end
+
+        for rt in 1:RT
+            C.ux₀_basis_quad_values[d,rt, :] = u_basis_func([t_quad_nodes[rt], xspan[1]], nn_params)
+            C.ux₁_basis_quad_values[d,rt, :] = u_basis_func([t_quad_nodes[rt], xspan[2]], nn_params)
+            C.vx₀_basis_quad_values[d,rt, :] = v_basis_func([t_quad_nodes[rt], xspan[1]], nn_params)
+            C.vx₁_basis_quad_values[d,rt, :] = v_basis_func([t_quad_nodes[rt], xspan[2]], nn_params)
+            C.wx₀_basis_quad_values[d,rt, :] = w_basis_func([t_quad_nodes[rt], xspan[1]], nn_params)
+            C.wx₁_basis_quad_values[d,rt, :] = w_basis_func([t_quad_nodes[rt], xspan[2]], nn_params)
+        end
+
+        for rt in 1:RT
+            for rx in 1:RX
+                C.u_basis_quad_values[d, :, rt, rx] = u_basis_func([t_quad_nodes[rt], xspan[1] + x_domain * x_quad_nodes[rx]], nn_params)
+                C.v_basis_quad_values[d, :, rt, rx] = v_basis_func([t_quad_nodes[rt], xspan[1] + x_domain * x_quad_nodes[rx]], nn_params)
+                C.w_basis_quad_values[d, :, rt, rx] = w_basis_func([t_quad_nodes[rt], xspan[1] + x_domain * x_quad_nodes[rx]], nn_params)
+            end
+        end
+
+    end
+
 
 end
 
@@ -558,9 +633,6 @@ function post_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int}, int_meth
 end
 
 function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:ELM_PDE_int}) where {ST}
-    local v_basis_func = int.method.basis.v
-    local w_basis_func = int.method.basis.w
-    local u_basis_func = int.method.basis.u
     local grid_matrix = int.method.grid_matrix
     local x_quad_nodes = int.method.spatial_quadrature.nodes
     local t_quad_nodes = int.method.time_quadrature.nodes
@@ -648,7 +720,6 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:EL
     end
 
     if show_status
-
         u_truth_mat = similar(C.u_quad_values)
         v_truth_mat = similar(C.v_quad_values)
         w_truth_mat = similar(C.w_quad_values)
@@ -817,7 +888,7 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<:ELM_PDE_int}
     end
 end
 
-function update!(sol_struct, int::PDEIntegrator{<:ELM_PDE_int})
+function update!(sol, int::PDEIntegrator{<:ELM_PDE_int})
     local D = int.problem.D
     local xspan = int.problem.xspan
     local xstep = int.problem.xstep
@@ -825,15 +896,17 @@ function update!(sol_struct, int::PDEIntegrator{<:ELM_PDE_int})
     local h = timestep(int)
     local C = cache(int)
     local NP = int.method.basis.NP
-    local v_basis_func = int.method.basis.v
-    local w_basis_func = int.method.basis.w
-    local u_basis_func = int.method.basis.u
+    local v_basis_func = int.method.basis.v_basis
+    local w_basis_func = int.method.basis.w_basis
+    local u_basis_func = int.method.basis.u_basis
+    local x_domain = xspan[2] - xspan[1]
+    local nn_params = int.method.basis.u_basis.params
 
     x_nodes = collect(xspan[1]:xstep:xspan[2])
-    ut₁_basis_values_tem = zeros(length(x_nodes), NP)
-    vt₁_basis_values_tem = zeros(length(x_nodes), NP)
-    wt₁_basis_values_tem = zeros(length(x_nodes), NP)
-
+    ut₁_basis_values_tem = zeros(D, length(x_nodes), NP)
+    vt₁_basis_values_tem = zeros(D, length(x_nodes), NP)
+    wt₁_basis_values_tem = zeros(D, length(x_nodes), NP)
+    @show size(ut₁_basis_values_tem)
     for d in 1:D
         for i in eachindex(x_nodes)
             ut₁_basis_values_tem[d,i, :] = u_basis_func([1.0, xspan[1] + x_domain * x_nodes[i]], nn_params)

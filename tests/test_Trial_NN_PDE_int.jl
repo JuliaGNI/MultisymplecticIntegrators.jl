@@ -22,7 +22,7 @@ Nb = parse(Int,ARGS[4])
 GeometricIntegratorsBase.default_options(::TrialNN_PDE_int) = (
     x_abstol = 8eps(),
     f_abstol = 8eps(),
-    max_iterations = 1000,
+    max_iterations = 100,
 )
 
 NN_width = 50
@@ -37,7 +37,7 @@ trial_basis = Trial_Solution_Basis(NN_width, activation)
 # rx = 3
 # for rt in [8,12,24]
 for rx in [16,32,64]
-        log_file="logs/h$(t_step)_width$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx)$(activation)_full.txt"
+        log_file="logs16122025/h$(t_step)_width$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx)$(activation)_full.txt"
         open(log_file, "w") do io
                 redirect_stdio(stdout=log_file, stderr=log_file) do
                         println("Start RT = $rt, RX = $rx")
@@ -51,7 +51,7 @@ for rx in [16,32,64]
                         p1 = plot(trial_sol.u[1], label="NN Solution", title="t = $t_step", xlabel="x", ylabel="u")
                         plot!(p1, lpde.exact_u.(t_step, x_plot), label="Exact")
 
-                        savefig("logs/h$(t_step)_width$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx)$(activation)_full.pdf")
+                        savefig("logs16122025/h$(t_step)_width$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx)$(activation)_full.pdf")
                 end
         end
 end

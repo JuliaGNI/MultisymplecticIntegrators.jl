@@ -261,6 +261,7 @@ end
 using IterTools
 
 function construct_quadrature_grid_with_boundary(dimensions::Vector{Int})
+    #including the quadrature points on the boundary and in the interior.
     d = length(dimensions)
 
     # Create quadrature rules for each dimension
@@ -341,13 +342,24 @@ function box_init_plain(input_dim::Int, output_dim::Int;Random_rng = Random.seed
         b[i] = k * dot(p, n)
     end
     return W, b
+    # initialize the parameters and train with LSGD
+    # for (name, layer) in zip(keys(PNN.params), values(PNN.params))
+    #     in_size = size(layer.W, 2)
+    #     out_size = size(layer.W, 1)
+    #     if hasfield(typeof(layer), :b)
+    #         layer.W[:], layer.b[:] = box_init_plain(in_size, out_size)
+    #     else
+    #         # For layers without bias (e.g., output), just regenerate W
+    #         layer.W[:], _ = box_init_plain(in_size, out_size)
+    #     end
+    # end
+
 end
 
 function lsgd_loss(network_inputs,labels,NN,ps)
     NN_output = NN(network_inputs, ps)
-    return sqrt(Statistics.mean((labels .- NN_output).^2))
+    return Statistics.mean((labels .- NN_output).^2)
 end
-
 
 function create_interior_quadrature_points_derivative_mat(ST::Type, RT::Int,RX::Int, D::Int,P_sizes::Vector{Int})
     mat = []

@@ -9,17 +9,25 @@ using ForwardDiff
 using Infiltrator
 
 Random.seed!(123)
+relu3(x) = max.(0, x).^3
+activation = tanh
 S = 200
-u_network = Chain(
-    Dense(2, S, tanh),
-    Dense(S, S, tanh),
-    Dense(S, S, tanh),
-)
+u_basis = Chain(
+    Dense(2, S, activation),
+    Dense(S, S, activation),
+    Dense(S, S, activation),
+)   
 
-nn_elm_basis = NN_Basis(u_network, S)
+nn_elm_basis = NN_Basis(u_basis, S)
 
 xspan = (0.0,1.0)
-elm_int = ELM_PDE_int(nn_elm_basis; RT=18,RX = 18,xspan = xspan,initial_guess_method = ELM(), show_status=true)
-lpde = MultiSymplectic.Wave.lpdeproblem(timestep=0.3, timespan =(0.0,0.3),xspan = xspan)
-sol = MultiSymplectic.integrate(lpde,elm_int)
+h = 0.3
+elm_int = ELM_PDE_int(nn_elm_basis; RT=64,RX = 18,xspan = xspan,initial_guess_method = LSGD(), show_status=true)
+lpde = MultiSymplectic.Wave.lpdeproblem(timestep=h, timespan =(0.0,h),xspan = xspan)
 
+log_file="logs/elmint.txt"
+open(log_file, "w") do io
+    redirect_stdio(stdout=log_file, stderr=log_file) do
+        sol = MultiSymplectic.integrate(lpde,elm_int)
+    end
+end
