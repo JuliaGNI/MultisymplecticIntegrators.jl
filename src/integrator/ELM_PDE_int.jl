@@ -279,6 +279,7 @@ end
 end
 
 function prior_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int{MVT,LT,BT,IPMT}}) where {MVT,LT,BT,IPMT<:ELM}
+    # Currently Unsupported!!!
     local D = int.problem.D 
     local RT = int.method.RT
     local RX = int.method.RX
@@ -292,7 +293,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int{MVT,LT,BT
     local v_basis_func = int.method.basis.v_basis
     local w_basis_func = int.method.basis.w_basis
     local u_basis_func = int.method.basis.u_basis
-
+    
     for d in 1:D
         for rx in 1:RX
             C.ut₀_basis_quad_values[d,rx, :] = u_basis_func([0.0, xspan[1] + x_domain * x_quad_nodes[rx]], nn_params)
@@ -335,7 +336,6 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int{MVT,LT,BT
     # println("After least square, the parameters are: ", C.x)
 
 end
-
 
 function prior_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int{MVT,LT,BT,IPMT}}) where {MVT,LT,BT,IPMT<:LSGD}
     local NP = int.method.basis.NP
@@ -530,6 +530,7 @@ function post_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int}, int_meth
     local μ₀_t = int_method.μ₀_t
     local show_status = int_method.show_status
     local h = timestep(int)
+    local nn_params = u_basis_func.params
 
     ut₀_quad_values_tem = zeros(Nbasis_λ_x)
     ut₁_quad_values_tem = zeros(Nbasis_λ_x)
@@ -548,22 +549,22 @@ function post_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int}, int_meth
     for d in 1:D
         for rx in 1:Nbasis_λ_x
             xx = λ_x.x[rx]
-            ut₀_quad_values_tem[rx] = (u[d])([0.0, xx], C.sol_params)[1]
-            ut₁_quad_values_tem[rx] = (u[d])([1.0, xx], C.sol_params)[1]
-            vt₀_quad_values_tem[rx] = (v[d])([0.0, xx], C.sol_params)[1] / h
-            vt₁_quad_values_tem[rx] = (v[d])([1.0, xx], C.sol_params)[1] / h
-            wt₀_quad_values_tem[rx] = (w[d])([0.0, xx], C.sol_params)[1]
-            wt₁_quad_values_tem[rx] = (w[d])([1.0, xx], C.sol_params)[1]
+            ut₀_quad_values_tem[rx] = sum(u_basis_func([0.0, xx], nn_params) .* C.x[1:NP])
+            ut₁_quad_values_tem[rx] = sum(u_basis_func([1.0, xx], nn_params) .* C.x[1:NP])
+            vt₀_quad_values_tem[rx] = sum(v_basis_func([0.0, xx], nn_params) .* C.x[1:NP]) / h
+            vt₁_quad_values_tem[rx] = sum(v_basis_func([1.0, xx], nn_params) .* C.x[1:NP]) / h
+            wt₀_quad_values_tem[rx] = sum(w_basis_func([0.0, xx], nn_params) .* C.x[1:NP])
+            wt₁_quad_values_tem[rx] = sum(w_basis_func([1.0, xx], nn_params) .* C.x[1:NP])
         end
 
         for rt in 1:Nbasis_μ_t
             tt = μ₀_t.x[rt]
-            ux₀_quad_values_tem[rt] = (u[d])([tt, xspan[1]], C.sol_params)[1]
-            ux₁_quad_values_tem[rt] = (u[d])([tt, xspan[2]], C.sol_params)[1]
-            vx₀_quad_values_tem[rt] = (v[d])([tt, xspan[1]], C.sol_params)[1] / h
-            vx₁_quad_values_tem[rt] = (v[d])([tt, xspan[2]], C.sol_params)[1] / h
-            wx₀_quad_values_tem[rt] = (w[d])([tt, xspan[1]], C.sol_params)[1]
-            wx₁_quad_values_tem[rt] = (w[d])([tt, xspan[2]], C.sol_params)[1]
+            ux₀_quad_values_tem[rt] = sum(u_basis_func([tt, xspan[1]], nn_params) .* C.x[1:NP])
+            ux₁_quad_values_tem[rt] = sum(u_basis_func([tt, xspan[2]], nn_params) .* C.x[1:NP])
+            vx₀_quad_values_tem[rt] = sum(v_basis_func([tt, xspan[1]], nn_params) .* C.x[1:NP]) / h
+            vx₁_quad_values_tem[rt] = sum(v_basis_func([tt, xspan[2]], nn_params) .* C.x[1:NP]) / h
+            wx₀_quad_values_tem[rt] = sum(w_basis_func([tt, xspan[1]], nn_params) .* C.x[1:NP])
+            wx₁_quad_values_tem[rt] = sum(w_basis_func([tt, xspan[2]], nn_params) .* C.x[1:NP])
         end
     end
     for d in 1:D

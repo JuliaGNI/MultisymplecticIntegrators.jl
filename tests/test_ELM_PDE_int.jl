@@ -29,5 +29,15 @@ log_file="logs/elmint.txt"
 open(log_file, "w") do io
     redirect_stdio(stdout=log_file, stderr=log_file) do
         sol = MultiSymplectic.integrate(lpde,elm_int)
+        
+        p = @layout [a b c]
+        p1 = plot([lpde.exact_u(0.3,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_u")
+        plot!(p1, sol.u[1], label="sol.u")
+        p2 = plot([lpde.exact_v(0.3,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_v")
+        plot!(p2, sol.v[1], label="sol.v")
+        p3 = plot([lpde.exact_w(0.3,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_w")
+        plot!(p3, sol.w[1], label="sol.w")
+        p = plot(p1, p2, p3, layout=p)
+        savefig("logs/NNInt_t=h.pdf")
     end
 end

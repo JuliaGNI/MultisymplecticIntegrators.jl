@@ -550,8 +550,6 @@ function post_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator}, in
 
 end
 
-
-
 function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN_PDE_Integrator}) where {ST}
     local C = cache(int, ST)
 
