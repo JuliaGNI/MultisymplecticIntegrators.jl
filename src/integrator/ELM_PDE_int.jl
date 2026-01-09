@@ -466,8 +466,9 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int{MVT,LT,BT
                 C.w_basis_quad_values[d, :, rt, rx] = w_basis_func([t_quad_nodes[rt], xspan[1] + x_domain * x_quad_nodes[rx]], nn_params)
             end
         end
-
+        @show nn_params.L1.b[:]
     end
+
 end
 
 copy_internal_variables!(C::ELM_PDE_intCache, solstep::SolutionStep) = nothing
@@ -906,17 +907,25 @@ function update!(sol, int::PDEIntegrator{<:ELM_PDE_int})
     local u_basis_func = int.method.basis.u_basis
     local x_domain = xspan[2] - xspan[1]
     local nn_params = int.method.basis.u_basis.params
+    local show_status = int.method.show_status
+    local x_quad_nodes = int.method.spatial_quadrature.nodes
+    local RX = int.method.RX
+    local exact_u = int.problem.exact_u
+    local exact_v = int.problem.exact_v
+    local exact_w = int.problem.exact_w
+
 
     x_nodes = collect(xspan[1]:xstep:xspan[2])
     ut₁_basis_values_tem = zeros(D, length(x_nodes), NP)
     vt₁_basis_values_tem = zeros(D, length(x_nodes), NP)
     wt₁_basis_values_tem = zeros(D, length(x_nodes), NP)
-    @show size(ut₁_basis_values_tem)
+
+
     for d in 1:D
         for i in eachindex(x_nodes)
-            ut₁_basis_values_tem[d,i, :] = u_basis_func([1.0, xspan[1] + x_domain * x_nodes[i]], nn_params)
-            vt₁_basis_values_tem[d,i, :] = v_basis_func([1.0, xspan[1] + x_domain * x_nodes[i]], nn_params)
-            wt₁_basis_values_tem[d,i, :] = w_basis_func([1.0, xspan[1] + x_domain * x_nodes[i]], nn_params)
+            ut₁_basis_values_tem[d,i, :] = u_basis_func([1.0, x_nodes[i]], nn_params)
+            vt₁_basis_values_tem[d,i, :] = v_basis_func([1.0, x_nodes[i]], nn_params)
+            wt₁_basis_values_tem[d,i, :] = w_basis_func([1.0, x_nodes[i]], nn_params)
         end
     end
 
@@ -927,5 +936,47 @@ function update!(sol, int::PDEIntegrator{<:ELM_PDE_int})
             sol.v[i] = sum(vt₁_basis_values_tem[d,i, :] .* x[1:NP]) / h
             sol.w[i] = sum(wt₁_basis_values_tem[d,i, :] .* x[1:NP])
         end
+    end
+
+    if show_status
+         # boundary values at quadrature points
+        ut₁_quad_values_truth = similar(C.ut₁_quad_values)
+        vt₁_quad_values_truth = similar(C.vt₁_quad_values)
+        wt₁_quad_values_truth = similar(C.wt₁_quad_values)
+
+        for d in 1:D
+            for j in 1:RX
+                ut₁_quad_values_truth[d,j] = exact_u.(sol.t, x_quad_nodes[j])
+                vt₁_quad_values_truth[d,j] = exact_v.(sol.t, x_quad_nodes[j])
+                wt₁_quad_values_truth[d,j] = exact_w.(sol.t, x_quad_nodes[j])
+            end
+
+            for rx in 1:RX
+                C.ut₁_quad_values[d,rx] = sum(C.ut₁_basis_quad_values[d,rx, :] .* x[1:NP])
+                C.vt₁_quad_values[d,rx] = sum(C.vt₁_basis_quad_values[d,rx, :] .* x[1:NP]) / h
+                C.wt₁_quad_values[d,rx] = sum(C.wt₁_basis_quad_values[d,rx, :] .* x[1:NP])
+            end
+        end
+
+        @show maximum(abs.(C.ut₁_quad_values .- ut₁_quad_values_truth))
+        @show maximum(abs.(C.vt₁_quad_values .- vt₁_quad_values_truth))
+        @show maximum(abs.(C.wt₁_quad_values .- wt₁_quad_values_truth))
+
+        ut₁_grid_truth = zeros(length(x_nodes))
+        vt₁_grid_truth = zeros(length(x_nodes))
+        wt₁_grid_truth = zeros(length(x_nodes))
+
+        for i in eachindex(x_nodes)
+            ut₁_grid_truth[i] = exact_u.(sol.t, x_nodes[i])
+            vt₁_grid_truth[i] = exact_v.(sol.t, x_nodes[i])
+            wt₁_grid_truth[i] = exact_w.(sol.t, x_nodes[i])
+        end
+
+        @show maximum(abs.(sol.u .- ut₁_grid_truth))
+        @show maximum(abs.(sol.v .- vt₁_grid_truth))
+        @show maximum(abs.(sol.w .- wt₁_grid_truth))
+
+        @show sol.u
+        @show ut₁_grid_truth
     end
 end

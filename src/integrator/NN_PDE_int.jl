@@ -891,8 +891,13 @@ function update!(sol, int::PDEIntegrator{<:NN_PDE_Integrator})
     local NP = int.method.basis.NP
     local x = nlsolution(int)
     local optim_mode = int.method.basis.optim_mode
-    last_layer = keys(u[1].params)[end]
+    local h = timestep(int)
+    local show_status = int.method.show_status
+    local exact_u = int.problem.exact_u
+    local exact_v = int.problem.exact_v
+    local exact_w = int.problem.exact_w
 
+    last_layer = keys(u[1].params)[end]
     x_nodes = collect(xspan[1]:xstep:xspan[2])
     if optim_mode == :Fully
         tem_params = NeuralNetworkParameters(reconstruct_params(x[1:NP], u[1].params))
@@ -921,9 +926,29 @@ function update!(sol, int::PDEIntegrator{<:NN_PDE_Integrator})
     for d in 1:D
         for i in eachindex(x_nodes)
             sol.u[i] = u[d]([1.0, x_nodes[i]], C.sol_params)[1]
-            sol.v[i] = v[d]([1.0, x_nodes[i]], C.sol_params)[1]
+            sol.v[i] = v[d]([1.0, x_nodes[i]], C.sol_params)[1] / h
             sol.w[i] = w[d]([1.0, x_nodes[i]], C.sol_params)[1]
         end
     end
+
+    if show_status
+        ut₁_grid_truth = zeros(length(x_nodes))
+        vt₁_grid_truth = zeros(length(x_nodes))
+        wt₁_grid_truth = zeros(length(x_nodes))
+
+        for i in eachindex(x_nodes)
+            ut₁_grid_truth[i] = exact_u(sol.t, x_nodes[i])
+            vt₁_grid_truth[i] = exact_v(sol.t, x_nodes[i])
+            wt₁_grid_truth[i] = exact_w(sol.t, x_nodes[i])
+        end
+
+        @show maximum(abs.(sol.u .- ut₁_grid_truth))
+        @show maximum(abs.(sol.v .- vt₁_grid_truth))
+        @show maximum(abs.(sol.w .- wt₁_grid_truth))
+
+        @show sol.u
+        @show ut₁_grid_truth
+    end
+
 end
 

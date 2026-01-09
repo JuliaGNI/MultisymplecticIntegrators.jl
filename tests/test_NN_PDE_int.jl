@@ -60,13 +60,3 @@ open(log_file, "w") do io
 #         savefig("logs/NN_pde.pdf")
     end
 end
-
-
-S = 100
-u_network = Chain(
-    Dense(2, 100, tanh),
-    Dense(100, 100, tanh),
-    Dense(100, S, tanh)
-)
-
-nn_elm_basis = NN_Basis(u_network, S)
