@@ -20,9 +20,9 @@ u_basis = Chain(
 
 nn_elm_basis = NN_Basis(u_basis, S)
 
-xspan = (0.0,1.0)
+xspan = (0.3,0.8)
 h = 0.3
-elm_int = ELM_PDE_int(nn_elm_basis; RT=64,RX = 18,xspan = xspan,initial_guess_method = LSGD(), show_status=true)
+elm_int = ELM_PDE_int(nn_elm_basis; RT=32,RX = 18,xspan = xspan,initial_guess_method = LSGD(), show_status=true)
 lpde = MultiSymplectic.Wave.lpdeproblem(timestep=h, timespan =(0.0,h),xspan = xspan)
 
 log_file="logs/elmint.txt"
