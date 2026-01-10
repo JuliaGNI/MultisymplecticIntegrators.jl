@@ -1,5 +1,6 @@
 struct TrialNN_PDE_int{BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PDEMethod
     basis::BT
+
     time_quadrature
     RT::Int # Number of quadrature points in time
 
@@ -9,17 +10,14 @@ struct TrialNN_PDE_int{BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PD
     grid_matrix # Quadrature grid points: [(t1,x1), (t1,x2), ]
     grid_weights # Quadrature weights
 
-    N_in::Int # Inside the Domain
-    x_nodes 
-    N_nodes::Int # Number of spatial nodes
-
     initial_guess_method::IPMT # :LSGD or :GroundTruth
 
     Nw                 # angular directions
     Nb                 # bias samples
 
-    function TrialNN_PDE_int(trial_NN,;xstep,xspan, RT::Int=6, RX::Int=8, N_in::Int=600, initial_guess_method::IPMT=TrialOGA2D(),
-        Nw::Int = 500,Nb::Int = 500) where {IPMT} # 300,300
+    show_status
+    function TrialNN_PDE_int(trial_NN,;RT::Int=6, RX::Int=8, initial_guess_method::IPMT=TrialOGA2D(),
+        Nw::Int = 500,Nb::Int = 500,show_status = false) where {IPMT} # 300,300
         if RT == 128
             t_quadrature = GaussQuadrature128()
         elseif RT == 64
@@ -39,13 +37,13 @@ struct TrialNN_PDE_int{BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PD
         dimensions = [RT, RX]
         grid_matrix, grid_weights = construct_quadrature_grid(dimensions)
 
-        x_nodes = collect(xspan[1]:xstep:xspan[2])
-        N = length(x_nodes)
         new{typeof(trial_NN),typeof(initial_guess_method)}(trial_NN,
             t_quadrature, RT,
             x_quadrature, RX,
-            grid_matrix, grid_weights, N_in, x_nodes,N,initial_guess_method,
-            Nw,Nb)
+            grid_matrix, grid_weights,
+            initial_guess_method,
+            Nw,Nb,
+            show_status)
     end
 end
 
@@ -152,7 +150,6 @@ function T2NN_manual(t, x, W2,W1,bias1,int)
            (x - a) / x_domain * (h - h * t) / h * NN(0.0, b, W2,W1,bias1,int)
 end
 
-
 function C1(t, x, tn,int)
     local xspan = int.problem.xspan
     local a,b = xspan[1],xspan[2]
@@ -202,9 +199,7 @@ function u_trial(t,x,all_params::Vector{ST},int,sol) where ST
     return u_trial(t,x,W2,W1,bias1,int,sol)
 end
 
-
-
-v_trial_zygote(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * Zygote.gradient(tt -> u_trial(tt,x,W2,W1,bias1,int,sol),t)[1]
+v_trial_zygote(t, x, W2,W1,bias1,int,sol) = Zygote.gradient(tt -> u_trial(tt,x,W2,W1,bias1,int,sol),t)[1]
 w_trial_zygote(t, x, W2,W1,bias1,int,sol) = Zygote.gradient(xx -> u_trial(t,xx,W2,W1,bias1,int,sol),x)[1]
 
 # v_trial(t, x, W2,W1,bias1,int,sol) = (1 / timestep(int)) * ForwardDiff.derivative(tt -> u_trial(tt,x,W2,W1,bias1,int,sol),t)[1]
@@ -213,11 +208,11 @@ w_trial_zygote(t, x, W2,W1,bias1,int,sol) = Zygote.gradient(xx -> u_trial(t,xx,W
 # v_trial_zygote(t, x, all_params,int,sol) = (1 / timestep(int)) * Zygote.gradient(tt -> u_trial(tt,x,all_params,int,sol),t)[1]
 # w_trial_zygote(t, x, all_params,int,sol) = Zygote.gradient(xx -> u_trial(t,xx,all_params,int,sol),x)[1]
 
-v_trial(t,x,params,int,sol) = (1 / timestep(int)) * ForwardDiff.derivative(tt -> u_trial(tt,x,params,int,sol),t)[1]
+v_trial(t,x,params,int,sol) = ForwardDiff.derivative(tt -> u_trial(tt,x,params,int,sol),t)[1]
 w_trial(t,x,params,int,sol) = ForwardDiff.derivative(xx -> u_trial(t,xx,params,int,sol),x)[1]
 
 ∂u∂p(t,x,params,int,sol) = ForwardDiff.gradient(p -> u_trial(t,x,p,int,sol),params)
-∂v∂p(t,x,params,int,sol) = (1 / timestep(int)) * ForwardDiff.gradient(p -> v_trial(t,x,p,int,sol),params)
+∂v∂p(t,x,params,int,sol) = ForwardDiff.gradient(p -> v_trial(t,x,p,int,sol),params)
 ∂w∂p(t,x,params,int,sol) = ForwardDiff.gradient(p -> w_trial(t,x,p,int,sol),params)
 
 # ∂u∂W2(t, x, W2,W1,bias1,int,sol) = ForwardDiff.gradient(p -> u_trial(t,x,p,W1,bias1,int,sol),W2)
@@ -454,7 +449,7 @@ end
 initialize_bcs_ics!(sol,int::PDEIntegrator{<:TrialNN_PDE_int}) = nothing
 
 function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:TrialNN_PDE_int}) where {ST}
-    local problem_params = int.problem.lagrangian_system.params
+    local lag_params = int.problem.lagrangian_system.params
     local grid_matrix = int.method.grid_matrix
     local ∂L∂U = int.problem.lagrangian_system.functions.∂L∂U
     local ∂L∂V = int.problem.lagrangian_system.functions.∂L∂V
@@ -466,11 +461,17 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Tr
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
     local C = cache(int,ST)
     local S = int.method.basis.S
-
+    local x_quad_nodes = int.method.spatial_quadrature.nodes
+    local t_quad_nodes = int.method.time_quadrature.nodes
     local W1 = cache(int,ST).W1
     local bias1 = cache(int,ST).bias1
     local W2 = cache(int,ST).W2
 
+    local h = timestep(int)
+    local exact_u = int.problem.exact_u
+    local exact_v = int.problem.exact_v
+    local exact_w = int.problem.exact_w
+    local show_status = int.method.show_status
 
     t2 = time()
     for d in 1:D
@@ -479,22 +480,9 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Tr
                 C.∂u∂θ_quad_values[d, i, j, :] = ∂u∂p(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],x,int,sol)
                 C.∂v∂θ_quad_values[d, i, j, :] = ∂v∂p(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],x,int,sol)
                 C.∂w∂θ_quad_values[d, i, j, :] = ∂w∂p(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],x,int,sol)
-
-                # C.∂u∂θ_quad_values[d, i, j, S+1:3*S] = reshape(∂u∂W1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,W1,cache(int).bias1,int,sol),:,1)
-                # C.∂v∂θ_quad_values[d, i, j, S+1:3*S] = reshape(∂v∂W1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,W1,cache(int).bias1,int,sol),:,1)
-                # C.∂w∂θ_quad_values[d, i, j, S+1:3*S] = reshape(∂w∂W1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,W1,cache(int).bias1,int,sol),:,1)
-
-                # C.∂u∂θ_quad_values[d, i, j, 3*S+1:end] = ∂u∂bias1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,cache(int).W1,bias1,int,sol)
-                # C.∂v∂θ_quad_values[d, i, j, 3*S+1:end] = ∂v∂bias1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,cache(int).W1,bias1,int,sol)
-                # C.∂w∂θ_quad_values[d, i, j, 3*S+1:end] = ∂w∂bias1(grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2],cache(int).W2,cache(int).W1,bias1,int,sol)
             end
         end
     end
-
-
-
-    t3 = time()
-    println("Time for ∂_∂p_quad_values computation: ", t3 - t2)
 
     # Unpack parameters from x into W2, W1, bias1
     W2 = x[1:S]
@@ -506,38 +494,61 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Tr
         for rt in 1:RT
             for rx in 1:RX
                 C.u_quad_values[d, rt, rx] = u_trial(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2],W2,W1,bias1,int,sol)
-                C.v_quad_values[d, rt, rx] = v_trial_zygote(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2],W2,W1,bias1,int,sol)
+                C.v_quad_values[d, rt, rx] = v_trial_zygote(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2],W2,W1,bias1,int,sol) / h
                 C.w_quad_values[d, rt, rx] = w_trial_zygote(grid_matrix[rt, rx][1], xspan[1] + x_domain* grid_matrix[rt, rx][2],W2,W1,bias1,int,sol)
             end
         end
     end
-    t4 = time()
-    println("Time for u,v,w quad values computation: ", t4 - t3)
-
-    local exact_u = int.problem.exact_u
-    local exact_v = int.problem.exact_v
-    local exact_w = int.problem.exact_w
-    local x_quad_nodes = int.method.spatial_quadrature.nodes
-    local t_quad_nodes = int.method.time_quadrature.nodes
-    local h = timestep(int)
-    
-    @show C.u_quad_values[1,1,:] .- exact_u.(h * t_quad_nodes[1], xspan[1] .+ x_domain .* x_quad_nodes)
-    @show C.v_quad_values[1,1,:] .- exact_v.(h * t_quad_nodes[1], xspan[1] .+ x_domain .* x_quad_nodes)
-    @show C.w_quad_values[1,1,:] .- exact_w.(h * t_quad_nodes[1], xspan[1] .+ x_domain .* x_quad_nodes)
 
     # Compute ∂L/∂θ at quadrature points
     for d in 1:D
         for i in 1:RT
             for j in 1:RX
-                C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], problem_params)
-                C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], problem_params)
-                C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], problem_params)
+                C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
+                C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
+                C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
             end
         end 
     end
-    t5 = time()
+
+    if show_status
+        u_truth_mat = similar(C.u_quad_values)
+        v_truth_mat = similar(C.v_quad_values)
+        w_truth_mat = similar(C.w_quad_values)
+
+        for d in 1:D
+            for i in 1:RT
+                for j in 1:RX
+                    u_truth_mat[d, i, j] = int.problem.exact_u.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                    v_truth_mat[d, i, j] = int.problem.exact_v.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                    w_truth_mat[d, i, j] = int.problem.exact_w.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                end
+            end
+        end
+
+        @show maximum(abs.(C.u_quad_values .- u_truth_mat))
+        @show maximum(abs.(C.v_quad_values .- v_truth_mat))
+        @show maximum(abs.(C.w_quad_values .- w_truth_mat))
+
+        ∂L∂U_truth_mat = similar(C.∂L∂U_quad_values)
+        ∂L∂V_truth_mat = similar(C.∂L∂V_quad_values)
+        ∂L∂W_truth_mat = similar(C.∂L∂W_quad_values)
+        
+        for d in 1:D
+            for i in 1:RT
+                for j in 1:RX
+                    ∂L∂U_truth_mat[d, i, j] = ∂L∂U[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
+                    ∂L∂V_truth_mat[d, i, j] = ∂L∂V[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
+                    ∂L∂W_truth_mat[d, i, j] = ∂L∂W[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
+                end
+            end
+        end
+
+        @show maximum(abs.(C.∂L∂U_quad_values .- ∂L∂U_truth_mat))
+        @show maximum(abs.(C.∂L∂V_quad_values .- ∂L∂V_truth_mat))
+        @show maximum(abs.(C.∂L∂W_quad_values .- ∂L∂W_truth_mat))
+    end
     # @infiltrate
-    println("Time for ∂L∂U,V,W quad values computation: ", t5 - t4)
 end
 
 post_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int}) = nothing
@@ -551,6 +562,7 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<:TrialNN_PDE_
     local quad_b = int.method.grid_weights
     local C = cache(int,ST)
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+    local show_status = int.method.show_status
 
     for d in 1:D 
         for p in 1:NP
@@ -560,7 +572,7 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<:TrialNN_PDE_
                     z +=  quad_b[rt,rx] * 
                         ( x_domain * timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * C.∂u∂θ_quad_values[d,rt,rx,p]
                         + x_domain                 * C.∂L∂V_quad_values[d,rt,rx] * C.∂v∂θ_quad_values[d,rt,rx,p]
-                        + x_domain * timestep(int)  * C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂θ_quad_values[d,rt,rx,p])
+                        + x_domain * timestep(int) * C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂θ_quad_values[d,rt,rx,p])
                 end
             end
             b[p] = -z
@@ -568,36 +580,62 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<:TrialNN_PDE_
     end
     # println("In the end of residual! function, b = ", b)
     # @infiltrate
-    @show b
+    if show_status
+        @show b
+        @show norm(b)
+    end
 end
 
 function update!(sol, int::PDEIntegrator{<:TrialNN_PDE_int})
     local D = int.problem.D
-    local x_nodes = int.method.x_nodes
-    local N_nodes = int.method.N_nodes
     local C = cache(int)
     local x = nlsolution(int)
     local S = int.method.basis.S
-
+    local h = timestep(int)
     local W2 = C.W2
     local W1 = C.W1
     local bias1 = C.bias1
-
+    local show_status = int.method.show_status
+    local exact_u = int.problem.exact_u
+    local exact_v = int.problem.exact_v
+    local exact_w = int.problem.exact_w
+    local xspan = int.problem.xspan
+    local xstep = int.problem.xstep
+    
     W2 = x[1:S]
     W1[:,1] = x[S+1:2*S] 
     W1[:,2] = x[2*S+1:3*S]
     bias1 = x[3*S+1:4*S]
+    
+    x_nodes = collect(xspan[1]:xstep:xspan[2])
 
     for d in 1:D
-        for i in 1:N_nodes 
-            sol.u[i] = u_trial(1.0,x_nodes[i],x,int,sol)
-            sol.v[i] = v_trial(1.0,x_nodes[i],x,int,sol)
-            sol.w[i] = w_trial(1.0,x_nodes[i],x,int,sol)
+        for i in eachindex(x_nodes)
+            sol.u[i] = u_trial(1.0, x_nodes[i],W2,W1,bias1,int,sol)
+            sol.v[i] = v_trial_zygote(1.0,x_nodes[i],W2,W1,bias1,int,sol)/h
+            sol.w[i] = w_trial_zygote(1.0,x_nodes[i],W2,W1,bias1,int,sol)
         end
     end
-    
-    # copy internal variables from cache to solution
-    # println("In the end of update! function, time = ", sol_struct.t)
+
+    if show_status
+        ut₁_grid_truth = zeros(length(x_nodes))
+        vt₁_grid_truth = zeros(length(x_nodes))
+        wt₁_grid_truth = zeros(length(x_nodes))
+
+        for i in eachindex(x_nodes)
+            ut₁_grid_truth[i] = exact_u(sol.t, x_nodes[i])
+            vt₁_grid_truth[i] = exact_v(sol.t, x_nodes[i])
+            wt₁_grid_truth[i] = exact_w(sol.t, x_nodes[i])
+        end
+
+        @show maximum(abs.(sol.u .- ut₁_grid_truth))
+        @show maximum(abs.(sol.v .- vt₁_grid_truth))
+        @show maximum(abs.(sol.w .- wt₁_grid_truth))
+
+        @show sol.u
+        @show ut₁_grid_truth
+    end
+
 end
 
 function internal_variables(method::TrialNN_PDE_int, problem::LPDEProblem)

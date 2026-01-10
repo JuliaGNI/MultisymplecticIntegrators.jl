@@ -9,52 +9,53 @@ using Plots
 using Profile
 using Base
 using Infiltrator
-t_step = parse(Float64,ARGS[1])
-rt = parse(Int,ARGS[2])
-Nw = parse(Int,ARGS[3])
-Nb = parse(Int,ARGS[4])
+# t_step = parse(Float64, ARGS[1])
+# rt = parse(Int, ARGS[2])
+# Nw = parse(Int, ARGS[3])
+# Nb = parse(Int, ARGS[4])
 
-# t_step = 0.1
-# NN_width = 3
-# Nw = 5
-# Nb = 5
+t_step = 0.3
+NN_width = 50
+Nw = 500
+Nb = 500
 
 GeometricIntegratorsBase.default_options(::TrialNN_PDE_int) = (
-    x_abstol = 8eps(),
-    f_abstol = 8eps(),
-    max_iterations = 100,
+        x_abstol=8eps(),
+        f_abstol=8eps(),
+        max_iterations=100,
 )
 
-NN_width = 50
 x_step = 0.01
 x_span = (0.3, 0.8)
 lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=(0.0, t_step), xspan=x_span, xstep=x_step)
 
-relu3(x) = max(0.0,x)^3
+relu3(x) = max(0.0, x)^3
 activation = tanh
 trial_basis = Trial_Solution_Basis(NN_width, activation)
-# rt = 1
-# rx = 3
+rt = 64
+rx = 18
 # for rt in [8,12,24]
-for rx in [16,32,64]
-        log_file="logs16122025/h$(t_step)_width$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx)$(activation)_full.txt"
-        open(log_file, "w") do io
-                redirect_stdio(stdout=log_file, stderr=log_file) do
-                        println("Start RT = $rt, RX = $rx")
-                        trial_int = TrialNN_PDE_int(trial_basis, xstep=x_step, xspan=x_span, initial_guess_method=TrialOGA2D(), RT=rt, RX=rx,Nw = Nw, Nb=Nb)
-                        trial_sol = MultiSymplectic.integrate(lpde, trial_int)
+# for rx in [16, 32, 64]
+log_file = "logs/trial_nn_int.txt"
+open(log_file, "w") do io
+        redirect_stdio(stdout=log_file, stderr=log_file) do
+                println("Start RT = $rt, RX = $rx")
+                trial_int = TrialNN_PDE_int(trial_basis, initial_guess_method=TrialOGA2D(), RT=rt, RX=rx, Nw=Nw, Nb=Nb,show_status=true)
+                sol = MultiSymplectic.integrate(lpde,trial_int)
+        
+                p = @layout [a b c]
+                p1 = plot([lpde.exact_u(t_step,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_u")
+                plot!(p1, sol.u[1], label="sol.u")
+                p2 = plot([lpde.exact_v(t_step,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_v")
+                plot!(p2, sol.v[1], label="sol.v")
+                p3 = plot([lpde.exact_w(t_step,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_w")
+                plot!(p3, sol.w[1], label="sol.w")
+                p = plot(p1, p2, p3, layout=p)
+                savefig("logs/trial_nn_int_t=$t_step.pdf")
 
-                        # prepare x values for plotting
-                        x_plot = collect(x_span[1]:x_step:x_span[2])
-
-                        # First subplot: NN vs exact at t = h (t_step)
-                        p1 = plot(trial_sol.u[1], label="NN Solution", title="t = $t_step", xlabel="x", ylabel="u")
-                        plot!(p1, lpde.exact_u.(t_step, x_plot), label="Exact")
-
-                        savefig("logs16122025/h$(t_step)_width$(NN_width)_Nw$(Nw)_Nb$(Nb)_RT$(rt)_RX$(rx)$(activation)_full.pdf")
-                end
         end
 end
+# end
 # end
 # (u_trial(grid_matrix[1,1][1] , xspan[1] + x_domain* grid_matrix[1,1][2]+ 3eps(),x,W1,bias1,int,sol) - u_trial(grid_matrix[1,1][1] , xspan[1] + x_domain* grid_matrix[1,1][2]- 3eps(),x,W1,bias1,int,sol)) / 6eps()
 
@@ -506,7 +507,7 @@ end
 #     # @show PNN.params.L1.W
 #     # @show PNN.params.L1.b
 #     # @show PNN.params.L2.W
-    
+
 
 #     gs = Zygote.gradient(p -> lsgd_loss(collocation_points, rhs, p), PNN.params)[1]
 #     # @show gs
@@ -524,7 +525,7 @@ end
 #     # @show PNN.params.L1.W
 #     # @show PNN.params.L1.b
 #     # @show PNN.params.L2.W
-    
+
 
 #     # sol = PNN.params.L2.W[:]
 #     # BNN.params.L1.W[:] = PNN.params.L1.W[:]
