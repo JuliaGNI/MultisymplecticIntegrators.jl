@@ -43,7 +43,7 @@ struct BSpline2D <: AbstractPDEBasis
         xs = xspan[1]:xstep:xspan[2]
         ts = 0.0:tstep:1.0
 
-        # Create B-spline knots based on interpolation points (uses an internal function)
+        # Create B-spline knots based on interpolation points 
         knots_x = SplineInterpolations.make_knots(xs, BSplineOrder(k), nothing)
         knots_t = SplineInterpolations.make_knots(ts, BSplineOrder(k), nothing)
 

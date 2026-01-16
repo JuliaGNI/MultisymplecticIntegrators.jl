@@ -19,7 +19,7 @@ end
 
 function construct_quadrature_grid(dimensions::Vector{Int},intervals::Vector{Vector{Float64}})
     @assert length(intervals) == length(dimensions) "Number of intervals must match number of dimensions"
-    quadrature_rules = [composite_quadrature(R,interval) for (R,interval) in zip(dimensions,intervals)]
+    quadrature_rules = [composite_quadrature(interval,R) for (interval,R) in zip(intervals,dimensions)]
 
     # Extract nodes and weights for each dimension
     nodes = [rule.nodes for rule in quadrature_rules]

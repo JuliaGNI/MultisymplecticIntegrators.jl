@@ -63,7 +63,7 @@ struct Galerkin_Bspline_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
         end
 
         dimensions = [RT,RX]  
-        grid_matrix, grid_weights = construct_quadrature_grid(dimensions)
+        grid_matrix, grid_weights = construct_quadrature_grid(dimensions,[basis.ts, basis.xs])
 
         S = basis.S
         u_collocation_matrix = zeros(S, RT, RX)
@@ -122,16 +122,20 @@ struct Galerkin_Bspline_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
         μ₁_t = Lagrangian_multiplier(μ,Nbasis_μ_t,k_μ_t,0.0,1.0)
 
         mλ_x = zeros(Nbasis_λ_x, RX)
-        mμ_t = zeros(Nbasis_μ_t, RT)
-
         for i in 1:Nbasis_λ_x
             mλ_x[i,:] = λ_x.b[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes)
         end
-    
-        for i in 1:Nbasis_μ_t
-            mμ_t[i,:] = μ₀_t.b[i].(t_quadrature.nodes)
-        end
 
+        # mμ_t = zeros(Nbasis_μ_t, RT)
+        # for i in 1:Nbasis_μ_t
+        #     mμ_t[i,:] = μ₀_t.b[i].(t_quadrature.nodes)
+        # end
+
+        mμ_t = zeros(basis.Nbasis_t, RT)
+        for i in 1:basis.Nbasis_t
+            mμ_t[i,:] = basis.Basis_t[i].(t_quadrature.nodes,BSplineKit.Derivative(1))
+        end
+        Nbasis_μ_t = basis.Nbasis_t
         new{typeof(μ₀_t),typeof(λ_x),typeof(basis)}(basis, 
             t_quadrature, RT,
             x_quadrature, RX,
