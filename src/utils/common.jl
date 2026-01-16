@@ -16,19 +16,10 @@ function GaussQuadrature128()
     return (nodes = nodes, weights = weights)
 end
 
-function construct_quadrature_grid(dimensions::Vector{Int})
-    # Create quadrature rules for each dimension
-    function quad_rules(R)
-        if R == 128
-            return GaussQuadrature128()
-        elseif R == 64
-            return GaussQuadrature64()
-        else
-            return QuadratureRules.GaussLegendreQuadrature(R)
-        end
-    end
 
-    quadrature_rules = [quad_rules(R) for R in dimensions]
+function construct_quadrature_grid(dimensions::Vector{Int},intervals::Vector{Vector{Float64}})
+    @assert length(intervals) == length(dimensions) "Number of intervals must match number of dimensions"
+    quadrature_rules = [composite_quadrature(R,interval) for (R,interval) in zip(dimensions,intervals)]
 
     # Extract nodes and weights for each dimension
     nodes = [rule.nodes for rule in quadrature_rules]
@@ -45,6 +36,49 @@ function construct_quadrature_grid(dimensions::Vector{Int})
     # grid_weights = hcat(map(x -> collect(x), grid_weights)...)
 
     return grid, grid_weights
+end
+
+
+"""
+    composite_quadrature(breaks::Vector{T}, k::Int) where T<:Real
+    
+Generate composite Gauss-Legendre quadrature nodes and weights over multiple intervals defined by `breaks`.
+- `breaks`: strictly increasing vector [x1, x2, ..., xn]
+- `k`: order of QuadratureRules
+return: (all_nodes, all_weights)
+"""
+function composite_quadrature(breaks::Vector{T}, k::Int) where T<:Real
+    if k == 128
+        return QGau = GaussQuadrature128()
+    elseif k == 64
+        return QGau = GaussQuadrature64()
+    else
+        return QGau = QuadratureRules.GaussLegendreQuadrature(k)
+    end
+    nodes_01, weights_01 = QGau.nodes, QGau.weights
+    num_intervals = length(breaks) - 1
+    num_points_per_interval = length(nodes_01)
+    
+    total_points = num_intervals * num_points_per_interval
+    all_nodes = Vector{T}(undef, total_points)
+    all_weights = Vector{T}(undef, total_points)
+    
+    #scale and shift to each interval
+    for i in 1:num_intervals
+        x_left = breaks[i]
+        x_right = breaks[i+1]
+        h = x_right - x_left  
+        
+        start_idx = (i - 1) * num_points_per_interval + 1
+        end_idx = i * num_points_per_interval
+        
+        # X = x_left + h * ξ
+        # W = h * ω
+        all_nodes[start_idx:end_idx] .= x_left .+ h .* nodes_01
+        all_weights[start_idx:end_idx] .= h .* weights_01
+    end
+    
+    return (nodes = all_nodes, weights = all_weights)
 end
 
 # # Example usage for 2 dimensions
