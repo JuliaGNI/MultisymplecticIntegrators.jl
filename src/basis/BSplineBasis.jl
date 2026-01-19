@@ -39,11 +39,13 @@ struct BSpline2D <: AbstractPDEBasis
     Nbasis_x::Int
     Nbasis_t::Int
     S::Int # total number of basis functions
-    function BSpline2D(k,;xspan = (0.0,1.0),tstep = 0.1,xstep = 0.05) # tstep and xstep are used to generate the knots, not the same as the problem domain steps
-        xs = xspan[1]:xstep:xspan[2]
-        ts = 0.0:tstep:1.0
+    function BSpline2D(k,;xspan = (0.0,1.0),t_knot_interval = 0.1,x_knot_interval = 0.05) # tstep and xstep are used to generate the knots, not the same as the problem domain steps
+        xs = collect(xspan[1]:x_knot_interval:xspan[2])
+        ts = collect(0.0:t_knot_interval:1.0)
 
         # Create B-spline knots based on interpolation points 
+        # The knots are not the same with the breaks,ie the xs and ts
+        # No boundary condition is imposed here
         knots_x = SplineInterpolations.make_knots(xs, BSplineOrder(k), nothing)
         knots_t = SplineInterpolations.make_knots(ts, BSplineOrder(k), nothing)
 

@@ -41,19 +41,24 @@ struct Galerkin_Bspline_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
     wx₁_basis_quad_values
 
     show_status
-    function Galerkin_Bspline_Integrator(basis; RT::Int = 8,RX::Int = 8,xspan::Tuple = (0.,1.0), 
+    function Galerkin_Bspline_Integrator(basis; RT_per_interval::Int = 4,RX_per_interval::Int = 4,xspan::Tuple = (0.,1.0), 
         Nbasis_μ_t::Int = 10,k_μ_t::Int = 4,μ::Symbol = :BSplineDirichlet,
         Nbasis_λ_x::Int = 10,k_λ_x::Int = 3,λ::Symbol = :BSplineDirichlet,
         show_status = false)
 
-        # The quadrature nodes are defined according to the breaks of BSpline Basis function to its domian, i.e. x_quadrature is in [a,b], t_quadrature is in [0,1]
-        t_quadrature = composite_quadrature(basis.ts,RT)
-        x_quadrature = composite_quadrature(basis.xs,RX)
+        # The quadrature nodes in [0.0,1.0]
+        t_num_interval = length(basis.ts) - 1
+        x_num_interval = length(basis.xs) - 1
+        t_quadrature = composite_quadrature(t_num_interval ,RT_per_interval)
+        x_quadrature = composite_quadrature(x_num_interval ,RX_per_interval)
 
-        dimensions = [RT,RX]  
-        grid_matrix, grid_weights = construct_quadrature_grid(dimensions,[basis.ts, basis.xs])
-
+        R_list = [RT_per_interval,RX_per_interval]  
+        grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
+        
         S = basis.S
+        RT = length(t_quadrature.nodes)
+        RX = length(x_quadrature.nodes)
+        
         u_collocation_matrix = zeros(S, RT, RX)
         v_collocation_matrix = zeros(S, RT, RX)
         w_collocation_matrix = zeros(S, RT, RX)

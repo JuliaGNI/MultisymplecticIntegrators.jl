@@ -16,10 +16,16 @@ function GaussQuadrature128()
     return (nodes = nodes, weights = weights)
 end
 
+"""
+    construct_quadrature_grid(R_list::Vector{Int},Num_intervals::Vector{Int})
+Generate a grid of quadrature nodes and weights for multiple dimensions using composite Gauss-Legendre quadrature.
+- `R_list`: vector specifying the number of quadrature points per interval for each dimension
+- `Num_intervals`: vector specifying the number of intervals for each dimension
+"""
+function construct_quadrature_grid(R_list::Vector{Int},Num_intervals_list::Vector{Int})
 
-function construct_quadrature_grid(dimensions::Vector{Int},intervals::Vector{Vector{Float64}})
-    @assert length(intervals) == length(dimensions) "Number of intervals must match number of dimensions"
-    quadrature_rules = [composite_quadrature(interval,R) for (interval,R) in zip(intervals,dimensions)]
+    @assert length(Num_intervals_list) == length(R_list) "Number of intervals must the length of R_list, should be the same as the dimension of the problem"
+    quadrature_rules = [composite_quadrature(N,R) for (N,R) in zip(Num_intervals_list,R_list)]
 
     # Extract nodes and weights for each dimension
     nodes = [rule.nodes for rule in quadrature_rules]
@@ -47,21 +53,23 @@ Generate composite Gauss-Legendre quadrature nodes and weights over multiple int
 - `k`: order of QuadratureRules
 return: (all_nodes, all_weights)
 """
-function composite_quadrature(breaks::Vector{T}, k::Int) where T<:Real
+function composite_quadrature(num_intervals, k::Int) where T<:Real
     if k == 128
-        return QGau = GaussQuadrature128()
+        QGau = GaussQuadrature128()
     elseif k == 64
-        return QGau = GaussQuadrature64()
+        QGau = GaussQuadrature64()
     else
-        return QGau = QuadratureRules.GaussLegendreQuadrature(k)
+        QGau = QuadratureRules.GaussLegendreQuadrature(k)
     end
     nodes_01, weights_01 = QGau.nodes, QGau.weights
-    num_intervals = length(breaks) - 1
+
+    # num_intervals = length(breaks) - 1
+    breaks = 0:1/num_intervals:1
     num_points_per_interval = length(nodes_01)
     
     total_points = num_intervals * num_points_per_interval
-    all_nodes = Vector{T}(undef, total_points)
-    all_weights = Vector{T}(undef, total_points)
+    all_nodes = zeros(total_points)
+    all_weights = zeros(total_points)
     
     #scale and shift to each interval
     for i in 1:num_intervals
