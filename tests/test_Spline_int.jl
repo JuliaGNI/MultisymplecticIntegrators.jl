@@ -1,12 +1,8 @@
-
 using MultiSymplectic
 using Infiltrator
 using Base
 using GeometricIntegratorsBase
 using Plots
-
-
-
 
 GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator) = (
     x_abstol = 8eps(),

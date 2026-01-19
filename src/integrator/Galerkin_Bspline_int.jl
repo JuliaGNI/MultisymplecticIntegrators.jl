@@ -46,21 +46,9 @@ struct Galerkin_Bspline_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
         Nbasis_λ_x::Int = 10,k_λ_x::Int = 3,λ::Symbol = :BSplineDirichlet,
         show_status = false)
 
-        if RT ==128 
-            t_quadrature = GaussQuadrature128()
-        elseif RT == 64
-            t_quadrature = GaussQuadrature64()
-        else
-            t_quadrature = QuadratureRules.GaussLegendreQuadrature(RT)
-        end
-
-        if RX == 128
-            x_quadrature = GaussQuadrature128()
-        elseif RX == 64
-            x_quadrature = GaussQuadrature64()
-        else
-            x_quadrature = QuadratureRules.GaussLegendreQuadrature(RX)
-        end
+        # The quadrature nodes are defined according to the breaks of BSpline Basis function to its domian, i.e. x_quadrature is in [a,b], t_quadrature is in [0,1]
+        t_quadrature = composite_quadrature(basis.ts,RT)
+        x_quadrature = composite_quadrature(basis.xs,RX)
 
         dimensions = [RT,RX]  
         grid_matrix, grid_weights = construct_quadrature_grid(dimensions,[basis.ts, basis.xs])
