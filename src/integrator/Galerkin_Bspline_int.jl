@@ -114,10 +114,10 @@ struct Galerkin_Bspline_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
         μ₀_t = Lagrangian_multiplier(μ,Nbasis_μ_t,k_μ_t,0.0,1.0)
         μ₁_t = Lagrangian_multiplier(μ,Nbasis_μ_t,k_μ_t,0.0,1.0)
 
-        mλ_x = zeros(Nbasis_λ_x, RX)
-        for i in 1:Nbasis_λ_x
-            mλ_x[i,:] = λ_x.b[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes)
-        end
+        # mλ_x = zeros(Nbasis_λ_x, RX)
+        # for i in 1:Nbasis_λ_x
+        #     mλ_x[i,:] = λ_x.b[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes)
+        # end
 
         # mμ_t = zeros(Nbasis_μ_t, RT)
         # for i in 1:Nbasis_μ_t
@@ -129,6 +129,13 @@ struct Galerkin_Bspline_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
             mμ_t[i,:] = basis.Basis_t[i].(t_quadrature.nodes,BSplineKit.Derivative(1))
         end
         Nbasis_μ_t = basis.Nbasis_t
+
+        mλ_x = zeros(basis.Nbasis_x, RX)
+        for i in 1:basis.Nbasis_x
+            mλ_x[i,:] = basis.Basis_x[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes,BSplineKit.Derivative(1))
+        end 
+        Nbasis_λ_x = basis.Nbasis_x
+
         new{typeof(μ₀_t),typeof(λ_x),typeof(basis)}(basis, 
             t_quadrature, RT,
             x_quadrature, RX,
@@ -334,6 +341,9 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
     C.x[1:S] = reshape(coefs, :, 1)
 
     if show_status
+        vdata = exact_v.(h .* ts, xs')
+        wdata = exact_w.(h .* ts, xs')
+
         u_approx = similar(udata)
         v_approx = similar(vdata)
         w_approx = similar(wdata)
