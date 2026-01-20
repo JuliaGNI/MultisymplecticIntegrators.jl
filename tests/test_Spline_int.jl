@@ -11,9 +11,19 @@ GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator) = (
 )
 
 xspan = (0.0, 1.0)
+x_ls = xspan[1]:lpde.xstep:xspan[2]
+t_step = 0.3
+t_span = (0.,0.6)
 spline_basis = BSpline2D(4,xspan = xspan)
-spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = 4,RX_per_interval = 4)
-lpde = MultiSymplectic.Wave.lpdeproblem(timestep=0.3, timespan=(0.0, 0.6), xspan=xspan, xstep=0.01)
+spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = 5,RX_per_interval = 5)
+lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=xspan, xstep=0.01)
+
+c = lpde.params.c
+wave_ham(u,v,w) = 1 / 2 * (c * v^2 + w^2)
+
+ham_ls = zeros(length(t_span[1]:t_step:t_span[2]))
+analytic_ham = zeros(length(t_span[1]:t_step:t_span[2]))
+
 
 # log_file="logs/SplineInt_2.txt"
 # open(log_file, "w") do io
@@ -46,6 +56,18 @@ lpde = MultiSymplectic.Wave.lpdeproblem(timestep=0.3, timespan=(0.0, 0.6), xspan
         p6 = plot([lpde.exact_w(0.6,xx) for xx in xspan[1]:0.01:xspan[2]] .- sol.w[2], label="error_w")
         p = plot(p1, p2, p3, p4, p5, p6, layout=p)
         savefig("logs/SplineInt_t=2h.pdf")
+
+        for (i, t) in enumerate(t_span[1]:t_step:t_span[2])
+            current_domain_ham = [wave_ham(ui,vi,wi) for (ui,vi,wi) in zip(sol.u[i-1],sol.v[i-1],sol.w[i-1])]
+            ham_ls[i] = sum(current_domain_ham)
+
+            analytic_u_values = lpde.exact_u.(t, x_ls)
+            analytic_v_values = lpde.exact_v.(t, x_ls)
+            analytic_w_values = lpde.exact_w.(t, x_ls)
+            current_ham = [wave_ham(ui,vi,wi) for (ui,vi,wi) in zip(analytic_u_values,analytic_v_values,analytic_w_values)]
+            analytic_ham[i] = sum(current_ham)
+        end
+        relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
 #     end
 # end
 
