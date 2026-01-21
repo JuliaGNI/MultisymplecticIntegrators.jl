@@ -10,64 +10,77 @@ using Plots
 #     max_iterations = 100,
 # )
 
+t_step = 0.2
+t_span = (0.,2.0)
 xspan = (0.0, 1.0)
-t_step = 0.3
-t_span = (0.,0.3)
-spline_basis = BSpline2D(4,xspan = xspan)
-spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = 5,RX_per_interval = 5,show_status = true)
 lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=xspan, xstep=0.01)
-
-c = lpde.params.c
 wave_ham(u,v,w) = 1 / 2 * (c * v^2 + w^2)
+x_ls = xspan[1]:lpde.xstep:xspan[2]
+c = lpde.params.c
 
+internal_k_list = [2,3,]#4,5,6
+t_knot_interval_list = [0.05,]#0.1,0.2,0.4,0.5
+x_knot_interval_list = [0.05,]#0.1,0.2,0.4,0.5
+error_tensor = zeros(length(internal_k_list),length(t_knot_interval_list),length(x_knot_interval_list))
 
 log_file="logs/SplineInt.txt"
 open(log_file, "w") do io
     redirect_stdio(stdout=log_file, stderr=log_file) do
-        println("Start Spline Integrator")
-        sol = MultiSymplectic.integrate(lpde, spline_int)
+        for (k_i,k) in enumerate(internal_k_list)
+            for (t_knot_i,t_knot_interval) in enumerate(t_knot_interval_list)
+                for (x_knot_i,x_knot_interval) in enumerate(x_knot_interval_list)
+                    spline_basis = BSpline2D(k,xspan = xspan)
+                    spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = true)
+                    println("Start Spline Integrator")
+                    sol = MultiSymplectic.integrate(lpde, spline_int)
 
-        x_ls = xspan[1]:lpde.xstep:xspan[2]
-        p = @layout [a b c; d e f]
-        p1 = plot([lpde.exact_u(0.3,xx) for xx in x_ls], label="exact_u")
-        plot!(p1, sol.u[1], label="sol.u")
-        p2 = plot([lpde.exact_v(0.3,xx) for xx in x_ls], label="exact_v")
-        plot!(p2, sol.v[1], label="sol.v")
-        p3 = plot([lpde.exact_w(0.3,xx) for xx in x_ls], label="exact_w")
-        plot!(p3, sol.w[1], label="sol.w")
-        p4 = plot([lpde.exact_u(0.3,xx) for xx in x_ls] .- sol.u[1], label="error_u")
-        p5 = plot([lpde.exact_v(0.3,xx) for xx in x_ls] .- sol.v[1], label="error_v")
-        p6 = plot([lpde.exact_w(0.3,xx) for xx in x_ls] .- sol.w[1], label="error_w")
-        p = plot(p1, p2, p3, p4, p5, p6, layout=p)
-        savefig("logs/SplineInt_t=h.pdf")
+                    # p = @layout [a b c; d e f]
+                    # p1 = plot([lpde.exact_u(0.3,xx) for xx in x_ls], label="exact_u")
+                    # plot!(p1, sol.u[1], label="sol.u")
+                    # p2 = plot([lpde.exact_v(0.3,xx) for xx in x_ls], label="exact_v")
+                    # plot!(p2, sol.v[1], label="sol.v")
+                    # p3 = plot([lpde.exact_w(0.3,xx) for xx in x_ls], label="exact_w")
+                    # plot!(p3, sol.w[1], label="sol.w")
+                    # p4 = plot([lpde.exact_u(0.3,xx) for xx in x_ls] .- sol.u[1], label="error_u")
+                    # p5 = plot([lpde.exact_v(0.3,xx) for xx in x_ls] .- sol.v[1], label="error_v")
+                    # p6 = plot([lpde.exact_w(0.3,xx) for xx in x_ls] .- sol.w[1], label="error_w")
+                    # p = plot(p1, p2, p3, p4, p5, p6, layout=p)
+                    # savefig("logs/SplineInt_t=$(t_step)_k=$(k).pdf")
 
-        # p = @layout [a b c; d e f]
-        # p1 = plot([lpde.exact_u(0.6,xx) for xx in x_ls], label="exact_u")
-        # plot!(p1, sol.u[2], label="sol.u")
-        # p2 = plot([lpde.exact_v(0.6,xx) for xx in x_ls], label="exact_v")
-        # plot!(p2, sol.v[2], label="sol.v")
-        # p3 = plot([lpde.exact_w(0.6,xx) for xx in x_ls], label="exact_w")
-        # plot!(p3, sol.w[2], label="sol.w")
-        # p4 = plot([lpde.exact_u(0.6,xx) for xx in x_ls] .- sol.u[2], label="error_u")
-        # p5 = plot([lpde.exact_v(0.6,xx) for xx in x_ls] .- sol.v[2], label="error_v")
-        # p6 = plot([lpde.exact_w(0.6,xx) for xx in x_ls] .- sol.w[2], label="error_w")
-        # p = plot(p1, p2, p3, p4, p5, p6, layout=p)
-        # savefig("logs/SplineInt_t=2h.pdf")
+                    # p = @layout [a b c; d e f]
+                    # p1 = plot([lpde.exact_u(0.6,xx) for xx in x_ls], label="exact_u")
+                    # plot!(p1, sol.u[2], label="sol.u")
+                    # p2 = plot([lpde.exact_v(0.6,xx) for xx in x_ls], label="exact_v")
+                    # plot!(p2, sol.v[2], label="sol.v")
+                    # p3 = plot([lpde.exact_w(0.6,xx) for xx in x_ls], label="exact_w")
+                    # plot!(p3, sol.w[2], label="sol.w")
+                    # p4 = plot([lpde.exact_u(0.6,xx) for xx in x_ls] .- sol.u[2], label="error_u")
+                    # p5 = plot([lpde.exact_v(0.6,xx) for xx in x_ls] .- sol.v[2], label="error_v")
+                    # p6 = plot([lpde.exact_w(0.6,xx) for xx in x_ls] .- sol.w[2], label="error_w")
+                    # p = plot(p1, p2, p3, p4, p5, p6, layout=p)
+                    # savefig("logs/SplineInt_t=2h.pdf")
 
 
-        ham_ls = zeros(length(t_span[1]:t_step:t_span[2]))
-        analytic_ham = zeros(length(t_span[1]:t_step:t_span[2]))
-        for (i, t) in enumerate(t_span[1]:t_step:t_span[2])
-            current_domain_ham = [wave_ham(ui,vi,wi) for (ui,vi,wi) in zip(sol.u[i-1],sol.v[i-1],sol.w[i-1])]
-            ham_ls[i] = sum(current_domain_ham)
+                    ham_ls = zeros(length(t_span[1]:t_step:t_span[2]))
+                    analytic_ham = zeros(length(t_span[1]:t_step:t_span[2]))
+                    for (i, t) in enumerate(t_span[1]:t_step:t_span[2])
+                        current_domain_ham = [wave_ham(ui,vi,wi) for (ui,vi,wi) in zip(sol.u[i-1],sol.v[i-1],sol.w[i-1])]
+                        ham_ls[i] = sum(current_domain_ham)
 
-            analytic_u_values = lpde.exact_u.(t, x_ls)
-            analytic_v_values = lpde.exact_v.(t, x_ls)
-            analytic_w_values = lpde.exact_w.(t, x_ls)
-            current_ham = [wave_ham(ui,vi,wi) for (ui,vi,wi) in zip(analytic_u_values,analytic_v_values,analytic_w_values)]
-            analytic_ham[i] = sum(current_ham)
+                        analytic_u_values = lpde.exact_u.(t, x_ls)
+                        analytic_v_values = lpde.exact_v.(t, x_ls)
+                        analytic_w_values = lpde.exact_w.(t, x_ls)
+                        current_ham = [wave_ham(ui,vi,wi) for (ui,vi,wi) in zip(analytic_u_values,analytic_v_values,analytic_w_values)]
+                        analytic_ham[i] = sum(current_ham)
+                    end
+                    relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
+                    plot(t_span[1]:t_step:t_span[2],relative_ham_err)
+                    savefig("logs/SplineInt_Ham_err_t=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval).pdf")
+
+                    error_tensor[k_i,t_knot_i,x_knot_i] = maximum(relative_ham_err)
+                end
+            end
         end
-        relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
     end
 end
 
