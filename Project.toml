@@ -6,6 +6,7 @@ version = "0.1.0"
 AbstractNeuralNetworks = "60874f82-5ada-4c70-bd1c-fa6be7711c8a"
 BSplineKit = "093aae92-e908-43d7-9660-e50ee39d5a0a"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 CompactBasisFunctions = "a09551c4-f815-4143-809e-dd1986753ba7"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 GeometricBase = "9a0b12b7-583b-4f04-aa1f-d8551b6addc9"
@@ -29,7 +30,6 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [sources]
 GeometricMachineLearning = {rev = "main", url = "https://github.com/JuliaGNI/GeometricMachineLearning.jl.git"}
-SimpleSolvers = {path = "/home/IPP-AD/lize/SimpleSolvers.jl"}
 
 [compat]
-SimpleSolvers = "0.6.2"
+CairoMakie = "0.13.10"

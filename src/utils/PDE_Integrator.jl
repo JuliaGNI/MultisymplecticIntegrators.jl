@@ -100,6 +100,8 @@ function integrate!(solstep::SolutionStep, int::AbstractPDEIntegrator)
     # copy internal variables from cache to solution step
     copy_internal_variables!(solstep,cache(int))
 
+    components!(nlsolution(int), current(solstep), parameters(solstep), int)
+
     cache(int).flag_done_initial_guess[1] != 0.0 ? cache(int).flag_done_initial_guess[1] = 0.0 : nothing 
 
     return solstep
