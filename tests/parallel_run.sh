@@ -11,24 +11,24 @@
 
 # Function to run the Julia script with the specified activation function
 run_configuration() {
-    local h=$1
-    local rt=$2
-    local Nw=$3
-    local Nb=$4
+    local internal_k=$1
+    local t_knot_interval=$2
+    local x_knot_interval=$3
+    local tstep=$4
 
     # Print the activation for debugging
-    echo "Running Julia script with Step Size: $h, RT: $rt, Nw: $Nw, Nb: $Nb"
+    echo "Running Julia script with internal_k=$internal_k, t_knot_interval=$t_knot_interval, x_knot_interval=$x_knot_interval, tstep=$tstep"
 
     # Run the Julia script in the background
-    julia --project=. tests/test_Trial_NN_PDE_int.jl $h $rt $Nw $Nb &
+    julia --project=. tests/test_Spline_int.jl $internal_k $t_knot_interval $x_knot_interval $tstep &
 }
 
 # Loop through the activations
-for h in {0.1,0.3}; do # ,
-    for rt in {12,24}; do #  
-        for Nw in {500,600}; do # 
-            for Nb in {500,600}; do # 
-                run_configuration $h $rt $Nw $Nb
+for internal_k in {3,4,5,6}; do # ,
+    for t_knot_interval in {0.1,}; do #  
+        for x_knot_interval in {0.1,}; do # 
+            for tstep in {0.1,0.2,0.4}; do
+                run_configuration $internal_k $t_knot_interval $x_knot_interval $tstep
             done
         done
     done

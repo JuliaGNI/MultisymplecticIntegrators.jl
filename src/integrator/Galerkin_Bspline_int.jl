@@ -311,10 +311,11 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
     local exact_v = int.problem.exact_v
     local exact_w = int.problem.exact_w
 
-    local xs = int.method.basis.xs
-    local ts = int.method.basis.ts # t \in [0, 1.0]
-    local Cx = int.method.basis.Collocation_x
-    local Ct = int.method.basis.Collocation_t
+    local x_collocation_points = int.method.basis.collocation_points_x
+    local t_collocation_points = int.method.basis.collocation_points_t
+    local Cx = int.method.basis.collocation_matrix_x
+    local Ct = int.method.basis.collocation_matrix_t
+
     local Bx = int.method.basis.Basis_x
     local Bt = int.method.basis.Basis_t
     local S = int.method.basis.S
@@ -326,31 +327,31 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
     local RX = int.method.RX
     local show_status = int.method.show_status
 
-    udata = exact_u.(h .* ts, xs') # fdata[i,j] = exact_u(h .* ts[i], xs[j])
+    udata = exact_u.(h .* t_collocation_points, x_collocation_points') # fdata[i,j] = exact_u(h .* ts[i], xs[j])
     
     # 2D B-spline coefficients (output)
     coefs = similar(udata)
 
     # Solve linear systems
-    for j ∈ eachindex(xs)
+    for j ∈ eachindex(x_collocation_points)
         @views ldiv!(coefs[:, j], Ct, udata[:, j])
     end
-    for i ∈ eachindex(ts)
+    for i ∈ eachindex(t_collocation_points)
         @views ldiv!(Cx, coefs[i, :])
     end
     C.x[1:S] = reshape(coefs, :, 1)
 
     if show_status
-        vdata = exact_v.(h .* ts, xs')
-        wdata = exact_w.(h .* ts, xs')
+        vdata = exact_v.(h .* t_collocation_points, x_collocation_points')
+        wdata = exact_w.(h .* t_collocation_points, x_collocation_points')
 
         u_approx = similar(udata)
         v_approx = similar(vdata)
         w_approx = similar(wdata)
         # Verification: evaluate 2D spline at data points
-        for m ∈ eachindex(ts), n ∈ eachindex(xs)
-            t = ts[m]
-            x = xs[n]
+        for m ∈ eachindex(t_collocation_points), n ∈ eachindex(x_collocation_points)
+            t = t_collocation_points[m]
+            x = x_collocation_points[n]
             u_approx[m, n] = eval_spline2D(coefs, (Bt, Bx), (t, x))
             v_approx[m, n] = eval_spline2D_dt(coefs, (Bt, Bx), (t, x)) / h
             w_approx[m, n] = eval_spline2D_dx(coefs, (Bt, Bx), (t, x))

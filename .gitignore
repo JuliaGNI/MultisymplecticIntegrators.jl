@@ -3,3 +3,4 @@
 /logs/*.png
 Manifest.toml
 Project.toml
+Spline_int_logs/

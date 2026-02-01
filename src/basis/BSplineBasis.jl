@@ -30,8 +30,10 @@ struct BSpline2D <: AbstractPDEBasis
     xs 
     ts
 
-    Collocation_x # Collocation matrix after LU factorization
-    Collocation_t
+    collocation_points_x
+    collocation_points_t
+    collocation_matrix_x # Collocation matrix after LU factorization
+    collocation_matrix_t
 
     Basis_x
     Basis_t
@@ -43,24 +45,21 @@ struct BSpline2D <: AbstractPDEBasis
         xs = collect(xspan[1]:x_knot_interval:xspan[2])
         ts = collect(0.0:t_knot_interval:1.0)
 
-        # Create B-spline knots based on interpolation points 
-        # The knots are not the same with the breaks,ie the xs and ts
-        # No boundary condition is imposed here
-        knots_x = SplineInterpolations.make_knots(xs, BSplineOrder(k), nothing)
-        knots_t = SplineInterpolations.make_knots(ts, BSplineOrder(k), nothing)
-
         # Create B-spline bases
-        Bx = BSplineBasis(BSplineOrder(k), knots_x; augment = Val(false))
-        Bt = BSplineBasis(BSplineOrder(k), knots_t; augment = Val(false))
+        Bx = BSplineBasis(BSplineOrder(k), xs)
+        Bt = BSplineBasis(BSplineOrder(k), ts)
+
+        x_collocation_points = collocation_points(Bx)
+        t_collocation_points = collocation_points(Bt)
 
         # Create and factorise interpolation matrices
-        Cx = lu!(collocation_matrix(Bx, xs))
-        Ct = lu!(collocation_matrix(Bt, ts))
+        Cx = lu!(collocation_matrix(Bx, x_collocation_points))
+        Ct = lu!(collocation_matrix(Bt, t_collocation_points))
 
         Nbasis_x = length(Bx)
         Nbasis_t = length(Bt)
         S = Nbasis_x * Nbasis_t
-        return new(k, xs, ts, Cx, Ct, Bx, Bt, Nbasis_x, Nbasis_t, S)
+        return new(k, xs, ts, x_collocation_points, t_collocation_points, Cx, Ct, Bx, Bt, Nbasis_x, Nbasis_t, S)
     end
 
 end

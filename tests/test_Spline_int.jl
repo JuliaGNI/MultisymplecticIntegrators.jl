@@ -17,7 +17,7 @@ t_step = parse(Float64, ARGS[4])
 # k = 4
 # t_knot_interval = 0.1
 # x_knot_interval = 0.1
-t_span = (0.,2.0)
+t_span = (0.,20.0)
 xspan = (0.0, 1.0)
 # for t_step in [0.1,0.2,0.4]
     # t_step = 0.2
@@ -51,7 +51,7 @@ xspan = (0.0, 1.0)
             end
             relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
             plot(t_span[1]:t_step:t_span[2], relative_ham_err, xlabel="Time", ylabel="Relative Hamiltonian Error")
-            savefig("Spline_int_logs/SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval).png")
+            savefig("Spline_int_logs2/SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval).png")
             
             record_results["maximum_relative_ham_err"] = maximum(relative_ham_err)
             record_results["sol_u"] = sol.u
@@ -59,74 +59,32 @@ xspan = (0.0, 1.0)
             record_results["sol_w"] = sol.w
             record_results["sol_hamiltonian"] = ham_ls
             record_results["analytic_hamiltonian"] = analytic_ham
-            save("Spline_int_logs/SplineInt_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval).jld2", record_results)
+            save("Spline_int_logs2/SplineInt_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval).jld2", record_results)
             println("results saved: h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")
     #     end
     # end
 # end
-# using BSplineKit
-# using CairoMakie
-# xspan = (0.0,1.0)
-# k = 4
-# x_knot_interval = 0.05
-# xs = collect(xspan[1]:x_knot_interval:xspan[2])
-# Bx = BSplineBasis(BSplineOrder(k), xs)
-# basis = RecombinedBSplineBasis(Bx,Derivative(0))
-# function plot_knots!(ax, ts; knot_offset = 0.05, kws...)
-#     ys = zero(ts)
-#     # Add offset to distinguish knots with multiplicity > 1
-#     for i in eachindex(ts)[(begin + 1):end]
-#         if ts[i] == ts[i - 1]
-#             ys[i] = ys[i - 1] + knot_offset
-#         end
-#     end
-#     scatter!(ax, ts, ys; marker = '×', markersize = 24, color = :gray, kws...)
-#     ax
-# end
 
-# function plot_basis!(ax, B; eval_args = (), kws...)
-#     cmap = cgrad(:tab20)
-#     N = length(B)
-#     ts = knots(B)
-#     hlines!(ax, 0; color = :gray)
-#     for (n, bi) in enumerate(B)
-#         color = cmap[(n - 1) / (N - 1)]
-#         i, j = extrema(support(bi))
-#         lines!(ax, ts[i]..ts[j], x -> bi(x, eval_args...); color, linewidth = 2.5)
-#     end
-#     plot_knots!(ax, ts; kws...)
-#     ax
-# end
 
-# fig = Figure()
-# ax = Axis(
-#     fig[1, 1];
-#     xlabel = rich("x"; font = :italic),
-#     ylabel = rich("b", subscript("i"), rich("(x)"; offset = (0.1, 0.0)); font = :italic),
-# )
-# plot_basis!(ax, basis)
-# fig
+error_table = zeros(3,4)
+end_time = t_span[2]
+for (i, t_step) in enumerate([0.1,0.2,0.4])
+    for (ki,k) in enumerate([3,4,5,6])
+        jld2_file = "Spline_int_logs2/SplineInt_h=$(t_step)_k=$(k)_t_knot_interval=0.1_x_knot_interval=0.1.jld2"
+        record_results = load(jld2_file)
+        ham_ls = record_results["sol_hamiltonian"]
+        analytic_ham = record_results["analytic_hamiltonian"]
+        relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
+        error_table[i,ki] = maximum(relative_ham_err[1:Int(floor(end_time / t_step))])
+        # error_table[i,ki] = record_results["maximum_relative_ham_err"]
+    end
+end
 
-# fig_original = Figure()
-# ax_original = Axis(
-#     fig_original[1, 1];
-#     xlabel = rich("x"; font = :italic),
-#     ylabel = rich("B", subscript("i"), rich("(x)"; offset = (0.1, 0.0)); font = :italic),
-# )
-# plot_basis!(ax_original,Bx)
-# fig_original
+fig = Figure()
+ax = Axis(fig[1,1], xlabel="h", ylabel="Maximum Relative Hamiltonian Error", yscale = log10)
+for (ki, k) in enumerate([3,4,5,6])
+    scatterlines!(ax, [0.1,0.2,0.4], error_table[:,ki], label="k=$(k)")
+end
+axislegend(ax)
 
-# using Random
-# rng = MersenneTwister(42)
-# Ndata = 20
-# xs = range(0, 1; length = Ndata) .+ 0.01 .* randn(rng, Ndata)
-# sort!(xs)  # make sure coordinates are sorted
-# xs[begin] = 0; xs[end] = 1;   # not strictly necessary; just to set the data limits
-# ys = sinpi.(xs) .+ 0.02 .* randn(rng, Ndata)
-
-# S = interpolate(xs, ys, BSplineOrder(k),Natural())
-# plot_basis!(ax_original,S.spline.basis)
-# fig_original
-
-# scatter(xs, ys; label = "Data", color = :black)
-# lines(0..1, S; label = "k = 4", color = Cycled(4 - 3))
+save("Spline_int_logs2/SplineInt_Error_Table.pdf", fig)
