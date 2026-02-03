@@ -1,3 +1,4 @@
+using BSplineKit
 using MultiSymplectic
 # using Infiltrator
 using Base
@@ -9,19 +10,19 @@ using JLD2
 #     f_abstol = 8eps(),
 # )
 
-k = parse(Int, ARGS[1])
-t_knot_interval = parse(Float64, ARGS[2])
-x_knot_interval = parse(Float64, ARGS[3])
-t_step = parse(Float64, ARGS[4])
+# k = parse(Int, ARGS[1])
+# t_knot_interval = parse(Float64, ARGS[2])
+# x_knot_interval = parse(Float64, ARGS[3])
+# t_step = parse(Float64, ARGS[4])
 
-# k = 4
-# t_knot_interval = 0.1
-# x_knot_interval = 0.05
+k = 4
+t_knot_interval = 0.1
+x_knot_interval = 0.05
 
-t_span = (0.,20.0)
+t_span = (0.,0.2)
 xspan = (0.0, 1.0)
 # for t_step in [0.1,0.2,0.4]
-    # t_step = 0.2
+    t_step = 0.2
     lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=xspan, xstep=0.01)
     wave_ham(u,v,w) = 1 / 2 * (c * v^2 + w^2)
     x_ls = xspan[1]:lpde.xstep:xspan[2]
@@ -33,8 +34,8 @@ xspan = (0.0, 1.0)
     #     try
             record_results = Dict()
 
-            spline_basis = BSpline2D(k,xspan = xspan, t_knot_interval = t_knot_interval,x_knot_interval = x_knot_interval)
-            spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = false)
+            spline_basis = Dirichlet_BSpline2D(k,xspan = xspan, t_knot_interval = t_knot_interval,x_knot_interval = x_knot_interval)
+            spline_int = Galerkin_Dirichlet_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = false)
             println("Start Spline Integrator")
             sol, internal_solutions = MultiSymplectic.integrate(lpde, spline_int)
             println("End Spline Integrator with h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")
@@ -71,33 +72,3 @@ xspan = (0.0, 1.0)
     # end
 # end
 
-
-# error_table = zeros(3,4)
-# end_time = t_span[2]
-# for (i, t_step) in enumerate([0.1,0.2,0.4])
-#     for (ki,k) in enumerate([3,4,5,6])
-#         try
-#             jld2_file = "Spline_int_logs2/SplineInt_h=$(t_step)_k=$(k)_t_knot_interval=0.1_x_knot_interval=0.1.jld2"
-#             record_results = load(jld2_file)
-#             ham_ls = record_results["sol_hamiltonian"]
-#             analytic_ham = record_results["analytic_hamiltonian"]
-#             relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
-#             error_table[i,ki] = maximum(relative_ham_err[1:Int(floor(end_time / t_step))])
-#             # error_table[i,ki] = record_results["maximum_relative_ham_err"]
-#         catch e
-#             println("File not found: h=$(t_step), k=$(k)")
-#         end
-#     end
-# end
-
-# fig = Figure()
-# ax = Axis(fig[1,1], xlabel="h", ylabel="Maximum Relative Hamiltonian Error", yscale = log10)
-# # for (ki, k) in enumerate([3,4,5,6])
-#     scatterlines!(ax, [0.1,0.2,0.4], error_table[:,1], label="k=3")
-#     scatterlines!(ax, [0.1,0.2,0.4], error_table[:,2], label="k=4")
-#     scatterlines!(ax, [0.2,0.4], error_table[2:end,3], label="k=5")
-#     scatter!(ax,0.4, error_table[end,4], label="k=6")
-# # end
-# axislegend(ax)
-# display(fig)
-# save("Spline_int_logs2/SplineInt_Error_Table.pdf", fig)

@@ -57,6 +57,9 @@ module MultiSymplectic
     include("basis/BSplineBasis.jl")
     export BSplineDirichlet, BSpline2D
 
+    include("basis/Dirichlet_BSplineBasis.jl")
+    export Dirichlet_BSpline2D
+
     include("basis/Network_PDE_Basis.jl")
     export NetworkPDEBasis
 
@@ -79,8 +82,12 @@ module MultiSymplectic
     include("integrator/TrialNN_PDE_int.jl")
     export TrialNN_PDE_int
 
+    # Spline integrators
     include("integrator/Galerkin_Bspline_int.jl")
     export Galerkin_Bspline_Integrator
+
+    include("integrator/Galerkin_Dirichlet_Bspline_int.jl")
+    export Galerkin_Dirichlet_Bspline_Integrator
     
     #problems
     include("problem/sine_Gordon.jl")

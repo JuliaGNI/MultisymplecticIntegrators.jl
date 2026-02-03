@@ -55,7 +55,7 @@ end
 
 function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator)
     integrate!(sol, int, 1, ntime(sol))
-    return sol
+    # return sol
 end
 
 function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator, n₁::Int, n₂::Int;kwargs...)
@@ -66,9 +66,12 @@ function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator, n₁::In
 
     # copy initial condition from solution to solutionstep and initialize
     solstep = solutionstep(int, sol[n₁-1])
+    internal_solutions = Vector{Vector{Float64}}(undef,n₂ - n₁ + 1)
+
     # loop over time steps
     for n in n₁:n₂
         sol[n] = integrate!(solstep, int)
+        internal_solutions[n] = deepcopy(cache(int).x)
 
         havenan = false
         for s in current(solstep)
@@ -82,7 +85,7 @@ function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator, n₁::In
 
     end
 
-    return sol
+    return sol,internal_solutions
 end
 
 function integrate!(solstep::SolutionStep, int::AbstractPDEIntegrator)
