@@ -185,18 +185,42 @@ function lagrangianPDE_derivatives(t,x,u,v,w)
     return (Dt, Dx, Du, Dv, Dw)
 end
 
-Lagrangian_multiplier(::Val{:BSplineDirichlet},Nbasis::Integer,k,a,b) = BSplineDirichlet(Nbasis,k,a,b)
-function Lagrangian_multiplier(::Val{:Lagrange},Nbasis,k::Integer,a,b) 
-    QGau = QuadratureRules.GaussLegendreQuadrature(Nbasis)
-    CompactBasisFunctions.Lagrange(a .+ (b - a) .* QGau.nodes)
-end
 
-function Lagrangian_multiplier(basis::Symbol, Nbasis::Int, order::Integer,a,b)
+"""
+Basis for Lagrangian multipliers at the boundary, for 1D.
+"""
+function Lagrangian_multiplier(basis::Symbol, num_interval::Int, order::Integer,a,b)
     if basis ∉ (:BSplineDirichlet, :Lagrange)
         error("Unsupported basis: $basis")
     end
-    Lagrangian_multiplier(Val(basis), Nbasis,order,a,b)
+    Lagrangian_multiplier(Val(basis), num_interval,order,a,b)
 end
+
+Lagrangian_multiplier(::Val{:BSplineDirichlet},num_interval::Integer,k,a,b) = BSplineDirichlet(num_interval,k,a,b)
+
+struct BSplineDirichlet 
+    k::Int # order
+
+    N_intervals::Int
+    t::AbstractVector # knots from BSplineKit
+    b #  basis functions 
+
+    Nbasis::Int # number of basis
+    function BSplineDirichlet(num_interval::Int,k::Int,a,b)
+        knot = a:(b - a)/(num_interval-1):b
+        B = BSplineBasis(BSplineOrder(k), knot)
+    
+        return new(k, num_interval,B.t, B, length(B))
+    end
+end
+
+Base.length(Basis::BSplineDirichlet) = Basis.Nbasis
+
+function Lagrangian_multiplier(::Val{:Lagrange},num_interval::Int,k::Integer,a,b) 
+    QGau = QuadratureRules.GaussLegendreQuadrature(num_interval+1)
+    CompactBasisFunctions.Lagrange(a .+ (b - a) .* QGau.nodes)
+end
+
 
 function initialize_bcs_ics!(sol,int::PDEIntegrator)
     local C = cache(int)

@@ -1,29 +1,3 @@
-"""
-Basis for Lagrangian multipliers at the boundary, for 1D.
-"""
-
-struct BSplineDirichlet 
-    k::Int # order
-    Nbasis::Int # number of basis
-    x::AbstractVector # vector to generate knots
-    t::AbstractVector # knots from BSplineKit, was optimized
-
-    b #  basis functions 
-    function BSplineDirichlet(Nbasis::Int,k,a,b)
-        QGau = QuadratureRules.GaussLegendreQuadrature(Nbasis)
-        x = a:(b - a)/(Nbasis-1):b
-        # x = a .+ (b-a) .* QGau.nodes
-        t = make_knots(x,BSplineOrder(k),nothing) # nothing is the bc,default option is Dirichlet
-        B = BSplineBasis(BSplineOrder(k), t;augment = Val(false))
-
-        @assert Nbasis == length(B) "Number of basis functions does not match Nbasis"
-        return new(k, Nbasis, x, t, B)
-    end
-end
-
-Base.length(Basis::BSplineDirichlet) = Basis.Nbasis
-
-
 # serve as the approximation function inside domain
 struct BSpline2D <: AbstractPDEBasis
     k::Int

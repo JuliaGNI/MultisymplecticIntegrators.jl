@@ -10,14 +10,16 @@ struct NN_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMeth
     grid_matrix # Quadrature grid points: [(t1,x1), (t1,x2), ]
     grid_weights # Quadrature weights
 
-    Nbasis_μ_t
+    t_num_interval::Int
     k_μ_t::Int # order
     μ₀_t::MVT
     μ₁_t::MVT
+    Nbasis_μ_t::Int
 
-    Nbasis_λ_x
+    x_num_interval::Int
     k_λ_x::Int # order 
     λ_x::LT
+    Nbasis_λ_x::Int
 
     mλ_x # λ_x evaluated at quadrature points
     mμ_t
@@ -29,35 +31,29 @@ struct NN_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMeth
     Nb
 
     show_status::Bool
-    function NN_PDE_Integrator(basis; RT::Int=6, RX::Int=8, xspan::Tuple=(0., 1.0),
+    function NN_PDE_Integrator(basis;RT_per_interval::Int = 4,RX_per_interval::Int = 4,
+        xspan::Tuple=(0., 1.0),
         nepochs=1000, initial_guess_method::IPMT=OGA2D(), Nw::Int=500, Nb::Int=500,
-        Nbasis_μ_t::Int=10, k_μ_t::Int=4, μ::Symbol=:BSplineDirichlet,
-        Nbasis_λ_x::Int=10, k_λ_x::Int=3, λ::Symbol=:BSplineDirichlet,
+        t_num_interval::Int=10, k_μ_t::Int=4, μ::Symbol=:BSplineDirichlet,
+        x_num_interval::Int=10, k_λ_x::Int=3, λ::Symbol=:BSplineDirichlet,
         show_status::Bool=false) where {IPMT,}
+        
+        t_quadrature = composite_quadrature(t_num_interval ,RT_per_interval)
+        x_quadrature = composite_quadrature(x_num_interval ,RX_per_interval)
 
-        if RT == 128
-            t_quadrature = GaussQuadrature128()
-        elseif RT == 64
-            t_quadrature = GaussQuadrature64()
-        else
-            t_quadrature = QuadratureRules.GaussLegendreQuadrature(RT)
-        end
+        RT = length(t_quadrature.nodes)
+        RX = length(x_quadrature.nodes)
 
-        if RX == 128
-            x_quadrature = GaussQuadrature128()
-        elseif RX == 64
-            x_quadrature = GaussQuadrature64()
-        else
-            x_quadrature = QuadratureRules.GaussLegendreQuadrature(RX)
-        end
-
-        dimensions = [RT, RX]
-        grid_matrix, grid_weights = construct_quadrature_grid(dimensions)
-
+        R_list = [RT_per_interval,RX_per_interval]  
+        grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
+        
         # Construct Lagrangian multipliers, defined on [0,1] and need to be scaled carefully when used
-        λ_x = Lagrangian_multiplier(λ, Nbasis_λ_x, k_λ_x, xspan[1], xspan[2])
-        μ₀_t = Lagrangian_multiplier(μ, Nbasis_μ_t, k_μ_t, 0.0, 1.0)
-        μ₁_t = Lagrangian_multiplier(μ, Nbasis_μ_t, k_μ_t, 0.0, 1.0)
+        λ_x = Lagrangian_multiplier(λ, x_num_interval, k_λ_x, xspan[1], xspan[2])
+        μ₀_t = Lagrangian_multiplier(μ, t_num_interval, k_μ_t, 0.0, 1.0)
+        μ₁_t = Lagrangian_multiplier(μ, t_num_interval, k_μ_t, 0.0, 1.0)
+
+        Nbasis_μ_t = length(μ₀_t.b)
+        Nbasis_λ_x = length(λ_x.b)
 
         mλ_x = zeros(Nbasis_λ_x, RX)
         mμ_t = zeros(Nbasis_μ_t, RT)
@@ -74,8 +70,8 @@ struct NN_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMeth
             t_quadrature, RT,
             x_quadrature, RX,
             grid_matrix, grid_weights,
-            Nbasis_μ_t, k_μ_t, μ₀_t, μ₁_t,
-            Nbasis_λ_x, k_λ_x, λ_x,
+            t_num_interval, k_μ_t, μ₀_t, μ₁_t,Nbasis_μ_t,
+            x_num_interval, k_λ_x, λ_x,Nbasis_λ_x, 
             mλ_x, mμ_t,
             nepochs, initial_guess_method,
             Nw, Nb,show_status)

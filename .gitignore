@@ -6,3 +6,4 @@ Project.toml
 Spline_int_logs/
 Spline_int_logs2/
 Spline_int_logs3/
+*.txt
