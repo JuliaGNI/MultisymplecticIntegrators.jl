@@ -110,9 +110,9 @@ struct Galerkin_Bspline_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
 
 
         # Construct Lagrangian multipliers, defined on [0,1] and need to be scaled carefully when used
-        # λ_x = Lagrangian_multiplier(λ,Nbasis_λ_x,k_λ_x,xspan[1],xspan[2])
-        # μ₀_t = Lagrangian_multiplier(μ,Nbasis_μ_t,k_μ_t,0.0,1.0)
-        # μ₁_t = Lagrangian_multiplier(μ,Nbasis_μ_t,k_μ_t,0.0,1.0)
+        λ_x = Lagrangian_multiplier(λ,Nbasis_λ_x,k_λ_x,xspan[1],xspan[2])
+        μ₀_t = Lagrangian_multiplier(μ,Nbasis_μ_t,k_μ_t,0.0,1.0)
+        μ₁_t = Lagrangian_multiplier(μ,Nbasis_μ_t,k_μ_t,0.0,1.0)
 
         # mλ_x = zeros(Nbasis_λ_x, RX)
         # for i in 1:Nbasis_λ_x

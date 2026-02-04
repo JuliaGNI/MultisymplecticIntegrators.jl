@@ -11,7 +11,6 @@ struct Galerkin_Dirichlet_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
     grid_weights # Quadrature weights
 
     Nbasis_λ_x
-    k_λ_x::Int # order 
 
     mλ_x # λ_x evaluated at quadrature points
 
@@ -35,7 +34,6 @@ struct Galerkin_Dirichlet_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
 
     show_status
     function Galerkin_Dirichlet_Bspline_Integrator(basis; RT_per_interval::Int = 4,RX_per_interval::Int = 4,xspan::Tuple = (0.,1.0), 
-        Nbasis_λ_x::Int = 10,k_λ_x::Int = 3,
         show_status = false)
 
         # The quadrature nodes in [0.0,1.0]
@@ -48,6 +46,7 @@ struct Galerkin_Dirichlet_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
         grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
         
         S = basis.S
+        @show S
         RT = length(t_quadrature.nodes)
         RX = length(x_quadrature.nodes)
         
@@ -111,8 +110,7 @@ struct Galerkin_Dirichlet_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
             t_quadrature, RT,
             x_quadrature, RX,
             grid_matrix, grid_weights,
-            # Nbasis_μ_t,k_μ_t,# μ₀_t, μ₁_t,
-            Nbasis_λ_x,k_λ_x,#λ_x, #λ₁_x,
+            Nbasis_λ_x,
             mλ_x,
             u_collocation_matrix, v_collocation_matrix, w_collocation_matrix,
             ut₀_basis_quad_values,ut₁_basis_quad_values,
@@ -128,7 +126,7 @@ end
 
 default_solver(::Galerkin_Dirichlet_Bspline_Integrator) = NewtonMethod()
 
-struct Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S,Nbasis_λ_x} <: PDEIntegratorCache{ST,D}
+struct Galerkin_Dirichlet_Bspline_IntegratorCache{ST,RT,RX,D,S,Nbasis_λ_x} <: PDEIntegratorCache{ST,D}
     """
     RT = number of quadrature points in time
     RX = number of quadrature points in space
@@ -183,7 +181,7 @@ struct Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S,Nbasis_λ_x} <: PDEIntegrat
     boundary_condition_x₁::Matrix{ST}
     flag_done_initial_guess::Vector{ST}
 
-    function Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S,Nbasis_λ_x}() where {ST,RT,RX,D,S,Nbasis_λ_x}
+    function Galerkin_Dirichlet_Bspline_IntegratorCache{ST,RT,RX,D,S,Nbasis_λ_x}() where {ST,RT,RX,D,S,Nbasis_λ_x}
         # x = zeros(ST, NP + 2 * D * RX + 2* D * DX * RT ) # TODO: how to deal with RX being a vector/
         x = zeros(ST,S + D * Nbasis_λ_x) # params, λ_x_coes,μ₀_t_coes,μ₁_t_coes
         # TODO:consider when DX is a vector
@@ -250,15 +248,15 @@ struct Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S,Nbasis_λ_x} <: PDEIntegrat
     end
 end
 
-nlsolution(cache::Galerkin_Bspline_IntegratorCache) = cache.x
+nlsolution(cache::Galerkin_Dirichlet_Bspline_IntegratorCache) = cache.x
 
 function Cache{ST}(problem::LPDEProblem, int::Galerkin_Dirichlet_Bspline_Integrator; kwargs...) where {ST}
-    Galerkin_Bspline_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.S,int.Nbasis_λ_x}(; kwargs...)
+    Galerkin_Dirichlet_Bspline_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.S,int.Nbasis_λ_x}(; kwargs...)
 end
 
 #{ST,RT,RX,D,NP}(NP) where {ST,RT,RX,D,NP}
-@inline CacheType(ST, problem::LPDEProblem, int::Galerkin_Dirichlet_Bspline_Integrator) = Galerkin_Bspline_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.S,int.Nbasis_λ_x}
-@inline function Base.getindex(c::Galerkin_Bspline_IntegratorCache, ST::DataType)
+@inline CacheType(ST, problem::LPDEProblem, int::Galerkin_Dirichlet_Bspline_Integrator) = Galerkin_Dirichlet_Bspline_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.S,int.Nbasis_λ_x}
+@inline function Base.getindex(c::Galerkin_Dirichlet_Bspline_IntegratorCache, ST::DataType)
     key = hash(Threads.threadid(), hash(ST))
     if haskey(c.caches, key)
         c.caches[key]
@@ -267,7 +265,7 @@ end
     end::CacheType(ST, c.problem, c.method)
 end
 
-copy_internal_variables!(C::Galerkin_Bspline_IntegratorCache,solstep::SolutionStep) = nothing
+copy_internal_variables!(C::Galerkin_Dirichlet_Bspline_IntegratorCache,solstep::SolutionStep) = nothing
 
 function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Dirichlet_Bspline_Integrator})
     local exact_u = int.problem.exact_u

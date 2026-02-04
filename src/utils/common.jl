@@ -53,7 +53,7 @@ Generate composite Gauss-Legendre quadrature nodes and weights over multiple int
 - `k`: order of QuadratureRules
 return: (all_nodes, all_weights)
 """
-function composite_quadrature(num_intervals, k::Int) where T<:Real
+function composite_quadrature(num_intervals, k::Int)
     if k == 128
         QGau = GaussQuadrature128()
     elseif k == 64
@@ -438,9 +438,14 @@ function eval_spline2D(coefs::AbstractMatrix, (Bt, Bx), (t, x))
     kt = BSplineKit.order(Bt)
     kx = BSplineKit.order(Bx)
     val = zero(eltype(coefs))  # spline evaluated at (t, x)
-    for δx ∈ 1:kx, δt ∈ 1:kt
-        coef = coefs[it - δt + 1, ix - δx + 1]
-        val += coef * bt[δt] * bx[δx]
+    Nt, Nx = length(Bt), length(Bx)
+    for δx in eachindex(bx), δt in eachindex(bt)
+        ii = it - δt + 1
+        jj = ix - δx + 1
+        if ii >= 1 && ii <= Nt && jj >= 1 && jj <= Nx
+            coef = coefs[it - δt + 1, ix - δx + 1]
+            val += coef * bt[δt] * bx[δx]
+        end
     end
     val
 end
@@ -454,9 +459,14 @@ function eval_spline2D_dt(coefs::AbstractMatrix, (Bt, Bx), (t, x))
     kt = BSplineKit.order(Bt)
     kx = BSplineKit.order(Bx)
     val = zero(eltype(coefs))  # spline evaluated at (t, x)
-    for δx ∈ 1:kx, δt ∈ 1:kt
-        coef = coefs[it - δt + 1, ix - δx + 1]
-        val += coef * btd[δt] * bx[δx]
+    Nt, Nx = length(Bt), length(Bx)
+    for δx in eachindex(bx), δt in eachindex(btd)
+        ii = it - δt + 1
+        jj = ix - δx + 1
+        if ii >= 1 && ii <= Nt && jj >= 1 && jj <= Nx
+            coef = coefs[it - δt + 1, ix - δx + 1]
+            val += coef * btd[δt] * bx[δx]
+        end
     end
     val
 end
@@ -470,9 +480,14 @@ function eval_spline2D_dx(coefs::AbstractMatrix, (Bt, Bx), (t, x))
     kt = BSplineKit.order(Bt)
     kx = BSplineKit.order(Bx)
     val = zero(eltype(coefs))  # spline evaluated at (t, x)
-    for δx ∈ 1:kx, δt ∈ 1:kt
-        coef = coefs[it - δt + 1, ix - δx + 1]
-        val += coef * bt[δt] * bxd[δx]
+    Nt, Nx = length(Bt), length(Bx)
+    for δx in eachindex(bxd), δt in eachindex(bt)
+        ii = it - δt + 1
+        jj = ix_d - δx + 1
+        if ii >= 1 && ii <= Nt && jj >= 1 && jj <= Nx
+            coef = coefs[ii, jj]
+            val += coef * bt[δt] * bxd[δx]
+        end
     end
     val
 end
@@ -530,11 +545,14 @@ function spline2D_coeff_derivatives((Bt, Bx), (t, x))
     kt = BSplineKit.order(Bt)
     kx = BSplineKit.order(Bx)
 
-    dSdc = zeros(length(Bt), length(Bx))
-    @inbounds for δx in 1:kx, δt in 1:kt
-        ii = it - δt + 1
-        jj = ix - δx + 1
-        dSdc[ii, jj] = bt[δt] * bx[δx]
+    Nt, Nx = length(Bt), length(Bx)
+    dSdc = zeros(Nt, Nx)
+    for δx in eachindex(bx), δt in eachindex(bt)
+            ii = it - δt + 1
+            jj = ix - δx + 1
+            if ii >= 1 && ii <= Nt && jj >= 1 && jj <= Nx
+            dSdc[ii, jj] = bt[δt] * bx[δx]
+        end
     end
     return reshape(dSdc, :, )
 end
@@ -549,11 +567,14 @@ function spline2D_coeff_derivatives_time((Bt, Bx), (t, x))
     kt = BSplineKit.order(Bt)
     kx = BSplineKit.order(Bx)
 
-    dVdc = zeros(length(Bt), length(Bx))
-    @inbounds for δx in 1:kx, δt in 1:kt
+    Nt, Nx = length(Bt), length(Bx)
+    dVdc = zeros(Nt, Nx)
+    for δx in eachindex(bx), δt in eachindex(btd)
         ii = it - δt + 1
         jj = ix - δx + 1
-        dVdc[ii, jj] = btd[δt] * bx[δx]    # N'_i(t) * M_j(x)
+        if ii >= 1 && ii <= Nt && jj >= 1 && jj <= Nx
+            dVdc[ii, jj] = btd[δt] * bx[δx]    # N'_i(t) * M_j(x)
+        end
     end
     return reshape(dVdc, :, )
 end
@@ -565,13 +586,16 @@ function spline2D_coeff_derivatives_space((Bt, Bx), (t, x))
     ix_d, bxd = Bx(x, BSplineKit.Derivative(1))  # M'(x)
 
     kt = BSplineKit.order(Bt)
-    kx = BSplineKit.order(Bx)
+    kx = BSplineKit.order(Bx)   
 
-    dWdc = zeros(length(Bt), length(Bx))
-    @inbounds for δx in 1:kx, δt in 1:kt
+    Nt, Nx = length(Bt), length(Bx)
+    dWdc = zeros(Nt, Nx)
+    for δx in eachindex(bxd), δt in eachindex(bt)
         ii = it - δt + 1
-        jj = ix - δx + 1
-        dWdc[ii, jj] = bt[δt] * bxd[δx]    # N_i(t) * M'_j(x)
+        jj = ix_d - δx + 1
+        if ii >= 1 && ii <= Nt && jj >= 1 && jj <= Nx
+            dWdc[ii, jj] = bt[δt] * bxd[δx]
+        end
     end
     return reshape(dWdc, :, )
 end
