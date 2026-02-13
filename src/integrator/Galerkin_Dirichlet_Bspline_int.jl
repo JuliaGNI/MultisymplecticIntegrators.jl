@@ -287,8 +287,10 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Dirichlet_Bspl
     local RT = int.method.RT
     local RX = int.method.RX
     local show_status = int.method.show_status
+    local tn = sol.t - timestep(int)
 
-    udata = exact_u.(h .* t_collocation_points, x_collocation_points') # fdata[i,j] = exact_u(h .* ts[i], xs[j])
+    udata = exact_u.(tn .+ h .* t_collocation_points, x_collocation_points') # fdata[i,j] = exact_u(h .* ts[i], xs[j])
+    
     
     # 2D B-spline coefficients (output)
     coefs = similar(udata)

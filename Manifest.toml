@@ -2,7 +2,7 @@
 
 julia_version = "1.12.4"
 manifest_format = "2.0"
-project_hash = "b8331a9261ac6a57d94869acdc6850864323120f"
+project_hash = "61108cb0279289050fd99699b50c434a896d4fce"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "f7304359109c768cf32dc5fa2d371565bb63b68a"
@@ -865,7 +865,7 @@ version = "0.20.3"
 
 [[deps.GeometricIntegratorsBase]]
 deps = ["GeometricBase", "GeometricEquations", "GeometricSolutions", "LinearAlgebra", "OffsetArrays", "SimpleSolvers", "Unicode"]
-git-tree-sha1 = "ff81206f8285ce21d1c9a37aba7a3c26be01034c"
+path = "/home/IPP-AD/lize/.julia/dev/GeometricIntegratorsBase"
 uuid = "71212ab4-08a2-48eb-a02b-4cbad0e9c44a"
 version = "0.1.11"
 
@@ -1548,7 +1548,7 @@ uuid = "46d2c3a1-f734-5fdb-9937-b9b9aeba4221"
 version = "0.2.4"
 
 [[deps.MultiSymplectic]]
-deps = ["AbstractNeuralNetworks", "BSplineKit", "BenchmarkTools", "CairoMakie", "CompactBasisFunctions", "ForwardDiff", "GeometricBase", "GeometricEquations", "GeometricIntegratorsBase", "GeometricMachineLearning", "GeometricSolutions", "Infiltrator", "IterTools", "LinearAlgebra", "Parameters", "Plots", "QuadratureRules", "Random", "SimpleSolvers", "Statistics", "SymbolicNeuralNetworks", "Symbolics", "Unitful", "Zygote"]
+deps = ["AbstractNeuralNetworks", "BSplineKit", "BenchmarkTools", "CairoMakie", "CompactBasisFunctions", "ForwardDiff", "GeometricBase", "GeometricEquations", "GeometricIntegratorsBase", "GeometricMachineLearning", "GeometricSolutions", "Infiltrator", "IterTools", "JLD2", "LinearAlgebra", "Parameters", "Plots", "QuadratureRules", "Random", "SimpleSolvers", "Statistics", "SymbolicNeuralNetworks", "Symbolics", "Unitful", "Zygote"]
 path = "."
 uuid = "287958db-332d-4045-951c-e8138db0f134"
 version = "0.1.0"
@@ -2158,10 +2158,10 @@ uuid = "777ac1f9-54b0-4bf8-805c-2214025038e7"
 version = "1.2.0"
 
 [[deps.SimpleSolvers]]
-deps = ["Distances", "ForwardDiff", "GeometricBase", "LinearAlgebra", "Printf", "StaticArrays", "Test"]
-path = "/home/IPP-AD/lize/SimpleSolvers.jl/"
+deps = ["Distances", "ForwardDiff", "GeometricBase", "LinearAlgebra", "NaNMath", "Printf", "StaticArrays", "Test"]
+path = "/home/IPP-AD/lize/SimpleSolvers.jl"
 uuid = "36b790f5-6434-4fbe-b711-1f64a1e2f6a2"
-version = "0.7.5"
+version = "0.7.7"
 
 [[deps.SimpleTraits]]
 deps = ["InteractiveUtils", "MacroTools"]

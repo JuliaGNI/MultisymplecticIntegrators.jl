@@ -15,14 +15,14 @@ using JLD2
 # x_knot_interval = parse(Float64, ARGS[3])
 # t_step = parse(Float64, ARGS[4])
 
-k = 4
+k = 6
 t_knot_interval = 0.1
 x_knot_interval = 0.1
 
-t_span = (0.,10.0)
+t_span = (0.,4.0)
 xspan = (0.0, 1.0)
 # for t_step in [0.1,0.2,0.4]
-    t_step = 0.2
+    t_step = 0.4
     lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=xspan, xstep=0.01)
     wave_ham(u,v,w) = 1 / 2 * (c * v^2 + w^2)
     x_ls = xspan[1]:lpde.xstep:xspan[2]

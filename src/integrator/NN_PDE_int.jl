@@ -262,6 +262,8 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator{MVT
     local optim_mode = int.method.basis.optim_mode
     local NP = int.method.basis.NP
     local show_status = int.method.show_status
+    local tn = sol.t - timestep(int)
+
     # Equidistant Quadrature / sampling grid
     nx = 40
     nt = 20
@@ -310,7 +312,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator{MVT
     for i in 1:N
         t = quad_nodes[1, i]
         x = quad_nodes[2, i]
-        desired[i] = exact_u(h * t, x) - u([t, x], C.sol_params)[1]
+        desired[i] = exact_u(tn+h * t, x) - u([t, x], C.sol_params)[1]
     end
 
     # Run OGA (orthogonal matching) on Φ_raw to approximate `desired`

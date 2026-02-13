@@ -89,6 +89,9 @@ module MultiSymplectic
     include("integrator/Galerkin_Dirichlet_Bspline_int.jl")
     export Galerkin_Dirichlet_Bspline_Integrator
     
+    include("integrator/Galerkin_Full_Restriction_int.jl")
+    export Galerkin_Full_Restriction_Bspline_Integrator
+
     #problems
     include("problem/sine_Gordon.jl")
     export SineGordon

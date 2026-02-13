@@ -314,6 +314,8 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     local a,b = int.problem.xspan[1],int.problem.xspan[2]
     local exact_u = int.problem.exact_u
     local x_domain = b - a
+    local tn = sol.t - timestep(int)
+
     # local quad_nodes = int.method.grid_matrix
     # local quad_weights = int.method.grid_weights
 
@@ -374,7 +376,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
     desired = zeros(N)
     for i in 1:N
         t = quad_nodes[1,i]; x = quad_nodes[2,i]
-        desired[i] = exact_u(h * t, x) - u_trial(t, x, coeffs_full,Wsel,Bsel,int,sol)
+        desired[i] = exact_u(tn+h * t, x) - u_trial(t, x, coeffs_full,Wsel,Bsel,int,sol)
     end
     @show desired
 

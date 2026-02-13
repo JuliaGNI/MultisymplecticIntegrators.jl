@@ -1,0 +1,47 @@
+using BSplineKit
+using MultiSymplectic
+# using Infiltrator
+using Base
+using GeometricIntegratorsBase
+using Plots
+using JLD2
+
+# GeometricIntegratorsBase.default_options(::Galerkin_Full_Restriction_Bspline_Integrator) = (
+#     x_suctol = 8eps(),
+#     f_abstol = 8eps(),
+#     max_iterations = 3,
+# )
+
+k = 6
+t_knot_interval = 0.1
+x_knot_interval = 0.1
+
+t_span = (0.,4.0)
+xspan = (0.0, 1.0)
+# for t_step in [0.1,0.2,0.4]
+t_step = 0.4
+lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=xspan, xstep=0.01)
+wave_ham(u,v,w) = 1 / 2 * (c * v^2 + w^2)
+x_ls = xspan[1]:lpde.xstep:xspan[2]
+c = lpde.params.c
+
+spline_basis = Dirichlet_BSpline2D(k,xspan = xspan, t_knot_interval = t_knot_interval,x_knot_interval = x_knot_interval)
+spline_int = Galerkin_Full_Restriction_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = false)
+println("Start Spline Integrator")
+sol, internal_solutions = MultiSymplectic.integrate(lpde, spline_int)
+
+ham_ls = zeros(length(t_span[1]:t_step:t_span[2]))
+analytic_ham = zeros(length(t_span[1]:t_step:t_span[2]))
+for (i, t) in enumerate(t_span[1]:t_step:t_span[2])
+    current_domain_ham = [wave_ham(ui,vi,wi) for (ui,vi,wi) in zip(sol.u[i-1],sol.v[i-1],sol.w[i-1])]
+    ham_ls[i] = sum(current_domain_ham)
+
+    analytic_u_values = lpde.exact_u.(t, x_ls)
+    analytic_v_values = lpde.exact_v.(t, x_ls)
+    analytic_w_values = lpde.exact_w.(t, x_ls)
+    current_ham = [wave_ham(ui,vi,wi) for (ui,vi,wi) in zip(analytic_u_values,analytic_v_values,analytic_w_values)]
+    analytic_ham[i] = sum(current_ham)
+end
+relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
+plot(t_span[1]:t_step:t_span[2], relative_ham_err, xlabel="Time", ylabel="Relative Hamiltonian Error")
+savefig("Full_Restriction_SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_077.pdf")

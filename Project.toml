@@ -34,4 +34,5 @@ GeometricMachineLearning = {rev = "main", url = "https://github.com/JuliaGNI/Geo
 
 [compat]
 CairoMakie = "0.13.10"
+GeometricIntegratorsBase = "0.1.10"
 JLD2 = "0.6.3"
