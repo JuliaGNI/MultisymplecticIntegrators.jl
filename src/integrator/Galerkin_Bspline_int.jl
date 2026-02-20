@@ -11,12 +11,12 @@ struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
     grid_weights # Quadrature weights
     
     Nbasis_μ_t
-    k_μ_t::Int # order
+    # k_μ_t::Int # order 
     # μ₀_t::MVT
     # μ₁_t::MVT
 
     Nbasis_λ_x
-    k_λ_x::Int # order 
+    # k_λ_x::Int # order 
     # λ_x::LT
 
     mλ_x # λ_x evaluated at quadrature points
@@ -139,8 +139,8 @@ struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
             t_quadrature, RT,
             x_quadrature, RX,
             grid_matrix, grid_weights,
-            Nbasis_μ_t,k_μ_t,# μ₀_t, μ₁_t,
-            Nbasis_λ_x,k_λ_x,#λ_x, λ₁_x,
+            Nbasis_μ_t,#k_μ_t, μ₀_t, μ₁_t,
+            Nbasis_λ_x,#k_λ_x,λ_x, λ₁_x,
             mλ_x, mμ_t,
             u_collocation_matrix, v_collocation_matrix, w_collocation_matrix,
             ut₀_basis_quad_values,ut₁_basis_quad_values,

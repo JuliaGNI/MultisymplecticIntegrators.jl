@@ -24,11 +24,13 @@ run_configuration() {
 }
 
 # Loop through the activations
-for internal_k in {3,4,5,6}; do # ,
+for internal_k in {4,5,6}; do # ,
     for t_knot_interval in {0.1,}; do #  
         for x_knot_interval in {0.1,0.05}; do # 
             for tstep in {0.1,0.2,0.4}; do
-                run_configuration $internal_k $t_knot_interval $x_knot_interval $tstep
+                # for reg_factor in {0.0,1e-3}; do
+                run_configuration $internal_k $t_knot_interval $x_knot_interval $tstep 
+                # done
             done
         done
     done
