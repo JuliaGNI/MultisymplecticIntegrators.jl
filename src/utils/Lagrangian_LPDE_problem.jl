@@ -1,10 +1,11 @@
 struct LPDE{invType <: OptionalInvariants,
     parType <: OptionalParameters,
-    perType <: OptionalPeriodicity} <: GeometricEquation{invType,parType,perType} end
+    perType <: OptionalPeriodicity} <: GeometricEquation{invType,parType,perType} 
+end
 
-# const LPDEProblem = EquationProblem{LPDE} ? 
+# const LPDEProblem = EquationProblem{LPDE}
 
-struct LPDEProblem{superType<:GeometricEquation,} <: GeometricProblem{superType}
+struct LPDEProblem{superType<:GeometricEquation,dType<:Number,tType<:Real} <: GeometricProblem{superType, dType, tType}
     lagrangian_system
     D::Int
     ics_function::Function
@@ -12,7 +13,7 @@ struct LPDEProblem{superType<:GeometricEquation,} <: GeometricProblem{superType}
     
     ics::NamedTuple
 
-    timespan::Tuple
+    timespan::Tuple{tType, tType}
     timestep
 
     xspan::Tuple{Float64, Float64}
@@ -27,8 +28,10 @@ struct LPDEProblem{superType<:GeometricEquation,} <: GeometricProblem{superType}
     least_squares_assemble
     function LPDEProblem(lag_sys,ics_function,bcs_function,ics_values,tspan, tstep, xspan, xstep, params,exact_u,exact_v,exact_w,least_squares_assemble = nothing;internal = nothing)
         superType = LPDE
+        tType = eltype(tspan)
+        dType = eltype(ics_values.u)
         # ics_values = merge((t = tspan[begin],), ics_values)
-        new{superType, }(
+        new{superType,dType,tType}(#
             lag_sys,
             lag_sys.D,
             ics_function,

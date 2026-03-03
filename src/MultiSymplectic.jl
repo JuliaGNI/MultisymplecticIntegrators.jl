@@ -8,7 +8,7 @@ module MultiSymplectic
     import GeometricIntegratorsBase: _state, _vectorfield, compute_vectorfields!,_extrapolate!,internal_variables,nlsolution
     import GeometricBase: datatype,timetype,ntime
     import GeometricBase: initialtime, finaltime, timespan, timestep,periodicity, NullPeriodicity
-    import GeometricEquations:GeometricProblem,initial_conditions
+    import GeometricEquations:initial_conditions,GeometricProblem
     using GeometricSolutions:GeometricSolution
 
     using Symbolics
