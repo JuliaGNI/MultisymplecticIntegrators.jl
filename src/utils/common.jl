@@ -248,7 +248,6 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator)
             C.ics_ut₀_quad_values[d,:] = internal(sol).ut₁_quad_values[d,:]
             C.ics_vt₀_quad_values[d,:] = internal(sol).vt₁_quad_values[d,:]
             C.ics_wt₀_quad_values[d,:] = internal(sol).wt₁_quad_values[d,:]
-            @show C.ics_wt₀_quad_values
         end
 
         for i in 1:RT

@@ -16,11 +16,11 @@ GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator) = (
     x_suctol = 2eps(),
     f_abstol = 2eps(),
     regularization_factor = regularization_factor,
-    max_iterations = 100,
+    max_iterations = 10,
 )
 
 # k = 4
-# t_knot_interval = 0.1
+# t_knot_interval = 0.5
 # x_knot_interval = 0.1
 # t_step = 0.2
 
@@ -58,7 +58,7 @@ xspan = (0.0, 1.0)
             end
             relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
             plot(t_span[1]:t_step:t_span[2], relative_ham_err, xlabel="Time", ylabel="Relative Hamiltonian Error")
-            savefig("Spline_int_logs4_077/SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor).pdf")
+            savefig("Spline_int_logs5_078/SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor).pdf")
             
             record_results["maximum_relative_ham_err"] = maximum(relative_ham_err)
             record_results["sol_u"] = sol.u
@@ -66,7 +66,7 @@ xspan = (0.0, 1.0)
             record_results["sol_w"] = sol.w
             record_results["sol_hamiltonian"] = ham_ls
             record_results["analytic_hamiltonian"] = analytic_ham
-            save("Spline_int_logs4_077/SplineInt_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_077.jld2", record_results)
+            save("Spline_int_logs5_078/SplineInt_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_077.jld2", record_results)
             println("results saved: h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")
     #     catch e
     #         println("Error occurred for h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")

@@ -307,7 +307,6 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator{MVT
     Bsel = zeros(S)
 
     # Build the desired internal PNN output on all quadrature nodes:
-    # desired = target + T1NN - T2NN - C1 + C2  (evaluated with current PNN.params)
     desired = zeros(N)
     for i in 1:N
         t = quad_nodes[1, i]
