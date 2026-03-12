@@ -20,12 +20,12 @@ run_configuration() {
     echo "Running Julia script with internal_k=$internal_k, t_knot_interval=$t_knot_interval, x_knot_interval=$x_knot_interval, tstep=$tstep" | tee -a parallel_run.log
 
     # Run the Julia script in the background
-    julia --project=. tests/test_Spline_int.jl $internal_k $t_knot_interval $x_knot_interval $tstep >> parallel_run.log 2>&1 &
+    julia --project=. tests/test_constraint_spline.jl $internal_k $t_knot_interval $x_knot_interval $tstep >> parallel_run.log 2>&1 &
 }
 
 # Loop through the activations
 for internal_k in {4,5,6}; do # ,
-    for t_knot_interval in {0.1,}; do #  
+    for t_knot_interval in {0.5,}; do #  
         for x_knot_interval in {0.1,0.05}; do # 
             for tstep in {0.1,0.2,0.4}; do
                 # for reg_factor in {0.0,1e-3}; do

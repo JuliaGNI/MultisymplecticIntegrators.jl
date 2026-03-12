@@ -13,6 +13,7 @@ module Wave
     using Symbolics
     using MultiSymplectic
     using Infiltrator
+    using JLD2
 
     const D = 1
     const DX = 1
@@ -145,7 +146,7 @@ module Wave
         local RT = int.method.RT
         local RX = int.method.RX
         local NP = int.method.basis.NP
-        local u_func = int.method.basis.u
+        local u_basis = int.method.basis.u_basis
         local show_status = int.method.show_status
         local h = int.problem.timestep
         local tn = sol.t - h
@@ -157,10 +158,9 @@ module Wave
 
         utt_basis_quad_values = zeros(RT*RX, NP);
         uxx_basis_quad_values = zeros(RT*RX, NP);
-
         for rt in 1:RT
             for rx in 1:RX
-                    hess = vector_hessian(u_func,[t_quad_nodes[rt], xspan[1] + x_domain * x_quad_nodes[rx]])
+                    hess = vector_hessian(u_basis,[t_quad_nodes[rt], xspan[1] + x_domain * x_quad_nodes[rx]])
                     utt_basis_quad_values[(rt-1)*RX + rx, :] = hess[:,1,1]
                     uxx_basis_quad_values[(rt-1)*RX + rx, :] = hess[:,2,2]
             end
@@ -189,7 +189,14 @@ module Wave
                 end
             end
             @show maximum(abs.(elm_pred - truth))
-            @infiltrate
+            # u_func.params[keys(u_func.params)[end]].W[:] = C.x[1:NP]
+
+            record_results = Dict()
+            record_results["max_error"] = maximum(abs.(elm_pred - truth))
+            record_results["u_basis_params"] = u_basis.params
+            record_results["x"] = C.x[1:NP]
+            JLD2.save("LS_initial_guess_results.jld2", record_results)
+
         end
     end
 

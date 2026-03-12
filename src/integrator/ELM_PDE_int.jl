@@ -1,3 +1,4 @@
+using JLD2
 struct ELM_PDE_int{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PDEMethod
     basis::BT
 
@@ -28,33 +29,25 @@ struct ELM_PDE_int{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <:
     GD_lr::Float64
 
     show_status::Bool
-    function ELM_PDE_int(basis; RT::Int=6, RX::Int=8,
+    function ELM_PDE_int(basis; RT_per_interval::Int = 4,RX_per_interval::Int = 4,
         xspan::Tuple = (0.,1.0), 
         Nbasis_μ_t::Int = 10,k_μ_t::Int = 4,μ::Symbol = :BSplineDirichlet,
         Nbasis_λ_x::Int = 10,k_λ_x::Int = 3,λ::Symbol = :BSplineDirichlet,
-        nepochs::Int = 100,GD_lr::Float64 = 0.0001,
+        nepochs::Int = 100,GD_lr::Float64 = 1e-5,
         initial_guess_method::IPMT = LSGD(), # ELM()
         show_status = false) where {IPMT,}
 
-        if RT == 128
-            t_quadrature = GaussQuadrature128()
-        elseif RT == 64
-            t_quadrature = GaussQuadrature64()
-        else
-            t_quadrature = QuadratureRules.GaussLegendreQuadrature(RT)
-        end
+        t_num_interval = 8
+        x_num_interval = 8
 
-        if RX == 128
-            x_quadrature = GaussQuadrature128()
-        elseif RX == 64
-            x_quadrature = GaussQuadrature64()
-        else
-            x_quadrature = QuadratureRules.GaussLegendreQuadrature(RX)
-        end
+        t_quadrature = composite_quadrature(t_num_interval ,RT_per_interval)
+        x_quadrature = composite_quadrature(x_num_interval ,RX_per_interval)
 
-        dimensions = [RT, RX]
-        grid_matrix, grid_weights = construct_quadrature_grid(dimensions)
-
+        R_list = [RT_per_interval,RX_per_interval]  
+        grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
+        
+        RT = length(t_quadrature.nodes)
+        RX = length(x_quadrature.nodes)
 
         # Construct Lagrangian multipliers, defined on [0,1] and need to be scaled carefully when used
         λ_x = Lagrangian_multiplier(λ,Nbasis_λ_x,k_λ_x,xspan[1],xspan[2])
@@ -390,22 +383,32 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int{MVT,LT,BT
 
         Φ = AbstractNeuralNetworks.Chain(PNN.model.layers[1:end-1]...)(network_inputs, tem_ps)
         PNN.params[keys(PNN.params)[end]].W[:] = (Φ' \ labels')'
+    
+        ls_err[ep] = lsgd_loss(network_inputs, labels, PNN, PNN.params)
+        print("\n loss after least square: $(ls_err[ep]) by $ep epochs")
 
-        if show_status
-            ls_err[ep] = lsgd_loss(network_inputs, labels, PNN, PNN.params)
-            print("\n loss after least square: $(ls_err[ep]) by $ep epochs")
+        NN_output = PNN(network_inputs, PNN.params)
+        ls_max_err[ep] = maximum(abs.(labels .- NN_output))
 
-            NN_output = PNN(network_inputs, PNN.params)
-            ls_max_err[ep] = maximum(abs.(labels .- NN_output))
+        if ep == nepochs && show_status
             println("max error :",ls_max_err[ep])
+            record_results = Dict()
+            record_results["max_error"] = gd_max_err
+            record_results["gd_err"] = gd_err
+            record_results["ls_max_error"] = ls_max_err
+            record_results["ls_err"] = ls_err
+            record_results["PNN_params"] = PNN.params
+            JLD2.save("LSGD_initial_guess_results.jld2", record_results)
+            print("Results saved!!!")
+            @show PNN.params[keys(PNN.params)[end]].W[:]
         end
 
-        if ls_max_err[ep] <1e-7
-            print("\n final max error : $(ls_max_err[ep]) by $ep epochs")
-            break
-        elseif ep == nepochs
-            print("\n final loss: $err by $ep epochs")
-        end
+        # if ls_max_err[ep] <1e-7
+        #     print("\n final max error : $(ls_max_err[ep]) by $ep epochs")
+        #     break
+        # elseif ep == nepochs
+        #     print("\n final loss: $err by $ep epochs")
+        # end
     end
 
     # if show_status

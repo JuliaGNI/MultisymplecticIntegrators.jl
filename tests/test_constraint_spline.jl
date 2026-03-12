@@ -5,24 +5,28 @@ using Base
 using GeometricIntegratorsBase
 using Plots
 using JLD2
-# GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator) = (
-#     x_suctol = 8eps(),
-#     f_abstol = 8eps(),
-# )
 
-# k = parse(Int, ARGS[1])
-# t_knot_interval = parse(Float64, ARGS[2])
-# x_knot_interval = parse(Float64, ARGS[3])
-# t_step = parse(Float64, ARGS[4])
+k = parse(Int, ARGS[1])
+t_knot_interval = parse(Float64, ARGS[2])
+x_knot_interval = parse(Float64, ARGS[3])
+t_step = parse(Float64, ARGS[4])
+regularization_factor = 0.0
 
-k = 6
-t_knot_interval = 0.1
-x_knot_interval = 0.1
+GeometricIntegratorsBase.default_options(::Galerkin_Dirichlet_Bspline_Integrator) = (
+    x_suctol = 2eps(),
+    f_abstol = 2eps(),
+    regularization_factor = regularization_factor,
+    max_iterations = 10,
+)
 
-t_span = (0.,4.0)
+# k = 6
+# t_knot_interval = 0.1
+# x_knot_interval = 0.1
+
+t_span = (0.,10.0)
 xspan = (0.0, 1.0)
 # for t_step in [0.1,0.2,0.4]
-    t_step = 0.4
+    # t_step = 0.4
     lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=xspan, xstep=0.01)
     wave_ham(u,v,w) = 1 / 2 * (c * v^2 + w^2)
     x_ls = xspan[1]:lpde.xstep:xspan[2]
@@ -32,7 +36,6 @@ xspan = (0.0, 1.0)
     # open(log_file, "w") do io
     #     redirect_stdio(stdout=log_file, stderr=log_file) do
     #     try
-            record_results = Dict()
 
             spline_basis = Dirichlet_BSpline2D(k,xspan = xspan, t_knot_interval = t_knot_interval,x_knot_interval = x_knot_interval)
             spline_int = Galerkin_Dirichlet_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = false)
@@ -54,15 +57,16 @@ xspan = (0.0, 1.0)
             end
             relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
             plot(t_span[1]:t_step:t_span[2], relative_ham_err, xlabel="Time", ylabel="Relative Hamiltonian Error")
-            savefig("Constraint_SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_075.pdf")
-            
+            savefig("Half_Spline_int_logs_078/Constraint_SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_077.pdf")
+                        
+            record_results = Dict()
             record_results["maximum_relative_ham_err"] = maximum(relative_ham_err)
             record_results["sol_u"] = sol.u
             record_results["sol_v"] = sol.v
             record_results["sol_w"] = sol.w
             record_results["sol_hamiltonian"] = ham_ls
             record_results["analytic_hamiltonian"] = analytic_ham
-            save("Constraint_SplineInt_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_075.jld2", record_results)
+            save("Half_Spline_int_logs_078/Constraint_SplineInt_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_077.jld2", record_results)
             println("results saved: h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")
     #     catch e
     #         println("Error occurred for h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")
