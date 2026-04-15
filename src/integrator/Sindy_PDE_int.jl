@@ -24,28 +24,20 @@ struct Sindy_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
     mμ_t
 
     show_status::Bool
-    function Sindy_PDE_Integrator(basis,init_w::Vector;RT::Int = 6,RX::Int = 8,xspan::Tuple = (0.,1.0), 
+    function Sindy_PDE_Integrator(basis,init_w::Vector;RT_per_interval::Int = 4,RX_per_interval::Int = 4,xspan::Tuple = (0.,1.0), 
         Nbasis_μ_t::Int = 10,k_μ_t::Int = 4,μ::Symbol = :BSplineDirichlet,
         Nbasis_λ_x::Int = 10,k_λ_x::Int = 4,λ::Symbol = :BSplineDirichlet,
+        t_num_interval::Int = 1, x_num_interval::Int = 5,
         show_status = false)
-        if RT ==128 
-            t_quadrature = GaussQuadrature128()
-        elseif RT == 64
-            t_quadrature = GaussQuadrature64()
-        else
-            t_quadrature = QuadratureRules.GaussLegendreQuadrature(RT)
-        end
 
-        if RX == 128
-            x_quadrature = GaussQuadrature128()
-        elseif RX == 64
-            x_quadrature = GaussQuadrature64()
-        else
-            x_quadrature = QuadratureRules.GaussLegendreQuadrature(RX)
-        end
+        t_quadrature = composite_quadrature(t_num_interval ,RT_per_interval)
+        x_quadrature = composite_quadrature(x_num_interval ,RX_per_interval)
 
-        dimensions = [RT,RX]  
-        grid_matrix, grid_weights = construct_quadrature_grid(dimensions)
+        RT = length(t_quadrature.nodes)
+        RX = length(x_quadrature.nodes)
+        
+        R_list = [RT_per_interval,RX_per_interval]  
+        grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
         # Construct Lagrangian multipliers, defined on [0,1] and need to be scaled carefully when used
         λ_x = Lagrangian_multiplier(λ,Nbasis_λ_x,k_λ_x,xspan[1],xspan[2])
         μ₀_t = Lagrangian_multiplier(μ,Nbasis_μ_t,k_μ_t,0.0,1.0)

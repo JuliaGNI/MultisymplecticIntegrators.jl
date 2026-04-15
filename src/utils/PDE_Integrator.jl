@@ -70,6 +70,7 @@ function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator, n₁::In
 
     # loop over time steps
     for n in n₁:n₂
+        println("current time step: ", n)
         sol[n] = integrate!(solstep, int)
         internal_solutions[n] = deepcopy(cache(int).x)
 
