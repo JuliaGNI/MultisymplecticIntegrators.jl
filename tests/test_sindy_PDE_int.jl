@@ -69,6 +69,7 @@ begin
     record_results["ham_ls"] = ham_ls
     record_results["analytic_ham"] = analytic_ham
     record_results["ham_err"] = ham_err
+    record_results["internal_values"] = internal_values
 
     save("sindy_results_sine_gordon_h$(t_step)_reg$(reg_factor)_x$(x_span[1])_to_$(x_span[2]).jld2",record_results)
 
