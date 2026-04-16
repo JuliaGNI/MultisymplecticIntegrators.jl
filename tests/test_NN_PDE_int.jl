@@ -20,7 +20,7 @@ relu3 = x -> max(0, x) ^3
 GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
     x_abstol = 8eps(),
     f_abstol = 8eps(),
-    max_iterations = 100,
+    max_iterations = 10,
 )
 
 S = 150

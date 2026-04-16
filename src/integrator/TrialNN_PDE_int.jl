@@ -378,7 +378,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IP
         t = quad_nodes[1,i]; x = quad_nodes[2,i]
         desired[i] = exact_u(tn+h * t, x) - u_trial(t, x, coeffs_full,Wsel,Bsel,int,sol)
     end
-    @show desired
+    # @show desired
 
     # Run OGA (orthogonal matching) on Φ_raw to approximate `desired`
     residual = copy(desired)
