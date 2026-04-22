@@ -1,21 +1,21 @@
 struct TrialNN_PDE_int{BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PDEMethod
     basis::BT
 
-    time_quadrature
+    time_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RT::Int # Number of quadrature points in time
 
-    spatial_quadrature
+    spatial_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RX::Int # Number of quadrature points in spatial dimension, for simplicity, set the same for all dimensions
 
-    grid_matrix # Quadrature grid points: [(t1,x1), (t1,x2), ]
-    grid_weights # Quadrature weights
+    grid_matrix::Matrix{Tuple{Float64, Float64}} # Quadrature grid points: [(t1,x1), (t1,x2), ]
+    grid_weights::Matrix{Float64} # Quadrature weights
 
     initial_guess_method::IPMT # :LSGD or :GroundTruth
 
-    Nw                 # angular directions
-    Nb                 # bias samples
+    Nw::Int                      # angular directions
+    Nb::Int                      # bias samples
 
-    show_status
+    show_status::Bool
     function TrialNN_PDE_int(trial_NN,;RT::Int=6, RX::Int=8, initial_guess_method::IPMT=TrialOGA2D(),
         Nw::Int = 500,Nb::Int = 500,show_status = false) where {IPMT} # 300,300
         if RT == 128

@@ -427,32 +427,55 @@ function lsgd_loss(network_inputs,labels,NN,ps)
     return Statistics.mean((labels .- NN_output).^2)
 end
 
-function create_interior_quadrature_points_derivative_mat(ST::Type, RT::Int,RX::Int, D::Int,P_sizes::Vector{Int})
-    mat = []
+function create_interior_quadrature_points_derivative_mat(ST::Type, RT::Int, RX::Int, D::Int, P_sizes::Vector{Int})
+
+    Ptotal = sum(P_sizes)
+
+    mat = zeros(ST, RT, RX, Ptotal, D)
+
+    offset = vcat(1, cumsum(P_sizes) .+ 1)
+
+    mat_view = Vector{AbstractArray{ST,3}}(undef, D)
+
     for d in 1:D
-        push!(mat, zeros(ST, RT, RX, P_sizes[d]))
+        mat_view[d] = @view mat[:, :, offset[d]:offset[d+1]-1, d]
     end
-    return mat
+
+    return mat_view
 end
 
-function create_interior_quadrature_points_derivative_mat(ST::Type, RT::Int,RX::Int, D::Int, DX::Int,P_sizes::Vector{Int})
-    mat = Array{Array{ST}}(undef,D,DX)
+function create_interior_quadrature_points_derivative_mat(ST::Type, RT::Int, RX::Int, D::Int, DX::Int, P_sizes::Vector{Int})
+    Ptotal = sum(P_sizes)
+
+    mat = zeros(ST, RT, RX, Ptotal, D, DX)
+
+    offset = vcat(1, cumsum(P_sizes) .+ 1)
+
+    mat_view = Matrix{AbstractArray{ST,3}}(undef, D, DX)
 
     for d in 1:D
         for dx in 1:DX
-            mat[d,dx] = zeros(ST, RT, RX, P_sizes[d])
+            mat_view[d, dx] =
+                @view mat[:, :, :, offset[d]:offset[d+1]-1, d, dx]
         end
     end
 
-    return mat
+    return mat_view
 end
 
 function create_boundary_derivative_vector(ST::Type, D::Int,R::Int,P_sizes::Vector{Int})
-    mat = []
+    Ptotal = sum(P_sizes)
+    mat = zeros(ST, R, Ptotal, D)
+
+    offset = vcat(1, cumsum(P_sizes) .+ 1)
+
+    mat_view = Vector{Any}(undef, D)
+
     for d in 1:D
-        push!(mat, zeros(ST, R, P_sizes[d]))
+        mat_view[d] = @view mat[:, offset[d]:offset[d+1]-1, d]
     end
-    return mat
+
+    return mat_view
 end
 
 function eval_spline2D(coefs::AbstractMatrix, (Bt, Bx), (t, x))
