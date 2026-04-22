@@ -10,6 +10,11 @@ struct NN_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMeth
     grid_matrix::Matrix{Tuple{Float64, Float64}} # Quadrature grid points: [(t1,x1), (t1,x2), ]
     grid_weights::Matrix{Float64} # Quadrature weights
 
+    t₀_quad::Matrix{Tuple{Float64, Float64}}
+    t₁_quad::Matrix{Tuple{Float64, Float64}}
+    x₀_quad::Matrix{Tuple{Float64, Float64}}
+    x₁_quad::Matrix{Tuple{Float64, Float64}}
+
     t_num_interval::Int
     k_μ_t::Int # order
     μ₀_t::MVT
@@ -25,7 +30,7 @@ struct NN_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMeth
     mμ_t::Matrix{Float64}
 
     nepochs::Int
-    initial_guess_method::IPMT # :LSGD or :GroundTruth
+    initial_guess_method::IPMT # 
 
     Nw::Int                 # angular directions
     Nb::Int
@@ -33,10 +38,14 @@ struct NN_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMeth
     show_status::Bool
     function NN_PDE_Integrator(basis;RT_per_interval::Int = 4,RX_per_interval::Int = 4,
         xspan::Tuple=(0., 1.0),
-        nepochs=1000, initial_guess_method::IPMT=OGA2D(), Nw::Int=500, Nb::Int=500,
+        nepochs=1000, 
         t_num_interval::Int=10, k_μ_t::Int=4, μ::Symbol=:BSplineDirichlet,
         x_num_interval::Int=10, k_λ_x::Int=3, λ::Symbol=:BSplineDirichlet,
-        show_status::Bool=false) where {IPMT,}
+        show_status::Bool=false,
+        initial_guess_method::IPMT=OGA2D(), # hyperparameters for OGA2d
+        nx::Int = 40,nt::Int= 20,Nw::Int=500, Nb::Int=500,
+        
+        ) where {IPMT,}
         
         t_quadrature = composite_quadrature(t_num_interval ,RT_per_interval)
         x_quadrature = composite_quadrature(x_num_interval ,RX_per_interval)
@@ -46,7 +55,20 @@ struct NN_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMeth
 
         R_list = [RT_per_interval,RX_per_interval]  
         grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
-        
+        # scale grid_matrix
+        grid_matrix[i, j][2] = xspan[1] + x_domain * grid_matrix[i, j][2]
+
+        # construct quad point at 4 boundary
+        t₀_quad = grid_matrix
+        t₀_quad[:,:][1] .= 0.0
+        t₁_quad = grid_matrix
+        t₁_quad[:,:][1] .= 1.0
+
+        x₀_quad = grid_matrix
+        x₀_quad[:,:][2] .= xspan[1]
+        x₁_quad = grid_matrix
+        x₁_quad[:,:][2] .= xspan[2]
+
         # Construct Lagrangian multipliers, defined on [0,1] and need to be scaled carefully when used
         λ_x = Lagrangian_multiplier(λ, x_num_interval, k_λ_x, xspan[1], xspan[2])
         μ₀_t = Lagrangian_multiplier(μ, t_num_interval, k_μ_t, 0.0, 1.0)
@@ -66,6 +88,28 @@ struct NN_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMeth
             mμ_t[i, :] = μ₀_t.b[i].(t_quadrature.nodes)
         end
 
+        # Data preparation for OGA2d
+        # Equidistant Quadrature / sampling grid
+        if initial_guess_method == OGA2D()
+            xs = range(a, b, length=nx)
+            ts = range(0.0, 1.0, length=nt)
+
+        # build list of sample coords as 2×N matrix (t; x)
+        coords = [(t, x) for t in ts, x in xs]   # nt × nx array of tuples
+        N = length(coords)
+        equispaced_quad_nodes = zeros(2, N)
+        for i in 1:N
+            equispaced_quad_nodes[1, i] = coords[i][1]
+            equispaced_quad_nodes[2, i] = coords[i][2]
+        end
+
+
+
+
+
+
+
+        end
         new{typeof(μ₀_t),typeof(λ_x),typeof(basis),typeof(initial_guess_method)}(basis,
             t_quadrature, RT,
             x_quadrature, RX,
@@ -264,20 +308,9 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator{MVT
     local show_status = int.method.show_status
     local tn = sol.t - timestep(int)
 
-    # Equidistant Quadrature / sampling grid
-    nx = 40
-    nt = 20
-    xs = range(a, b, length=nx)
-    ts = range(0.0, 1.0, length=nt)
 
-    # build list of sample coords as 2×N matrix (t; x)
-    coords = [(t, x) for t in ts, x in xs]   # nt × nx array of tuples
-    N = length(coords)
-    quad_nodes = zeros(2, N)
-    for i in 1:N
-        quad_nodes[1, i] = coords[i][1]
-        quad_nodes[2, i] = coords[i][2]
-    end
+
+
 
     # simple uniform quadrature weights (you can switch to Simpson)
     quad_weights = fill(1.0 / N, N)
@@ -606,7 +639,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN
                 C.sol_params[name].W[:] = layer.W[:]
             end
         end
-        C.sol_params[last_layer].W[:] = x[1:NP]
+        C.sol_params.L2.W[:] = x[1:NP]
     end
 
     # quad_point = @MArray{2, Float64}(0.0, 0.0)
@@ -653,19 +686,19 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN
                 for j in 1:RX#TODO what if RX is a Vector
                     quad_point[1] = grid_matrix[i, j][1]
                     quad_point[2] = xspan[1] + x_domain * grid_matrix[i, j][2]
-                    @views C.∂u∂P_quad_values[d][i, j, :] = ∂u∂P(quad_point, NN_params)[last_layer].W[:]
-                    @views C.∂v∂P_quad_values[d][i, j, :] = ∂v∂P(quad_point, NN_params)[last_layer].W[:]
-                    @views C.∂w∂P_quad_values[d][i, j, :] = ∂w∂P(quad_point, NN_params)[last_layer].W[:]
+                    @views C.∂u∂P_quad_values[d][i, j, :] = ∂u∂P(quad_point, NN_params).L2.W[:]
+                    @views C.∂v∂P_quad_values[d][i, j, :] = ∂v∂P(quad_point, NN_params).L2.W[:]
+                    @views C.∂w∂P_quad_values[d][i, j, :] = ∂w∂P(quad_point, NN_params).L2..W[:]
                 end
             end
             # q = StaticVector{2, Float64}(0.0, 0.0)
             for rx in 1:RX
-                @views C.∂u∂P_t₀_quad_values[d][rx, :] .= ∂u∂P([0.0, xspan[1] + x_domain * x_quad_nodes[rx]], NN_params)[last_layer].W[:]
-                @views C.∂u∂P_t₁_quad_values[d][rx, :] .= ∂u∂P([1.0, xspan[1] + x_domain * x_quad_nodes[rx]], NN_params)[last_layer].W[:]
+                @views C.∂u∂P_t₀_quad_values[d][rx, :] .= ∂u∂P([0.0, xspan[1] + x_domain * x_quad_nodes[rx]], NN_params).L2.W[:]
+                @views C.∂u∂P_t₁_quad_values[d][rx, :] .= ∂u∂P([1.0, xspan[1] + x_domain * x_quad_nodes[rx]], NN_params).L2.W[:]
             end
             for rt in 1:RT
-                @views C.∂u∂P_x₀_quad_values[d][rt, :] .= ∂u∂P([t_quad_nodes[rt], xspan[1]], NN_params)[last_layer].W[:]
-                @views C.∂u∂P_x₁_quad_values[d][rt, :] .= ∂u∂P([t_quad_nodes[rt], xspan[2]], NN_params)[last_layer].W[:]
+                @views C.∂u∂P_x₀_quad_values[d][rt, :] .= ∂u∂P([t_quad_nodes[rt], xspan[1]], NN_params).L2.W[:]
+                @views C.∂u∂P_x₁_quad_values[d][rt, :] .= ∂u∂P([t_quad_nodes[rt], xspan[2]], NN_params).L2.W[:]
             end
         end
     end
@@ -944,7 +977,7 @@ function update!(sol, int::PDEIntegrator{<:NN_PDE_Integrator})
                 C.sol_params[name].W[:] = layer.W[:]
             end
         end
-        C.sol_params[last_layer].W[:] = x[1:NP]
+        C.sol_params.L2.W[:] = x[1:NP]
     end
 
     for d in 1:D
