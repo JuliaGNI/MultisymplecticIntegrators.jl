@@ -2,26 +2,26 @@ struct Sindy_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
     symbolic_expr_basis::BT
     init_w::Vector
 
-    time_quadrature
+    time_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RT::Int # Number of quadrature points in time
 
-    spatial_quadrature
+    spatial_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RX::Int # Number of quadrature points in spatial dimension, for simplicity, set the same for all dimensions
     
-    grid_matrix # Quadrature grid points: [(t1,x1), (t1,x2), ]
-    grid_weights # Quadrature weights
+    grid_matrix::Matrix{Vector{Float64}} # Quadrature grid points: [(t1,x1), (t1,x2), ]
+    grid_weights::Matrix{Float64} # Quadrature weights
     
-    Nbasis_μ_t
+    Nbasis_μ_t::Int
     k_μ_t::Int # order
     μ₀_t::MVT
     μ₁_t::MVT
 
-    Nbasis_λ_x
+    Nbasis_λ_x::Int
     k_λ_x::Int # order 
     λ_x::LT
 
-    mλ_x # λ_x evaluated at quadrature points
-    mμ_t
+    mλ_x::Matrix{Float64} # λ_x evaluated at quadrature points
+    mμ_t::Matrix{Float64}
 
     show_status::Bool
     function Sindy_PDE_Integrator(basis,init_w::Vector;RT_per_interval::Int = 4,RX_per_interval::Int = 4,xspan::Tuple = (0.,1.0), 

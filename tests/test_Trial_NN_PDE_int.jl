@@ -1,6 +1,7 @@
 # cd("MultiSymplectic.jl")
 # using Pkg
 # Pkg.activate(".")
+using Revise
 using GeometricIntegratorsBase
 using MultiSymplectic
 using AbstractNeuralNetworks
@@ -14,34 +15,31 @@ using Infiltrator
 # Nw = parse(Int, ARGS[3])
 # Nb = parse(Int, ARGS[4])
 
-t_step = 0.3
-NN_width = 50
-Nw = 500
-Nb = 500
+t_step = 0.1
+NN_width = 80
 
 GeometricIntegratorsBase.default_options(::TrialNN_PDE_int) = (
-        x_abstol=8eps(),
-        f_abstol=8eps(),
-        max_iterations=100,
+    max_iterations = 100,
+    regularization_factor = 1e-5,
+    f_abstol = 2eps(),
+    x_suctol = 2eps()
 )
 
 x_step = 0.01
-x_span = (0.3, 0.8)
+x_span = (0.0, 1.0)
 lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=(0.0, t_step), xspan=x_span, xstep=x_step)
 
 relu3(x) = max(0.0, x)^3
 activation = tanh
 trial_basis = Trial_Solution_Basis(NN_width, activation)
-rt = 64
-rx = 18
+
 # for rt in [8,12,24]
 # for rx in [16, 32, 64]
-log_file = "logs/trial_nn_int.txt"
-open(log_file, "w") do io
-        redirect_stdio(stdout=log_file, stderr=log_file) do
-                println("Start RT = $rt, RX = $rx")
-                trial_int = TrialNN_PDE_int(trial_basis, initial_guess_method=TrialOGA2D(), RT=rt, RX=rx, Nw=Nw, Nb=Nb,show_status=true)
-                sol = MultiSymplectic.integrate(lpde,trial_int)
+# log_file = "logs/trial_nn_int.txt"
+# open(log_file, "w") do io
+#         redirect_stdio(stdout=log_file, stderr=log_file) do
+                trial_int = TrialNN_PDE_int(trial_basis, show_status=false)
+                sol,internal_values = MultiSymplectic.integrate(lpde,trial_int)
         
                 p = @layout [a b c]
                 p1 = plot([lpde.exact_u(t_step,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_u")
@@ -53,8 +51,8 @@ open(log_file, "w") do io
                 p = plot(p1, p2, p3, layout=p)
                 savefig("logs/trial_nn_int_t=$t_step.pdf")
 
-        end
-end
+#         end
+# end
 # end
 # end
 # (u_trial(grid_matrix[1,1][1] , xspan[1] + x_domain* grid_matrix[1,1][2]+ 3eps(),x,W1,bias1,int,sol) - u_trial(grid_matrix[1,1][1] , xspan[1] + x_domain* grid_matrix[1,1][2]- 3eps(),x,W1,bias1,int,sol)) / 6eps()

@@ -548,7 +548,7 @@ function create_tem_vector(ST::Type, D::Int,P_sizes::Vector{Int})
 end
 
 
-function spline2D_all_derivatives((Bt, Bx), (t, x))
+function spline2D_all_derivatives((Bt, Bx)::Tuple{BT,BT}, (t, x)::Tuple{Float64,Float64}) where BT
     # basis in t
     it, bt = Bt(t)
     it_d, btd = Bt(t, BSplineKit.Derivative(1))   # N'(t)
@@ -581,11 +581,9 @@ function spline2D_all_derivatives((Bt, Bx), (t, x))
 
     return reshape(dSdc, :, ), reshape(dVdc, :, ), reshape(dWdc, :, )
 end
-
-using BSplineKit
-
+spline2D_all_derivatives((Bt, Bx)::Tuple{BT,BT}, tx::Vector{Float64}) where BT = spline2D_all_derivatives((Bt, Bx), (tx[1], tx[2]))
 # ∂S/∂c
-function spline2D_coeff_derivatives((Bt, Bx), (t, x))
+function spline2D_coeff_derivatives((Bt, Bx)::Tuple{BT,BT}, (t, x)::Tuple{Float64,Float64}) where BT
     it, bt = Bt(t)
     ix, bx = Bx(x)
 
@@ -603,9 +601,11 @@ function spline2D_coeff_derivatives((Bt, Bx), (t, x))
     end
     return reshape(dSdc, :, )
 end
+spline2D_coeff_derivatives((Bt, Bx)::Tuple{BT,BT}, tx::Vector{Float64}) where BT = spline2D_coeff_derivatives((Bt, Bx), (tx[1], tx[2]))
+
 
 # ∂v/∂c = N'_i(t) * M_j(x) 
-function spline2D_coeff_derivatives_time((Bt, Bx), (t, x))
+function spline2D_coeff_derivatives_time((Bt, Bx)::Tuple{BT,BT}, (t, x)::Tuple{Float64,Float64}) where BT
     it, bt   = Bt(t)
     it_d, btd = Bt(t, BSplineKit.Derivative(1))  # N'(t)
 
@@ -625,9 +625,11 @@ function spline2D_coeff_derivatives_time((Bt, Bx), (t, x))
     end
     return reshape(dVdc, :, )
 end
+spline2D_coeff_derivatives_time((Bt, Bx)::Tuple{BT,BT}, tx::Vector{Float64}) where BT = spline2D_coeff_derivatives_time((Bt, Bx), (tx[1], tx[2]))
+
 
 # ∂w/∂c = N_i(t) * M'_j(x) 
-function spline2D_coeff_derivatives_space((Bt, Bx), (t, x))
+function spline2D_coeff_derivatives_space((Bt, Bx)::Tuple{BT,BT}, (t, x)::Tuple{Float64,Float64}) where BT
     it, bt = Bt(t)
     ix, bx = Bx(x)
     ix_d, bxd = Bx(x, BSplineKit.Derivative(1))  # M'(x)
@@ -646,7 +648,7 @@ function spline2D_coeff_derivatives_space((Bt, Bx), (t, x))
     end
     return reshape(dWdc, :, )
 end
-
+spline2D_coeff_derivatives_space((Bt, Bx)::Tuple{BT,BT}, tx::Vector{Float64}) where BT = spline2D_coeff_derivatives_space((Bt, Bx), (tx[1], tx[2]))
 
 function vector_hessian(f, x)
     S = length(f(x))    

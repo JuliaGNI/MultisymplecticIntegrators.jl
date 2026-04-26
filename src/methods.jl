@@ -23,7 +23,7 @@ abstract type AbstractPDEBasis end #<: Basis
 
 abstract type InitialParametersMethod end
 struct LSGD <: InitialParametersMethod end
-struct OGA2D <: InitialParametersMethod end
+# struct OGA2D <: InitialParametersMethod end
 struct ELM <: InitialParametersMethod end
 struct PINN <: InitialParametersMethod end
 struct TrialOGA2D <: InitialParametersMethod end

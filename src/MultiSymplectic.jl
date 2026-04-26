@@ -6,11 +6,15 @@ module MultiSymplectic
     import GeometricIntegratorsBase: default_solver,default_options,initsolver,CacheDict,Cache,cache,CacheType,solutionstep,reset!
     import GeometricIntegratorsBase: problem,method,parameters,SolverMethod,history, solver,residual!,copy_internal_variables!,internal
     import GeometricIntegratorsBase: compute_vectorfields!,_extrapolate!,internal_variables,nlsolution
-    import GeometricBase: datatype,timetype,ntime,_state, _vectorfield
+    import GeometricIntegratorsBase: _state, _vectorfield, compute_vectorfields!,_extrapolate!,internal_variables,nlsolution
+    import GeometricBase: datatype,timetype,ntime
     import GeometricBase: initialtime, finaltime, timespan, timestep,periodicity, NullPeriodicity
-    import GeometricEquations:initial_conditions,GeometricProblem,initialstate
+    import GeometricEquations:initial_conditions,GeometricProblem
     using GeometricSolutions:GeometricSolution
 
+
+
+    
     using Symbolics
     using AbstractNeuralNetworks
     using SymbolicNeuralNetworks
@@ -49,10 +53,10 @@ module MultiSymplectic
     # utils
     include("utils/common.jl")
     export LPDE_variables,symbolize,substitute_parameters,Lagrangian_multiplier
-    export initialize_bcs_ics!,vector_hessian,initialstate
+    export initialize_bcs_ics!,vector_hessian
 
     include("utils/OGA_2d.jl")
-    export OGA2d
+    export OGA2D
     # basis
     include("basis/Sindy_PDE_basis.jl")
     export SindyPDEBasis    

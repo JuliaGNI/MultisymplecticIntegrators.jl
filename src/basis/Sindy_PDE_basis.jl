@@ -1,17 +1,17 @@
-struct SindyPDEBasis <: AbstractPDEBasis
-    u_expr # expression
-    v_expr
-    w_expr
+struct SindyPDEBasis{UPT,VPT,WPT,UFT,VFT,WFT} <: AbstractPDEBasis
+    u_expr::Vector{Num} # expression
+    v_expr::Vector{Num}
+    w_expr::Vector{Num}
 
-    expr_params # parameters from the expression
+    expr_params::Vector{Symbolics.Arr{Num, 1}} # parameters from the expression
 
-    ∂u∂P # derivatives with respect to P
-    ∂v∂P
-    ∂w∂P
+    ∂u∂P::UPT # derivatives with respect to P
+    ∂v∂P::VPT
+    ∂w∂P::WPT
 
-    u # callable function
-    v   
-    w
+    u::UFT # callable function
+    v::VFT
+    w::WFT
 
     NP::Int
     P_sizes::Vector{Int}
@@ -79,6 +79,6 @@ struct SindyPDEBasis <: AbstractPDEBasis
         #     end
         # end
 
-        new(u_expr, v_expr, w_expr, P, ∂u∂P, ∂v∂P, ∂w∂P, u, v, w, NP, P_sizes)
+        new{typeof(∂u∂P),typeof(∂v∂P),typeof(∂w∂P),typeof(u),typeof(v),typeof(w)}(u_expr, v_expr, w_expr, P, ∂u∂P, ∂v∂P, ∂w∂P, u, v, w, NP, P_sizes)
     end
 end

@@ -1,3 +1,4 @@
+using Revise
 using MultiSymplectic
 # using Infiltrator
 using Base
@@ -6,12 +7,12 @@ using Plots
 using JLD2
 
 
-k = parse(Int, ARGS[1])
-t_knot_interval = parse(Float64, ARGS[2])
-x_knot_interval = parse(Float64, ARGS[3])
-t_step = parse(Float64, ARGS[4])
-regularization_factor = 0.0
+# k = parse(Int, ARGS[1])
+# t_knot_interval = parse(Float64, ARGS[2])
+# x_knot_interval = parse(Float64, ARGS[3])
+# t_step = parse(Float64, ARGS[4])
 
+regularization_factor = 0.0
 GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator) = (
     x_suctol = 2eps(),
     f_abstol = 2eps(),
@@ -19,10 +20,10 @@ GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator) = (
     max_iterations = 10,
 )
 
-# k = 4
-# t_knot_interval = 0.5
-# x_knot_interval = 0.1
-# t_step = 0.2
+k = 4
+t_knot_interval = 0.5
+x_knot_interval = 0.1
+t_step = 0.2
 
 t_span = (0.,10.0)
 xspan = (0.0, 1.0)
@@ -39,7 +40,7 @@ xspan = (0.0, 1.0)
             record_results = Dict()
 
             spline_basis = BSpline2D(k,xspan = xspan, t_knot_interval = t_knot_interval,x_knot_interval = x_knot_interval)
-            spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = false)
+            spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = 4,RX_per_interval = 4,show_status = false)
             println("Start Spline Integrator")
             sol, internal_solutions = MultiSymplectic.integrate(lpde, spline_int)
             println("End Spline Integrator with h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")

@@ -1,46 +1,46 @@
 struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
     basis::BT
     
-    time_quadrature
+    time_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RT::Int # Number of quadrature points in time
 
-    spatial_quadrature
+    spatial_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RX::Int # Number of quadrature points in spatial dimension, for simplicity, set the same for all dimensions
     
-    grid_matrix # Quadrature grid points: [(t1,x1), (t1,x2), ]
-    grid_weights # Quadrature weights
-    
-    Nbasis_μ_t
+    grid_matrix::Matrix{Vector{Float64}} # Quadrature grid points: [(t1,x1), (t1,x2), ]
+    grid_weights::Matrix{Float64} # Quadrature weights
+
+    Nbasis_μ_t::Int
     # k_μ_t::Int # order 
     # μ₀_t::MVT
     # μ₁_t::MVT
 
-    Nbasis_λ_x
+    Nbasis_λ_x::Int
     # k_λ_x::Int # order 
     # λ_x::LT
 
-    mλ_x # λ_x evaluated at quadrature points
-    mμ_t
+    mλ_x::Matrix{Float64} # λ_x evaluated at quadrature points
+    mμ_t::Matrix{Float64}
 
-    u_collocation_mat
-    v_collocation_mat
-    w_collocation_mat
+    u_collocation_mat::Array{Float64}
+    v_collocation_mat::Array{Float64}
+    w_collocation_mat::Array{Float64}
 
-    ut₀_basis_quad_values
-    ut₁_basis_quad_values
-    vt₀_basis_quad_values
-    vt₁_basis_quad_values
-    wt₀_basis_quad_values
-    wt₁_basis_quad_values
+    ut₀_basis_quad_values::Matrix{Float64}
+    ut₁_basis_quad_values::Matrix{Float64}
+    vt₀_basis_quad_values::Matrix{Float64}
+    vt₁_basis_quad_values::Matrix{Float64}
+    wt₀_basis_quad_values::Matrix{Float64}
+    wt₁_basis_quad_values::Matrix{Float64}
 
-    ux₀_basis_quad_values
-    ux₁_basis_quad_values
-    vx₀_basis_quad_values
-    vx₁_basis_quad_values
-    wx₀_basis_quad_values
-    wx₁_basis_quad_values
+    ux₀_basis_quad_values::Matrix{Float64}
+    ux₁_basis_quad_values::Matrix{Float64}
+    vx₀_basis_quad_values::Matrix{Float64}
+    vx₁_basis_quad_values::Matrix{Float64}
+    wx₀_basis_quad_values::Matrix{Float64}
+    wx₁_basis_quad_values::Matrix{Float64}
 
-    show_status
+    show_status::Bool
     function Galerkin_Bspline_Integrator(basis; RT_per_interval::Int = 4,RX_per_interval::Int = 4,xspan::Tuple = (0.,1.0),show_status = false) 
         # Nbasis_μ_t::Int = 10,k_μ_t::Int = 4,μ::Symbol = :BSplineDirichlet,
         # Nbasis_λ_x::Int = 10,k_λ_x::Int = 3,λ::Symbol = :BSplineDirichlet,
@@ -54,24 +54,32 @@ struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
         R_list = [RT_per_interval,RX_per_interval]  
         grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
         
+        x0 = xspan[1]
+        x_domain = xspan[2] - xspan[1]
+        grid_matrix = [collect(grid_matrix[i, j]) for i in axes(grid_matrix, 1), j in axes(grid_matrix, 2)]
+
+        @inbounds for k in eachindex(grid_matrix)
+            t, xhat = grid_matrix[k]
+            grid_matrix[k][2] = x0 + x_domain * xhat
+        end
+
         S = basis.S
         RT = length(t_quadrature.nodes)
         RX = length(x_quadrature.nodes)
         
+
+
         u_collocation_matrix = zeros(S, RT, RX)
         v_collocation_matrix = zeros(S, RT, RX)
         w_collocation_matrix = zeros(S, RT, RX)
         for rt in 1:RT
             for rx in 1:RX
-                # tt = tstep .* t_quadrature.nodes[rt]
-                xx = xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes[rx]
-                tt = t_quadrature.nodes[rt]
-                # xx = x_quadrature.nodes[rx]
-                u_collocation_matrix[:,rt,rx] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x), (tt, xx))
-                v_collocation_matrix[:,rt,rx] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x), (tt, xx))
-                w_collocation_matrix[:,rt,rx] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x), (tt, xx))
+                @views u_collocation_matrix[:,rt,rx] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x), grid_matrix[rt,rx])
+                @views v_collocation_matrix[:,rt,rx] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x), grid_matrix[rt,rx])
+                @views w_collocation_matrix[:,rt,rx] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x), grid_matrix[rt,rx])
             end
         end
+
 
         ut₀_basis_quad_values = zeros(S,RX)
         ut₁_basis_quad_values = zeros(S,RX)
@@ -89,22 +97,22 @@ struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
 
         for rx in 1:RX
             xx = xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes[rx]
-            ut₀_basis_quad_values[:,rx] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
-            ut₁_basis_quad_values[:,rx] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(1.0 ,xx)) # top
-            vt₀_basis_quad_values[:,rx] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
-            vt₁_basis_quad_values[:,rx] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(1.0 ,xx))   
-            wt₀_basis_quad_values[:,rx] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
-            wt₁_basis_quad_values[:,rx] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(1.0 ,xx))
+            @views ut₀_basis_quad_values[:,rx] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
+            @views ut₁_basis_quad_values[:,rx] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(1.0 ,xx)) # top
+            @views vt₀_basis_quad_values[:,rx] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
+            @views vt₁_basis_quad_values[:,rx] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(1.0 ,xx))   
+            @views wt₀_basis_quad_values[:,rx] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
+            @views wt₁_basis_quad_values[:,rx] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(1.0 ,xx))
         end
 
         for i in 1:RT
             tt = t_quadrature.nodes[i]
-            ux₀_basis_quad_values[:,i] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
-            ux₁_basis_quad_values[:,i] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
-            vx₀_basis_quad_values[:,i] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
-            vx₁_basis_quad_values[:,i] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
-            wx₀_basis_quad_values[:,i] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
-            wx₁_basis_quad_values[:,i] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
+            @views ux₀_basis_quad_values[:,i] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
+            @views ux₁_basis_quad_values[:,i] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
+            @views vx₀_basis_quad_values[:,i] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
+            @views vx₁_basis_quad_values[:,i] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
+            @views wx₀_basis_quad_values[:,i] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
+            @views wx₁_basis_quad_values[:,i] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
         end
 
 
@@ -125,13 +133,13 @@ struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
 
         mμ_t = zeros(basis.Nbasis_x, RT)
         for i in 1:basis.Nbasis_x
-            mμ_t[i,:] = basis.Basis_x[i].(t_quadrature.nodes,BSplineKit.Derivative(1))#
+            @views mμ_t[i,:] = basis.Basis_x[i].(t_quadrature.nodes,BSplineKit.Derivative(1))#
         end
         Nbasis_μ_t = basis.Nbasis_x
         
         mλ_x = zeros(basis.Nbasis_t, RX)
         for i in 1:basis.Nbasis_t
-            mλ_x[i,:] = basis.Basis_t[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes,BSplineKit.Derivative(1))#
+            @views mλ_x[i,:] = basis.Basis_t[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes,BSplineKit.Derivative(1))#
         end 
         Nbasis_λ_x = basis.Nbasis_t
 
@@ -470,13 +478,18 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     local exact_w = int.problem.exact_w
     local show_status = int.method.show_status
 
+    spline_coeffs = x[1:S]
     # interior values at quadrature points
     for d in 1:D
         for i in 1:RT
             for j in 1:RX
-                C.u_quad_values[d, i, j] = sum(x[1:S] .* int.method.u_collocation_mat[:, i, j])
-                C.v_quad_values[d, i, j] = sum(x[1:S] .* int.method.v_collocation_mat[:, i, j]) / h 
-                C.w_quad_values[d, i, j] = sum(x[1:S] .* int.method.w_collocation_mat[:, i, j])
+                @views current_u_row = int.method.u_collocation_mat[:, i, j]
+                @views current_v_row = int.method.v_collocation_mat[:, i, j]
+                @views current_w_row = int.method.w_collocation_mat[:, i, j]
+
+                C.u_quad_values[d, i, j] = sum(spline_coeffs .* current_u_row)
+                C.v_quad_values[d, i, j] = sum(spline_coeffs .* current_v_row) / h 
+                C.w_quad_values[d, i, j] = sum(spline_coeffs .* current_w_row)
             end
         end
     end
@@ -484,31 +497,36 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     for d in 1:D
         for i in 1:RT
             for j in 1:RX
-                C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
-                C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
-                C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
+                current_u = C.u_quad_values[d, i, j]
+                current_v = C.v_quad_values[d, i, j]
+                current_w = C.w_quad_values[d, i, j]
+                
+                C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](current_u, current_v, current_w, lag_params)
+                C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](current_u, current_v, current_w, lag_params)
+                C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](current_u, current_v, current_w, lag_params)
             end
-        end 
+        end
     end
+
 
     # boundary values at quadrature points
     for d in 1:D
         for j in 1:RX
-            C.ut₀_quad_values[d,j] = sum(x[1:S] .* int.method.ut₀_basis_quad_values[:,j])
-            C.ut₁_quad_values[d,j] = sum(x[1:S] .* int.method.ut₁_basis_quad_values[:,j])
-            C.vt₀_quad_values[d,j] = sum(x[1:S] .* int.method.vt₀_basis_quad_values[:,j]) / h
-            C.vt₁_quad_values[d,j] = sum(x[1:S] .* int.method.vt₁_basis_quad_values[:,j]) / h
-            C.wt₀_quad_values[d,j] = sum(x[1:S] .* int.method.wt₀_basis_quad_values[:,j])
-            C.wt₁_quad_values[d,j] = sum(x[1:S] .* int.method.wt₁_basis_quad_values[:,j])
+            @views C.ut₀_quad_values[d,j] = sum(spline_coeffs .* int.method.ut₀_basis_quad_values[:,j])
+            @views C.ut₁_quad_values[d,j] = sum(spline_coeffs .* int.method.ut₁_basis_quad_values[:,j])
+            @views C.vt₀_quad_values[d,j] = sum(spline_coeffs .* int.method.vt₀_basis_quad_values[:,j]) / h
+            @views C.vt₁_quad_values[d,j] = sum(spline_coeffs .* int.method.vt₁_basis_quad_values[:,j]) / h
+            @views C.wt₀_quad_values[d,j] = sum(spline_coeffs .* int.method.wt₀_basis_quad_values[:,j])
+            @views C.wt₁_quad_values[d,j] = sum(spline_coeffs .* int.method.wt₁_basis_quad_values[:,j])
         end
 
         for i in 1:RT
-            C.ux₀_quad_values[d,i] = sum(x[1:S] .* int.method.ux₀_basis_quad_values[:,i])
-            C.ux₁_quad_values[d,i] = sum(x[1:S] .* int.method.ux₁_basis_quad_values[:,i])
-            C.vx₀_quad_values[d,i] = sum(x[1:S] .* int.method.vx₀_basis_quad_values[:,i])/ h
-            C.vx₁_quad_values[d,i] = sum(x[1:S] .* int.method.vx₁_basis_quad_values[:,i])/ h
-            C.wx₀_quad_values[d,i] = sum(x[1:S] .* int.method.wx₀_basis_quad_values[:,i]) 
-            C.wx₁_quad_values[d,i] = sum(x[1:S] .* int.method.wx₁_basis_quad_values[:,i]) 
+            @views C.ux₀_quad_values[d,i] = sum(spline_coeffs .* int.method.ux₀_basis_quad_values[:,i])
+            @views C.ux₁_quad_values[d,i] = sum(spline_coeffs .* int.method.ux₁_basis_quad_values[:,i])
+            @views C.vx₀_quad_values[d,i] = sum(spline_coeffs .* int.method.vx₀_basis_quad_values[:,i])/ h
+            @views C.vx₁_quad_values[d,i] = sum(spline_coeffs .* int.method.vx₁_basis_quad_values[:,i])/ h
+            @views C.wx₀_quad_values[d,i] = sum(spline_coeffs .* int.method.wx₀_basis_quad_values[:,i]) 
+            @views C.wx₁_quad_values[d,i] = sum(spline_coeffs .* int.method.wx₁_basis_quad_values[:,i]) 
         end
     end
 
@@ -516,9 +534,9 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     cache(int).flag_done_initial_guess[1] == 0.0 ? post_initial_guess!(x[1:S], cache(int),sol,int,int.method) : nothing
     
     for d in 1:D
-        C.λ₁_x_coes[d,:] = x[S+1:S+Nbasis_λ_x]
-        C.μ₀_t_coes[d,:] = x[S+Nbasis_λ_x+1:S+Nbasis_λ_x+Nbasis_μ_t]
-        C.μ₁_t_coes[d,:] = x[S+Nbasis_λ_x+Nbasis_μ_t+1:S+Nbasis_λ_x+2*Nbasis_μ_t]
+        @views C.λ₁_x_coes[d,:] = x[S+1:S+Nbasis_λ_x]
+        @views C.μ₀_t_coes[d,:] = x[S+Nbasis_λ_x+1:S+Nbasis_λ_x+Nbasis_μ_t]
+        @views C.μ₁_t_coes[d,:] = x[S+Nbasis_λ_x+Nbasis_μ_t+1:S+Nbasis_λ_x+2*Nbasis_μ_t]
     end
 
     for d in 1:D

@@ -290,6 +290,10 @@ end
     end::CacheType(ST, c.problem, c.method)
 end
 
+zero_vectors!(x::NamedTuple) = foreach(zero_vectors!, values(x))
+zero_vectors!(x::AbstractArray) = fill!(x, zero(eltype(x)))
+zero_vectors!(x) = nothing
+
 function prior_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator{MVT,LT,BT,IPMT}}) where {MVT,LT,BT,IPMT<:OGA2D}
     local h = timestep(int)
     local S = int.method.basis.S
@@ -307,13 +311,21 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator{MVT
     local M = int.method.initial_guess_method.M
     local tn = sol.t - timestep(int)
 
-    local desired = C.desired
-    local corrs = C.corrs
-    local Wsel = C.Wsel
-    local Bsel = C.Bsel
-    local B = C.B
-    local coeffs_full = C.coeffs_full
-    local selected = C.selected 
+    # local desired = C.desired
+    # local corrs = C.corrs
+    # local Wsel = C.Wsel
+    # local Bsel = C.Bsel
+    # local B = C.B
+    # local coeffs_full = C.coeffs_full
+    
+    B = zeros(N, S)   # orthonormal basis columns
+    coeffs_full = zeros(S)     # coefficients to write into PNN L2
+    Wsel = zeros(S, 2)        
+    Bsel = zeros(S)
+    desired = zeros(N)
+    corrs = zeros(M)
+    selected = zeros(Int, S) # indices of selected atoms in the dictionary
+    zero_vectors!(C.sol_params)
 
     @show selected
     # Build the desired internal PNN output on all quadrature nodes:
@@ -358,11 +370,11 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator{MVT
     end
 
     for j = 1:S
-        u.params.L1.W[j, :] .= Wsel[j, :]
+        @views u.params.L1.W[j, :] .= Wsel[j, :]
         u.params.L1.b[j] = Bsel[j]
         u.params.L2.W[j] = coeffs_full[j]
 
-        C.sol_params.L1.W[j, :] .= Wsel[j, :]
+        @views C.sol_params.L1.W[j, :] .= Wsel[j, :]
         C.sol_params.L1.b[j] = Bsel[j]
         C.sol_params.L2.W[j] = coeffs_full[j]
     end
@@ -379,7 +391,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator{MVT
     end
 
     # if show_status
-    target_vec = [exact_u(h * quad_nodes[1, i], quad_nodes[2, i]) for i in 1:N]
+    target_vec = [exact_u(tn + h * quad_nodes[1, i], quad_nodes[2, i]) for i in 1:N]
     approx_vec = [u(quad_nodes[:, i], C.sol_params)[1] for i in 1:N]
     err_vec = abs.(target_vec .- approx_vec)
     println("Max abs error after OGA initial guess: ", maximum(err_vec))
@@ -724,12 +736,12 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN
     for d in 1:D
         for rx in 1:RX
             C.λ₀_quad_values[d, rx] = ∂L∂V[d](C.ics_ut₀_quad_values[d, rx], C.ics_vt₀_quad_values[d, rx], C.ics_wt₀_quad_values[d, rx], lag_params)
-            C.λ₁_quad_values[d, rx] = sum(C.λ₁_x_coes[d, :] .* mλ_x[:, rx])
+            @views C.λ₁_quad_values[d, rx] = sum(C.λ₁_x_coes[d, :] .* mλ_x[:, rx])
         end
 
         for rt in 1:RT
-            C.μ₀_quad_values[d, rt] = sum(C.μ₀_t_coes[d, :] .* mμ_t[:, rt])
-            C.μ₁_quad_values[d, rt] = sum(C.μ₁_t_coes[d, :] .* mμ_t[:, rt])
+            @views C.μ₀_quad_values[d, rt] = sum(C.μ₀_t_coes[d, :] .* mμ_t[:, rt])
+            @views C.μ₁_quad_values[d, rt] = sum(C.μ₁_t_coes[d, :] .* mμ_t[:, rt])
         end
     end
 

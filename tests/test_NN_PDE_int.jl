@@ -13,19 +13,7 @@ using Infiltrator
 using Base
 using GeometricIntegratorsBase
 using BenchmarkTools
-
-
-using GeometricProblems.HarmonicOscillator
-import GeometricEquations.initialstate
-HO_lode = lodeproblem()
-a = initialstate(HO_lode)
-
-
-
-
-
-
-
+using JLD2
 
 # using Gtk4
 # using ProfileView
@@ -35,34 +23,56 @@ a = initialstate(HO_lode)
 relu2(x) = max(0, x) ^2
 relu3(x) = max(0, x) ^3
 
+t_step = parse(Float64, ARGS[1])
+reg_factor = parse(Float64, ARGS[2])
+S = parse(Int, ARGS[3])
+
 GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
     max_iterations = 100,
-    regularization_factor = 1e-5,
-    f_abstol = 2eps(),
-    x_suctol = 2eps()
+    regularization_factor = reg_factor,
+    # f_abstol = 2eps(),
+    # x_suctol = 2eps()
 )
 
-S = 50
 nn_pde_basis = NetworkPDEBasis(S,tanh,:Partially) # Partially, Fully
 xspan = (0.0,1.0)
-
+t_span = (0.0,2.0)
 nn_int = NN_PDE_Integrator(nn_pde_basis,xspan = xspan, μ =:BSplineDirichlet,λ =:BSplineDirichlet,
 k_μ_t = 4,k_λ_x = 4, show_status=false)
 
-t_step = 0.1
-lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan =(0.0,0.3),xspan = xspan)
+lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan = t_span,xspan = xspan)
 
-sol = MultiSymplectic.integrate(lpde,nn_int)
+sol,internal_values = MultiSymplectic.integrate(lpde,nn_int)
 
-p = @layout [a b c]
-p1 = plot([lpde.exact_u(t_step,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_u")
-plot!(p1, sol[1].u[1], label="sol.u")
-p2 = plot([lpde.exact_v(t_step,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_v")
-plot!(p2, sol[1].v[1], label="sol.v")
-p3 = plot([lpde.exact_w(t_step,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_w")
-plot!(p3, sol[1].w[1], label="sol.w")
-p = plot(p1, p2, p3, layout=p)
-savefig("NNInt_t=h_partially.pdf")
+wave_ham(u,v,w) = 1 / 2 * (0.5 * v^2 + w^2)
+ham_ls = zeros(length(t_span[1]:t_step:t_span[2]))
+analytic_ham = zeros(length(t_span[1]:t_step:t_span[2]))
+x_ls = xspan[1]:0.01:xspan[2]
+
+for (i, t) in enumerate(t_span[1]:t_step:t_span[2])
+    current_domain_ham = [wave_ham(ui,vi,wi) for (ui,vi,wi) in zip(sol.u[i-1],sol.v[i-1],sol.w[i-1])]
+    ham_ls[i] = sum(current_domain_ham)
+
+    analytic_u_values = lpde.exact_u.(t, x_ls)
+    analytic_v_values = lpde.exact_v.(t, x_ls)
+    analytic_w_values = lpde.exact_w.(t, x_ls)
+    current_ham = [wave_ham(ui,vi,wi) for (ui,vi,wi) in zip(analytic_u_values,analytic_v_values,analytic_w_values)]
+    analytic_ham[i] = sum(current_ham)
+end
+relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
+max_err = maximum(relative_ham_err)
+
+
+
+record = Dict(
+    "sol_u" => sol.u,
+    "sol_v" => sol.v,
+    "sol_w" => sol.w,
+    "internal_values" => internal_values,
+)
+save("NNInt_partially_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err).jld2", record)
+
+
 
 # using GeometricSolutions
 # sol = GeometricSolution(lpde)

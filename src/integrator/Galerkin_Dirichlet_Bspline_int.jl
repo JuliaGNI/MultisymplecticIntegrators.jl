@@ -1,38 +1,38 @@
 struct Galerkin_Dirichlet_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
     basis::BT
     
-    time_quadrature
+    time_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RT::Int # Number of quadrature points in time
 
-    spatial_quadrature
+    spatial_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RX::Int # Number of quadrature points in spatial dimension, for simplicity, set the same for all dimensions
     
-    grid_matrix # Quadrature grid points: [(t1,x1), (t1,x2), ]
-    grid_weights # Quadrature weights
+    grid_matrix::Matrix{Vector{Float64}} # Quadrature grid points: [(t1,x1), (t1,x2), ]
+    grid_weights::Matrix{Float64} # Quadrature weights
 
-    Nbasis_λ_x
+    Nbasis_λ_x::Int
 
-    mλ_x # λ_x evaluated at quadrature points
+    mλ_x::Matrix{Float64} # λ_x evaluated at quadrature points
 
-    u_collocation_mat
-    v_collocation_mat
-    w_collocation_mat
+    u_collocation_mat::Array{Float64}
+    v_collocation_mat::Array{Float64}
+    w_collocation_mat::Array{Float64}
 
-    ut₀_basis_quad_values
-    ut₁_basis_quad_values
-    vt₀_basis_quad_values
-    vt₁_basis_quad_values
-    wt₀_basis_quad_values
-    wt₁_basis_quad_values
+    ut₀_basis_quad_values::Matrix{Float64}
+    ut₁_basis_quad_values::Matrix{Float64}
+    vt₀_basis_quad_values::Matrix{Float64}
+    vt₁_basis_quad_values::Matrix{Float64}
+    wt₀_basis_quad_values::Matrix{Float64}
+    wt₁_basis_quad_values::Matrix{Float64}
 
-    ux₀_basis_quad_values
-    ux₁_basis_quad_values
-    vx₀_basis_quad_values
-    vx₁_basis_quad_values
-    wx₀_basis_quad_values
-    wx₁_basis_quad_values
+    ux₀_basis_quad_values::Matrix{Float64}
+    ux₁_basis_quad_values::Matrix{Float64}
+    vx₀_basis_quad_values::Matrix{Float64}
+    vx₁_basis_quad_values::Matrix{Float64}
+    wx₀_basis_quad_values::Matrix{Float64}
+    wx₁_basis_quad_values::Matrix{Float64}
 
-    show_status
+    show_status::Bool
     function Galerkin_Dirichlet_Bspline_Integrator(basis; RT_per_interval::Int = 4,RX_per_interval::Int = 4,xspan::Tuple = (0.,1.0), 
         show_status = false)
 
