@@ -41,6 +41,15 @@ struct Galerkin_Full_Restriction_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDE
         R_list = [RT_per_interval,RX_per_interval]  
         grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
         
+        x0 = xspan[1]
+        x_domain = xspan[2] - xspan[1]
+        grid_matrix = [collect(grid_matrix[i, j]) for i in axes(grid_matrix, 1), j in axes(grid_matrix, 2)]
+
+        @inbounds for k in eachindex(grid_matrix)
+            t, xhat = grid_matrix[k]
+            grid_matrix[k][2] = x0 + x_domain * xhat
+        end
+        
         S = basis.S
         RT = length(t_quadrature.nodes)
         RX = length(x_quadrature.nodes)

@@ -34,7 +34,7 @@ GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
     # x_suctol = 2eps()
 )
 
-nn_pde_basis = NetworkPDEBasis(S,tanh,:Partially) # Partially, Fully
+nn_pde_basis = NetworkPDEBasis(S,tanh,:Fully) # Partially, Fully
 xspan = (0.0,1.0)
 t_span = (0.0,2.0)
 nn_int = NN_PDE_Integrator(nn_pde_basis,xspan = xspan, μ =:BSplineDirichlet,λ =:BSplineDirichlet,
@@ -70,8 +70,7 @@ record = Dict(
     "sol_w" => sol.w,
     "internal_values" => internal_values,
 )
-save("NNInt_partially_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err).jld2", record)
-
+save("NNInt_fully_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err).jld2", record)
 
 
 # using GeometricSolutions
