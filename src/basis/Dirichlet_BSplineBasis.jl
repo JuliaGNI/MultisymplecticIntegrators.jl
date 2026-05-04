@@ -2,7 +2,7 @@
 Basis for Lagrangian multipliers at the boundary, for 1D.
 """
 # serve as the approximation function inside domain
-struct Dirichlet_BSpline2D{CXT, BT} <: AbstractPDEBasis
+struct Dirichlet_BSpline2D{CXT, BXT, BTT} <: AbstractPDEBasis
     k::Int
     xs::Vector{Float64} 
     ts::Vector{Float64} 
@@ -13,8 +13,8 @@ struct Dirichlet_BSpline2D{CXT, BT} <: AbstractPDEBasis
     collocation_matrix_x::CXT # Collocation matrix after LU factorization
     collocation_matrix_t::CXT
 
-    Basis_x::BT
-    Basis_t::BT
+    Basis_x::BXT
+    Basis_t::BTT
 
     Nbasis_x::Int
     Nbasis_t::Int
@@ -39,7 +39,7 @@ struct Dirichlet_BSpline2D{CXT, BT} <: AbstractPDEBasis
         Nbasis_x = length(Rx)
         Nbasis_t = length(Bt)
         S = Nbasis_x * Nbasis_t
-        return new{typeof(Cx), typeof(Bt)}(k, xs, ts, x_collocation_points, t_collocation_points, Cx, Ct, Rx, Bt, Nbasis_x, Nbasis_t, S)
+        return new{typeof(Cx), typeof(Rx), typeof(Bt)}(k, xs, ts, x_collocation_points, t_collocation_points, Cx, Ct, Rx, Bt, Nbasis_x, Nbasis_t, S)
     end
 
 end
