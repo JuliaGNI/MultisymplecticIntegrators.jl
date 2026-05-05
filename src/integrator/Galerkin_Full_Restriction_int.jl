@@ -650,7 +650,7 @@ function internal_variables(method::Galerkin_Full_Restriction_Bspline_Integrator
     ut₁_quad_values = zeros(D,RX)
     vt₁_quad_values = zeros(D,RX)
     wt₁_quad_values = zeros(D,RX)
-
+    
     known_dofs = zeros(Nx)
     p₀_quad_values = zeros(D, RX)
 

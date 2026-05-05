@@ -78,6 +78,8 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,S,NP} <: PDEIntegratorCache{ST,D}
     ∂u∂θ_quad_values::Array{ST}
     ∂v∂θ_quad_values::Array{ST}
     ∂w∂θ_quad_values::Array{ST}
+    flag_done_initial_guess::Vector{ST}
+
     function TrialNN_PDE_intCache{ST,RT,RX,D,S,NP}() where {ST,RT,RX,D,S,NP}
         x = zeros(ST, NP) # in ELM, x is just the output layer parameters
         
@@ -100,6 +102,7 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,S,NP} <: PDEIntegratorCache{ST,D}
         ∂u∂θ_quad_values = zeros(ST, D, RT, RX, NP)
         ∂v∂θ_quad_values = zeros(ST, D, RT, RX, NP)
         ∂w∂θ_quad_values = zeros(ST, D, RT, RX, NP)
+        flag_done_initial_guess = zeros(ST, 1)
 
         new(x,
             W2,W1,bias1,
@@ -107,6 +110,7 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,S,NP} <: PDEIntegratorCache{ST,D}
             u_quad_values,v_quad_values,w_quad_values,
             ∂L∂U_quad_values,∂L∂V_quad_values,∂L∂W_quad_values,
             ∂u∂θ_quad_values,∂v∂θ_quad_values,∂w∂θ_quad_values,
+            flag_done_initial_guess    
             )
     end
 end
@@ -447,13 +451,25 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Tr
     local exact_w = int.problem.exact_w
     local show_status = int.method.show_status
 
+    local u_func = int.method.basis.u_func
+    local v_func = int.method.basis.v_func
+    local w_func = int.method.basis.w_func
+    local ∂u∂p_func = int.method.basis.∂u∂p_func
+    local ∂v∂p_func = int.method.basis.∂v∂p_func
+    local ∂w∂p_func = int.method.basis.∂w∂p_func
+    local tn = sol.t - timestep(int)
+    local h = timestep(int)
+    local previous_W2_s = cache(int).previous_W2
+    local previous_W1_s = cache(int).previous_W1
+    local previous_bias1_s = cache(int).previous_bias1
+
     t2 = time()
     for d in 1:D
         for i in 1:RT
             for j in 1:RX 
-                @views C.∂u∂θ_quad_values[d, i, j, :] = ∂u∂p(grid_matrix[i, j],x,int,sol)
-                @views C.∂v∂θ_quad_values[d, i, j, :] = ∂v∂p(grid_matrix[i, j],x,int,sol)
-                @views C.∂w∂θ_quad_values[d, i, j, :] = ∂w∂p(grid_matrix[i, j],x,int,sol)
+                @views C.∂u∂θ_quad_values[d, i, j, :] = ∂u∂p_func(grid_matrix[i, j][1],grid_matrix[i, j][2],tn,h,x,previous_W2_s,previous_W1_s,previous_bias1_s)
+                @views C.∂v∂θ_quad_values[d, i, j, :] = ∂v∂p_func(grid_matrix[i, j][1],grid_matrix[i, j][2],tn,h,x,previous_W2_s,previous_W1_s,previous_bias1_s)
+                @views C.∂w∂θ_quad_values[d, i, j, :] = ∂w∂p_func(grid_matrix[i, j][1],grid_matrix[i, j][2],tn,h,x,previous_W2_s,previous_W1_s,previous_bias1_s)
             end
         end
     end
@@ -467,9 +483,9 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Tr
     for d in 1:D
         for rt in 1:RT
             for rx in 1:RX
-                C.u_quad_values[d, rt, rx] = u_trial(grid_matrix[rt, rx],W2,W1,bias1,int,sol)
-                C.v_quad_values[d, rt, rx] = v_trial_zygote(grid_matrix[rt, rx],W2,W1,bias1,int,sol) / h
-                C.w_quad_values[d, rt, rx] = w_trial_zygote(grid_matrix[rt, rx],W2,W1,bias1,int,sol)
+                C.u_quad_values[d, rt, rx] = u_func(grid_matrix[rt, rx][1],grid_matrix[rt, rx][2],tn,h,x,previous_W2_s,previous_W1_s,previous_bias1_s)
+                C.v_quad_values[d, rt, rx] = v_func(grid_matrix[rt, rx][1],grid_matrix[rt, rx][2],tn,h,x,previous_W2_s,previous_W1_s,previous_bias1_s) / h
+                C.w_quad_values[d, rt, rx] = w_func(grid_matrix[rt, rx][1],grid_matrix[rt, rx][2],tn,h,x,previous_W2_s,previous_W1_s,previous_bias1_s)
             end
         end
     end
@@ -579,7 +595,15 @@ function update!(sol, int::PDEIntegrator{<:TrialNN_PDE_int})
     local exact_w = int.problem.exact_w
     local xspan = int.problem.xspan
     local xstep = int.problem.xstep
-    
+    local u_func = int.method.basis.u_func
+    local v_func = int.method.basis.v_func
+    local w_func = int.method.basis.w_func
+    local tn = sol.t - timestep(int)
+    local h = timestep(int)
+    local previous_W2_s = cache(int).previous_W2
+    local previous_W1_s = cache(int).previous_W1
+    local previous_bias1_s = cache(int).previous_bias1
+
     @views copyto!(W2, x[1:S])
     @views copyto!(view(W1, :, 1), x[S+1:2*S])
     @views copyto!(view(W1, :, 2), x[2*S+1:3*S])
@@ -587,13 +611,22 @@ function update!(sol, int::PDEIntegrator{<:TrialNN_PDE_int})
     
     x_nodes = collect(xspan[1]:xstep:xspan[2])
 
+    # for d in 1:D
+    #     for i in eachindex(x_nodes)
+    #         sol.u[i] = u_trial(1.0, x_nodes[i],W2,W1,bias1,int,sol)
+    #         sol.v[i] = v_trial_zygote(1.0,x_nodes[i],W2,W1,bias1,int,sol)/h
+    #         sol.w[i] = w_trial_zygote(1.0,x_nodes[i],W2,W1,bias1,int,sol)
+    #     end
+    # end
+    
     for d in 1:D
         for i in eachindex(x_nodes)
-            sol.u[i] = u_trial(1.0, x_nodes[i],W2,W1,bias1,int,sol)
-            sol.v[i] = v_trial_zygote(1.0,x_nodes[i],W2,W1,bias1,int,sol)/h
-            sol.w[i] = w_trial_zygote(1.0,x_nodes[i],W2,W1,bias1,int,sol)
+            sol.u[i] = u_func(1.0,x_nodes[i],tn,h,x,previous_W2_s,previous_W1_s,previous_bias1_s)
+            sol.v[i] = v_func(1.0,x_nodes[i],tn,h,x,previous_W2_s,previous_W1_s,previous_bias1_s)/h
+            sol.w[i] = w_func(1.0,x_nodes[i],tn,h,x,previous_W2_s,previous_W1_s,previous_bias1_s)
         end
     end
+
 
     if show_status
         ut₁_grid_truth = zeros(length(x_nodes))

@@ -36,7 +36,7 @@ GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
 
 nn_pde_basis = NetworkPDEBasis(S,tanh,:Fully) # Partially, Fully
 xspan = (0.0,1.0)
-t_span = (0.0,2.0)
+t_span = (0.0,10.0)
 nn_int = NN_PDE_Integrator(nn_pde_basis,xspan = xspan, μ =:BSplineDirichlet,λ =:BSplineDirichlet,
 k_μ_t = 4,k_λ_x = 4, show_status=false)
 

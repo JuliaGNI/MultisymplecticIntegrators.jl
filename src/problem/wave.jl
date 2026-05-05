@@ -6,7 +6,7 @@
 
 module Wave
 
-    export lagrangian, hamiltonian, initial_condition, boundary_condition, lpdeproblem
+    export lagrangian_density, hamiltonian_density,hamiltonian, initial_condition, boundary_condition, lpdeproblem
 
     using Parameters: @unpack
     using LinearAlgebra
@@ -39,14 +39,39 @@ module Wave
         (A1 * cos((pi*c*t)/l) + B1 * sin((pi*c*t)/l + pi/6)) * sin((pi*x)/l) + (A2 * cos((2*pi*c*t)/l) + B2 * sin((2*pi*c*t)/l + pi/6)) * sin((2*pi*x)/l)
     end
 
+    function exact_u(tx::Vector{Float64};params = default_parameters)
+        exact_u(tx[1], tx[2]; params=params)
+    end
+
+    function exact_u(tx_mat::Matrix{Vector{Float64}};params = default_parameters)
+        [exact_u(tx_mat[i,j]; params=params) for i in 1:size(tx_mat,1), j in 1:size(tx_mat,2)]
+    end
+
     function exact_v(t,x;params = default_parameters)
         @unpack c, A1, A2, B1, B2, l = params
         (-A1*c*pi*sin((pi*x) / l)*sin((c*pi*t) / l) - (2//1)*A2*c*pi*sin((2*pi*c*t) / l)*sin((2*pi*x) / l) + B1*c*pi*sin((pi*x) / l)*cos(((1//6)*pi*l + c*pi*t) / l) + (2//1)*B2*c*pi*cos(((1//6)*pi*l + (2//1)*c*pi*t) / l)*sin((2*pi*x) / l)) / l
     end
 
+    function exact_v(tx::Vector{Float64};params = default_parameters)
+        exact_v(tx[1], tx[2]; params=params)
+    end
+
+    function exact_v(tx_mat::Matrix{Vector{Float64}};params = default_parameters)
+        [exact_v(tx_mat[i,j]; params=params) for i in 1:size(tx_mat,1), j in 1:size(tx_mat,2)]
+    end
+
+
     function exact_w(t,x;params = default_parameters)
         @unpack c, A1, A2, B1, B2, l = params
         (A1*pi*cos((pi*x) / l)*cos((c*pi*t) / l) + (2//1)*A2*pi*cos((2*pi*c*t) / l)*cos((2*pi*x) / l) + B1*pi*cos((pi*x) / l)*sin(((1//6)*pi*l + c*pi*t) / l) + (2//1)*B2*pi*sin(((1//6)*pi*l + (2//1)*c*pi*t) / l)*cos((2*pi*x) / l)) / l
+    end
+
+    function exact_w(tx::Vector{Float64};params = default_parameters)
+        exact_w(tx[1], tx[2]; params=params)
+    end
+
+    function exact_w(tx_mat::Matrix{Vector{Float64}};params = default_parameters)
+        [exact_w(tx_mat[i,j]; params=params) for i in 1:size(tx_mat,1), j in 1:size(tx_mat,2)]
     end
 
     function exact_solution(t::Float64, x::Float64)
@@ -66,6 +91,15 @@ module Wave
         v=[exact_v(ti, xi) for ti in t, xi in x],
         w=[exact_w(ti, xi) for ti in t, xi in x])
     end
+
+    function exact_solution(tx::Vector{Float64})
+        exact_solution(tx[1], tx[2])
+    end
+
+    function exact_solution(tx_mat::Matrix{Vector{Float64}})
+        ([exact_solution(tx_mat[i,j]) for i in 1:size(tx_mat,1), j in 1:size(tx_mat,2)],)
+    end
+
 
     function initial_condition(x::Float64)
         u₀ = exact_u(timespan[1], x)
@@ -117,17 +151,39 @@ module Wave
     end
 
     # Lagrangian and Hamiltonian density
-    function lagrangian(t, x, u, v, w, params)
+    function lagrangian_density(t, x, u, v, w, params)
         @unpack c, A1, A2, B1, B2, l = params
         1 / 2 * (v[1]^2 - c^2 * w[1]^2)
     end
 
-    function hamiltonian(t, x, u, v, w, params)
+    function hamiltonian_density(t, x, u, v, w, params)
         @unpack c, A1, A2, B1, B2, l = params
         1 / 2 * (v[1]^2 + c^2 * w[1]^2)  
     end
 
-    function lpdeproblem(; lagrangian_function=lagrangian, initial_condition_function=initial_condition, boundary_condition_function=boundary_condition, timespan=timespan, timestep::Float64=timestep, xspan::Tuple=xspan, xstep::Float64=xstep, params=default_parameters,
+    # Hamiltonian on a given spatial-temporal domain
+    function hamiltonian(u_quad_values, v_quad_values, w_quad_values, grid_quad_node, grid_quad_weights,params = default_parameters,xspan = xspan,timestep = timestep)
+        ham = 0.0
+
+        D = size(u_quad_values, 1)
+        RT = size(u_quad_values, 2)
+        RX = size(u_quad_values, 3)
+        x_domain = xspan[2] - xspan[1]
+        for d in 1:D
+            for rt in 1:RT
+                for rx in 1:RX
+                    hams+= x_domain * timestep * grid_quad_weights[rt,rx] * 
+                    hamiltonian_density(grid_quad_node[rt,rx][1], grid_quad_node[rt,rx][2], u_quad_values[d, rt, rx], v_quad_values[d, rt, rx], w_quad_values[d, rt, rx], params)
+                end
+            end
+        end
+
+        return ham
+    end
+
+
+
+    function lpdeproblem(; lagrangian_function=lagrangian_density, initial_condition_function=initial_condition, boundary_condition_function=boundary_condition, timespan=timespan, timestep::Float64=timestep, xspan::Tuple=xspan, xstep::Float64=xstep, params=default_parameters,
         exact_u = exact_u, exact_v = exact_v, exact_w = exact_w,least_squares_assemble = problem_matrix_assemble)
         # @assert timestep^2 < c * xstep^2 "timestep^2 < c*xstep^2 must hold for CFL condition"
         @assert timespan[1] < timespan[2] "timespan must be increasing"

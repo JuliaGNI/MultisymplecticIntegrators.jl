@@ -15,8 +15,8 @@ using Infiltrator
 # Nw = parse(Int, ARGS[3])
 # Nb = parse(Int, ARGS[4])
 
-t_step = 0.1
-NN_width = 80
+t_step = 0.5
+NN_width = 70
 
 GeometricIntegratorsBase.default_options(::TrialNN_PDE_int) = (
     max_iterations = 100,
@@ -31,7 +31,7 @@ lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=(0.0, t_step),
 
 relu3(x) = max(0.0, x)^3
 activation = tanh
-trial_basis = Trial_Solution_Basis(NN_width, activation)
+trial_basis = Trial_Solution_Basis(NN_width, activation,lpde.exact_u,x_span)
 
 # for rt in [8,12,24]
 # for rx in [16, 32, 64]
@@ -39,15 +39,15 @@ trial_basis = Trial_Solution_Basis(NN_width, activation)
 # open(log_file, "w") do io
 #         redirect_stdio(stdout=log_file, stderr=log_file) do
                 trial_int = TrialNN_PDE_int(trial_basis, show_status=false)
-                sol,internal_values = MultiSymplectic.integrate(lpde,trial_int)
+                sol= MultiSymplectic.integrate(lpde,trial_int)
         
                 p = @layout [a b c]
-                p1 = plot([lpde.exact_u(t_step,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_u")
-                plot!(p1, sol.u[1], label="sol.u")
-                p2 = plot([lpde.exact_v(t_step,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_v")
-                plot!(p2, sol.v[1], label="sol.v")
-                p3 = plot([lpde.exact_w(t_step,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_w")
-                plot!(p3, sol.w[1], label="sol.w")
+                p1 = plot([lpde.exact_u(t_step,xx) for xx in x_span[1]:0.01:x_span[2]], label="exact_u")
+                plot!(p1, sol.sol.s.u[1], label="sol.u")
+                p2 = plot([lpde.exact_v(t_step,xx) for xx in x_span[1]:0.01:x_span[2]], label="exact_v")
+                plot!(p2, sol.sol.s.v[1], label="sol.v")
+                p3 = plot([lpde.exact_w(t_step,xx) for xx in x_span[1]:0.01:x_span[2]], label="exact_w")
+                plot!(p3, sol.sol.s.w[1], label="sol.w")
                 p = plot(p1, p2, p3, layout=p)
                 savefig("logs/trial_nn_int_t=$t_step.pdf")
 
@@ -55,7 +55,7 @@ trial_basis = Trial_Solution_Basis(NN_width, activation)
 # end
 # end
 # end
-# (u_trial(grid_matrix[1,1][1] , xspan[1] + x_domain* grid_matrix[1,1][2]+ 3eps(),x,W1,bias1,int,sol) - u_trial(grid_matrix[1,1][1] , xspan[1] + x_domain* grid_matrix[1,1][2]- 3eps(),x,W1,bias1,int,sol)) / 6eps()
+# (u_trial(grid_matrix[1,1][1] , xspan[1] + x_domain* grid_matrix[1,1][2]+ 3eps(),x,W1,bias1 ) - u_trial(grid_matrix[1,1][1] , xspan[1] + x_domain* grid_matrix[1,1][2]- 3eps(),x,W1,bias1 )) / 6eps()
 
 
 
@@ -557,3 +557,196 @@ trial_basis = Trial_Solution_Basis(NN_width, activation)
 
 # plot(ds_loss)
 # plot(ls_loss)
+
+
+# using Symbolics, LinearAlgebra
+# using Symbolics: IfElse
+
+# # 假设 S 是隐藏层神经元数量
+# function generate_symbolic_u_trial(S::Int, activation_fn, exact_u_sym_fn; a=0.0, b=1.0, h=0.1, tn=0.0)
+#     # 1. 定义符号变量
+#     @variables t x
+#     @variables W2[1:S] W1[1:S, 1:2] bias1[1:S]
+#     # 如果 C1 中涉及上一时刻的权重，也需要定义为符号常数（或者直接传入数值）
+#     @variables pW2[1:S] pW1[1:S, 1:2] pbias1[1:S]
+
+#     # 2. 定义符号 NN
+#     # 映射激活函数 (如果是自定义函数，需要先注册，例如 @register_symbolic my_act(x))
+#     # 假设 activation_fn 是可以直接处理 Symbolics.Num 的函数，如 σ(x) = 1/(1+exp(-x))
+#     function sym_NN(_t, _x, _W2, _W1, _b1)
+#         return sum(_W2[i] * activation_fn(_W1[i,1]*_t + _W1[i,2]*_x + _b1[i]) for i in 1:S)
+#     end
+
+#     # 3. 构造辅助项 (T1, T2, C1, C2) 的符号表达式
+#     x_domain = b - a
+    
+#     # T1NN_manual
+#     t1_nn = (b - x) / x_domain * sym_NN(t, a, W2, W1, bias1) +
+#             (x - a) / x_domain * sym_NN(t, b, W2, W1, bias1) +
+#             (h - h * t) / h * sym_NN(0.0, x, W2, W1, bias1)
+
+#     # T2NN_manual
+#     t2_nn = (b - x) / x_domain * (h - h * t) / h * sym_NN(0.0, a, W2, W1, bias1) +
+#             (x - a) / x_domain * (h - h * t) / h * sym_NN(0.0, b, W2, W1, bias1)
+
+#     # C1 和 C2
+#     # 注意：exact_u 必须能接受符号输入。如果是闭式解，直接写表达式。
+#     # 如果 exact_u 是黑盒，需要用 @register_symbolic 注册
+#     if tn == 0.0
+#         c1 = (b - x) * exact_u_sym_fn(h*t, a) / x_domain +
+#              (x - a) * exact_u_sym_fn(h*t, b) / x_domain +
+#              (h - h * t) * exact_u_sym_fn(tn, x) / h
+#     else
+#         # 对应原有逻辑中 tn != 0 使用上一时刻 NN 的部分
+#         c1 = (b - x) * exact_u_sym_fn(tn + h*t, a) / x_domain +
+#              (x - a) * exact_u_sym_fn(tn + h*t, b) / x_domain +
+#              (h - h * t) * sym_NN(1.0, x, pW2, pW1, pbias1) / h
+#     end
+
+#     c2 = (b - x) * (h - h * t) * exact_u_sym_fn(tn, a) / x_domain / h +
+#          (x - a) * (h - h * t) * exact_u_sym_fn(tn, b) / x_domain / h
+
+#     # 4. 组合得到 u_trial 符号表达式
+#     expr_u = sym_NN(t, x, W2, W1, bias1) - t1_nn + t2_nn + c1 - c2
+
+#     return expr_u, (t, x), (W2, W1, bias1, pW2, pW1, pbias1)
+# end
+
+# # 假设配置
+# S = 50
+# σ(x) = tanh(x) # 激活函数
+# exact_u_expr(t, x) = sin(pi*x) * exp(-t) # 举例一个精确解
+
+# # 生成表达式
+# u_expr, (t_sym, x_sym), (W2_s, W1_s, b1_s, pW2_s, pW1_s, pb1_s) = 
+#     generate_symbolic_u_trial(S, σ, exact_u_expr,tn=2.0)
+
+# # 1. 对时间 t 求导 (v_trial)
+# v_expr = Symbolics.derivative(u_expr, t_sym)
+
+# # 2. 对空间 x 求导 (w_trial)
+# w_expr = Symbolics.derivative(u_expr, x_sym)
+
+# # 3. 对参数 p 求导 (∂u∂p)
+# # 把所有训练参数打包成一个向量
+# params_flat = [vec(W2_s); vec(W1_s); vec(b1_s)]
+# du_dp_expr = Symbolics.jacobian([u_expr], params_flat) 
+# dv_dp_expr = Symbolics.jacobian([v_expr], params_flat)
+# dw_dp_expr = Symbolics.jacobian([w_expr], params_flat)
+
+# # 4. 编译为 Julia 函数
+# # build_function 会生成非常高效的、包含展开循环的代码
+# # target=:function 生成普通函数，target=:inplace 可以生成不分配内存的版本
+# u_func = build_function(u_expr, t_sym, x_sym, params_flat, pW2_s, pW1_s, pb1_s, expression=Val{false})
+# v_func = build_function(v_expr, t_sym, x_sym, params_flat, pW2_s, pW1_s, pb1_s, expression=Val{false})
+# w_func = build_function(w_expr, t_sym, x_sym, params_flat, pW2_s, pW1_s, pb1_s, expression=Val{false})
+
+# ∂u∂p_func = build_function(du_dp_expr, t_sym, x_sym, params_flat, pW2_s, pW1_s, pb1_s, expression=Val{false})[1]
+# ∂v∂p_func = build_function(dv_dp_expr, t_sym, x_sym, params_flat, pW2_s, pW1_s, pb1_s, expression=Val{false})[1]
+# ∂w∂p_func = build_function(dw_dp_expr, t_sym, x_sym, params_flat, pW2_s, pW1_s, pb1_s, expression=Val{false})[1]
+
+# t_val = 0.5
+# x_val = 0.2
+# tn_val = 2.0
+# h_val = 0.1
+# xspan = x_span
+# p_current = rand(4*S) # W2, W1, bias 的平坦化向量
+# pw2 = rand(S)
+# pw1 = rand(S, 2)
+# pb1 = rand(S)
+
+# # 直接调用
+# @benchmark ∂v∂p_func(t_val, x_val,tn_val, h_val, p_current, pw2, pw1, pb1)
+# @benchmark ∂v∂p(t_val, x_val, p_current)
+
+
+
+
+# c=0.5
+# A1 = 0.8
+# A2 = 0.0
+# B1 = 0.8
+# B2 = 0.0
+# l = 1.0
+# activation = tanh
+# a,b = 0.0, 1.0
+# x_domain = b - a
+# h = h_val
+# tn = tn_val
+# function exact_u(t,x)
+# (A1 * cos((pi*c*t)/l) + B1 * sin((pi*c*t)/l + pi/6)) * sin((pi*x)/l) + (A2 * cos((2*pi*c*t)/l) + B2 * sin((2*pi*c*t)/l + pi/6)) * sin((2*pi*x)/l)
+# end
+
+# function NN(t::TT, x::XT, W2::AbstractVector{DT}, W1::AbstractMatrix{DT}, bias1::AbstractVector{DT}) where {TT,XT, DT}
+#     return sum(W2[i] * activation(W1[i,1]*t + W1[i,2]*x + bias1[i]) for i in eachindex(W2))
+# end
+
+# function T1NN_manual(t::TT, x::XT, W2::AbstractVector{DT}, W1::AbstractMatrix{DT}, bias1::AbstractVector{DT}) where {TT,XT, DT}
+
+#     return (b - x) / x_domain * NN(t, a, W2,W1,bias1) +
+#            (x - a) / x_domain * NN(t, b, W2,W1,bias1) +
+#            (h - h * t) / h * NN(0.0, x, W2,W1,bias1)
+# end
+
+# function T2NN_manual(t::TT, x::XT, W2::AbstractVector{DT}, W1::AbstractMatrix{DT}, bias1::AbstractVector{DT}) where {TT,XT, DT}
+
+#     return (b - x) / x_domain * (h - h * t) / h * NN(0.0, a, W2,W1,bias1) +
+#            (x - a) / x_domain * (h - h * t) / h * NN(0.0, b, W2,W1,bias1)
+# end
+
+# function C1(t::TT, x::XT, tn::ST) where {TT,XT,ST}
+#     local a,b = xspan[1],xspan[2]
+#     local x_domain = b-a
+
+#     return (b - x) * exact_u(h*t, a) / x_domain +
+#         (x - a) * exact_u(h*t, b) / x_domain +
+#         (h - h * t) * exact_u(tn, x) / h
+
+# end
+
+# function C2(t::TT, x::XT, tn::ST) where {TT,XT,ST}
+
+#     return (b - x) * (h - h * t) * exact_u(tn, a) / x_domain / h +
+#            (x - a) * (h - h * t) * exact_u(tn, b) / x_domain / h
+# end
+
+# function u_trial(t::TT, x::XT, W2::AbstractVector{DT}, W1::AbstractMatrix{DT}, bias1::AbstractVector{DT}) where {TT,XT, DT}
+#     NN(t, x, W2, W1, bias1) - T1NN_manual(t, x, W2, W1, bias1) + T2NN_manual(t, x, W2, W1, bias1) + C1(t, x, tn) - C2(t, x, tn)
+# end
+
+# function u_trial(t::TT,x::XT,all_params::AbstractVector{DT} ) where {TT,XT, DT}
+#     @views W2 = all_params[1:S]
+#     @views W1 = reshape(all_params[S+1:3*S], S, 2)
+#     @views bias1 = all_params[3*S+1:4*S]
+#     return u_trial(t,x,W2,W1,bias1)
+# end
+
+# u_trial(tx::Vector{ST},all_params::Vector{DT}) where {ST, DT} = u_trial(tx[1],tx[2],all_params) 
+# u_trial(tx::NTuple{2,ST},all_params::Vector{DT} ) where {ST<:Real, DT} = u_trial(tx[1],tx[2],all_params)
+# v_trial_zygote(t::TT, x::XT, W2::AbstractVector{DT}, W1::AbstractMatrix{DT}, bias1::AbstractVector{DT}, sol) where {TT,XT, DT} = Zygote.gradient(tt -> u_trial(tt,x,W2,W1,bias1 ),t)[1]
+# w_trial_zygote(t::TT, x::XT, W2::AbstractVector{DT}, W1::AbstractMatrix{DT}, bias1::AbstractVector{DT}, sol) where {TT,XT, DT} = Zygote.gradient(xx -> u_trial(t,xx,W2,W1,bias1 ),x)[1]
+
+
+# u_trial(tx::Vector{ST}, W2::Vector{DT}, W1::Matrix{DT}, bias1::Vector{DT}, sol) where {ST, DT} = u_trial(tx[1],tx[2],W2,W1,bias1 )
+# u_trial(tx::NTuple{2,ST}, W2::Vector{DT}, W1::Matrix{DT}, bias1::Vector{DT}, sol) where {ST<:Real, DT} = u_trial(tx[1],tx[2],W2,W1,bias1 )
+# v_trial_zygote(tx::Vector{ST}, W2::Vector{DT}, W1::Matrix{DT}, bias1::Vector{DT}, sol) where {ST, DT} = v_trial_zygote(tx[1],tx[2],W2,W1,bias1 )
+# v_trial_zygote(tx::NTuple{2,ST}, W2::Vector{DT}, W1::Matrix{DT}, bias1::Vector{DT}, sol) where {ST<:Real, DT} = v_trial_zygote(tx[1],tx[2],W2,W1,bias1 )
+# w_trial_zygote(tx::Vector{ST}, W2::Vector{DT}, W1::Matrix{DT}, bias1::Vector{DT}, sol) where {ST, DT} = w_trial_zygote(tx[1],tx[2],W2,W1,bias1 )
+# w_trial_zygote(tx::NTuple{2,ST}, W2::Vector{DT}, W1::Matrix{DT}, bias1::Vector{DT}, sol) where {ST<:Real, DT} = w_trial_zygote(tx[1],tx[2],W2,W1,bias1 )
+
+
+# v_trial(t::TT,x::XT,params::AbstractVector{DT} ) where {TT,XT, DT} = ForwardDiff.derivative(tt -> u_trial(tt,x,params ),t)[1]
+# w_trial(t::TT,x::XT,params::AbstractVector{DT} ) where {TT,XT, DT} = ForwardDiff.derivative(xx -> u_trial(t,xx,params ),x)[1]
+    
+
+# ∂u∂p(t::TT,x::XT,params::AbstractVector{DT} ) where {TT,XT, DT} = ForwardDiff.gradient(p -> u_trial(t,x,p ),params)
+# ∂v∂p(t::TT,x::XT,params::AbstractVector{DT} ) where {TT,XT, DT} = ForwardDiff.gradient(p -> v_trial(t,x,p ),params)
+# ∂w∂p(t::TT,x::XT,params::AbstractVector{DT} ) where {TT,XT, DT} = ForwardDiff.gradient(p -> w_trial(t,x,p ),params)
+
+# ∂u∂p(input::Vector{ST}, params::Vector{DT}, sol) where {ST, DT} = ∂u∂p(input[1],input[2],params )
+# ∂v∂p(input::Vector{ST}, params::Vector{DT}, sol) where {ST, DT} = ∂v∂p(input[1],input[2],params )
+# ∂w∂p(input::Vector{ST}, params::Vector{DT}, sol) where {ST, DT} = ∂w∂p(input[1],input[2],params )
+# ∂u∂p(input::NTuple{2,ST}, params::Vector{DT}, sol) where {ST<:Real, DT} = ∂u∂p(input[1],input[2],params )
+# ∂v∂p(input::NTuple{2,ST}, params::Vector{DT}, sol) where {ST<:Real, DT} = ∂v∂p(input[1],input[2],params )
+# ∂w∂p(input::NTuple{2,ST}, params::Vector{DT}, sol) where {ST<:Real, DT} = ∂w∂p(input[1],input[2],params )
+

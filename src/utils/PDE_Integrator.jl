@@ -68,11 +68,19 @@ function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator, n₁::In
     solstep = solutionstep(int, sol[n₁-1])
     internal_solutions = Vector{Vector{Float64}}(undef,n₂ - n₁ + 1)
 
+    u_quad_values = Vector{Array{Float64}}(undef,n₂ - n₁ + 1)
+    v_quad_values = Vector{Array{Float64}}(undef,n₂ - n₁ + 1)
+    w_quad_values = Vector{Array{Float64}}(undef,n₂ - n₁ + 1)
+
     # loop over time steps
     for n in n₁:n₂
         println("current time step: ", n)
         sol[n] = integrate!(solstep, int)
         internal_solutions[n] = deepcopy(cache(int).x)
+        u_quad_values[n] = deepcopy(cache(int).u_quad_values)
+        v_quad_values[n] = deepcopy(cache(int).v_quad_values)
+        w_quad_values[n] = deepcopy(cache(int).w_quad_values)
+
 
         havenan = false
         for s in current(solstep)
@@ -86,7 +94,9 @@ function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator, n₁::In
 
     end
 
-    return sol,internal_solutions
+    return (sol = sol,
+    u_quad_values=u_quad_values,v_quad_values=v_quad_values,w_quad_values=w_quad_values,
+    internal_solutions=internal_solutions)
 end
 
 function integrate!(solstep::SolutionStep, int::AbstractPDEIntegrator)
