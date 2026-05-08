@@ -5,7 +5,6 @@ using AbstractNeuralNetworks
 using Random
 using GeometricMachineLearning
 using Zygote
-using Plots
 using ForwardDiff
 using Base
 
@@ -34,43 +33,77 @@ GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
     # x_suctol = 2eps()
 )
 
-nn_pde_basis = NetworkPDEBasis(S,tanh,:Fully) # Partially, Fully
+nn_pde_basis = NetworkPDEBasis(S,tanh,:Partially) # Partially, Fully
 xspan = (0.0,1.0)
 t_span = (0.0,10.0)
-nn_int = NN_PDE_Integrator(nn_pde_basis,xspan = xspan, μ =:BSplineDirichlet,λ =:BSplineDirichlet,
+nn_int = NN_PDE_Integrator(nn_pde_basis,xspan = xspan, μ =:BSplineDirichlet,λ =:BSplineDirichlet,t_num_interval = 2, x_num_interval = 5,
 k_μ_t = 4,k_λ_x = 4, show_status=false)
 
 lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan = t_span,xspan = xspan)
 
-sol,internal_values = MultiSymplectic.integrate(lpde,nn_int)
+sol = MultiSymplectic.integrate(lpde,nn_int)
 
-wave_ham(u,v,w) = 1 / 2 * (0.5 * v^2 + w^2)
-ham_ls = zeros(length(t_span[1]:t_step:t_span[2]))
-analytic_ham = zeros(length(t_span[1]:t_step:t_span[2]))
-x_ls = xspan[1]:0.01:xspan[2]
+c=0.5
+A1 = 0.8
+A2 = 0.0
+B1 = 0.8
+B2 = 0.0
+l = 1.0
 
-for (i, t) in enumerate(t_span[1]:t_step:t_span[2])
-    current_domain_ham = [wave_ham(ui,vi,wi) for (ui,vi,wi) in zip(sol.u[i-1],sol.v[i-1],sol.w[i-1])]
-    ham_ls[i] = sum(current_domain_ham)
-
-    analytic_u_values = lpde.exact_u.(t, x_ls)
-    analytic_v_values = lpde.exact_v.(t, x_ls)
-    analytic_w_values = lpde.exact_w.(t, x_ls)
-    current_ham = [wave_ham(ui,vi,wi) for (ui,vi,wi) in zip(analytic_u_values,analytic_v_values,analytic_w_values)]
-    analytic_ham[i] = sum(current_ham)
+function hamiltonian_density(t, x, u, v, w)
+    1 / 2 * (v[1]^2 + c^2 * w[1]^2)  
 end
+
+# Hamiltonian on a given spatial-temporal domain
+function hamiltonian(u_quad_values::Matrix{Float64}, v_quad_values::Matrix{Float64}, w_quad_values::Matrix{Float64}, grid_quad_node::Matrix{Vector{ST}}, 
+    grid_quad_weights::Matrix{ST}, xspan = xspan, timestep = t_step) where ST
+    ham = 0.0
+
+    RT = size(u_quad_values, 1)
+    RX = size(u_quad_values, 2)
+    x_domain = xspan[2] - xspan[1]
+        for rt in 1:RT
+            for rx in 1:RX
+                ham+= x_domain * timestep * grid_quad_weights[rt,rx] * 
+                hamiltonian_density(grid_quad_node[rt,rx][1], grid_quad_node[rt,rx][2], u_quad_values[rt, rx], v_quad_values[rt, rx], w_quad_values[rt, rx])
+            end
+        end
+
+    return ham
+end
+
+
+ham_ls = zeros(length(t_span[1]:t_step:t_span[2]-t_step))
+analytic_ham = zeros(length(t_span[1]:t_step:t_span[2]-t_step))
+for (i, t) in enumerate(t_span[1]:t_step:t_span[2]-t_step)
+
+    ham_ls[i] = hamiltonian(sol.u_quad_values[i][1,:,:], sol.v_quad_values[i][1,:,:], sol.w_quad_values[i][1,:,:],  nn_int.grid_matrix,  nn_int.grid_weights)
+
+    analytic_u_values = [lpde.exact_u(t + t_step* nn_int.grid_matrix[i,j][1],  nn_int.grid_matrix[i,j][2]; params=lpde.params) for i in 1:size( nn_int.grid_matrix, 1), j in 1:size( nn_int.grid_matrix, 2)]
+    analytic_v_values = [lpde.exact_v(t + t_step* nn_int.grid_matrix[i,j][1],  nn_int.grid_matrix[i,j][2]; params=lpde.params) for i in 1:size( nn_int.grid_matrix, 1), j in 1:size( nn_int.grid_matrix, 2)]
+    analytic_w_values = [lpde.exact_w(t + t_step* nn_int.grid_matrix[i,j][1],  nn_int.grid_matrix[i,j][2]; params=lpde.params) for i in 1:size( nn_int.grid_matrix, 1), j in 1:size( nn_int.grid_matrix, 2)]
+
+    analytic_ham[i] = hamiltonian(analytic_u_values, analytic_v_values, analytic_w_values,  nn_int.grid_matrix,  nn_int.grid_weights)
+end
+
+
 relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
 max_err = maximum(relative_ham_err)
 
-
-
 record = Dict(
-    "sol_u" => sol.u,
-    "sol_v" => sol.v,
-    "sol_w" => sol.w,
-    "internal_values" => internal_values,
+    "sol_u" => sol.sol.u,
+    "sol_v" => sol.sol.v,
+    "sol_w" => sol.sol.w,
+    "sol_u_quad" => sol.u_quad_values,
+    "sol_v_quad" => sol.v_quad_values,
+    "sol_w_quad" => sol.w_quad_values,
+    "internal_solutions" => sol.internal_solutions,
+    "ham_ls" => ham_ls,
+    "analytic_ham" => analytic_ham,
+    "relative_ham_err" => relative_ham_err,
+    "max_err" => max_err
 )
-save("NNInt_fully_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err).jld2", record)
+save("NNInt_partially_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err).jld2", record)
 
 
 # using GeometricSolutions
