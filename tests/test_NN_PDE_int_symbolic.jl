@@ -14,6 +14,8 @@ using GeometricIntegratorsBase
 using BenchmarkTools
 using JLD2
 using Profile
+# using ProfView
+
 
 # using Gtk4
 # using ProfileView
@@ -27,11 +29,12 @@ relu3(x) = max(0, x) ^3
 # reg_factor = parse(Float64, ARGS[2])
 # S = parse(Int, ARGS[3])
 
-t_step =0.2
+t_step =0.5
 reg_factor = 1e-5
-S = 20
-max_iters = 10
-GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
+S = 70
+max_iters = 100
+
+GeometricIntegratorsBase.default_options(::NN_PDE_Integrator_Symbolic) = (
     max_iterations = max_iters,
     warn_iterations = max_iters,
     regularization_factor = reg_factor,
@@ -40,17 +43,17 @@ GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
     verbosity = 2,
 )
 
-nn_pde_basis = NetworkPDEBasis(S,tanh,:Fully) # Partially, Fully
+nn_pde_basis_sym = NetworkPDEBasis_Symbolic(S,tanh,:Fully) # Partially, Fully
+
 xspan = (0.0,1.0)
-t_span = (0.0,0.2)
-nn_int = NN_PDE_Integrator(nn_pde_basis,xspan = xspan, μ =:BSplineDirichlet,λ =:BSplineDirichlet,t_num_interval = 2, x_num_interval = 5,
+t_span = (0.0,10.0)
+nn_int = NN_PDE_Integrator_Symbolic(nn_pde_basis_sym,xspan = xspan, μ =:BSplineDirichlet,λ =:BSplineDirichlet,t_num_interval = 2, x_num_interval = 5,
 k_μ_t = 4,k_λ_x = 4, show_status=false)
 
 lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan = t_span,xspan = xspan)
 
 
-@profile sol = MultiSymplectic.integrate(lpde,nn_int)
-Profile.print(format=:flat, sortedby=:count)
+sol = MultiSymplectic.integrate(lpde,nn_int)
 
 c=0.5
 A1 = 0.8
@@ -112,23 +115,19 @@ record = Dict(
     "relative_ham_err" => relative_ham_err,
     "max_err" => max_err
 )
-save("NNInt_partially_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err).jld2", record)
-
-
-using GeometricSolutions
-sol = GeometricSolution(lpde)
-integrator = PDEIntegrator(lpde, nn_int)
-import GeometricIntegratorsBase: solutionstep,nlsolution,current,parameters
-solstep = solutionstep(integrator, sol[0])
-
-MultiSymplectic.prior_initial_guess!(cache(integrator),solstep,integrator)
-Q1 = GeometricIntegratorsBase.current(solstep)
-Q2 = GeometricIntegratorsBase.history(solstep)
-Q3 = GeometricIntegratorsBase.parameters(solstep)
-MultiSymplectic.integrate_step!(Q1, Q2, Q3, integrator)
-@profview MultiSymplectic.integrate_step!(Q1, Q2, Q3, integrator)
+save("NNInt_fully_Symb_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err).jld2", record)
 
 
 
-# @benchmark  MultiSymplectic.components!(nlsolution($integrator),current($solstep), parameters($solstep), $integrator)
-# @benchmark MultiSymplectic.residual!(nlsolution($integrator), current($solstep), parameters($solstep), $integrator)
+# using GeometricSolutions
+# sol = GeometricSolution(lpde)
+# integrator = PDEIntegrator(lpde, nn_int)
+# import GeometricIntegratorsBase: solutionstep,nlsolution,current,parameters
+# solstep = solutionstep(integrator, sol[0])
+
+# MultiSymplectic.prior_initial_guess!(cache(integrator),solstep,integrator)
+# Q1 = GeometricIntegratorsBase.current(solstep)
+# Q2 = GeometricIntegratorsBase.history(solstep)
+# Q3 = GeometricIntegratorsBase.parameters(solstep)
+# MultiSymplectic.integrate_step!(Q1, Q2, Q3, integrator)
+# VSCodeServer.@profview MultiSymplectic.integrate_step!(Q1, Q2, Q3, integrator)

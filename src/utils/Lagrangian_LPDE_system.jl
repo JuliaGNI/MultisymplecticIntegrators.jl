@@ -1,16 +1,16 @@
 
-struct LPDESystem
-    L
-    D
-    t 
-    x
-    u # alias for q
-    v # alias for ut
-    w # alias for ux
-    params
-    equations
-    functions
-    function LPDESystem(L,t,x,U,V,W,params = NamedTuple();simplify = true, scalarize = true)
+struct LPDESystem{LType,TType,XType,UType,VType,WType,EType,FType}
+    L::LType
+    D::Int
+    t::TType
+    x::XType
+    u::UType # alias for q
+    v::VType # alias for ut
+    w::WType # alias for ux
+    params::NamedTuple
+    equations::EType
+    functions::FType
+    function LPDESystem(L::LType,t::TType,x::XType,U::UType,V::VType,W::WType,params = NamedTuple();simplify = true, scalarize = true) where {LType,TType,XType,UType,VType,WType}
 
         DX = length(x)
         D = length(U)
@@ -54,7 +54,7 @@ struct LPDESystem
             ∂L∂W = ∂L∂W,
         ) # set of callable functions
 
-        return new(Ls,D, t, x, U,V,W, params, equs, functions)
+        return new{LType,TType,XType,UType,VType,WType,typeof(equs),typeof(functions)}(Ls,D, t, x, U,V,W, params, equs, functions)
     end
 end
 

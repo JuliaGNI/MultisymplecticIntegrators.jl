@@ -339,7 +339,6 @@ function prior_initial_guess!(C::TrialNN_PDE_intCache, sol, int::PDEIntegrator{<
     local Φ_raw = int.method.initial_guess_method.Φ_raw
     local N = int.method.initial_guess_method.N
     local M = int.method.initial_guess_method.M
-    local tn = sol.t - timestep(int)
 
     # This performs up to `max_iter` outer iterations to account for boundary terms depending on PNN
     B = zeros(N, S)   # orthonormal basis columns
