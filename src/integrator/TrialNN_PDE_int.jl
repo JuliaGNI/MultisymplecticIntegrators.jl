@@ -7,7 +7,7 @@ struct TrialNN_PDE_int{BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PD
     spatial_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RX::Int # Number of quadrature points in spatial dimension, for simplicity, set the same for all dimensions
 
-    grid_matrix::Matrix{NTuple{2,Float64}}  # Quadrature grid points: [(t1,x1), (t1,x2), ]
+    grid_matrix::Matrix{Vector{Float64}}  # Quadrature grid points: [(t1,x1), (t1,x2), ]
     grid_weights::Matrix{Float64} # Quadrature weights
 
     initial_guess_method::IPMT # :LSGD or :GroundTruth
@@ -18,7 +18,7 @@ struct TrialNN_PDE_int{BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PD
     show_status::Bool
     function TrialNN_PDE_int(basis,;RT_per_interval::Int = 4,RX_per_interval::Int = 4,
         nx::Int = 40,nt::Int= 20,Nw::Int=500, Nb::Int=500,show_status::Bool = false,
-        xspan::Tuple=(0., 1.0),t_num_interval::Int=10,x_num_interval::Int=10,
+        xspan::Tuple=(0., 1.0),t_num_interval::Int=2,x_num_interval::Int=5,
         initial_guess_method::IPMT=OGA2D(xspan[1], xspan[2],basis.activation_function,nx,nt,Nw, Nb),) where {IPMT,} # 300,300
         
         t_quadrature = composite_quadrature(t_num_interval ,RT_per_interval)
@@ -28,14 +28,16 @@ struct TrialNN_PDE_int{BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PD
         RX = length(x_quadrature.nodes)
 
         R_list = [RT_per_interval,RX_per_interval]  
-        raw_grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
+        grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
         # scale grid_matrix
         x0 = xspan[1]
         x_domain = xspan[2] - xspan[1]
-        grid_matrix = Matrix{NTuple{2,Float64}}(undef, size(raw_grid_matrix)...)
-        @inbounds for i in axes(grid_matrix, 1), j in axes(grid_matrix, 2)
-            t, xhat = raw_grid_matrix[i, j]
-            grid_matrix[i, j] = (Float64(t), Float64(x0 + x_domain * xhat))
+
+        grid_matrix = [collect(grid_matrix[i, j]) for i in axes(grid_matrix, 1), j in axes(grid_matrix, 2)]
+
+        @inbounds for k in eachindex(grid_matrix)
+            t, xhat = grid_matrix[k]
+            grid_matrix[k][2] = x0 + x_domain * xhat
         end
 
         new{typeof(basis),typeof(initial_guess_method)}(basis,
@@ -406,8 +408,8 @@ function prior_initial_guess!(C::TrialNN_PDE_intCache, sol, int::PDEIntegrator{<
     approx_vec = [u_trial(quad_nodes[1,i], quad_nodes[2,i], C.W2,C.W1,C.bias1,int,sol)  for i in 1:N ]
     err_vec = abs.(target_vec .- approx_vec)
     println("Max abs error after OGA initial guess: ", maximum(err_vec))
-    println("OGA initial guess completed.")
-    println("Initial guess \n", C.x)
+    # println("OGA initial guess completed.")
+    # println("Initial guess \n", C.x)
 end
 
 function copy_internal_variables!(C::TrialNN_PDE_intCache,solstep::SolutionStep)
@@ -458,12 +460,10 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Tr
     local ∂v∂p_func = int.method.basis.∂v∂p_func
     local ∂w∂p_func = int.method.basis.∂w∂p_func
     local tn = sol.t - timestep(int)
-    local h = timestep(int)
     local previous_W2_s = cache(int).previous_W2
     local previous_W1_s = cache(int).previous_W1
     local previous_bias1_s = cache(int).previous_bias1
 
-    t2 = time()
     for d in 1:D
         for i in 1:RT
             for j in 1:RX 

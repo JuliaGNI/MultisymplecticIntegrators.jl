@@ -6,50 +6,125 @@ using GeometricIntegratorsBase
 using MultiSymplectic
 using AbstractNeuralNetworks
 using Zygote
-using Plots
+using JLD2
 using Profile
 using Base
 using Infiltrator
-# t_step = parse(Float64, ARGS[1])
-# rt = parse(Int, ARGS[2])
-# Nw = parse(Int, ARGS[3])
-# Nb = parse(Int, ARGS[4])
 
-t_step = 0.5
-NN_width = 70
+
+t_step = parse(Float64, ARGS[1])
+reg_factor = parse(Float64, ARGS[2])
+S = parse(Int, ARGS[3])
+
+
+# t_step = 0.2
+# reg_factor = 1e-5
+# S = 70
+
 
 GeometricIntegratorsBase.default_options(::TrialNN_PDE_int) = (
     max_iterations = 100,
-    regularization_factor = 1e-5,
-    f_abstol = 2eps(),
-    x_suctol = 2eps()
+    regularization_factor = reg_factor,
+    # f_abstol = 2eps(),
+    # x_suctol = 2eps(),
+    # verbosity = 2
 )
 
 x_step = 0.01
 x_span = (0.0, 1.0)
-lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=(0.0, t_step), xspan=x_span, xstep=x_step)
+t_span = (0.0,10.0)
+lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=x_span, xstep=x_step)
 
 relu3(x) = max(0.0, x)^3
 activation = tanh
-trial_basis = Trial_Solution_Basis(NN_width, activation,lpde.exact_u,x_span)
+trial_basis = Trial_Solution_Basis(S, activation,lpde.exact_u,x_span)
 
 # for rt in [8,12,24]
 # for rx in [16, 32, 64]
 # log_file = "logs/trial_nn_int.txt"
 # open(log_file, "w") do io
 #         redirect_stdio(stdout=log_file, stderr=log_file) do
-                trial_int = TrialNN_PDE_int(trial_basis, show_status=false)
+                trial_int = TrialNN_PDE_int(trial_basis, show_status=false,t_num_interval=4,x_num_interval=8)
                 sol= MultiSymplectic.integrate(lpde,trial_int)
         
-                p = @layout [a b c]
-                p1 = plot([lpde.exact_u(t_step,xx) for xx in x_span[1]:0.01:x_span[2]], label="exact_u")
-                plot!(p1, sol.sol.s.u[1], label="sol.u")
-                p2 = plot([lpde.exact_v(t_step,xx) for xx in x_span[1]:0.01:x_span[2]], label="exact_v")
-                plot!(p2, sol.sol.s.v[1], label="sol.v")
-                p3 = plot([lpde.exact_w(t_step,xx) for xx in x_span[1]:0.01:x_span[2]], label="exact_w")
-                plot!(p3, sol.sol.s.w[1], label="sol.w")
-                p = plot(p1, p2, p3, layout=p)
-                savefig("logs/trial_nn_int_t=$t_step.pdf")
+
+
+
+c=0.5
+A1 = 0.8
+A2 = 0.0
+B1 = 0.8
+B2 = 0.0
+l = 1.0
+
+function hamiltonian_density(t, x, u, v, w)
+    1 / 2 * (v[1]^2 + c^2 * w[1]^2)  
+end
+
+# Hamiltonian on a given spatial-temporal domain
+function hamiltonian(u_quad_values::Matrix{Float64}, v_quad_values::Matrix{Float64}, w_quad_values::Matrix{Float64}, grid_quad_node::Matrix{Vector{ST}}, 
+    grid_quad_weights::Matrix{ST}, xspan = x_span, timestep = t_step) where ST
+    ham = 0.0
+
+    RT = size(u_quad_values, 1)
+    RX = size(u_quad_values, 2)
+    x_domain = xspan[2] - xspan[1]
+        for rt in 1:RT
+            for rx in 1:RX
+                ham+= x_domain * timestep * grid_quad_weights[rt,rx] * 
+                hamiltonian_density(grid_quad_node[rt,rx][1], grid_quad_node[rt,rx][2], u_quad_values[rt, rx], v_quad_values[rt, rx], w_quad_values[rt, rx])
+            end
+        end
+
+    return ham
+end
+
+
+ham_ls = zeros(length(t_span[1]:t_step:t_span[2]-t_step))
+analytic_ham = zeros(length(t_span[1]:t_step:t_span[2]-t_step))
+for (i, t) in enumerate(t_span[1]:t_step:t_span[2]-t_step)
+
+    ham_ls[i] = hamiltonian(sol.u_quad_values[i][1,:,:], sol.v_quad_values[i][1,:,:], sol.w_quad_values[i][1,:,:],  trial_int.grid_matrix,  trial_int.grid_weights)
+
+    analytic_u_values = [lpde.exact_u(t + t_step* trial_int.grid_matrix[i,j][1],  trial_int.grid_matrix[i,j][2]; params=lpde.params) for i in 1:size( trial_int.grid_matrix, 1), j in 1:size( trial_int.grid_matrix, 2)]
+    analytic_v_values = [lpde.exact_v(t + t_step* trial_int.grid_matrix[i,j][1],  trial_int.grid_matrix[i,j][2]; params=lpde.params) for i in 1:size( trial_int.grid_matrix, 1), j in 1:size( trial_int.grid_matrix, 2)]
+    analytic_w_values = [lpde.exact_w(t + t_step* trial_int.grid_matrix[i,j][1],  trial_int.grid_matrix[i,j][2]; params=lpde.params) for i in 1:size( trial_int.grid_matrix, 1), j in 1:size( trial_int.grid_matrix, 2)]
+
+    analytic_ham[i] = hamiltonian(analytic_u_values, analytic_v_values, analytic_w_values,  trial_int.grid_matrix,  trial_int.grid_weights)
+end
+
+
+relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
+max_err = maximum(relative_ham_err)
+
+record = Dict(
+    "sol_u" => sol.sol.u,
+    "sol_v" => sol.sol.v,
+    "sol_w" => sol.sol.w,
+    "sol_u_quad" => sol.u_quad_values,
+    "sol_v_quad" => sol.v_quad_values,
+    "sol_w_quad" => sol.w_quad_values,
+    "internal_solutions" => sol.internal_solutions,
+    "ham_ls" => ham_ls,
+    "analytic_ham" => analytic_ham,
+    "relative_ham_err" => relative_ham_err,
+    "max_err" => max_err
+)
+save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_fabs0xuc0.jld2", record)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #         end
 # end
