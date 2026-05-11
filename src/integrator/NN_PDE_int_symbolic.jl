@@ -290,9 +290,9 @@ end
     end::CacheType(ST, c.problem, c.method)
 end
 
-zero_vectors!(x::NamedTuple) = foreach(zero_vectors!, values(x))
-zero_vectors!(x::AbstractArray) = fill!(x, zero(eltype(x)))
-zero_vectors!(x) = nothing
+# zero_vectors!(x::NamedTuple) = foreach(zero_vectors!, values(x))
+# zero_vectors!(x::AbstractArray) = fill!(x, zero(eltype(x)))
+# zero_vectors!(x) = nothing
 
 function prior_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator_Symbolic{MVT,LT,BT,IPMT}}) where {MVT,LT,BT,IPMT<:OGA2D}
     local h = timestep(int)

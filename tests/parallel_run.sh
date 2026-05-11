@@ -19,13 +19,13 @@ run_configuration() {
     echo "Running Julia script with h=$tstep, reg_factor=$reg_factor, S=$S" 
 
     # Run the Julia script in the background
-    julia --project=. tests/test_NN_PDE_int.jl $tstep $reg_factor $S &
+    julia --project=. tests/test_Trial_NN_PDE_int.jl $tstep $reg_factor $S &
 }
 
 # Loop through the activations
 for tstep in {0.2,0.5}; do
-    for reg_factor in {1e-3,1e-5,1e-7,}; do #  ,1e-7
-        for S in {60,70}; do # 
+    for reg_factor in {0.0,1e-5,1e-7}; do #  ,1e-7
+        for S in {70,60}; do # 
             run_configuration $tstep $reg_factor $S 
         done
     done

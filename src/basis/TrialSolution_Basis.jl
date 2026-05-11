@@ -11,9 +11,9 @@ struct Trial_Solution_Basis{AF, UFT, VFT, WFT, UPFT, VPFT, WPFT} <: AbstractPDEB
     ∂v∂p_func::VPFT
     ∂w∂p_func::WPFT
 
-    function Trial_Solution_Basis(S::Int, σ::AF, exact_u_expr,x_span) where {AF}
+    function Trial_Solution_Basis(S::Int, σ::AF,x_span) where {AF}
         a,b = x_span[1], x_span[2]
-        u_expr, (t_sym, x_sym, tn_sym, h_sym), (W2_s, W1_s, b1_s, previous_W2_s, previous_W1_s, previous_bias1_s) = generate_symbolic_u_trial(S, σ, exact_u_expr,a=a, b=b)
+        u_expr, (t_sym, x_sym, h_sym), (W2_s, W1_s, b1_s) = generate_symbolic_u_trial(S, σ,a=a, b=b) # previous_W2_s, previous_W1_s, previous_bias1_s,
         # 1. Differentiate with respect to time t (v_trial)
         v_expr = Symbolics.derivative(u_expr, t_sym)
 
@@ -30,13 +30,13 @@ struct Trial_Solution_Basis{AF, UFT, VFT, WFT, UPFT, VPFT, WPFT} <: AbstractPDEB
         # 4. Compile to Julia functions
         # build_function generates very efficient code with unrolled loops
         # target=:function creates a normal function, target=:inplace can generate an allocation-free version
-        u_func = build_function(u_expr, t_sym, x_sym, tn_sym, h_sym, params_flat, previous_W2_s, previous_W1_s, previous_bias1_s, expression=Val{false})
-        v_func = build_function(v_expr, t_sym, x_sym, tn_sym, h_sym, params_flat, previous_W2_s, previous_W1_s, previous_bias1_s, expression=Val{false})
-        w_func = build_function(w_expr, t_sym, x_sym, tn_sym, h_sym, params_flat, previous_W2_s, previous_W1_s, previous_bias1_s, expression=Val{false})
+        u_func = build_function(u_expr, t_sym, x_sym, h_sym, params_flat, expression=Val{false}) 
+        v_func = build_function(v_expr, t_sym, x_sym, h_sym, params_flat, expression=Val{false})
+        w_func = build_function(w_expr, t_sym, x_sym, h_sym, params_flat, expression=Val{false})
 
-        ∂u∂p_func = build_function(du_dp_expr, t_sym, x_sym, tn_sym, h_sym, params_flat, previous_W2_s, previous_W1_s, previous_bias1_s, expression=Val{false})[1]
-        ∂v∂p_func = build_function(dv_dp_expr, t_sym, x_sym, tn_sym, h_sym, params_flat, previous_W2_s, previous_W1_s, previous_bias1_s, expression=Val{false})[1]
-        ∂w∂p_func = build_function(dw_dp_expr, t_sym, x_sym, tn_sym, h_sym, params_flat, previous_W2_s, previous_W1_s, previous_bias1_s, expression=Val{false})[1]
+        ∂u∂p_func = build_function(du_dp_expr, t_sym, x_sym, h_sym, params_flat, expression=Val{false})[1]
+        ∂v∂p_func = build_function(dv_dp_expr, t_sym, x_sym, h_sym, params_flat, expression=Val{false})[1]
+        ∂w∂p_func = build_function(dw_dp_expr, t_sym, x_sym, h_sym, params_flat, expression=Val{false})[1]
 
 
         new{AF, typeof(u_func), typeof(v_func), typeof(w_func), 
@@ -45,12 +45,12 @@ struct Trial_Solution_Basis{AF, UFT, VFT, WFT, UPFT, VPFT, WPFT} <: AbstractPDEB
     end
 end
 
-function generate_symbolic_u_trial(S::Int, activation_fn, exact_u_sym_fn; a=0.0, b=1.0)
+function generate_symbolic_u_trial(S::Int, activation_fn; a=0.0, b=1.0)
     # 1. Define symbolic variables
-    @variables t x tn h 
+    @variables t x h 
     @variables W2[1:S] W1[1:S, 1:2] bias1[1:S]
     # If C1 depends on previous-step weights, define them as symbolic constants (or pass values directly)
-    @variables previous_W2[1:S] previous_W1[1:S, 1:2] previous_bias1[1:S]
+    # @variables previous_W2[1:S] previous_W1[1:S, 1:2] previous_bias1[1:S]
 
     # 2. Define the symbolic neural network
     # Map the activation function (for custom functions, register it first, e.g. @register_symbolic my_act(x))
@@ -70,23 +70,23 @@ function generate_symbolic_u_trial(S::Int, activation_fn, exact_u_sym_fn; a=0.0,
     t2_nn = (b - x) / x_domain * (h - h * t) / h * sym_NN(0.0, a, W2, W1, bias1) +
             (x - a) / x_domain * (h - h * t) / h * sym_NN(0.0, b, W2, W1, bias1)
 
-    # Special handling for C1: use IfElse.ifelse instead of a plain if
-    # If tn == 0, use exact_u; otherwise use previous-step NN (TrialNN logic)
-    prev_step_term = ifelse(tn == 0.0, 
-                    exact_u_sym_fn(0.0, x), 
-                    sym_NN(1.0, x, previous_W2, previous_W1, previous_bias1))
+    # # Special handling for C1: use IfElse.ifelse instead of a plain if
+    # # If tn == 0, use exact_u; otherwise use previous-step NN (TrialNN logic)
+    # prev_step_term = ifelse(tn == 0.0, 
+    #                 exact_u_sym_fn(0.0, x), 
+    #                 sym_NN(1.0, x, previous_W2, previous_W1, previous_bias1))
 
-    c1 = (b - x) * exact_u_sym_fn(tn + h*t, a) / x_domain +
-         (x - a) * exact_u_sym_fn(tn + h*t, b) / x_domain +
-         (h - h * t) * prev_step_term / h
+    # c1 = (b - x) * exact_u_sym_fn(tn + h*t, a) / x_domain +
+    #      (x - a) * exact_u_sym_fn(tn + h*t, b) / x_domain +
+    #      (h - h * t) * prev_step_term / h
 
-    # C2 uses symbolic tn and h
-    c2 = (b - x) * (h - h * t) * exact_u_sym_fn(tn, a) / x_domain / h +
-         (x - a) * (h - h * t) * exact_u_sym_fn(tn, b) / x_domain / h
+    # # C2 uses symbolic tn and h
+    # c2 = (b - x) * (h - h * t) * exact_u_sym_fn(tn, a) / x_domain / h +
+    #      (x - a) * (h - h * t) * exact_u_sym_fn(tn, b) / x_domain / h
 
     # 4. Combine terms to obtain the symbolic u_trial expression
-    expr_u = sym_NN(t, x, W2, W1, bias1) - t1_nn + t2_nn + c1 - c2
+    expr_u = sym_NN(t, x, W2, W1, bias1) - t1_nn + t2_nn # + c1 - c2
 
     # Return with tn and h included in the argument list
-    return expr_u, (t, x, tn, h), (W2, W1, bias1, previous_W2, previous_W1, previous_bias1)
+    return expr_u, (t, x, h), (W2, W1, bias1)# , previous_W2, previous_W1, previous_bias1
 end

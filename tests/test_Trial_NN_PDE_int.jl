@@ -27,26 +27,28 @@ GeometricIntegratorsBase.default_options(::TrialNN_PDE_int) = (
     regularization_factor = reg_factor,
     # f_abstol = 2eps(),
     # x_suctol = 2eps(),
-    # verbosity = 2
+    verbosity = 2
 )
 
 x_step = 0.01
 x_span = (0.0, 1.0)
-t_span = (0.0,10.0)
+t_span = (0.0,2*t_step)
 lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=x_span, xstep=x_step)
 
 relu3(x) = max(0.0, x)^3
 activation = tanh
-trial_basis = Trial_Solution_Basis(S, activation,lpde.exact_u,x_span)
+trial_basis = Trial_Solution_Basis(S, activation,x_span)
 
 # for rt in [8,12,24]
 # for rx in [16, 32, 64]
-# log_file = "logs/trial_nn_int.txt"
+# log_file = "trial_nn_int_debug.txt"
 # open(log_file, "w") do io
 #         redirect_stdio(stdout=log_file, stderr=log_file) do
-                trial_int = TrialNN_PDE_int(trial_basis, show_status=false,t_num_interval=4,x_num_interval=8)
-                sol= MultiSymplectic.integrate(lpde,trial_int)
-        
+            trial_int = TrialNN_PDE_int(trial_basis, show_status=false,t_num_interval=4,x_num_interval=8)
+            sol= MultiSymplectic.integrate(lpde,trial_int)
+    #     end
+    # end
+# end
 
 
 
@@ -94,7 +96,7 @@ for (i, t) in enumerate(t_span[1]:t_step:t_span[2]-t_step)
 end
 
 
-relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
+relative_ham_err = abs.((ham_ls .-  analytic_ham ) ./ analytic_ham)
 max_err = maximum(relative_ham_err)
 
 record = Dict(
@@ -111,7 +113,6 @@ record = Dict(
     "max_err" => max_err
 )
 save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_fabs0xuc0.jld2", record)
-
 
 
 
