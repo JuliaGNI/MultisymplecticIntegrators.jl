@@ -92,6 +92,16 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,S,NP,OGAN,a,b,xstep} <: PDEIntegratorCach
     C1C2_result::Matrix{ST}
     ∂C1C2∂t_result::Matrix{ST}
     ∂C1C2∂x_result::Matrix{ST}
+
+    previous_C1C2_equispaced_quad_nodes::Vector{ST}
+    previous_C1C2_quad::Array{ST}
+    previous_∂C1C2∂t_quad::Array{ST}
+    previous_∂C1C2∂x_quad::Array{ST}
+    
+    previous_C1C2_result::Matrix{ST}
+    previous_∂C1C2∂t_result::Matrix{ST}
+    previous_∂C1C2∂x_result::Matrix{ST}
+
     function TrialNN_PDE_intCache{ST,RT,RX,D,S,NP,OGAN,a,b,xstep}() where {ST,RT,RX,D,S,NP,OGAN,a,b,xstep}
         x = zeros(ST, NP) # in ELM, x is just the output layer parameters
         
@@ -117,6 +127,7 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,S,NP,OGAN,a,b,xstep} <: PDEIntegratorCach
         flag_done_initial_guess = zeros(ST, 1)
 
         C1C2_equispaced_quad_nodes = zeros(ST,OGAN)
+        
         C1C2_quad=zeros(ST, D, RT, RX) 
         ∂C1C2∂t_quad=zeros(ST, D, RT, RX) 
         ∂C1C2∂x_quad=zeros(ST, D, RT, RX)
@@ -126,6 +137,17 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,S,NP,OGAN,a,b,xstep} <: PDEIntegratorCach
         ∂C1C2∂t_result=zeros(ST, D, length(x_nodes)) 
         ∂C1C2∂x_result=zeros(ST, D, length(x_nodes))
 
+        previous_C1C2_equispaced_quad_nodes = zeros(ST,OGAN)
+        
+        previous_C1C2_quad=zeros(ST, D, RT, RX) 
+        previous_∂C1C2∂t_quad=zeros(ST, D, RT, RX) 
+        previous_∂C1C2∂x_quad=zeros(ST, D, RT, RX)
+
+        previous_C1C2_result=zeros(ST, D, length(x_nodes)) 
+        previous_∂C1C2∂t_result=zeros(ST, D, length(x_nodes)) 
+        previous_∂C1C2∂x_result=zeros(ST, D, length(x_nodes))
+
+
 
         new(x,
             W2,W1,bias1,
@@ -134,12 +156,13 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,S,NP,OGAN,a,b,xstep} <: PDEIntegratorCach
             ∂L∂U_quad_values,∂L∂V_quad_values,∂L∂W_quad_values,
             ∂u∂θ_quad_values,∂v∂θ_quad_values,∂w∂θ_quad_values,
             flag_done_initial_guess,
-            C1C2_equispaced_quad_nodes,
-            C1C2_quad,
-            ∂C1C2∂t_quad,
-            ∂C1C2∂x_quad,
+            C1C2_equispaced_quad_nodes,C1C2_quad,
+            ∂C1C2∂t_quad,∂C1C2∂x_quad,
             x_nodes,
-            C1C2_result,∂C1C2∂t_result,∂C1C2∂x_result
+            C1C2_result,∂C1C2∂t_result,∂C1C2∂x_result,
+            previous_C1C2_equispaced_quad_nodes,previous_C1C2_quad,
+            previous_∂C1C2∂t_quad,previous_∂C1C2∂x_quad,
+            previous_C1C2_result,∂C1C2∂t_result,previous_∂C1C2∂x_result
             )
     end
 end
@@ -465,6 +488,16 @@ function copy_internal_variables!(C::TrialNN_PDE_intCache,solstep::SolutionStep)
     haskey(internal(solstep), :previous_W2) && copyto!(C.previous_W2,internal(solstep).previous_W2)
     haskey(internal(solstep), :previous_W1) && copyto!(C.previous_W1,internal(solstep).previous_W1)
     haskey(internal(solstep), :previous_bias1) && copyto!(C.previous_bias1,internal(solstep).previous_bias1)
+    
+    haskey(internal(solstep), :previous_C1C2_equispaced_quad_nodes) && copyto!(C.previous_C1C2_equispaced_quad_nodes,internal(solstep).previous_C1C2_equispaced_quad_nodes)
+    haskey(internal(solstep), :previous_C1C2_quad) && copyto!(C.previous_C1C2_quad,internal(solstep).previous_C1C2_quad)
+    haskey(internal(solstep), :previous_∂C1C2∂t_quad) && copyto!(C.previous_bias1,internal(solstep).previous_bias1)
+    haskey(internal(solstep), :previous_∂C1C2∂x_quad) && copyto!(C.previous_bias1,internal(solstep).previous_bias1)
+    haskey(internal(solstep), :previous_C1C2_result) && copyto!(C.previous_bias1,internal(solstep).previous_bias1)
+    haskey(internal(solstep), :previous_∂C1C2∂t_result) && copyto!(C.previous_bias1,internal(solstep).previous_bias1)
+    haskey(internal(solstep), :previous_∂C1C2∂x_result) && copyto!(C.previous_bias1,internal(solstep).previous_bias1)
+
+
 end
 
 function copy_internal_variables!(solstep::SolutionStep,C::TrialNN_PDE_intCache)
@@ -748,13 +781,35 @@ end
 
 function internal_variables(method::TrialNN_PDE_int, problem::LPDEProblem)
     local S = method.basis.S
+    local OGAN = int.initial_guess_method.N
+    local D = int.problem.D
+    local RT = int.method.RT
+    local RX = int.method.RX
+    local a,b = int.problem.xspan[1],int.problem.xspan[2]
 
     W1 = zeros(S, 2)
     W2 = zeros(S)
     bias1 = zeros(S)
+    C1C2_equispaced_quad_nodes = zeros(OGAN)
+    C1C2_quad=zeros(D, RT, RX) 
+    ∂C1C2∂t_quad=zeros(D, RT, RX) 
+    ∂C1C2∂x_quad=zeros( D, RT, RX)
+
+    x_nodes = collect(a:0.01:b)
+    C1C2_result=zeros(D, length(x_nodes)) 
+    ∂C1C2∂t_result=zeros(D, length(x_nodes)) 
+    ∂C1C2∂x_result=zeros(D, length(x_nodes))
+
     return (previous_W1 = W1,
         previous_bias1 = bias1,
         previous_W2 = W2,
+        previous_C1C2_equispaced_quad_nodes = C1C2_equispaced_quad_nodes,
+        previous_C1C2_quad = C1C2_quad,
+        previous_∂C1C2∂t_quad = ∂C1C2∂t_quad,
+        previous_∂C1C2∂x_quad = ∂C1C2∂x_quad,
+        previous_C1C2_result = C1C2_result,
+        previous_∂C1C2∂t_result = ∂C1C2∂t_result,
+        previous_∂C1C2∂x_result=∂C1C2∂x_result,
         )
 end
 
