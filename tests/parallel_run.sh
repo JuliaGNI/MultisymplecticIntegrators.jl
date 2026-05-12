@@ -24,7 +24,7 @@ run_configuration() {
 
 # Loop through the activations
 for tstep in {0.2,0.5}; do
-    for reg_factor in {0.0,1e-5,1e-7}; do #  ,1e-7
+    for reg_factor in {1e-5,1e-7}; do #  ,1e-7
         for S in {70,60}; do # 
             run_configuration $tstep $reg_factor $S 
         done

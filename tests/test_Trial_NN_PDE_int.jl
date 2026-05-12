@@ -12,27 +12,26 @@ using Base
 using Infiltrator
 
 
-t_step = parse(Float64, ARGS[1])
-reg_factor = parse(Float64, ARGS[2])
-S = parse(Int, ARGS[3])
+# t_step = parse(Float64, ARGS[1])
+# reg_factor = parse(Float64, ARGS[2])
+# S = parse(Int, ARGS[3])
 
 
-# t_step = 0.2
-# reg_factor = 1e-5
-# S = 70
-
+t_step = 0.2
+reg_factor = 1e-5
+S = 70
 
 GeometricIntegratorsBase.default_options(::TrialNN_PDE_int) = (
     max_iterations = 100,
     regularization_factor = reg_factor,
     # f_abstol = 2eps(),
     # x_suctol = 2eps(),
-    verbosity = 2
+    verbosity = 1
 )
 
 x_step = 0.01
 x_span = (0.0, 1.0)
-t_span = (0.0,2*t_step)
+t_span = (0.0,3*t_step)
 lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=x_span, xstep=x_step)
 
 relu3(x) = max(0.0, x)^3

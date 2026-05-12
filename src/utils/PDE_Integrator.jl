@@ -102,12 +102,12 @@ end
 function integrate!(solstep::SolutionStep, int::AbstractPDEIntegrator)
     reset!(solstep, timestep(int))
 
+    # copy internal variables from solution step to cache
+    copy_internal_variables!(cache(int),solstep)
+
     initialize_bcs_ics!(solstep,int)
 
     prior_initial_guess!(cache(int),solstep,int)
-
-    # copy internal variables from solution step to cache
-    copy_internal_variables!(cache(int),solstep)
 
     integrate_step!(current(solstep), history(solstep), parameters(solstep), int)
 

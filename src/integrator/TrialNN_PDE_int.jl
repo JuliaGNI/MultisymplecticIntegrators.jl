@@ -137,15 +137,15 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,S,NP,OGAN,a,b,xstep} <: PDEIntegratorCach
         ∂C1C2∂t_result=zeros(ST, D, length(x_nodes)) 
         ∂C1C2∂x_result=zeros(ST, D, length(x_nodes))
 
-        previous_C1C2_equispaced_quad_nodes = zeros(ST,OGAN)
+        previous_C1C2_equispaced_quad_nodes = zeros(OGAN)
         
-        previous_C1C2_quad=zeros(ST, D, RT, RX) 
-        previous_∂C1C2∂t_quad=zeros(ST, D, RT, RX) 
-        previous_∂C1C2∂x_quad=zeros(ST, D, RT, RX)
+        previous_C1C2_quad=zeros(D, RT, RX) 
+        previous_∂C1C2∂t_quad=zeros(D, RT, RX) 
+        previous_∂C1C2∂x_quad=zeros(D, RT, RX)
 
-        previous_C1C2_result=zeros(ST, D, length(x_nodes)) 
-        previous_∂C1C2∂t_result=zeros(ST, D, length(x_nodes)) 
-        previous_∂C1C2∂x_result=zeros(ST, D, length(x_nodes))
+        previous_C1C2_result=zeros(D, length(x_nodes)) 
+        previous_∂C1C2∂t_result=zeros(D, length(x_nodes)) 
+        previous_∂C1C2∂x_result=zeros(D, length(x_nodes))
 
 
 
@@ -162,7 +162,7 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,S,NP,OGAN,a,b,xstep} <: PDEIntegratorCach
             C1C2_result,∂C1C2∂t_result,∂C1C2∂x_result,
             previous_C1C2_equispaced_quad_nodes,previous_C1C2_quad,
             previous_∂C1C2∂t_quad,previous_∂C1C2∂x_quad,
-            previous_C1C2_result,∂C1C2∂t_result,previous_∂C1C2∂x_result
+            previous_C1C2_result,previous_∂C1C2∂t_result,previous_∂C1C2∂x_result
             )
     end
 end
@@ -491,12 +491,11 @@ function copy_internal_variables!(C::TrialNN_PDE_intCache,solstep::SolutionStep)
     
     haskey(internal(solstep), :previous_C1C2_equispaced_quad_nodes) && copyto!(C.previous_C1C2_equispaced_quad_nodes,internal(solstep).previous_C1C2_equispaced_quad_nodes)
     haskey(internal(solstep), :previous_C1C2_quad) && copyto!(C.previous_C1C2_quad,internal(solstep).previous_C1C2_quad)
-    haskey(internal(solstep), :previous_∂C1C2∂t_quad) && copyto!(C.previous_bias1,internal(solstep).previous_bias1)
-    haskey(internal(solstep), :previous_∂C1C2∂x_quad) && copyto!(C.previous_bias1,internal(solstep).previous_bias1)
-    haskey(internal(solstep), :previous_C1C2_result) && copyto!(C.previous_bias1,internal(solstep).previous_bias1)
-    haskey(internal(solstep), :previous_∂C1C2∂t_result) && copyto!(C.previous_bias1,internal(solstep).previous_bias1)
-    haskey(internal(solstep), :previous_∂C1C2∂x_result) && copyto!(C.previous_bias1,internal(solstep).previous_bias1)
-
+    haskey(internal(solstep), :previous_∂C1C2∂t_quad) && copyto!(C.previous_∂C1C2∂t_quad,internal(solstep).previous_∂C1C2∂t_quad)
+    haskey(internal(solstep), :previous_∂C1C2∂x_quad) && copyto!(C.previous_∂C1C2∂x_quad,internal(solstep).previous_∂C1C2∂x_quad)
+    haskey(internal(solstep), :previous_C1C2_result) && copyto!(C.previous_C1C2_result,internal(solstep).previous_C1C2_result)
+    haskey(internal(solstep), :previous_∂C1C2∂t_result) && copyto!(C.previous_∂C1C2∂t_result,internal(solstep).previous_∂C1C2∂t_result)
+    haskey(internal(solstep), :previous_∂C1C2∂x_result) && copyto!(C.previous_∂C1C2∂x_result,internal(solstep).previous_∂C1C2∂x_result)
 
 end
 
@@ -504,15 +503,19 @@ function copy_internal_variables!(solstep::SolutionStep,C::TrialNN_PDE_intCache)
     haskey(internal(solstep), :previous_W2) && copyto!(internal(solstep).previous_W2,C.W2)
     haskey(internal(solstep), :previous_W1) && copyto!(internal(solstep).previous_W1,C.W1)
     haskey(internal(solstep), :previous_bias1) && copyto!(internal(solstep).previous_bias1,C.bias1)
+
+    haskey(internal(solstep), :previous_C1C2_equispaced_quad_nodes) && copyto!(internal(solstep).previous_C1C2_equispaced_quad_nodes,C.C1C2_equispaced_quad_nodes)
+    haskey(internal(solstep), :previous_C1C2_quad) && copyto!(internal(solstep).previous_C1C2_quad,C.C1C2_quad)
+    haskey(internal(solstep), :previous_∂C1C2∂t_quad) && copyto!(internal(solstep).previous_∂C1C2∂t_quad,C.∂C1C2∂t_quad)
+    haskey(internal(solstep), :previous_∂C1C2∂x_quad) && copyto!(internal(solstep).previous_∂C1C2∂x_quad,C.∂C1C2∂x_quad)
+    haskey(internal(solstep), :previous_C1C2_result) && copyto!(internal(solstep).previous_C1C2_result,C.C1C2_result)
+    haskey(internal(solstep), :previous_∂C1C2∂t_result) && copyto!(internal(solstep).previous_∂C1C2∂t_result,C.∂C1C2∂t_result)
+    haskey(internal(solstep), :previous_∂C1C2∂x_result) && copyto!(internal(solstep).previous_∂C1C2∂x_result,C.∂C1C2∂x_result)
 end
 
 
 
 function initialize_bcs_ics!(sol,int::PDEIntegrator{<:TrialNN_PDE_int}) 
-    local C1C2_equispaced_quad_nodes = cache(int).C1C2_equispaced_quad_nodes
-    local C1C2_quad = cache(int).C1C2_quad
-    local ∂C1C2∂t_quad = cache(int).∂C1C2∂t_quad
-    local ∂C1C2∂x_quad = cache(int).∂C1C2∂x_quad
     local N = int.method.initial_guess_method.N
     local quad_nodes = int.method.initial_guess_method.equispaced_quad_nodes
     local tn = sol.t - timestep(int)
@@ -522,10 +525,14 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:TrialNN_PDE_int})
     local RX = int.method.RX
     local h = timestep(int)
     local x_nodes = cache(int).x_nodes
+
     local C1C2_result = cache(int).C1C2_result
     local ∂C1C2∂t_result = cache(int).∂C1C2∂t_result
     local ∂C1C2∂x_result = cache(int).∂C1C2∂x_result
-
+    local C1C2_equispaced_quad_nodes = cache(int).C1C2_equispaced_quad_nodes
+    local C1C2_quad = cache(int).C1C2_quad
+    local ∂C1C2∂t_quad = cache(int).∂C1C2∂t_quad
+    local ∂C1C2∂x_quad = cache(int).∂C1C2∂x_quad
 
     for i in 1:N
         C1C2_equispaced_quad_nodes[i] = C1C2(quad_nodes[:,i], tn, int,sol)
@@ -548,6 +555,19 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:TrialNN_PDE_int})
             ∂C1C2∂x_result[d, i] = ∂C1C2∂x(1.0,x_nodes[i],tn, int,sol)
         end
     end
+
+    if tn != 0.0
+        C1C2_equispaced_quad_nodes += cache(int).previous_C1C2_equispaced_quad_nodes
+        C1C2_quad += cache(int).previous_C1C2_quad
+        ∂C1C2∂t_quad += cache(int).previous_∂C1C2∂t_quad
+        ∂C1C2∂x_quad += cache(int).previous_∂C1C2∂x_quad
+        # @infiltrate
+        C1C2_result += cache(int).previous_C1C2_result
+        ∂C1C2∂t_result += cache(int).previous_∂C1C2∂t_result
+        ∂C1C2∂x_result += cache(int).previous_∂C1C2∂x_result
+    end
+
+
 end
 
 function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:TrialNN_PDE_int}) where {ST}
@@ -781,11 +801,11 @@ end
 
 function internal_variables(method::TrialNN_PDE_int, problem::LPDEProblem)
     local S = method.basis.S
-    local OGAN = int.initial_guess_method.N
-    local D = int.problem.D
-    local RT = int.method.RT
-    local RX = int.method.RX
-    local a,b = int.problem.xspan[1],int.problem.xspan[2]
+    local OGAN = method.initial_guess_method.N
+    local D = 1
+    local RT = method.RT
+    local RX = method.RX
+    local a,b = method.xspan[1],method.xspan[2]
 
     W1 = zeros(S, 2)
     W2 = zeros(S)
