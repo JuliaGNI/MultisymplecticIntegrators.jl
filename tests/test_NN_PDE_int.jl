@@ -42,7 +42,7 @@ GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
 
 nn_pde_basis = NetworkPDEBasis(S,tanh,:Fully) # Partially, Fully
 xspan = (0.0,1.0)
-t_span = (0.0,10.0)
+t_span = (0.0,0.2)
 nn_int = NN_PDE_Integrator(nn_pde_basis,xspan = xspan, μ =:BSplineDirichlet,λ =:BSplineDirichlet,t_num_interval = 2, x_num_interval = 5,
 k_μ_t = 4,k_λ_x = 4, show_status=false)
 
@@ -115,19 +115,18 @@ record = Dict(
 save("NNInt_partially_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err).jld2", record)
 
 
-# using GeometricSolutions
-# sol = GeometricSolution(lpde)
-# integrator = PDEIntegrator(lpde, nn_int)
-# import GeometricIntegratorsBase: solutionstep,nlsolution,current,parameters
-# solstep = solutionstep(integrator, sol[0])
+using GeometricSolutions
+sol = GeometricSolution(lpde)
+integrator = PDEIntegrator(lpde, nn_int)
+import GeometricIntegratorsBase: solutionstep,nlsolution,current,parameters
+solstep = solutionstep(integrator, sol[0])
 
-# MultiSymplectic.prior_initial_guess!(cache(integrator),solstep,integrator)
-# Q1 = GeometricIntegratorsBase.current(solstep)
-# Q2 = GeometricIntegratorsBase.history(solstep)
-# Q3 = GeometricIntegratorsBase.parameters(solstep)
-# MultiSymplectic.integrate_step!(Q1, Q2, Q3, integrator)
-# @profview MultiSymplectic.integrate_step!(Q1, Q2, Q3, integrator)
-# @profview MultiSymplectic.integrate_step!(Q1, Q2, Q3, integrator)
+MultiSymplectic.prior_initial_guess!(cache(integrator),solstep,integrator)
+Q1 = GeometricIntegratorsBase.current(solstep)
+Q2 = GeometricIntegratorsBase.history(solstep)
+Q3 = GeometricIntegratorsBase.parameters(solstep)
+MultiSymplectic.integrate_step!(Q1, Q2, Q3, integrator)
+@profview MultiSymplectic.integrate_step!(Q1, Q2, Q3, integrator)
 
 
 
