@@ -70,6 +70,9 @@ module MultiSymplectic
     include("basis/Network_PDE_Basis.jl")
     export NetworkPDEBasis
 
+    include("basis/Network_PDE_basis_symbolic.jl")
+    export NetworkPDEBasis_Symbolic
+
     include("basis/NN_Basis.jl")
     export NN_Basis
 
@@ -82,6 +85,9 @@ module MultiSymplectic
 
     include("integrator/NN_PDE_int.jl")
     export NN_PDE_Integrator
+
+    include("integrator/NN_PDE_int_symbolic.jl")
+    export NN_PDE_Integrator_Symbolic
 
     include("integrator/ELM_PDE_int.jl")
     export ELM_PDE_int

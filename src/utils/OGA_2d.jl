@@ -10,7 +10,7 @@ struct OGA2D <: InitialParametersMethod
     Nw::Int
     Nb::Int
 
-    function OGA2D(a::Float64,b::Float64,activation::Function,nx::Int = 40,nt::Int= 20,Nw::Int=500, Nb::Int=500)
+    function OGA2D(a::Float64,b::Float64,activation::Function; nx::Int = 40, nt::Int= 20, Nw::Int=500, Nb::Int=500)
         # Equidistant Quadrature / sampling grid
         xs = range(a, b, length=nx)
         ts = range(0.0, 1.0, length=nt)
