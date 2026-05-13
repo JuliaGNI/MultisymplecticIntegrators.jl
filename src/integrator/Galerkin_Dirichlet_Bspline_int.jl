@@ -109,11 +109,11 @@ struct Galerkin_Dirichlet_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
         end
 
         
-        mλ_x = zeros(basis.Nbasis_t, RX)
-        for i in 1:basis.Nbasis_t
-            mλ_x[i,:] = basis.Basis_t[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes,BSplineKit.Derivative(1))#
+        mλ_x = zeros(basis.Nbasis_x, RX)
+        for i in 1:basis.Nbasis_x
+            mλ_x[i,:] = basis.Basis_x[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes,BSplineKit.Derivative(1))#
         end 
-        Nbasis_λ_x = basis.Nbasis_t
+        Nbasis_λ_x = basis.Nbasis_x
 
         new{typeof(basis)}(basis, 
             t_quadrature, RT,
@@ -369,7 +369,6 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Dirichlet_Bspl
         println("Max error in initial guess at quadrature points for w: ", maximum(abs.(w_quad_value .- w_quad_approx)))
     end
 
-    # @infiltrate
 end
 
 function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Galerkin_Dirichlet_Bspline_Integrator},int_method::Galerkin_Dirichlet_Bspline_Integrator{BT}) where {BT}
@@ -422,14 +421,15 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     local exact_v = int.problem.exact_v
     local exact_w = int.problem.exact_w
     local show_status = int.method.show_status
+    coeffs = x[1:S]
 
     # interior values at quadrature points
     for d in 1:D
         for i in 1:RT
             for j in 1:RX
-                C.u_quad_values[d, i, j] = sum(x[1:S] .* int.method.u_collocation_mat[:, i, j])
-                C.v_quad_values[d, i, j] = sum(x[1:S] .* int.method.v_collocation_mat[:, i, j]) / h 
-                C.w_quad_values[d, i, j] = sum(x[1:S] .* int.method.w_collocation_mat[:, i, j])
+                @views C.u_quad_values[d, i, j] = sum(coeffs .* int.method.u_collocation_mat[:, i, j])
+                @views C.v_quad_values[d, i, j] = sum(coeffs .* int.method.v_collocation_mat[:, i, j]) / h 
+                @views C.w_quad_values[d, i, j] = sum(coeffs .* int.method.w_collocation_mat[:, i, j])
             end
         end
     end
@@ -437,9 +437,13 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     for d in 1:D
         for i in 1:RT
             for j in 1:RX
-                C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
-                C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
-                C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
+                current_u = C.u_quad_values[d, i, j]
+                current_v = C.v_quad_values[d, i, j]
+                current_w = C.w_quad_values[d, i, j]
+                
+                C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](current_u, current_v, current_w, lag_params)
+                C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](current_u, current_v, current_w, lag_params)
+                C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](current_u, current_v, current_w, lag_params)
             end
         end 
     end
@@ -447,21 +451,21 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     # boundary values at quadrature points
     for d in 1:D
         for j in 1:RX
-            C.ut₀_quad_values[d,j] = sum(x[1:S] .* int.method.ut₀_basis_quad_values[:,j])
-            C.ut₁_quad_values[d,j] = sum(x[1:S] .* int.method.ut₁_basis_quad_values[:,j])
-            C.vt₀_quad_values[d,j] = sum(x[1:S] .* int.method.vt₀_basis_quad_values[:,j]) / h
-            C.vt₁_quad_values[d,j] = sum(x[1:S] .* int.method.vt₁_basis_quad_values[:,j]) / h
-            C.wt₀_quad_values[d,j] = sum(x[1:S] .* int.method.wt₀_basis_quad_values[:,j])
-            C.wt₁_quad_values[d,j] = sum(x[1:S] .* int.method.wt₁_basis_quad_values[:,j])
+            @views C.ut₀_quad_values[d,j] = sum(coeffs .* int.method.ut₀_basis_quad_values[:,j])
+            @views C.ut₁_quad_values[d,j] = sum(coeffs .* int.method.ut₁_basis_quad_values[:,j])
+            @views C.vt₀_quad_values[d,j] = sum(coeffs .* int.method.vt₀_basis_quad_values[:,j]) / h
+            @views C.vt₁_quad_values[d,j] = sum(coeffs .* int.method.vt₁_basis_quad_values[:,j]) / h
+            @views C.wt₀_quad_values[d,j] = sum(coeffs .* int.method.wt₀_basis_quad_values[:,j])
+            @views C.wt₁_quad_values[d,j] = sum(coeffs .* int.method.wt₁_basis_quad_values[:,j])
         end
 
         for i in 1:RT
-            C.ux₀_quad_values[d,i] = sum(x[1:S] .* int.method.ux₀_basis_quad_values[:,i])
-            C.ux₁_quad_values[d,i] = sum(x[1:S] .* int.method.ux₁_basis_quad_values[:,i])
-            C.vx₀_quad_values[d,i] = sum(x[1:S] .* int.method.vx₀_basis_quad_values[:,i])/ h
-            C.vx₁_quad_values[d,i] = sum(x[1:S] .* int.method.vx₁_basis_quad_values[:,i])/ h
-            C.wx₀_quad_values[d,i] = sum(x[1:S] .* int.method.wx₀_basis_quad_values[:,i]) 
-            C.wx₁_quad_values[d,i] = sum(x[1:S] .* int.method.wx₁_basis_quad_values[:,i]) 
+            @views C.ux₀_quad_values[d,i] = sum(coeffs .* int.method.ux₀_basis_quad_values[:,i])
+            @views C.ux₁_quad_values[d,i] = sum(coeffs .* int.method.ux₁_basis_quad_values[:,i])
+            @views C.vx₀_quad_values[d,i] = sum(coeffs .* int.method.vx₀_basis_quad_values[:,i])/ h
+            @views C.vx₁_quad_values[d,i] = sum(coeffs .* int.method.vx₁_basis_quad_values[:,i])/ h
+            @views C.wx₀_quad_values[d,i] = sum(coeffs .* int.method.wx₀_basis_quad_values[:,i]) 
+            @views C.wx₁_quad_values[d,i] = sum(coeffs .* int.method.wx₁_basis_quad_values[:,i]) 
         end
     end
 
@@ -621,9 +625,10 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<: Galerkin_Di
             for rx in 1:RX
                 z += x_domain * brx[rx] * mλ_x[p,rx] * (C.ut₀_quad_values[d, rx] - C.init_condition_t₀[d, rx])
             end
-            b[S + (d - 1) * Nbasis_λ_x + p] = - z
+            b[S + (d - 1) * Nbasis_λ_x + p] = - z 
         end
     end
+    # @infiltrate
 
     if show_status
         @show b

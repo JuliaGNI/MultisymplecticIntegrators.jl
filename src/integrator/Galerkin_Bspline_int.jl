@@ -67,8 +67,6 @@ struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
         RT = length(t_quadrature.nodes)
         RX = length(x_quadrature.nodes)
         
-
-
         u_collocation_matrix = zeros(S, RT, RX)
         v_collocation_matrix = zeros(S, RT, RX)
         w_collocation_matrix = zeros(S, RT, RX)
@@ -131,17 +129,17 @@ struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
         #     mμ_t[i,:] = μ₀_t.b[i].(t_quadrature.nodes)
         # end
 
-        mμ_t = zeros(basis.Nbasis_x, RT)
-        for i in 1:basis.Nbasis_x
-            @views mμ_t[i,:] = basis.Basis_x[i].(t_quadrature.nodes,BSplineKit.Derivative(1))#
-        end
-        Nbasis_μ_t = basis.Nbasis_x
-        
-        mλ_x = zeros(basis.Nbasis_t, RX)
+        mμ_t = zeros(basis.Nbasis_t, RT)
         for i in 1:basis.Nbasis_t
-            @views mλ_x[i,:] = basis.Basis_t[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes,BSplineKit.Derivative(1))#
+            @views mμ_t[i,:] = basis.Basis_t[i].(t_quadrature.nodes,BSplineKit.Derivative(1))#
+        end
+        Nbasis_μ_t = basis.Nbasis_t
+        
+        mλ_x = zeros(basis.Nbasis_x, RX)
+        for i in 1:basis.Nbasis_x
+            @views mλ_x[i,:] = basis.Basis_x[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes,BSplineKit.Derivative(1))#
         end 
-        Nbasis_λ_x = basis.Nbasis_t
+        Nbasis_λ_x = basis.Nbasis_x
 
         new{typeof(basis)}(basis, 
             t_quadrature, RT,
