@@ -7,13 +7,13 @@ using GeometricIntegratorsBase
 using Plots
 using JLD2
 
-# k = parse(Int, ARGS[1])
-# t_step = parse(Float64, ARGS[2])
-# t_knot_interval = parse(Float64, ARGS[3])
+k = parse(Int, ARGS[1])
+t_step = parse(Float64, ARGS[2])
+t_knot_interval = parse(Float64, ARGS[3])
 
-k = 4
-t_knot_interval = 0.25
-t_step = 0.2
+# k = 4
+# t_knot_interval = 0.25
+# t_step = 0.2
 
 regularization_factor = 0.0
 GeometricIntegratorsBase.default_options(::Galerkin_Full_Restriction_Bspline_Integrator) = (

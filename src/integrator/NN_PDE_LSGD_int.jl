@@ -102,7 +102,7 @@ end
 
 default_solver(::NN_PDE_Integrator) = NewtonMethod()
 
-struct NN_PDE_IntegratorCache{ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M,PT} <: PDEIntegratorCache{ST,D}
+struct NN_PDE_IntegratorCache{ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M} <: PDEIntegratorCache{ST,D}
     """
     RT = number of quadrature points in time
     RX = number of quadrature points in space
@@ -112,17 +112,17 @@ struct NN_PDE_IntegratorCache{ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M,PT} <:
     """
     x::Vector{ST}
 
-    u_quad_values::Array{ST,3}
-    v_quad_values::Array{ST,3}
-    w_quad_values::Array{ST,3}
+    u_quad_values::Array{ST}
+    v_quad_values::Array{ST}
+    w_quad_values::Array{ST}
 
-    ∂L∂U_quad_values::Array{ST,3}
-    ∂L∂V_quad_values::Array{ST,3}
-    ∂L∂W_quad_values::Array{ST,3}
+    ∂L∂U_quad_values::Array{ST}
+    ∂L∂V_quad_values::Array{ST}
+    ∂L∂W_quad_values::Array{ST}
 
-    ∂u∂P_quad_values::Vector{Array{ST,3}}
-    ∂v∂P_quad_values::Vector{Array{ST,3}}
-    ∂w∂P_quad_values::Vector{Array{ST,3}}
+    ∂u∂P_quad_values::Vector{AbstractArray{ST,3}}
+    ∂v∂P_quad_values::Vector{AbstractArray{ST,3}}
+    ∂w∂P_quad_values::Vector{AbstractArray{ST,3}}
 
     λ₀_x_coes::Matrix{ST}
     λ₁_x_coes::Matrix{ST}
@@ -134,10 +134,10 @@ struct NN_PDE_IntegratorCache{ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M,PT} <:
     μ₀_quad_values::Matrix{ST}
     μ₁_quad_values::Matrix{ST}
 
-    ∂u∂P_t₀_quad_values::Vector{Array{ST,2}}
-    ∂u∂P_t₁_quad_values::Vector{Array{ST,2}}
-    ∂u∂P_x₀_quad_values::Vector{Array{ST,2}}
-    ∂u∂P_x₁_quad_values::Vector{Array{ST,2}}
+    ∂u∂P_t₀_quad_values::Vector{AbstractArray{ST,2}}
+    ∂u∂P_t₁_quad_values::Vector{AbstractArray{ST,2}}
+    ∂u∂P_x₀_quad_values::Vector{AbstractArray{ST,2}}
+    ∂u∂P_x₁_quad_values::Vector{AbstractArray{ST,2}}
 
     ut₀_quad_values::Matrix{ST} # bottom boundary, i.e. t = 0
     ut₁_quad_values::Matrix{ST} # top boundary, i.e. t = T
@@ -170,7 +170,7 @@ struct NN_PDE_IntegratorCache{ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M,PT} <:
     boundary_condition_x₀::Matrix{ST}
     boundary_condition_x₁::Matrix{ST}
 
-    sol_params::PT
+    sol_params::@NamedTuple{L1::@NamedTuple{W::Matrix{ST}, b::Vector{ST}},L2::@NamedTuple{W::Matrix{ST}}}
     flag_done_initial_guess::Vector{ST}
 
     # fields for OGA2D
@@ -181,7 +181,7 @@ struct NN_PDE_IntegratorCache{ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M,PT} <:
     desired::Vector{ST}
     corrs::Vector{ST}
     selected::Vector{Int}
-    function NN_PDE_IntegratorCache{ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M,PT}() where {ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M,PT}
+    function NN_PDE_IntegratorCache{ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M}() where {ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M}
         # x = zeros(ST, NP + 2 * D * RX + 2* D * DX * RT ) # TODO: how to deal with RX being a vector/
         x = zeros(ST, NP + D * Nbasis_λ_x + 2 * D * Nbasis_μ_t) # params, λ₀_x_coes,μ₀_t_coes,μ₁_t_coes
         # TODO:consider when DX is a vector
@@ -255,7 +255,7 @@ struct NN_PDE_IntegratorCache{ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M,PT} <:
         corrs = zeros(ST, M)
         selected = zeros(Int, S) # indices of selected atoms in the dictionary
 
-        new{ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M,typeof(sol_params)}(x,
+        new(x,
             u_quad_values, v_quad_values, w_quad_values,
             ∂L∂U_quad_values, ∂L∂V_quad_values, ∂L∂W_quad_values,
             ∂u∂P_quad_values, ∂v∂P_quad_values, ∂w∂P_quad_values,
@@ -274,23 +274,13 @@ struct NN_PDE_IntegratorCache{ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M,PT} <:
     end
 end
 
-nlsolution(cache::NN_PDE_IntegratorCache{ST}) where {ST} = cache.x::Vector{Float64}
-
-
-
+nlsolution(cache::NN_PDE_IntegratorCache) = cache.x
 
 function Cache{ST}(problem::LPDEProblem, int::NN_PDE_Integrator; kwargs...) where {ST}
-    S = int.basis.S
-    PT = typeof((L1=(W=zeros(ST, S, 2), b=zeros(ST, S)), L2=(W=zeros(ST, 1, S),)))
-    NN_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.NP,int.basis.S,int.Nbasis_μ_t,int.Nbasis_λ_x,int.initial_guess_method.N,int.initial_guess_method.M,PT}(; kwargs...)
+    NN_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.NP,int.basis.S,int.Nbasis_μ_t,int.Nbasis_λ_x,int.initial_guess_method.N,int.initial_guess_method.M}(; kwargs...)
 end
 
-@inline function CacheType(ST, problem::LPDEProblem, int::NN_PDE_Integrator)
-    S = int.basis.S
-    PT = typeof((L1=(W=zeros(ST, S, 2), b=zeros(ST, S)), L2=(W=zeros(ST, 1, S),)))
-
-    return NN_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.NP,int.basis.S,int.Nbasis_μ_t,int.Nbasis_λ_x,int.initial_guess_method.N,int.initial_guess_method.M,PT}
-end
+@inline CacheType(ST, problem::LPDEProblem, int::NN_PDE_Integrator) = NN_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.NP,int.basis.S,int.Nbasis_μ_t,int.Nbasis_λ_x,int.initial_guess_method.N,int.initial_guess_method.M}
 @inline function Base.getindex(c::NN_PDE_IntegratorCache, ST::DataType)
     key = hash(Threads.threadid(), hash(ST))
     if haskey(c.caches, key)
@@ -305,6 +295,113 @@ zero_vectors!(x::AbstractArray) = fill!(x, zero(eltype(x)))
 zero_vectors!(x) = nothing
 
 function prior_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator{MVT,LT,BT,IPMT}}) where {MVT,LT,BT,IPMT<:OGA2D}
+    local h = timestep(int)
+    local S = int.method.basis.S
+    local exact_u = int.problem.exact_u
+    local u = int.method.basis.u
+    local optim_mode = int.method.basis.optim_mode
+    local NP = int.method.basis.NP
+    local show_status = int.method.show_status
+
+    local quad_nodes = int.method.initial_guess_method.equispaced_quad_nodes
+    local quad_weights = int.method.initial_guess_method.quad_weights
+    local A_mat = int.method.initial_guess_method.A_mat
+    local Φ_raw = int.method.initial_guess_method.Φ_raw
+    local N = int.method.initial_guess_method.N
+    local M = int.method.initial_guess_method.M
+    local tn = sol.t - timestep(int)
+
+    # local desired = C.desired
+    # local corrs = C.corrs
+    # local Wsel = C.Wsel
+    # local Bsel = C.Bsel
+    # local B = C.B
+    # local coeffs_full = C.coeffs_full
+    
+    B = zeros(N, S)   # orthonormal basis columns
+    coeffs_full = zeros(S)     # coefficients to write into PNN L2
+    Wsel = zeros(S, 2)        
+    Bsel = zeros(S)
+    desired = zeros(N)
+    corrs = zeros(M)
+    selected = zeros(Int, S) # indices of selected atoms in the dictionary
+    zero_vectors!(C.sol_params)
+
+    @show selected
+    # Build the desired internal PNN output on all quadrature nodes:
+    for i in 1:N
+        t = quad_nodes[1, i]
+        x = quad_nodes[2, i]
+        desired[i] = exact_u(tn + h*t, x) - u([t, x], C.sol_params)[1]
+    end
+
+    # Run OGA (orthogonal matching) on Φ_raw to approximate `desired`
+    residual = copy(desired)
+
+    for s = 1:S
+        # compute correlations with residual (weighted)
+        for i in 1:M
+            corrs[i] = abs(sum(Φ_raw[i, :] .* (residual .* quad_weights)))
+        end
+        idx = argmax(corrs)
+        selected[s] = idx
+        length(Set(selected)) -1 == s ? nothing : @warn "atom repeated at s=$s, idx=$idx"
+
+        # extract raw atom (already normalized) and orthogonalize (Gram-Schmidt)
+        φ = copy(Φ_raw[idx, :])
+
+        # append to B
+        @views B[:, s] .= φ
+
+        # solve least-squares for coefficients in orthonormal basis
+        coeffs = view(B,:,1:s) \ desired         # small system k×1 solved implicitly
+        # update residual
+        residual = desired - view(B,:,1:s) * coeffs
+
+        # store selection params (note A_mat rows correspond to atoms prior to normalization,
+        # yet we normalized Φ_raw; we must store original (w,b) for a neuron consistent with A_mat)
+        @views Wsel[s, :] .= A_mat[idx, 1:2]
+        Bsel[s] = A_mat[idx, 3]
+
+        coeffs_full[1:s] .= coeffs
+        if show_status
+            println("s=$s idx=$idx ‖residual‖=$(norm(residual))")
+        end
+    end
+
+    for j = 1:S
+        @views u.params.L1.W[j, :] .= Wsel[j, :]
+        u.params.L1.b[j] = Bsel[j]
+        u.params.L2.W[j] = coeffs_full[j]
+
+        @views C.sol_params.L1.W[j, :] .= Wsel[j, :]
+        C.sol_params.L1.b[j] = Bsel[j]
+        C.sol_params.L2.W[j] = coeffs_full[j]
+    end
+
+
+    # copy the parameters to the cache
+    if optim_mode == :Partially
+        C.x[1:NP] = C.sol_params.L2.W[:]
+    elseif optim_mode == :Fully
+        C.x[1:2*S] = reshape(C.sol_params.L1.W, :, 1)
+        C.x[2*S+1:3*S] = C.sol_params.L1.b[:]
+        C.x[3*S+1:4*S] = C.sol_params.L2.W[:]
+        @assert 4 * S == NP
+    end
+
+    # if show_status
+    target_vec = [exact_u(tn + h * quad_nodes[1, i], quad_nodes[2, i]) for i in 1:N]
+    approx_vec = [u(quad_nodes[:, i], C.sol_params)[1] for i in 1:N]
+    err_vec = abs.(target_vec .- approx_vec)
+    println("Max abs error after OGA initial guess: ", maximum(err_vec))
+    # println("OGA initial guess completed.")
+    # println("Initial guess \n", C.x)
+    # # end
+
+end
+
+function prior_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator{MVT,LT,BT,IPMT}}) where {MVT,LT,BT,IPMT<:LSGD}
     local h = timestep(int)
     local S = int.method.basis.S
     local exact_u = int.problem.exact_u
@@ -431,7 +528,7 @@ function post_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator}, in
         tem_x₁_∂L∂W = zeros(RT)
 
         for rx in 1:RX
-            tem_t₁_∂L∂V[rx] = Base.invokelatest(lag_sys.∂L∂V[d],C.ut₁_quad_values[d,rx], C.vt₁_quad_values[d,rx], C.wt₁_quad_values[d,rx], params)
+            tem_t₁_∂L∂V[rx] = lag_sys.∂L∂V[d](C.ut₁_quad_values[d,rx], C.vt₁_quad_values[d,rx], C.wt₁_quad_values[d,rx], params)
         end
         λ_x_tem = mλ_x'\tem_t₁_∂L∂V
 
@@ -440,8 +537,8 @@ function post_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator}, in
         end
 
         for rt in 1:RT
-            tem_x₀_∂L∂W[rt] = Base.invokelatest(lag_sys.∂L∂W[d],C.ux₀_quad_values[d,rt], C.vx₀_quad_values[d,rt], C.wx₀_quad_values[d,rt], params)
-            tem_x₁_∂L∂W[rt] = Base.invokelatest(lag_sys.∂L∂W[d],C.ux₁_quad_values[d,rt], C.vx₁_quad_values[d,rt], C.wx₁_quad_values[d,rt], params)
+            tem_x₀_∂L∂W[rt] = lag_sys.∂L∂W[d](C.ux₀_quad_values[d,rt], C.vx₀_quad_values[d,rt], C.wx₀_quad_values[d,rt], params)
+            tem_x₁_∂L∂W[rt] = lag_sys.∂L∂W[d](C.ux₁_quad_values[d,rt], C.vx₁_quad_values[d,rt], C.wx₁_quad_values[d,rt], params)
         end
         μ₀_t_tem = mμ_t'\tem_x₀_∂L∂W
         μ₁_t_tem = mμ_t'\tem_x₁_∂L∂W
@@ -622,6 +719,8 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN
     local exact_w = int.problem.exact_w
     local show_status = int.method.show_status
 
+    last_layer = keys(u.params)[end]
+
     #copy part of x into the network parameter
     if optim_mode == :Fully
         @views C.sol_params.L1.W[:,1] = x[1:S]
@@ -703,9 +802,9 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN
                 current_v = C.v_quad_values[d, i, j]
                 current_w = C.w_quad_values[d, i, j]
                 
-                C.∂L∂U_quad_values[d, i, j] = Base.invokelatest(∂L∂U[d],current_u, current_v, current_w, lag_params)
-                C.∂L∂V_quad_values[d, i, j] = Base.invokelatest(∂L∂V[d],current_u, current_v, current_w, lag_params)
-                C.∂L∂W_quad_values[d, i, j] = Base.invokelatest(∂L∂W[d],current_u, current_v, current_w, lag_params)
+                C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](current_u, current_v, current_w, lag_params)
+                C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](current_u, current_v, current_w, lag_params)
+                C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](current_u, current_v, current_w, lag_params)
             end
         end
     end
@@ -743,7 +842,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN
 
     for d in 1:D
         for rx in 1:RX
-            C.λ₀_quad_values[d, rx] = Base.invokelatest(∂L∂V[d],C.ics_ut₀_quad_values[d, rx], C.ics_vt₀_quad_values[d, rx], C.ics_wt₀_quad_values[d, rx], lag_params)
+            C.λ₀_quad_values[d, rx] = ∂L∂V[d](C.ics_ut₀_quad_values[d, rx], C.ics_vt₀_quad_values[d, rx], C.ics_wt₀_quad_values[d, rx], lag_params)
             @views C.λ₁_quad_values[d, rx] = sum(C.λ₁_x_coes[d, :] .* mλ_x[:, rx])
         end
 
@@ -924,14 +1023,12 @@ end
 
 function update!(sol, int::PDEIntegrator{<:NN_PDE_Integrator})
     local D = int.problem.D
-    local u = int.method.basis.u
-    local v = int.method.basis.v
-    local w = int.method.basis.w
+    local u = [int.method.basis.u]
+    local v = [int.method.basis.v]
+    local w = [int.method.basis.w]
     local xspan = int.problem.xspan
     local xstep = int.problem.xstep
-    
-    local CT = MultiSymplectic.CacheType(Float64, int.problem, int.method)
-    local C = cache(int, Float64)::CT    
+    local C = cache(int)
     local NP = int.method.basis.NP
     local x = nlsolution(int)
     local optim_mode = int.method.basis.optim_mode
@@ -940,37 +1037,39 @@ function update!(sol, int::PDEIntegrator{<:NN_PDE_Integrator})
     local exact_u = int.problem.exact_u
     local exact_v = int.problem.exact_v
     local exact_w = int.problem.exact_w
-    local S = int.method.basis.S
 
+    last_layer = keys(u[1].params)[end]
     x_nodes = collect(xspan[1]:xstep:xspan[2])
     if optim_mode == :Fully
-        @views C.sol_params.L1.W[:,1] = x[1:S]
-        @views C.sol_params.L1.W[:,2] = x[S+1:2*S]
-        @views C.sol_params.L1.b[:] = x[2*S+1:3*S]
-        @views C.sol_params.L2.W[:] = x[3*S+1:4*S]
-    elseif optim_mode == :Partially
-        for (name, layer) in zip(keys(u.params), values(u.params))
+        tem_params = NeuralNetworkParameters(reconstruct_params(x[1:NP], u[1].params))
+        for (name, layer) in zip(keys(tem_params), values(tem_params))
             if hasfield(typeof(layer), :b)
-                @views C.sol_params[name].W[:] = layer.W[:]
-                @views C.sol_params[name].b[:] = layer.b[:]
+                C.sol_params[name].W[:] = layer.W[:]
+                C.sol_params[name].b[:] = layer.b[:]
             else
                 # For layers without bias (e.g., output), just regenerate W
-                @views C.sol_params[name].W[:] = layer.W[:]
+                C.sol_params[name].W[:] = layer.W[:]
             end
         end
-        @views C.sol_params.L2.W[:] = x[1:NP]
+    elseif optim_mode == :Partially
+        for (name, layer) in zip(keys(u[1].params), values(u[1].params))
+            if hasfield(typeof(layer), :b)
+                C.sol_params[name].W[:] = layer.W[:]
+                C.sol_params[name].b[:] = layer.b[:]
+            else
+                # For layers without bias (e.g., output), just regenerate W
+                C.sol_params[name].W[:] = layer.W[:]
+            end
+        end
+        C.sol_params.L2.W[:] = x[1:NP]
     end
 
-    point = [1.0, 0.0] 
-    for i in eachindex(x_nodes)
-        point[2] = x_nodes[i]
-        res_u = u(point, C.sol_params)[1]::Float64
-        res_v = v(point, C.sol_params)[1]::Float64
-        res_w = w(point, C.sol_params)[1]::Float64
-        
-        sol.u[i] = res_u
-        sol.v[i] = res_v / h
-        sol.w[i] = res_w
+    for d in 1:D
+        for i in eachindex(x_nodes)
+            sol.u[i] = u[d]([1.0, x_nodes[i]], C.sol_params)[1]
+            sol.v[i] = v[d]([1.0, x_nodes[i]], C.sol_params)[1] / h
+            sol.w[i] = w[d]([1.0, x_nodes[i]], C.sol_params)[1]
+        end
     end
 
     if show_status
@@ -992,6 +1091,5 @@ function update!(sol, int::PDEIntegrator{<:NN_PDE_Integrator})
         @show ut₁_grid_truth
     end
 
-    return nothing
 end
 

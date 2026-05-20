@@ -30,11 +30,14 @@ begin
                     # isfile(data_file) ? nothing : continue
                     try
                         result_data = load(data_file)
-                        if result_data["maximum_relative_ham_err"] >10.0
-                            println("Warning: Unusually high error in $(data_file): $(result_data["maximum_relative_ham_err"])")
+                        err = result_data["maximum_relative_ham_err"]
+                        # err = minimum(result_data["relative_hamiltonian_error"])
+
+                        if err >10.0
+                            println("Warning: Unusually high error in $(data_file): $err")
                             continue
                         end
-                        spline_err_tensor[hi,ki,t_knot_interval_i,x_knot_interval_i] = result_data["maximum_relative_ham_err"]
+                        spline_err_tensor[hi,ki,t_knot_interval_i,x_knot_interval_i] = err
                     catch e
                         println("Failed to load data from $(data_file): $(e)")
                         continue
@@ -74,7 +77,7 @@ begin
         orientation = :vertical,fontsize=label_size
     )
 
-    save("full_restriction_spline_1005/HO_hamiltonian_error.pdf", fig)
+    save("full_restriction_spline_1005/Wave_hamiltonian_error.pdf", fig)
 end
 
 ### Harmonic Oscillator with Time-Reversible Neural Variational Integrators
