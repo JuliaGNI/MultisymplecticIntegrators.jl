@@ -31,7 +31,7 @@ S = parse(Int, ARGS[3])
 # reg_factor = 1e-5
 # Nb = 500
 
-max_iters = 1
+max_iters = 100
 GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
     max_iterations = max_iters,
     warn_iterations = max_iters,
@@ -42,7 +42,7 @@ GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
 )
 # S = 7
 xspan = (0.0,1.0)
-t_span = (0.0,0.2)
+t_span = (0.0,10.0)
 
 c=0.5
 A1 = 0.8
@@ -78,7 +78,7 @@ for t_step in [0.2,0.5]#
 
     for t_interval in [2,4,5]#
         for x_interval in [2,4,5]#
-            for Nb in [500,750]#
+            for Nb in [500,]#750
                 nn_pde_basis = NetworkPDEBasis(S,tanh,:Fully) # Partially, Fully
 
                 nn_int = NN_PDE_Integrator(nn_pde_basis,xspan = xspan, μ =:BSplineDirichlet,λ =:BSplineDirichlet,t_num_interval = t_interval, x_num_interval = x_interval,
