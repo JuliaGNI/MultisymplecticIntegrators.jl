@@ -1,9 +1,9 @@
-struct NN_Basis{NT,UT,DT,UFT} <: AbstractPDEBasis
+struct NN_Basis{NT,UT,VT,WT,UFT} <: AbstractPDEBasis
     network_arch::NT
-    
+
     u_basis::UT
-    v_basis::DT
-    w_basis::DT
+    v_basis::VT
+    w_basis::WT
 
     u::UFT
     NP::Int
@@ -15,7 +15,7 @@ struct NN_Basis{NT,UT,DT,UFT} <: AbstractPDEBasis
 
         u_arch = Chain(u_basis_arch...,Dense(NP,1,identity,use_bias=false))
         u_func = AbstractNeuralNetworks.NeuralNetwork(u_arch)
-        return new{typeof(u_arch),typeof(u_basis),typeof(v_basis),typeof(u_func)}(u_arch,
+        return new{typeof(u_arch),typeof(u_basis),typeof(v_basis),typeof(w_basis),typeof(u_func)}(u_arch,
             u_basis, v_basis, w_basis,
             u_func,
             NP)
