@@ -171,7 +171,7 @@ module Wave
         for d in 1:D
             for rt in 1:RT
                 for rx in 1:RX
-                    ham += x_domain * timestep * grid_quad_weights[rt,rx] * 
+                    ham += x_domain * timestep * grid_quad_weights[rt,rx] *
                     hamiltonian_density(grid_quad_node[rt,rx][1], grid_quad_node[rt,rx][2], u_quad_values[d, rt, rx], v_quad_values[d, rt, rx], w_quad_values[d, rt, rx], params)
                 end
             end
@@ -188,7 +188,7 @@ module Wave
         @assert timespan[1] < timespan[2] "timespan must be increasing"
         @assert xspan[1] < xspan[2] "xspan must be increasing"
 
-        t, x, U, V, W = LPDE_variables(1, 1) # U,V,W does not have t,x dependence 
+        t, x, U, V, W = LPDE_variables(1, 1) # U,V,W does not have t,x dependence
         lag_sys = LPDESystem(lagrangian_function(t, x, U, V, W, params), t, x, U, V, W, params)
 
         x_nodes = collect(xspan[1]:xstep:xspan[2])

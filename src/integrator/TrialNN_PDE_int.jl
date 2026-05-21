@@ -323,7 +323,7 @@ function mse_loss(params, tx_in, u_trial,int,sol)
         t_samples = tx_in[1, i]
         x_samples = tx_in[2, i]
         pred = u_trial(t_samples, x_samples, params,int,sol)
-        label = exact_u(h * t_samples, x_samples)
+        label = exact_u(tn + h * t_samples, x_samples)
         loss += (pred - label)^2
     end
     return loss / size(tx_in, 2)
