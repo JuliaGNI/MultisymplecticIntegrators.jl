@@ -281,7 +281,7 @@ function post_initial_guess!(C, sol, int::PDEIntegrator{<:Sindy_PDE_Integrator},
 
         for rt in 1:Nbasis_μ_t
             C.x[NP + D * Nbasis_λ_x + (d - 1) * Nbasis_μ_t + rt] = μ₀_t_tem[rt]
-            C.x[NP + D * Nbasis_λ_x + + D * Nbasis_μ_t + (d - 1) * Nbasis_μ_t + rt] = μ₁_t_tem[rt]
+            C.x[NP + D * Nbasis_λ_x + D * Nbasis_μ_t + (d - 1) * Nbasis_μ_t + rt] = μ₁_t_tem[rt]
         end
     end
     C.flag_done_initial_guess[1] = 1.0
