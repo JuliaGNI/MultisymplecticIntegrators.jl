@@ -26,7 +26,7 @@ B1 = 0.3
 A2 = 0.0
 B2 = 0.0
 c = 1.
-exact_u(x,t)=  (A1 * cos((pi*c*t)) + B1 * sin((pi*c*t) + pi/6)) * sin((pi*x)) + (A2 * cos((2*pi*c*t)) + B2 * sin((2*pi*c*t) + pi/6)) * sin((2*pi*x)) + 1.0 
+exact_u(t,x)=  (A1 * cos((pi*c*t)) + B1 * sin((pi*c*t) + pi/6)) * sin((pi*x)) + (A2 * cos((2*pi*c*t)) + B2 * sin((2*pi*c*t) + pi/6)) * sin((2*pi*x)) + 1.0
 
 tstep = 0.3
 tspan =(0.0,1.5)
@@ -36,7 +36,7 @@ x_domain = xspan[2] - xspan[1]
 h = tstep
 
 #  Trial solution function construction
-psi_L(x) = (b - x) / x_domain       # left 
+psi_L(x) = (b - x) / x_domain       # left
 psi_R(x) = (x - a) / x_domain       # right
 phi_B(t) = (h - t) / h   # bottom
 
@@ -54,7 +54,7 @@ end
 function C1(t, x, tn, params)
     return psi_L(x) * exact_u(t,a)  +
         psi_R(x) * exact_u(t,b) +
-        phi_B(t) * exact_u(0,x) 
+        phi_B(t) * exact_u(0,x)
 
 end
 
@@ -187,7 +187,7 @@ end
 # #     epoch_loss /= num_samples
 # #     push!(loss_history, epoch_loss)
 # #     println("Epoch $epoch, Loss: $epoch_loss")
-    
+
 # # end
 
 # # Plot loss history
@@ -226,9 +226,9 @@ AbstractNeuralNetworks.Chain(PNN.model.layers[1:end-1]...)([0.0,2.0],intermidiat
 
 
 u0 = PNN.params.L3.W[:]
-prob = NonlinearLeastSquaresProblem(
-NonlinearFunction(nlls!, resid_prototype = zeros(N_in)), u0, PNN)
-u_sol = solve(prob,maxtime = 60,abstol = 1e-12, reltol = 1e-12).u
+# prob = NonlinearLeastSquaresProblem(
+# NonlinearFunction(nlls!, resid_prototype = zeros(N_in)), u0, PNN)
+# u_sol = solve(prob,maxtime = 60,abstol = 1e-12, reltol = 1e-12).u
 
 
 
@@ -258,7 +258,7 @@ end
 function C12(t, x, tn, dofs)
     return psi_L(x) * exact_u(t,a)  +
         psi_R(x) * exact_u(t,b) +
-        phi_B(t) * exact_u(0,x) 
+        phi_B(t) * exact_u(0,x)
 end
 
 function C22(t, x, tn, dofs)
