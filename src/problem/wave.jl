@@ -221,7 +221,7 @@ module Wave
             end
         end
 
-        C.system_matrix[1:RT * RX, :] = utt_basis_quad_values -  c^2 * uxx_basis_quad_values
+        C.system_matrix[1:RT * RX, :] = utt_basis_quad_values - int.problems.params.c^2 * uxx_basis_quad_values
         C.system_matrix[RT * RX + 1:RT * RX + RX, :] = C.ut₀_basis_quad_values
         C.system_matrix[RT * RX + RX + 1:RT * RX + RX + RT, :] = C.ux₀_basis_quad_values
         C.system_matrix[RT * RX + RX + RT + 1:RT * RX + RX + 2 * RT, :] = C.ux₁_basis_quad_values
@@ -229,7 +229,7 @@ module Wave
         C.system_rhs[RT * RX + 1:RT * RX + RX] = C.init_condition_t₀[1,:]'
         C.system_rhs[RT * RX + RX + 1:RT * RX + RX + RT] = C.boundary_condition_x₀[1,:]'
         C.system_rhs[RT * RX + RX + RT + 1:RT * RX + RX + 2 * RT] = C.boundary_condition_x₁[1,:]'
-    
+
         C.x[1:NP] = C.system_matrix \ C.system_rhs
 
 
@@ -256,5 +256,3 @@ module Wave
     end
 
 end
-
-
