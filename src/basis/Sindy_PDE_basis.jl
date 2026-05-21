@@ -36,15 +36,11 @@ struct SindyPDEBasis{UPT,VPT,WPT,UFT,VFT,WFT} <: AbstractPDEBasis
             for i in 1:P_sizes[d]
                 ∂u_expr∂P[i] = Symbolics.derivative(u_expr[d],P[d][i])
                 ∂v_expr∂P[i] = Symbolics.derivative(v_expr[d],P[d][i])
-                ∂w_expr∂P[i] = Symbolics.derivative(u_expr[d],P[d][i])
+                ∂w_expr∂P[i] = Symbolics.derivative(w_expr[d],P[d][i])
             end
-            ∂u∂P = [Symbolics.eval(Symbolics.build_function(∂u_expr∂P[i],P, t, x)) for i in 1:P_sizes[d]]
-            ∂v∂P = [Symbolics.eval(Symbolics.build_function(∂v_expr∂P[i],P, t, x)) for i in 1:P_sizes[d]]
-            ∂w∂P = [Symbolics.eval(Symbolics.build_function(∂w_expr∂P[i],P, t, x)) for i in 1:P_sizes[d]]
-
-            # push!(∂u∂P,dqdP)
-            # push!(∂v∂P,dvdP)
-            # push!(∂w∂P,dwdP)
+            push!(∂u∂P, [eval(build_function(∂u_expr∂P[i],P, t, x)) for i in 1:P_sizes[d]])
+            push!(∂v∂P, [eval(build_function(∂v_expr∂P[i],P, t, x)) for i in 1:P_sizes[d]])
+            push!(∂w∂P, [eval(build_function(∂w_expr∂P[i],P, t, x)) for i in 1:P_sizes[d]])
         end
 
         #Derive the w expression
