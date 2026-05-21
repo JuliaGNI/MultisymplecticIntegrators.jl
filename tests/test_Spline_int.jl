@@ -11,9 +11,9 @@ using JLD2
 # t_step = parse(Float64, ARGS[2])
 # t_knot_interval = parse(Float64, ARGS[3])
 
-k = 3
+k = 4
 t_knot_interval = 0.5
-x_knot_interval = 0.1
+x_knot_interval = 0.05
 t_step = 0.1
 
 regularization_factor = 0.0
@@ -57,8 +57,8 @@ end
 
 
 
-t_span = (0.,0.1)
-xspan = (0.2, 0.8)
+t_span = (0.,10.0)
+xspan = (0.0, 1.0)
 # for t_step in [0.1,0.2,0.4]
 
 lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=xspan, xstep=0.01)
@@ -66,7 +66,7 @@ x_ls = xspan[1]:lpde.xstep:xspan[2]
 c = lpde.params.c
 # for x_knot_interval in [0.2,0.5]
     spline_basis = BSpline2D(k,xspan = xspan, t_knot_interval = t_knot_interval,x_knot_interval = x_knot_interval)
-    spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = true)
+    spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = false)
     println("Start Spline Integrator")
     sol_set = MultiSymplectic.integrate(lpde, spline_int)
     println("End Spline Integrator with h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")
@@ -85,7 +85,7 @@ c = lpde.params.c
     end
 
 
-    relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
+    relative_ham_err = (ham_ls .-  analytic_ham) ./ analytic_ham
     max_err = maximum(relative_ham_err)
     plot(relative_ham_err, xlabel="Time", ylabel="Relative Hamiltonian Error")
     savefig("SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.pdf")

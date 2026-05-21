@@ -574,6 +574,25 @@ function spline2D_coeff_derivatives((Bt, Bx)::Tuple{BTT,BXT}, (t, x)::Tuple{Floa
 end
 spline2D_coeff_derivatives((Bt, Bx)::Tuple{BTT,BXT}, tx::Vector{Float64}) where {BXT,BTT} = spline2D_coeff_derivatives((Bt, Bx), (tx[1], tx[2]))
 
+function spline2D_active_coeff_derivatives((Bt, Bx)::Tuple{BTT,BXT}, (t, x)::Tuple{Float64,Float64}) where {BXT,BTT}
+    it, bt = Bt(t)
+    ix, bx = Bx(x)
+    Nt, Nx = length(Bt), length(Bx)
+    indices = Int[]
+    values = Float64[]
+    for δx in eachindex(bx), δt in eachindex(bt)
+        ii = it - δt + 1
+        jj = ix - δx + 1
+        if ii >= 1 && ii <= Nt && jj >= 1 && jj <= Nx
+            push!(indices, ii + (jj - 1) * Nt)
+            push!(values, bt[δt] * bx[δx])
+        end
+    end
+    return indices, values
+end
+spline2D_active_coeff_derivatives((Bt, Bx)::Tuple{BTT,BXT}, tx::Vector{Float64}) where {BXT,BTT} =
+    spline2D_active_coeff_derivatives((Bt, Bx), (tx[1], tx[2]))
+
 
 # ∂v/∂c = N'_i(t) * M_j(x)
 function spline2D_coeff_derivatives_time((Bt, Bx)::Tuple{BTT,BXT}, (t, x)::Tuple{Float64,Float64}) where {BXT,BTT}
@@ -598,6 +617,25 @@ function spline2D_coeff_derivatives_time((Bt, Bx)::Tuple{BTT,BXT}, (t, x)::Tuple
 end
 spline2D_coeff_derivatives_time((Bt, Bx)::Tuple{BTT,BXT}, tx::Vector{Float64}) where {BXT,BTT} = spline2D_coeff_derivatives_time((Bt, Bx), (tx[1], tx[2]))
 
+function spline2D_active_coeff_derivatives_time((Bt, Bx)::Tuple{BTT,BXT}, (t, x)::Tuple{Float64,Float64}) where {BXT,BTT}
+    it_d, btd = Bt(t, BSplineKit.Derivative(1))
+    ix, bx = Bx(x)
+    Nt, Nx = length(Bt), length(Bx)
+    indices = Int[]
+    values = Float64[]
+    for δx in eachindex(bx), δt in eachindex(btd)
+        ii = it_d - δt + 1
+        jj = ix - δx + 1
+        if ii >= 1 && ii <= Nt && jj >= 1 && jj <= Nx
+            push!(indices, ii + (jj - 1) * Nt)
+            push!(values, btd[δt] * bx[δx])
+        end
+    end
+    return indices, values
+end
+spline2D_active_coeff_derivatives_time((Bt, Bx)::Tuple{BTT,BXT}, tx::Vector{Float64}) where {BXT,BTT} =
+    spline2D_active_coeff_derivatives_time((Bt, Bx), (tx[1], tx[2]))
+
 
 # ∂w/∂c = N_i(t) * M'_j(x)
 function spline2D_coeff_derivatives_space((Bt, Bx)::Tuple{BTT,BXT}, (t, x)::Tuple{Float64,Float64}) where {BXT,BTT}
@@ -620,6 +658,25 @@ function spline2D_coeff_derivatives_space((Bt, Bx)::Tuple{BTT,BXT}, (t, x)::Tupl
     return reshape(dWdc, :, )
 end
 spline2D_coeff_derivatives_space((Bt, Bx)::Tuple{BTT,BXT}, tx::Vector{Float64}) where {BXT,BTT} = spline2D_coeff_derivatives_space((Bt, Bx), (tx[1], tx[2]))
+
+function spline2D_active_coeff_derivatives_space((Bt, Bx)::Tuple{BTT,BXT}, (t, x)::Tuple{Float64,Float64}) where {BXT,BTT}
+    it, bt = Bt(t)
+    ix_d, bxd = Bx(x, BSplineKit.Derivative(1))
+    Nt, Nx = length(Bt), length(Bx)
+    indices = Int[]
+    values = Float64[]
+    for δx in eachindex(bxd), δt in eachindex(bt)
+        ii = it - δt + 1
+        jj = ix_d - δx + 1
+        if ii >= 1 && ii <= Nt && jj >= 1 && jj <= Nx
+            push!(indices, ii + (jj - 1) * Nt)
+            push!(values, bt[δt] * bxd[δx])
+        end
+    end
+    return indices, values
+end
+spline2D_active_coeff_derivatives_space((Bt, Bx)::Tuple{BTT,BXT}, tx::Vector{Float64}) where {BXT,BTT} =
+    spline2D_active_coeff_derivatives_space((Bt, Bx), (tx[1], tx[2]))
 
 function vector_hessian(f, x)
     S = length(f(x))

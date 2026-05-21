@@ -10,22 +10,37 @@ struct Galerkin_Full_Restriction_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDE
     grid_matrix::Matrix{Vector{Float64}} # Quadrature grid points: [[t1,x1], [t1,x2], ]
     grid_weights::Matrix{Float64} # Quadrature weights
 
-    u_collocation_mat::Array{Float64}
-    v_collocation_mat::Array{Float64}
-    w_collocation_mat::Array{Float64}
+    u_collocation_indices::Array{Int,3}
+    u_collocation_values::Array{Float64,3}
+    v_collocation_indices::Array{Int,3}
+    v_collocation_values::Array{Float64,3}
+    w_collocation_indices::Array{Int,3}
+    w_collocation_values::Array{Float64,3}
 
+    ut₀_basis_quad_indices::Matrix{Int}
     ut₀_basis_quad_values::Matrix{Float64}
+    ut₁_basis_quad_indices::Matrix{Int}
     ut₁_basis_quad_values::Matrix{Float64}
+    vt₀_basis_quad_indices::Matrix{Int}
     vt₀_basis_quad_values::Matrix{Float64}
+    vt₁_basis_quad_indices::Matrix{Int}
     vt₁_basis_quad_values::Matrix{Float64}
+    wt₀_basis_quad_indices::Matrix{Int}
     wt₀_basis_quad_values::Matrix{Float64}
+    wt₁_basis_quad_indices::Matrix{Int}
     wt₁_basis_quad_values::Matrix{Float64}
 
+    ux₀_basis_quad_indices::Matrix{Int}
     ux₀_basis_quad_values::Matrix{Float64}
+    ux₁_basis_quad_indices::Matrix{Int}
     ux₁_basis_quad_values::Matrix{Float64}
+    vx₀_basis_quad_indices::Matrix{Int}
     vx₀_basis_quad_values::Matrix{Float64}
+    vx₁_basis_quad_indices::Matrix{Int}
     vx₁_basis_quad_values::Matrix{Float64}
+    wx₀_basis_quad_indices::Matrix{Int}
     wx₀_basis_quad_values::Matrix{Float64}
+    wx₁_basis_quad_indices::Matrix{Int}
     wx₁_basis_quad_values::Matrix{Float64}
 
     show_status::Bool
@@ -33,8 +48,8 @@ struct Galerkin_Full_Restriction_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDE
         show_status = false)
 
         # The quadrature nodes in [0.0,1.0]
-        t_num_interval = length(basis.ts) - 1
-        x_num_interval = length(basis.xs) - 1
+        t_num_interval = length(unique(basis.ts)) - 1
+        x_num_interval = length(unique(basis.xs)) - 1
         t_quadrature = composite_quadrature(t_num_interval ,RT_per_interval)
         x_quadrature = composite_quadrature(x_num_interval ,RX_per_interval)
 
@@ -54,53 +69,87 @@ struct Galerkin_Full_Restriction_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDE
         RT = length(t_quadrature.nodes)
         RX = length(x_quadrature.nodes)
 
-        u_collocation_matrix = zeros(S, RT, RX)
-        v_collocation_matrix = zeros(S, RT, RX)
-        w_collocation_matrix = zeros(S, RT, RX)
-        for rt in 1:RT
-            for rx in 1:RX
-                # tt = tstep .* t_quadrature.nodes[rt]
-                xx = xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes[rx]
-                tt = t_quadrature.nodes[rt]
-                # xx = x_quadrature.nodes[rx]
-                @views u_collocation_matrix[:,rt,rx] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x), (tt, xx))
-                @views v_collocation_matrix[:,rt,rx] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x), (tt, xx))
-                @views w_collocation_matrix[:,rt,rx] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x), (tt, xx))
+        active_size = BSplineKit.order(basis.Basis_t) * BSplineKit.order(basis.Basis_x)
+        function fill_active!(indices_array, values_array, active_indices, active_values, q...)
+            for n in eachindex(active_indices)
+                indices_array[n, q...] = active_indices[n]
+                values_array[n, q...] = active_values[n]
             end
         end
 
-        ut₀_basis_quad_values = zeros(S,RX)
-        ut₁_basis_quad_values = zeros(S,RX)
-        vt₀_basis_quad_values = zeros(S,RX)
-        vt₁_basis_quad_values = zeros(S,RX)
-        wt₀_basis_quad_values = zeros(S,RX)
-        wt₁_basis_quad_values = zeros(S,RX)
+        u_collocation_indices = zeros(Int, active_size, RT, RX)
+        u_collocation_values = zeros(active_size, RT, RX)
+        v_collocation_indices = zeros(Int, active_size, RT, RX)
+        v_collocation_values = zeros(active_size, RT, RX)
+        w_collocation_indices = zeros(Int, active_size, RT, RX)
+        w_collocation_values = zeros(active_size, RT, RX)
+        for rt in 1:RT
+            for rx in 1:RX
+                active_indices, active_values = spline2D_active_coeff_derivatives((basis.Basis_t, basis.Basis_x), grid_matrix[rt,rx])
+                fill_active!(u_collocation_indices, u_collocation_values, active_indices, active_values, rt, rx)
+                active_indices, active_values = spline2D_active_coeff_derivatives_time((basis.Basis_t, basis.Basis_x), grid_matrix[rt,rx])
+                fill_active!(v_collocation_indices, v_collocation_values, active_indices, active_values, rt, rx)
+                active_indices, active_values = spline2D_active_coeff_derivatives_space((basis.Basis_t, basis.Basis_x), grid_matrix[rt,rx])
+                fill_active!(w_collocation_indices, w_collocation_values, active_indices, active_values, rt, rx)
+            end
+        end
 
-        ux₀_basis_quad_values = zeros(S,RT)
-        ux₁_basis_quad_values = zeros(S,RT)
-        vx₀_basis_quad_values = zeros(S,RT)
-        vx₁_basis_quad_values = zeros(S,RT)
-        wx₀_basis_quad_values = zeros(S,RT)
-        wx₁_basis_quad_values = zeros(S,RT)
+        ut₀_basis_quad_indices = zeros(Int, active_size,RX)
+        ut₀_basis_quad_values = zeros(active_size,RX)
+        ut₁_basis_quad_indices = zeros(Int, active_size,RX)
+        ut₁_basis_quad_values = zeros(active_size,RX)
+        vt₀_basis_quad_indices = zeros(Int, active_size,RX)
+        vt₀_basis_quad_values = zeros(active_size,RX)
+        vt₁_basis_quad_indices = zeros(Int, active_size,RX)
+        vt₁_basis_quad_values = zeros(active_size,RX)
+        wt₀_basis_quad_indices = zeros(Int, active_size,RX)
+        wt₀_basis_quad_values = zeros(active_size,RX)
+        wt₁_basis_quad_indices = zeros(Int, active_size,RX)
+        wt₁_basis_quad_values = zeros(active_size,RX)
+
+        ux₀_basis_quad_indices = zeros(Int, active_size,RT)
+        ux₀_basis_quad_values = zeros(active_size,RT)
+        ux₁_basis_quad_indices = zeros(Int, active_size,RT)
+        ux₁_basis_quad_values = zeros(active_size,RT)
+        vx₀_basis_quad_indices = zeros(Int, active_size,RT)
+        vx₀_basis_quad_values = zeros(active_size,RT)
+        vx₁_basis_quad_indices = zeros(Int, active_size,RT)
+        vx₁_basis_quad_values = zeros(active_size,RT)
+        wx₀_basis_quad_indices = zeros(Int, active_size,RT)
+        wx₀_basis_quad_values = zeros(active_size,RT)
+        wx₁_basis_quad_indices = zeros(Int, active_size,RT)
+        wx₁_basis_quad_values = zeros(active_size,RT)
 
         for rx in 1:RX
             xx = xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes[rx]
-            @views ut₀_basis_quad_values[:,rx] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
-            @views ut₁_basis_quad_values[:,rx] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(1.0 ,xx)) # top
-            @views vt₀_basis_quad_values[:,rx] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
-            @views vt₁_basis_quad_values[:,rx] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(1.0 ,xx))
-            @views wt₀_basis_quad_values[:,rx] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
-            @views wt₁_basis_quad_values[:,rx] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(1.0 ,xx))
+            active_indices, active_values = spline2D_active_coeff_derivatives((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
+            fill_active!(ut₀_basis_quad_indices, ut₀_basis_quad_values, active_indices, active_values, rx)
+            active_indices, active_values = spline2D_active_coeff_derivatives((basis.Basis_t, basis.Basis_x),(1.0 ,xx))
+            fill_active!(ut₁_basis_quad_indices, ut₁_basis_quad_values, active_indices, active_values, rx)
+            active_indices, active_values = spline2D_active_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
+            fill_active!(vt₀_basis_quad_indices, vt₀_basis_quad_values, active_indices, active_values, rx)
+            active_indices, active_values = spline2D_active_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(1.0 ,xx))
+            fill_active!(vt₁_basis_quad_indices, vt₁_basis_quad_values, active_indices, active_values, rx)
+            active_indices, active_values = spline2D_active_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
+            fill_active!(wt₀_basis_quad_indices, wt₀_basis_quad_values, active_indices, active_values, rx)
+            active_indices, active_values = spline2D_active_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(1.0 ,xx))
+            fill_active!(wt₁_basis_quad_indices, wt₁_basis_quad_values, active_indices, active_values, rx)
         end
 
         for i in 1:RT
             tt = t_quadrature.nodes[i]
-            @views ux₀_basis_quad_values[:,i] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
-            @views ux₁_basis_quad_values[:,i] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
-            @views vx₀_basis_quad_values[:,i] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
-            @views vx₁_basis_quad_values[:,i] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
-            @views wx₀_basis_quad_values[:,i] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
-            @views wx₁_basis_quad_values[:,i] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
+            active_indices, active_values = spline2D_active_coeff_derivatives((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
+            fill_active!(ux₀_basis_quad_indices, ux₀_basis_quad_values, active_indices, active_values, i)
+            active_indices, active_values = spline2D_active_coeff_derivatives((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
+            fill_active!(ux₁_basis_quad_indices, ux₁_basis_quad_values, active_indices, active_values, i)
+            active_indices, active_values = spline2D_active_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
+            fill_active!(vx₀_basis_quad_indices, vx₀_basis_quad_values, active_indices, active_values, i)
+            active_indices, active_values = spline2D_active_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
+            fill_active!(vx₁_basis_quad_indices, vx₁_basis_quad_values, active_indices, active_values, i)
+            active_indices, active_values = spline2D_active_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(tt,xspan[1]))
+            fill_active!(wx₀_basis_quad_indices, wx₀_basis_quad_values, active_indices, active_values, i)
+            active_indices, active_values = spline2D_active_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(tt,xspan[2]))
+            fill_active!(wx₁_basis_quad_indices, wx₁_basis_quad_values, active_indices, active_values, i)
         end
 
 
@@ -108,13 +157,21 @@ struct Galerkin_Full_Restriction_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDE
             t_quadrature, RT,
             x_quadrature, RX,
             grid_matrix, grid_weights,
-            u_collocation_matrix, v_collocation_matrix, w_collocation_matrix,
-            ut₀_basis_quad_values,ut₁_basis_quad_values,
-            vt₀_basis_quad_values,vt₁_basis_quad_values,
-            wt₀_basis_quad_values,wt₁_basis_quad_values,
-            ux₀_basis_quad_values,ux₁_basis_quad_values,
-            vx₀_basis_quad_values,vx₁_basis_quad_values,
-            wx₀_basis_quad_values,wx₁_basis_quad_values,
+            u_collocation_indices, u_collocation_values,
+            v_collocation_indices, v_collocation_values,
+            w_collocation_indices, w_collocation_values,
+            ut₀_basis_quad_indices, ut₀_basis_quad_values,
+            ut₁_basis_quad_indices, ut₁_basis_quad_values,
+            vt₀_basis_quad_indices, vt₀_basis_quad_values,
+            vt₁_basis_quad_indices, vt₁_basis_quad_values,
+            wt₀_basis_quad_indices, wt₀_basis_quad_values,
+            wt₁_basis_quad_indices, wt₁_basis_quad_values,
+            ux₀_basis_quad_indices, ux₀_basis_quad_values,
+            ux₁_basis_quad_indices, ux₁_basis_quad_values,
+            vx₀_basis_quad_indices, vx₀_basis_quad_values,
+            vx₁_basis_quad_indices, vx₁_basis_quad_values,
+            wx₀_basis_quad_indices, wx₀_basis_quad_values,
+            wx₁_basis_quad_indices, wx₁_basis_quad_values,
             show_status
             )
     end
@@ -385,12 +442,25 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     full_mat[2:end, :] .= reshape(x, Nt-1, Nx)
     full_coefs = vec(full_mat)
 
+    function active_dot(indices, values, q...)
+        z = zero(ST)
+        for n in axes(indices, 1)
+            p = indices[n, q...]
+            iszero(p) && break
+            z += full_coefs[p] * values[n, q...]
+        end
+        return z
+    end
+
     for d in 1:D
         for i in 1:RT
             for j in 1:RX
-                C.u_quad_values[d, i, j] = sum(full_coefs .* int.method.u_collocation_mat[:, i, j])
-                C.v_quad_values[d, i, j] = sum(full_coefs .* int.method.v_collocation_mat[:, i, j]) / h
-                C.w_quad_values[d, i, j] = sum(full_coefs .* int.method.w_collocation_mat[:, i, j])
+                C.u_quad_values[d, i, j] = active_dot(
+                    int.method.u_collocation_indices, int.method.u_collocation_values, i, j)
+                C.v_quad_values[d, i, j] = active_dot(
+                    int.method.v_collocation_indices, int.method.v_collocation_values, i, j) / h
+                C.w_quad_values[d, i, j] = active_dot(
+                    int.method.w_collocation_indices, int.method.w_collocation_values, i, j)
             end
         end
     end
@@ -408,21 +478,21 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     # boundary values at quadrature points
     for d in 1:D
         for j in 1:RX
-            C.ut₀_quad_values[d,j] = sum(full_coefs .* int.method.ut₀_basis_quad_values[:,j])
-            C.ut₁_quad_values[d,j] = sum(full_coefs .* int.method.ut₁_basis_quad_values[:,j])
-            C.vt₀_quad_values[d,j] = sum(full_coefs .* int.method.vt₀_basis_quad_values[:,j]) / h
-            C.vt₁_quad_values[d,j] = sum(full_coefs .* int.method.vt₁_basis_quad_values[:,j]) / h
-            C.wt₀_quad_values[d,j] = sum(full_coefs .* int.method.wt₀_basis_quad_values[:,j])
-            C.wt₁_quad_values[d,j] = sum(full_coefs .* int.method.wt₁_basis_quad_values[:,j])
+            C.ut₀_quad_values[d,j] = active_dot(int.method.ut₀_basis_quad_indices, int.method.ut₀_basis_quad_values, j)
+            C.ut₁_quad_values[d,j] = active_dot(int.method.ut₁_basis_quad_indices, int.method.ut₁_basis_quad_values, j)
+            C.vt₀_quad_values[d,j] = active_dot(int.method.vt₀_basis_quad_indices, int.method.vt₀_basis_quad_values, j) / h
+            C.vt₁_quad_values[d,j] = active_dot(int.method.vt₁_basis_quad_indices, int.method.vt₁_basis_quad_values, j) / h
+            C.wt₀_quad_values[d,j] = active_dot(int.method.wt₀_basis_quad_indices, int.method.wt₀_basis_quad_values, j)
+            C.wt₁_quad_values[d,j] = active_dot(int.method.wt₁_basis_quad_indices, int.method.wt₁_basis_quad_values, j)
         end
 
         for i in 1:RT
-            C.ux₀_quad_values[d,i] = sum(full_coefs .* int.method.ux₀_basis_quad_values[:,i])
-            C.ux₁_quad_values[d,i] = sum(full_coefs .* int.method.ux₁_basis_quad_values[:,i])
-            C.vx₀_quad_values[d,i] = sum(full_coefs .* int.method.vx₀_basis_quad_values[:,i])/ h
-            C.vx₁_quad_values[d,i] = sum(full_coefs .* int.method.vx₁_basis_quad_values[:,i])/ h
-            C.wx₀_quad_values[d,i] = sum(full_coefs .* int.method.wx₀_basis_quad_values[:,i])
-            C.wx₁_quad_values[d,i] = sum(full_coefs .* int.method.wx₁_basis_quad_values[:,i])
+            C.ux₀_quad_values[d,i] = active_dot(int.method.ux₀_basis_quad_indices, int.method.ux₀_basis_quad_values, i)
+            C.ux₁_quad_values[d,i] = active_dot(int.method.ux₁_basis_quad_indices, int.method.ux₁_basis_quad_values, i)
+            C.vx₀_quad_values[d,i] = active_dot(int.method.vx₀_basis_quad_indices, int.method.vx₀_basis_quad_values, i) / h
+            C.vx₁_quad_values[d,i] = active_dot(int.method.vx₁_basis_quad_indices, int.method.vx₁_basis_quad_values, i) / h
+            C.wx₀_quad_values[d,i] = active_dot(int.method.wx₀_basis_quad_indices, int.method.wx₀_basis_quad_values, i)
+            C.wx₁_quad_values[d,i] = active_dot(int.method.wx₁_basis_quad_indices, int.method.wx₁_basis_quad_values, i)
         end
     end
 
@@ -539,41 +609,63 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<: Galerkin_Fu
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
     local brx = int.method.spatial_quadrature.weights
     local brt = int.method.time_quadrature.weights
-    local u_coll_mat = int.method.u_collocation_mat
-    local v_coll_mat = int.method.v_collocation_mat
-    local w_coll_mat = int.method.w_collocation_mat
+    local u_collocation_indices = int.method.u_collocation_indices
+    local u_collocation_values = int.method.u_collocation_values
+    local v_collocation_indices = int.method.v_collocation_indices
+    local v_collocation_values = int.method.v_collocation_values
+    local w_collocation_indices = int.method.w_collocation_indices
+    local w_collocation_values = int.method.w_collocation_values
     local S = int.method.basis.S
+    local ut₀_basis_quad_indices = int.method.ut₀_basis_quad_indices
     local ut₀_basis_quad_values = int.method.ut₀_basis_quad_values
-    local ut₁_basis_quad_values = int.method.ut₁_basis_quad_values
-    local ux₀_basis_quad_values = int.method.ux₀_basis_quad_values
-    local ux₁_basis_quad_values = int.method.ux₁_basis_quad_values
     local show_status = int.method.show_status
     local Nx = int.method.basis.Nbasis_x
     local Nt = int.method.basis.Nbasis_t
 
+    fill!(b, zero(ST))
+
     for d in 1:D
-        for j in 1:Nx
-            for  i in 1:(Nt-1)
-                p = (j - 1) * Nt + i
-                b_idx = (j - 1) * (Nt - 1) + i
-                z_lag = zero(ST)
-                z_p0 = zero(ST)
-                for rx in 1:RX
-                    for rt in 1:RT
-                        z_lag +=  quad_b[rt,rx] *
-                                ( x_domain * timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * u_coll_mat[p, rt, rx]
-                                + x_domain                 * C.∂L∂V_quad_values[d,rt,rx] * v_coll_mat[p, rt, rx]
-                                + x_domain * timestep(int) * C.∂L∂W_quad_values[d,rt,rx] * w_coll_mat[p, rt, rx])
-                    end
+        for rt in 1:RT
+            for rx in 1:RX
+                zU = quad_b[rt,rx] * x_domain * timestep(int) * C.∂L∂U_quad_values[d,rt,rx]
+                zV = quad_b[rt,rx] * x_domain * C.∂L∂V_quad_values[d,rt,rx]
+                zW = quad_b[rt,rx] * x_domain * timestep(int) * C.∂L∂W_quad_values[d,rt,rx]
+                for n in axes(u_collocation_indices, 1)
+                    p = u_collocation_indices[n, rt, rx]
+                    iszero(p) && break
+                    i = p - (div(p - 1, Nt) * Nt)
+                    i > Nt - 1 && continue
+                    b_idx = div(p - 1, Nt) * (Nt - 1) + i
+                    b[b_idx] += zU * u_collocation_values[n, rt, rx]
                 end
-                if i == 1
-                    for rx in 1:RX
-                        z_p0 += x_domain * brx[rx] * C.p₀_quad_values[1, rx] * ut₀_basis_quad_values[p, rx]
-                    end
-                    b[b_idx] = z_lag + z_p0
-                else
-                    b[b_idx] = z_lag
+                for n in axes(v_collocation_indices, 1)
+                    p = v_collocation_indices[n, rt, rx]
+                    iszero(p) && break
+                    i = p - (div(p - 1, Nt) * Nt)
+                    i > Nt - 1 && continue
+                    b_idx = div(p - 1, Nt) * (Nt - 1) + i
+                    b[b_idx] += zV * v_collocation_values[n, rt, rx]
                 end
+                for n in axes(w_collocation_indices, 1)
+                    p = w_collocation_indices[n, rt, rx]
+                    iszero(p) && break
+                    i = p - (div(p - 1, Nt) * Nt)
+                    i > Nt - 1 && continue
+                    b_idx = div(p - 1, Nt) * (Nt - 1) + i
+                    b[b_idx] += zW * w_collocation_values[n, rt, rx]
+                end
+            end
+        end
+
+        for rx in 1:RX
+            z_p0 = x_domain * brx[rx] * C.p₀_quad_values[d, rx]
+            for n in axes(ut₀_basis_quad_indices, 1)
+                p = ut₀_basis_quad_indices[n, rx]
+                iszero(p) && break
+                i = p - (div(p - 1, Nt) * Nt)
+                i == 1 || continue
+                b_idx = div(p - 1, Nt) * (Nt - 1) + i
+                b[b_idx] += z_p0 * ut₀_basis_quad_values[n, rx]
             end
         end
     end
