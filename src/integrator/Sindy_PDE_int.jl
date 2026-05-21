@@ -7,24 +7,24 @@ struct Sindy_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
 
     spatial_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RX::Int # Number of quadrature points in spatial dimension, for simplicity, set the same for all dimensions
-    
+
     grid_matrix::Matrix{Vector{Float64}} # Quadrature grid points: [(t1,x1), (t1,x2), ]
     grid_weights::Matrix{Float64} # Quadrature weights
-    
+
     Nbasis_μ_t::Int
     k_μ_t::Int # order
     μ₀_t::MVT
     μ₁_t::MVT
 
     Nbasis_λ_x::Int
-    k_λ_x::Int # order 
+    k_λ_x::Int # order
     λ_x::LT
 
     mλ_x::Matrix{Float64} # λ_x evaluated at quadrature points
     mμ_t::Matrix{Float64}
 
     show_status::Bool
-    function Sindy_PDE_Integrator(basis,init_w::Vector;RT_per_interval::Int = 4,RX_per_interval::Int = 4,xspan::Tuple = (0.,1.0), 
+    function Sindy_PDE_Integrator(basis,init_w::Vector;RT_per_interval::Int = 4,RX_per_interval::Int = 4,xspan::Tuple = (0.,1.0),
         Nbasis_μ_t::Int = 10,k_μ_t::Int = 4,μ::Symbol = :BSplineDirichlet,
         Nbasis_λ_x::Int = 10,k_λ_x::Int = 4,λ::Symbol = :BSplineDirichlet,
         t_num_interval::Int = 1, x_num_interval::Int = 5,
@@ -35,8 +35,8 @@ struct Sindy_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
 
         RT = length(t_quadrature.nodes)
         RX = length(x_quadrature.nodes)
-        
-        R_list = [RT_per_interval,RX_per_interval]  
+
+        R_list = [RT_per_interval,RX_per_interval]
         grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
         # Construct Lagrangian multipliers, defined on [0,1] and need to be scaled carefully when used
         λ_x = Lagrangian_multiplier(λ,Nbasis_λ_x,k_λ_x,xspan[1],xspan[2])
@@ -49,11 +49,11 @@ struct Sindy_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
         for i in 1:Nbasis_λ_x
             mλ_x[i,:] = λ_x.b[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes)
         end
-    
+
         for i in 1:Nbasis_μ_t
             mμ_t[i,:] = μ₀_t.b[i].(t_quadrature.nodes)
         end
-        
+
         new{typeof(μ₀_t),typeof(λ_x),typeof(basis)}(basis, init_w,
             t_quadrature, RT,
             x_quadrature, RX,
@@ -61,7 +61,7 @@ struct Sindy_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
             Nbasis_μ_t,k_μ_t, μ₀_t, μ₁_t,
             Nbasis_λ_x, k_λ_x,λ_x,
             mλ_x, mμ_t,show_status)
-    end 
+    end
 end
 
 default_solver(::Sindy_PDE_Integrator) = NewtonMethod()
@@ -93,10 +93,10 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP,Nbasis_μ_t,Nbasis_λ_x} <: PDEIn
     μ₀_t_coes::Matrix{ST}
     μ₁_t_coes::Matrix{ST}
 
-    λ₀_quad_values::Matrix{ST} 
+    λ₀_quad_values::Matrix{ST}
     λ₁_quad_values::Matrix{ST}
     μ₀_quad_values::Matrix{ST}
-    μ₁_quad_values::Matrix{ST} 
+    μ₁_quad_values::Matrix{ST}
 
     ∂u∂P_t₀_quad_values
     ∂u∂P_t₁_quad_values
@@ -138,7 +138,7 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP,Nbasis_μ_t,Nbasis_λ_x} <: PDEIn
 
     function Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP,Nbasis_μ_t,Nbasis_λ_x}(P_sizes) where {ST,RT,RX,D,NP,Nbasis_μ_t,Nbasis_λ_x}
         x = zeros(ST,NP + D * Nbasis_λ_x +2* D * Nbasis_μ_t) # params, λ₀_x_coes,μ₀_t_coes,μ₁_t_coes
-        
+
         u_quad_values = zeros(ST, D, RT, RX)
         v_quad_values = zeros(ST, D, RT, RX)
         w_quad_values = zeros(ST, D, RT, RX)
@@ -150,21 +150,21 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP,Nbasis_μ_t,Nbasis_λ_x} <: PDEIn
         ∂u∂P_quad_values = create_interior_quadrature_points_derivative_mat(ST, RT,RX,D,P_sizes)
         ∂v∂P_quad_values = create_interior_quadrature_points_derivative_mat(ST, RT,RX,D,P_sizes)
         ∂w∂P_quad_values = create_interior_quadrature_points_derivative_mat(ST, RT,RX,D,P_sizes)
-        
+
         λ₀_x_coes = zeros(ST, D, Nbasis_λ_x)
         λ₁_x_coes = zeros(ST, D, Nbasis_λ_x)
         μ₀_t_coes = zeros(ST, D, Nbasis_μ_t)
         μ₁_t_coes = zeros(ST, D, Nbasis_μ_t)
 
-        λ₀_quad_values = zeros(ST, D, RX) 
+        λ₀_quad_values = zeros(ST, D, RX)
         λ₁_quad_values = zeros(ST, D, RX)
-        μ₀_quad_values = zeros(ST, D, RT) 
-        μ₁_quad_values = zeros(ST, D, RT) 
+        μ₀_quad_values = zeros(ST, D, RT)
+        μ₁_quad_values = zeros(ST, D, RT)
 
-        ∂u∂P_t₀_quad_values = create_boundary_derivative_vector(ST, D, RX,P_sizes) 
-        ∂u∂P_t₁_quad_values = create_boundary_derivative_vector(ST, D, RX,P_sizes) 
-        ∂u∂P_x₀_quad_values = create_boundary_derivative_vector(ST, D, RT,P_sizes) 
-        ∂u∂P_x₁_quad_values = create_boundary_derivative_vector(ST, D, RT,P_sizes) 
+        ∂u∂P_t₀_quad_values = create_boundary_derivative_vector(ST, D, RX,P_sizes)
+        ∂u∂P_t₁_quad_values = create_boundary_derivative_vector(ST, D, RX,P_sizes)
+        ∂u∂P_x₀_quad_values = create_boundary_derivative_vector(ST, D, RT,P_sizes)
+        ∂u∂P_x₁_quad_values = create_boundary_derivative_vector(ST, D, RT,P_sizes)
 
         ut₀_quad_values = zeros(ST,D,RX) # bottom boundary, i.e. t = 0
         ut₁_quad_values = zeros(ST,D,RX) # top boundary, i.e. t = T
@@ -204,7 +204,7 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP,Nbasis_μ_t,Nbasis_λ_x} <: PDEIn
             u_quad_values, v_quad_values, w_quad_values,
             ∂L∂U_quad_values, ∂L∂V_quad_values, ∂L∂W_quad_values,
             ∂u∂P_quad_values, ∂v∂P_quad_values, ∂w∂P_quad_values,
-            λ₀_x_coes, λ₁_x_coes,μ₀_t_coes,μ₁_t_coes, 
+            λ₀_x_coes, λ₁_x_coes,μ₀_t_coes,μ₁_t_coes,
             λ₀_quad_values, λ₁_quad_values, μ₀_quad_values, μ₁_quad_values,
             ∂u∂P_t₀_quad_values, ∂u∂P_t₁_quad_values, ∂u∂P_x₀_quad_values, ∂u∂P_x₁_quad_values,
             ut₀_quad_values, ut₁_quad_values,vt₀_quad_values, vt₁_quad_values,wt₀_quad_values, wt₁_quad_values,
@@ -213,7 +213,7 @@ struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP,Nbasis_μ_t,Nbasis_λ_x} <: PDEIn
             bc_ux₀_quad_values, bc_vx₀_quad_values, bc_wx₀_quad_values,
             bc_ux₁_quad_values, bc_vx₁_quad_values, bc_wx₁_quad_values,
             tem_P,
-            init_condition_t₀, 
+            init_condition_t₀,
             boundary_condition_x₀, boundary_condition_x₁,
             flag_done_initial_guess)
     end
@@ -227,14 +227,6 @@ end
 
 #{ST,RT,RX,D,NP}(P_sizes) where {ST,RT,RX,D,NP}
 @inline CacheType(ST, problem::LPDEProblem, method::Sindy_PDE_Integrator) = Sindy_PDE_IntegratorCache{ST,method.RT,method.RX,problem.D,method.symbolic_expr_basis.NP,method.Nbasis_μ_t,method.Nbasis_λ_x}
-@inline function Base.getindex(c::Sindy_PDE_IntegratorCache, ST::DataType)
-    key = hash(Threads.threadid(), hash(ST))
-    if haskey(c.caches, key)
-        c.caches[key]
-    else
-        c.caches[key] = Cache{ST}(c.problem, c.method)
-    end::CacheType(ST, c.problem, c.method)
-end
 
 function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Sindy_PDE_Integrator})
     local P_sizes = int.method.symbolic_expr_basis.P_sizes
@@ -301,7 +293,7 @@ function post_initial_guess!(C,sol,int::PDEIntegrator{<:Sindy_PDE_Integrator},in
     local NP = int_method.symbolic_expr_basis.NP
     local RT = int_method.RT
     local RX = int_method.RX
-    local D = int.problem.D 
+    local D = int.problem.D
     local lag_sys = int.problem.lagrangian_system.functions
     local lag_params = int.problem.lagrangian_system.params
     local Nbasis_λ_x = int_method.Nbasis_λ_x
@@ -372,7 +364,7 @@ function post_initial_guess!(C,sol,int::PDEIntegrator{<:Sindy_PDE_Integrator},in
         vt₀_truth_quad = zeros(Nbasis_λ_x)
         wt₀_truth_quad = zeros(Nbasis_λ_x)
         wt₁_truth_quad = zeros(Nbasis_λ_x)
-        
+
 
         ux₀_truth_quad = zeros(Nbasis_μ_t)
         ux₁_truth_quad = zeros(Nbasis_μ_t)
@@ -477,7 +469,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Si
                     C.∂w∂P_quad_values[d][i, j, p] = ∂w∂P[p](C.tem_P, sol.t - timestep(int) + timestep(int)* grid_matrix[i, j][1], xspan[1] + x_domain* grid_matrix[i, j][2])
                 end
             end
-        
+
             for rx in 1:RX
                 C.∂u∂P_t₀_quad_values[d][rx,p] = ∂u∂P[p](C.tem_P, sol.t - timestep(int),xspan[1] + x_domain* x_quad_nodes[rx])
                 C.∂u∂P_t₁_quad_values[d][rx,p] = ∂u∂P[p](C.tem_P, sol.t                ,xspan[1] + x_domain* x_quad_nodes[rx])
@@ -496,13 +488,13 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Si
                 C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
                 C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](C.u_quad_values[d, i, j], C.v_quad_values[d, i, j], C.w_quad_values[d, i, j], lag_params)
             end
-        end 
+        end
     end
 
     # boundary values at quadrature points
     for d in 1:D
         for j in 1:RX
-            C.ut₀_quad_values[d,j] = u[d](C.tem_P,sol.t - timestep(int),xspan[1] + x_domain* x_quad_nodes[j]) # bottom 
+            C.ut₀_quad_values[d,j] = u[d](C.tem_P,sol.t - timestep(int),xspan[1] + x_domain* x_quad_nodes[j]) # bottom
             C.ut₁_quad_values[d,j] = u[d](C.tem_P,sol.t,                xspan[1] + x_domain* x_quad_nodes[j]) # top
 
             C.vt₀_quad_values[d,j] = v[d](C.tem_P,sol.t - timestep(int),xspan[1] + x_domain* x_quad_nodes[j])
@@ -545,8 +537,8 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Si
 end
 
 function residual!(b::Vector{ST}, sol, params,int::PDEIntegrator{<: Sindy_PDE_Integrator}) where {ST,}
-    local D = int.problem.D 
-    local D = int.problem.D 
+    local D = int.problem.D
+    local D = int.problem.D
     local RT = int.method.RT
     local RX = int.method.RX
     local P_sizes = int.method.symbolic_expr_basis.P_sizes
@@ -563,7 +555,7 @@ function residual!(b::Vector{ST}, sol, params,int::PDEIntegrator{<: Sindy_PDE_In
     local show_status = int.method.show_status
 
     current_idx = 1
-    for d in 1:D 
+    for d in 1:D
         for p in 1:P_sizes[d]
             z = zero(ST)
             for rt in 1:RT
@@ -580,7 +572,7 @@ function residual!(b::Vector{ST}, sol, params,int::PDEIntegrator{<: Sindy_PDE_In
             for rt in 1:RT
                 z+= timestep(int)* brt[rt] * (C.μ₀_quad_values[d,rt] * C.∂u∂P_x₀_quad_values[d][rt,p] - C.μ₁_quad_values[d,rt] * C.∂u∂P_x₁_quad_values[d][rt,p])
             end
-            b[current_idx] = z 
+            b[current_idx] = z
             current_idx += 1
         end
     end
@@ -645,7 +637,7 @@ function update!(sol, int::PDEIntegrator{<:Sindy_PDE_Integrator})
             sol.w[i] = (w[d])(tem_P, sol.t, x_nodes[i])
         end
     end
-    
+
 end
 
 function internal_variables(method::Sindy_PDE_Integrator, problem::LPDEProblem)

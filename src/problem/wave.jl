@@ -12,7 +12,6 @@ module Wave
     using LinearAlgebra
     using Symbolics
     using MultiSymplectic
-    using Infiltrator
     using JLD2
 
     const D = 1
@@ -158,7 +157,7 @@ module Wave
 
     function hamiltonian_density(t, x, u, v, w, params)
         @unpack c, A1, A2, B1, B2, l = params
-        1 / 2 * (v[1]^2 + c^2 * w[1]^2)  
+        1 / 2 * (v^2 + c^2 * w^2)
     end
 
     # Hamiltonian on a given spatial-temporal domain
@@ -172,7 +171,7 @@ module Wave
         for d in 1:D
             for rt in 1:RT
                 for rx in 1:RX
-                    hams+= x_domain * timestep * grid_quad_weights[rt,rx] * 
+                    ham += x_domain * timestep * grid_quad_weights[rt,rx] * 
                     hamiltonian_density(grid_quad_node[rt,rx][1], grid_quad_node[rt,rx][2], u_quad_values[d, rt, rx], v_quad_values[d, rt, rx], w_quad_values[d, rt, rx], params)
                 end
             end

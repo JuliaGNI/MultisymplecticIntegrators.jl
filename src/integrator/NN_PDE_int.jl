@@ -22,7 +22,7 @@ struct NN_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMeth
     Nbasis_μ_t::Int
 
     x_num_interval::Int
-    k_λ_x::Int # order 
+    k_λ_x::Int # order
     λ_x::LT
     Nbasis_λ_x::Int
 
@@ -30,27 +30,27 @@ struct NN_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMeth
     mμ_t::Matrix{Float64}
 
     nepochs::Int
-    initial_guess_method::IPMT # 
+    initial_guess_method::IPMT #
 
     show_status::Bool
     function NN_PDE_Integrator(basis;RT_per_interval::Int = 4,RX_per_interval::Int = 4,
         xspan::Tuple=(0., 1.0),
-        nepochs=1000, 
+        nepochs=1000,
         t_num_interval::Int=10, k_μ_t::Int=4, μ::Symbol=:BSplineDirichlet,
         x_num_interval::Int=10, k_λ_x::Int=3, λ::Symbol=:BSplineDirichlet,
         show_status::Bool=false,
         nx::Int = 40,nt::Int= 20,Nw::Int=500, Nb::Int=500,
         initial_guess_method::IPMT=OGA2D(xspan[1], xspan[2],basis.activation_function,nx = nx,nt=nt,Nw=Nw, Nb=Nb), # hyperparameters for OGA2d
-    
+
         ) where {IPMT,}
-        
+
         t_quadrature = composite_quadrature(t_num_interval ,RT_per_interval)
         x_quadrature = composite_quadrature(x_num_interval ,RX_per_interval)
 
         RT = length(t_quadrature.nodes)
         RX = length(x_quadrature.nodes)
 
-        R_list = [RT_per_interval,RX_per_interval]  
+        R_list = [RT_per_interval,RX_per_interval]
         grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
         # scale grid_matrix
         x0 = xspan[1]
@@ -67,7 +67,7 @@ struct NN_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMeth
         t₁_quad = [[1.0, x_quadrature.nodes[i]] for i in 1:RX]
         x₀_quad = [[t_quadrature.nodes[i], xspan[1]] for i in 1:RT]
         x₁_quad = [[t_quadrature.nodes[i], xspan[2]] for i in 1:RT]
-        
+
         # Construct Lagrangian multipliers, defined on [0,1] and need to be scaled carefully when used
         λ_x = Lagrangian_multiplier(λ, x_num_interval, k_λ_x, xspan[1], xspan[2])
         μ₀_t = Lagrangian_multiplier(μ, t_num_interval, k_μ_t, 0.0, 1.0)
@@ -93,7 +93,7 @@ struct NN_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMeth
             grid_matrix, grid_weights,
             t₀_quad, t₁_quad, x₀_quad, x₁_quad,
             t_num_interval, k_μ_t, μ₀_t, μ₁_t,Nbasis_μ_t,
-            x_num_interval, k_λ_x, λ_x,Nbasis_λ_x, 
+            x_num_interval, k_λ_x, λ_x,Nbasis_λ_x,
             mλ_x, mμ_t,
             nepochs, initial_guess_method,
             show_status)
@@ -174,7 +174,7 @@ struct NN_PDE_IntegratorCache{ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M,PT} <:
     flag_done_initial_guess::Vector{ST}
 
     # fields for OGA2D
-    B::Matrix{ST}   
+    B::Matrix{ST}
     coeffs_full::Vector{ST}
     Wsel::Matrix{ST}
     Bsel::Vector{ST}
@@ -249,7 +249,7 @@ struct NN_PDE_IntegratorCache{ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M,PT} <:
 
         B = zeros(ST, N, S)   # orthonormal basis columns
         coeffs_full = zeros(ST, S)     # coefficients to write into PNN L2
-        Wsel = zeros(ST, S, 2)        
+        Wsel = zeros(ST, S, 2)
         Bsel = zeros(ST, S)
         desired = zeros(ST, N)
         corrs = zeros(ST, M)
@@ -291,14 +291,6 @@ end
 
     return NN_PDE_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.NP,int.basis.S,int.Nbasis_μ_t,int.Nbasis_λ_x,int.initial_guess_method.N,int.initial_guess_method.M,PT}
 end
-@inline function Base.getindex(c::NN_PDE_IntegratorCache, ST::DataType)
-    key = hash(Threads.threadid(), hash(ST))
-    if haskey(c.caches, key)
-        c.caches[key]
-    else
-        c.caches[key] = Cache{ST}(c.problem, c.method)
-    end::CacheType(ST, c.problem, c.method)
-end
 
 zero_vectors!(x::NamedTuple) = foreach(zero_vectors!, values(x))
 zero_vectors!(x::AbstractArray) = fill!(x, zero(eltype(x)))
@@ -327,10 +319,10 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator{MVT
     # local Bsel = C.Bsel
     # local B = C.B
     # local coeffs_full = C.coeffs_full
-    
+
     B = zeros(N, S)   # orthonormal basis columns
     coeffs_full = zeros(S)     # coefficients to write into PNN L2
-    Wsel = zeros(S, 2)        
+    Wsel = zeros(S, 2)
     Bsel = zeros(S)
     desired = zeros(N)
     corrs = zeros(M)
@@ -514,7 +506,7 @@ function post_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator}, in
 
         for rt in 1:Nbasis_μ_t
             C.x[NP+D*Nbasis_λ_x+(d-1)*Nbasis_μ_t+rt] = lag_sys.∂L∂W[d](ux₀_quad_values_tem[rt], vx₀_quad_values_tem[rt], wx₀_quad_values_tem[rt], params)
-            C.x[NP+D*Nbasis_λ_x++D*Nbasis_μ_t+(d-1)*Nbasis_μ_t+rt] = lag_sys.∂L∂W[d](ux₁_quad_values_tem[rt], vx₁_quad_values_tem[rt], wx₁_quad_values_tem[rt], params)
+            C.x[NP+D*Nbasis_λ_x+D*Nbasis_μ_t+(d-1)*Nbasis_μ_t+rt] = lag_sys.∂L∂W[d](ux₁_quad_values_tem[rt], vx₁_quad_values_tem[rt], wx₁_quad_values_tem[rt], params)
         end
     end
     C.flag_done_initial_guess[1] = 1.0
@@ -616,7 +608,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN
     local h = timestep(int)
     local Nbasis_λ_x = int.method.Nbasis_λ_x
     local Nbasis_μ_t = int.method.Nbasis_μ_t
-    
+
     local exact_u = int.problem.exact_u
     local exact_v = int.problem.exact_v
     local exact_w = int.problem.exact_w
@@ -702,7 +694,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN
                 current_u = C.u_quad_values[d, i, j]
                 current_v = C.v_quad_values[d, i, j]
                 current_w = C.w_quad_values[d, i, j]
-                
+
                 C.∂L∂U_quad_values[d, i, j] = Base.invokelatest(∂L∂U[d],current_u, current_v, current_w, lag_params)
                 C.∂L∂V_quad_values[d, i, j] = Base.invokelatest(∂L∂V[d],current_u, current_v, current_w, lag_params)
                 C.∂L∂W_quad_values[d, i, j] = Base.invokelatest(∂L∂W[d],current_u, current_v, current_w, lag_params)
@@ -712,7 +704,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN
 
     for d in 1:D
         for rx in 1:RX
-            C.ut₀_quad_values[d, rx] = u(t₀_quad[rx], C.sol_params)[1] # bottom 
+            C.ut₀_quad_values[d, rx] = u(t₀_quad[rx], C.sol_params)[1] # bottom
             C.vt₀_quad_values[d, rx] = v(t₀_quad[rx], C.sol_params)[1] / h
             C.wt₀_quad_values[d, rx] = w(t₀_quad[rx], C.sol_params)[1]
         end
@@ -761,9 +753,9 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN
         for d in 1:D
             for i in 1:RT
                 for j in 1:RX
-                    u_truth_mat[d, i, j] = int.problem.exact_u.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
-                    v_truth_mat[d, i, j] = int.problem.exact_v.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
-                    w_truth_mat[d, i, j] = int.problem.exact_w.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                    u_truth_mat[d, i, j] = int.problem.exact_u.(tn + h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                    v_truth_mat[d, i, j] = int.problem.exact_v.(tn + h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                    w_truth_mat[d, i, j] = int.problem.exact_w.(tn + h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
                 end
             end
         end
@@ -775,7 +767,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN
         ∂L∂U_truth_mat = similar(C.∂L∂U_quad_values)
         ∂L∂V_truth_mat = similar(C.∂L∂V_quad_values)
         ∂L∂W_truth_mat = similar(C.∂L∂W_quad_values)
-        
+
         for d in 1:D
             for i in 1:RT
                 for j in 1:RX
@@ -929,9 +921,9 @@ function update!(sol, int::PDEIntegrator{<:NN_PDE_Integrator})
     local w = int.method.basis.w
     local xspan = int.problem.xspan
     local xstep = int.problem.xstep
-    
+
     local CT = MultiSymplectic.CacheType(Float64, int.problem, int.method)
-    local C = cache(int, Float64)::CT    
+    local C = cache(int, Float64)::CT
     local NP = int.method.basis.NP
     local x = nlsolution(int)
     local optim_mode = int.method.basis.optim_mode
@@ -961,13 +953,13 @@ function update!(sol, int::PDEIntegrator{<:NN_PDE_Integrator})
         @views C.sol_params.L2.W[:] = x[1:NP]
     end
 
-    point = [1.0, 0.0] 
+    point = [1.0, 0.0]
     for i in eachindex(x_nodes)
         point[2] = x_nodes[i]
         res_u = u(point, C.sol_params)[1]::Float64
         res_v = v(point, C.sol_params)[1]::Float64
         res_w = w(point, C.sol_params)[1]::Float64
-        
+
         sol.u[i] = res_u
         sol.v[i] = res_v / h
         sol.w[i] = res_w
@@ -994,4 +986,3 @@ function update!(sol, int::PDEIntegrator{<:NN_PDE_Integrator})
 
     return nothing
 end
-
