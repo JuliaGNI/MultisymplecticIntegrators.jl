@@ -54,7 +54,6 @@ struct LPDESystem{LType,TType,XType,UType,VType,WType,EType,FType,PT<:NamedTuple
             ∂L∂W = ∂L∂W,
         ) # set of callable functions
 
-        return new{LType,TType,XType,UType,VType,WType,typeof(equs),typeof(functions)}(Ls,D, t, x, U,V,W, params, equs, functions)
+        return new{LType,TType,XType,UType,VType,WType,typeof(equs),typeof(functions),typeof(params)}(Ls,D, t, x, U,V,W, params, equs, functions)
     end
 end
-
