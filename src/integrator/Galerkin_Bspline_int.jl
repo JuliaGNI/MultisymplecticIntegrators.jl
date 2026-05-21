@@ -340,8 +340,8 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
     C.x[1:S] = reshape(coefs, :, 1)
 
     if show_status
-        vdata = exact_v.(h .* t_collocation_points, x_collocation_points')
-        wdata = exact_w.(h .* t_collocation_points, x_collocation_points')
+        vdata = exact_v.(tn .+ h .* t_collocation_points, x_collocation_points')
+        wdata = exact_w.(tn .+ h .* t_collocation_points, x_collocation_points')
 
         u_approx = similar(udata)
         v_approx = similar(vdata)
@@ -361,7 +361,7 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
         for ti in 1:RT
             for xi in 1:RX
                 tt = grid_matrix[ti,xi][1]
-                xx = a + (b - a) * grid_matrix[ti,xi][2]
+                xx = grid_matrix[ti,xi][2]
 
                 u_quad_approx[ti,xi] = eval_spline2D(coefs, (Bt, Bx), (tt, xx))
                 v_quad_approx[ti,xi] = eval_spline2D_dt(coefs, (Bt, Bx), (tt, xx)) / h
@@ -375,11 +375,11 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
         for ti in 1:RT
             for xi in 1:RX
                 tt = grid_matrix[ti,xi][1]
-                xx = a + (b - a) * grid_matrix[ti,xi][2]
+                xx = grid_matrix[ti,xi][2]
 
-                u_quad_value[ti,xi] = exact_u(h * tt, xx)
-                v_quad_value[ti,xi] = exact_v(h * tt, xx)
-                w_quad_value[ti,xi] = exact_w(h * tt, xx)
+                u_quad_value[ti,xi] = exact_u(tn .+ h * tt, xx)
+                v_quad_value[ti,xi] = exact_v(tn .+ h * tt, xx)
+                w_quad_value[ti,xi] = exact_w(tn .+ h * tt, xx)
             end
         end
 
@@ -395,7 +395,7 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
         println("Max error in initial guess at quadrature points for w: ", maximum(abs.(w_quad_value .- w_quad_approx)))
     end
 
-    # @infiltrate
+    @infiltrate
 end
 
 function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Galerkin_Bspline_Integrator},int_method::Galerkin_Bspline_Integrator)

@@ -1,7 +1,7 @@
 using Revise
 using BSplineKit
 using MultiSymplectic
-# using Infiltrator
+using Infiltrator
 using Base
 using GeometricIntegratorsBase
 using Plots
@@ -57,8 +57,8 @@ end
 
 
 
-t_span = (0.,20.0)
-xspan = (0.0, 1.0)
+t_span = (0.,0.1)
+xspan = (0.2, 0.8)
 # for t_step in [0.1,0.2,0.4]
 
 lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=xspan, xstep=0.01)
@@ -66,7 +66,7 @@ x_ls = xspan[1]:lpde.xstep:xspan[2]
 c = lpde.params.c
 # for x_knot_interval in [0.2,0.5]
     spline_basis = BSpline2D(k,xspan = xspan, t_knot_interval = t_knot_interval,x_knot_interval = x_knot_interval)
-    spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = false)
+    spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = true)
     println("Start Spline Integrator")
     sol_set = MultiSymplectic.integrate(lpde, spline_int)
     println("End Spline Integrator with h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")

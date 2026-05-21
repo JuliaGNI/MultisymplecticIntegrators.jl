@@ -502,7 +502,7 @@ end
 function eval_spline2D_dt(coefs::AbstractMatrix, (Bt, Bx), (t, x))
     it, bt = Bt(t)
     it_d, btd = Bt(t, BSplineKit.Derivative(1))  # N'(t)
-
+    @assert it == it_d
     ix, bx = Bx(x)
 
     kt = BSplineKit.order(Bt)
@@ -518,6 +518,7 @@ function eval_spline2D_dt(coefs::AbstractMatrix, (Bt, Bx), (t, x))
         end
     end
     val
+    # @infiltrate
 end
 
 function eval_spline2D_dx(coefs::AbstractMatrix, (Bt, Bx), (t, x))
@@ -525,6 +526,8 @@ function eval_spline2D_dx(coefs::AbstractMatrix, (Bt, Bx), (t, x))
 
     ix, bx = Bx(x)
     ix_d, bxd = Bx(x, BSplineKit.Derivative(1))   # M'(x)
+    
+    @assert ix == ix_d
 
     kt = BSplineKit.order(Bt)
     kx = BSplineKit.order(Bx)
