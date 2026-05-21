@@ -198,19 +198,19 @@ end
 
 Lagrangian_multiplier(::Val{:BSplineDirichlet},num_interval::Integer,k,a,b) = BSplineDirichlet(num_interval,k,a,b)
 
-struct BSplineDirichlet
+struct BSplineDirichlet{TT,BT}
     k::Int # order
 
     N_intervals::Int
-    t::AbstractVector # knots from BSplineKit
-    b #  basis functions
+    t::TT # knots from BSplineKit
+    b::BT #  basis functions
 
     Nbasis::Int # number of basis
     function BSplineDirichlet(num_interval::Int,k::Int,a,b)
         knot = a:(b - a)/(num_interval-1):b
         B = BSplineBasis(BSplineOrder(k), knot)
 
-        return new(k, num_interval,B.t, B, length(B))
+        return new{typeof(B.t),typeof(B)}(k, num_interval,B.t, B, length(B))
     end
 end
 
