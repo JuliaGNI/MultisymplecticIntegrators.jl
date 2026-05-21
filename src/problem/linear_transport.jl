@@ -7,8 +7,6 @@
     
 """
 
-using MultiSymplectic:ELM_PDE_int
-
 module LinearTransport
  
     export lagrangian, hamiltonian, initial_condition, boundary_condition, lpdeproblem
@@ -202,6 +200,7 @@ module LinearTransport
         local RT = int.method.RT
         local RX = int.method.RX
         local NP = int.method.basis.NP
+        local c = int.problem.params.c
         C.system_matrix[1:RT * RX, :] = C.v_basis_quad_values .+ c * C.w_basis_quad_values
         C.system_matrix[RT * RX + 1:RT * RX + RX, :] = C.ut₀_basis_quad_values
         C.system_matrix[RT * RX + RX + 1:RT * RX + RX + RT, :] = C.ux₀_basis_quad_values
