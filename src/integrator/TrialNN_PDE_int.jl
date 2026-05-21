@@ -132,20 +132,20 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,S,NP,OGAN,a,b,xstep} <: PDEIntegratorCach
         ∂C1C2∂t_quad=zeros(ST, D, RT, RX) 
         ∂C1C2∂x_quad=zeros(ST, D, RT, RX)
 
-        x_nodes = collect(a:0.01:b)
+        x_nodes = collect(a:xstep:b)
         C1C2_result=zeros(ST, D, length(x_nodes)) 
         ∂C1C2∂t_result=zeros(ST, D, length(x_nodes)) 
         ∂C1C2∂x_result=zeros(ST, D, length(x_nodes))
 
-        previous_C1C2_equispaced_quad_nodes = zeros(OGAN)
+        previous_C1C2_equispaced_quad_nodes = zeros(ST, OGAN)
         
-        previous_C1C2_quad=zeros(D, RT, RX) 
-        previous_∂C1C2∂t_quad=zeros(D, RT, RX) 
-        previous_∂C1C2∂x_quad=zeros(D, RT, RX)
+        previous_C1C2_quad=zeros(ST, D, RT, RX) 
+        previous_∂C1C2∂t_quad=zeros(ST, D, RT, RX) 
+        previous_∂C1C2∂x_quad=zeros(ST, D, RT, RX)
 
-        previous_C1C2_result=zeros(D, length(x_nodes)) 
-        previous_∂C1C2∂t_result=zeros(D, length(x_nodes)) 
-        previous_∂C1C2∂x_result=zeros(D, length(x_nodes))
+        previous_C1C2_result=zeros(ST, D, length(x_nodes)) 
+        previous_∂C1C2∂t_result=zeros(ST, D, length(x_nodes)) 
+        previous_∂C1C2∂x_result=zeros(ST, D, length(x_nodes))
 
 
 
@@ -557,14 +557,14 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator{<:TrialNN_PDE_int})
     end
 
     if tn != 0.0
-        C1C2_equispaced_quad_nodes += cache(int).previous_C1C2_equispaced_quad_nodes
-        C1C2_quad += cache(int).previous_C1C2_quad
-        ∂C1C2∂t_quad += cache(int).previous_∂C1C2∂t_quad
-        ∂C1C2∂x_quad += cache(int).previous_∂C1C2∂x_quad
+        C1C2_equispaced_quad_nodes .+= cache(int).previous_C1C2_equispaced_quad_nodes
+        C1C2_quad .+= cache(int).previous_C1C2_quad
+        ∂C1C2∂t_quad .+= cache(int).previous_∂C1C2∂t_quad
+        ∂C1C2∂x_quad .+= cache(int).previous_∂C1C2∂x_quad
         # @infiltrate
-        C1C2_result += cache(int).previous_C1C2_result
-        ∂C1C2∂t_result += cache(int).previous_∂C1C2∂t_result
-        ∂C1C2∂x_result += cache(int).previous_∂C1C2∂x_result
+        C1C2_result .+= cache(int).previous_C1C2_result
+        ∂C1C2∂t_result .+= cache(int).previous_∂C1C2∂t_result
+        ∂C1C2∂x_result .+= cache(int).previous_∂C1C2∂x_result
     end
 
 
@@ -659,9 +659,9 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Tr
         for d in 1:D
             for i in 1:RT
                 for j in 1:RX
-                    u_truth_mat[d, i, j] = int.problem.exact_u.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
-                    v_truth_mat[d, i, j] = int.problem.exact_v.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
-                    w_truth_mat[d, i, j] = int.problem.exact_w.(h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                    u_truth_mat[d, i, j] = int.problem.exact_u.(tn + h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                    v_truth_mat[d, i, j] = int.problem.exact_v.(tn + h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                    w_truth_mat[d, i, j] = int.problem.exact_w.(tn + h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
                 end
             end
         end
@@ -815,7 +815,7 @@ function internal_variables(method::TrialNN_PDE_int, problem::LPDEProblem)
     ∂C1C2∂t_quad=zeros(D, RT, RX) 
     ∂C1C2∂x_quad=zeros( D, RT, RX)
 
-    x_nodes = collect(a:0.01:b)
+    x_nodes = collect(a:xstep:b)
     C1C2_result=zeros(D, length(x_nodes)) 
     ∂C1C2∂t_result=zeros(D, length(x_nodes)) 
     ∂C1C2∂x_result=zeros(D, length(x_nodes))
