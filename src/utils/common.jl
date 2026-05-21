@@ -617,7 +617,7 @@ function spline2D_coeff_derivatives_time((Bt, Bx)::Tuple{BTT,BXT}, (t, x)::Tuple
     Nt, Nx = length(Bt), length(Bx)
     dVdc = zeros(Nt, Nx)
     for δx in eachindex(bx), δt in eachindex(btd)
-        ii = it - δt + 1
+        ii = it_d - δt + 1
         jj = ix - δx + 1
         if ii >= 1 && ii <= Nt && jj >= 1 && jj <= Nx
             dVdc[ii, jj] = btd[δt] * bx[δx]    # N'_i(t) * M_j(x)

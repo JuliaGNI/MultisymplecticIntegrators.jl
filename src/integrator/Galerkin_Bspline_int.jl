@@ -131,13 +131,13 @@ struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
 
         mμ_t = zeros(basis.Nbasis_t, RT)
         for i in 1:basis.Nbasis_t
-            @views mμ_t[i,:] = basis.Basis_t[i].(t_quadrature.nodes,BSplineKit.Derivative(1))#
+            @views mμ_t[i,:] = basis.Basis_t[i].(t_quadrature.nodes)#
         end
         Nbasis_μ_t = basis.Nbasis_t
         
         mλ_x = zeros(basis.Nbasis_x, RX)
         for i in 1:basis.Nbasis_x
-            @views mλ_x[i,:] = basis.Basis_x[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes,BSplineKit.Derivative(1))#
+            @views mλ_x[i,:] = basis.Basis_x[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes)#
         end 
         Nbasis_λ_x = basis.Nbasis_x
 
@@ -440,7 +440,7 @@ function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Ga
 
         for rt in 1:Nbasis_μ_t
             C.x[S + D * Nbasis_λ_x + (d - 1) * Nbasis_μ_t + rt] = μ₀_t_tem[rt]
-            C.x[S + D * Nbasis_λ_x + + D * Nbasis_μ_t + (d - 1) * Nbasis_μ_t + rt] = μ₁_t_tem[rt]
+            C.x[S + D * Nbasis_λ_x + D * Nbasis_μ_t + (d - 1) * Nbasis_μ_t + rt] = μ₁_t_tem[rt]
         end
     end
 
