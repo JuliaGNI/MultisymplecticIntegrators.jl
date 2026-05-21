@@ -1,5 +1,5 @@
 
-struct LPDESystem{LType,TType,XType,UType,VType,WType,EType,FType}
+struct LPDESystem{LType,TType,XType,UType,VType,WType,EType,FType,PT<:NamedTuple}
     L::LType
     D::Int
     t::TType
@@ -7,7 +7,7 @@ struct LPDESystem{LType,TType,XType,UType,VType,WType,EType,FType}
     u::UType # alias for q
     v::VType # alias for ut
     w::WType # alias for ux
-    params::NamedTuple
+    params::PT
     equations::EType
     functions::FType
     function LPDESystem(L::LType,t::TType,x::XType,U::UType,V::VType,W::WType,params = NamedTuple();simplify = true, scalarize = true) where {LType,TType,XType,UType,VType,WType}
