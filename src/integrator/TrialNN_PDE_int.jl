@@ -21,14 +21,14 @@ struct TrialNN_PDE_int{BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PD
         nx::Int = 40,nt::Int= 20,Nw::Int=500, Nb::Int=500,show_status::Bool = false,
         xspan::Tuple=(0., 1.0),t_num_interval::Int=2,x_num_interval::Int=5,
         initial_guess_method::IPMT=OGA2D(xspan[1], xspan[2],basis.activation_function,nx = nx,nt = nt,Nw = Nw,Nb = Nb),) where {IPMT,} # 300,300
-        
+
         t_quadrature = composite_quadrature(t_num_interval ,RT_per_interval)
         x_quadrature = composite_quadrature(x_num_interval ,RX_per_interval)
 
         RT = length(t_quadrature.nodes)
         RX = length(x_quadrature.nodes)
 
-        R_list = [RT_per_interval,RX_per_interval]  
+        R_list = [RT_per_interval,RX_per_interval]
         grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
         # scale grid_matrix
         x0 = xspan[1]
@@ -87,7 +87,7 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,S,NP,OGAN,a,b,xstep} <: PDEIntegratorCach
     C1C2_quad::Array{ST}
     ∂C1C2∂t_quad::Array{ST}
     ∂C1C2∂x_quad::Array{ST}
-    
+
     x_nodes::Vector{ST}
     C1C2_result::Matrix{ST}
     ∂C1C2∂t_result::Matrix{ST}
@@ -97,14 +97,14 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,S,NP,OGAN,a,b,xstep} <: PDEIntegratorCach
     previous_C1C2_quad::Array{ST}
     previous_∂C1C2∂t_quad::Array{ST}
     previous_∂C1C2∂x_quad::Array{ST}
-    
+
     previous_C1C2_result::Matrix{ST}
     previous_∂C1C2∂t_result::Matrix{ST}
     previous_∂C1C2∂x_result::Matrix{ST}
 
     function TrialNN_PDE_intCache{ST,RT,RX,D,S,NP,OGAN,a,b,xstep}() where {ST,RT,RX,D,S,NP,OGAN,a,b,xstep}
         x = zeros(ST, NP) # in ELM, x is just the output layer parameters
-        
+
         W2 = zeros(ST, S)
         W1 = zeros(ST, S, 2)
         bias1 = zeros(ST, S)
@@ -127,24 +127,24 @@ struct TrialNN_PDE_intCache{ST,RT,RX,D,S,NP,OGAN,a,b,xstep} <: PDEIntegratorCach
         flag_done_initial_guess = zeros(ST, 1)
 
         C1C2_equispaced_quad_nodes = zeros(ST,OGAN)
-        
-        C1C2_quad=zeros(ST, D, RT, RX) 
-        ∂C1C2∂t_quad=zeros(ST, D, RT, RX) 
+
+        C1C2_quad=zeros(ST, D, RT, RX)
+        ∂C1C2∂t_quad=zeros(ST, D, RT, RX)
         ∂C1C2∂x_quad=zeros(ST, D, RT, RX)
 
         x_nodes = collect(a:xstep:b)
-        C1C2_result=zeros(ST, D, length(x_nodes)) 
-        ∂C1C2∂t_result=zeros(ST, D, length(x_nodes)) 
+        C1C2_result=zeros(ST, D, length(x_nodes))
+        ∂C1C2∂t_result=zeros(ST, D, length(x_nodes))
         ∂C1C2∂x_result=zeros(ST, D, length(x_nodes))
 
         previous_C1C2_equispaced_quad_nodes = zeros(ST, OGAN)
-        
-        previous_C1C2_quad=zeros(ST, D, RT, RX) 
-        previous_∂C1C2∂t_quad=zeros(ST, D, RT, RX) 
+
+        previous_C1C2_quad=zeros(ST, D, RT, RX)
+        previous_∂C1C2∂t_quad=zeros(ST, D, RT, RX)
         previous_∂C1C2∂x_quad=zeros(ST, D, RT, RX)
 
-        previous_C1C2_result=zeros(ST, D, length(x_nodes)) 
-        previous_∂C1C2∂t_result=zeros(ST, D, length(x_nodes)) 
+        previous_C1C2_result=zeros(ST, D, length(x_nodes))
+        previous_∂C1C2∂t_result=zeros(ST, D, length(x_nodes))
         previous_∂C1C2∂x_result=zeros(ST, D, length(x_nodes))
 
 
@@ -174,14 +174,6 @@ function Cache{ST}(problem::LPDEProblem, int::TrialNN_PDE_int; kwargs...) where 
 end
 
 @inline CacheType(ST, problem::LPDEProblem, int::TrialNN_PDE_int) = TrialNN_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.S,int.basis.NP,int.initial_guess_method.N,int.xspan[1],int.xspan[2],problem.xstep}
-@inline function Base.getindex(c::TrialNN_PDE_intCache, ST::DataType)
-    key = hash(Threads.threadid(), hash(ST))
-    if haskey(c.caches, key)
-        c.caches[key]
-    else
-        c.caches[key] = Cache{ST}(c.problem, c.method)
-    end::CacheType(ST, c.problem, c.method)
-end
 
 function NN(t::TT, x::XT, W2::AbstractVector{DT}, W1::AbstractMatrix{DT}, bias1::AbstractVector{DT}, int::PDEIntegrator{<:TrialNN_PDE_int}) where {TT,XT, DT}
     local activation = int.method.basis.activation_function
@@ -218,7 +210,7 @@ function C1(t::TT, x::XT, tn::ST, int::PDEIntegrator{<:TrialNN_PDE_int}, sol::SL
     local W2 = cache(int).previous_W2
     local u_func = int.method.basis.u_func
     local S = int.method.basis.S
-    
+
     all_previous_params = vcat(
         W2,
         vec(W1),
@@ -230,8 +222,8 @@ function C1(t::TT, x::XT, tn::ST, int::PDEIntegrator{<:TrialNN_PDE_int}, sol::SL
            (x - a) * exact_u(h*t, b) / x_domain +
            (h - h * t) * exact_u(tn, x) / h
     else
-        # return (b - x) * exact_u(tn+h*t, a) / x_domain +(x - a) * exact_u(tn+h*t, b) / x_domain + (h - h * t) * u_trial(1.0, x, W2,W1,bias1,int,sol) / h # should be u_trial 
-        return (b - x) * exact_u(tn+h*t, a) / x_domain +(x - a) * exact_u(tn+h*t, b) / x_domain + (h - h * t) * u_func(1.0, x, h, all_previous_params,) / h # should be u_trial 
+        # return (b - x) * exact_u(tn+h*t, a) / x_domain +(x - a) * exact_u(tn+h*t, b) / x_domain + (h - h * t) * u_trial(1.0, x, W2,W1,bias1,int,sol) / h # should be u_trial
+        return (b - x) * exact_u(tn+h*t, a) / x_domain +(x - a) * exact_u(tn+h*t, b) / x_domain + (h - h * t) * u_func(1.0, x, h, all_previous_params,) / h # should be u_trial
 
     end
 end
@@ -263,7 +255,7 @@ function C1C2(t::TT, x::XT, tn::Float64, int::PDEIntegrator{<:TrialNN_PDE_int}, 
     C1(t, x, tn, int,sol) - C2(t, x, tn, int,sol)
 end
 
-C1C2(tx::Vector{ST},tn::Float64,int::PDEIntegrator{<:TrialNN_PDE_int},sol::SLT) where {ST,SLT} = C1C2(tx[1],tx[2],tn,int,sol) 
+C1C2(tx::Vector{ST},tn::Float64,int::PDEIntegrator{<:TrialNN_PDE_int},sol::SLT) where {ST,SLT} = C1C2(tx[1],tx[2],tn,int,sol)
 
 ∂C1C2∂t(t::TT, x::XT, tn::Float64, int::PDEIntegrator{<:TrialNN_PDE_int}, sol::SLT) where {TT,XT,SLT} = Zygote.gradient(tt -> C1C2(tt,x,tn,int,sol),t)[1]
 ∂C1C2∂x(t::TT, x::XT, tn::Float64, int::PDEIntegrator{<:TrialNN_PDE_int}, sol::SLT) where {TT,XT,SLT} = Zygote.gradient(xx -> C1C2(t,xx,tn,int,sol),x)[1]
@@ -271,7 +263,7 @@ C1C2(tx::Vector{ST},tn::Float64,int::PDEIntegrator{<:TrialNN_PDE_int},sol::SLT) 
 ∂C1C2∂t(tx::Vector{ST},tn::Float64,int::PDEIntegrator{<:TrialNN_PDE_int},sol::SLT) where {ST,SLT} = ∂C1C2∂t(tx[1],tx[2],tn,int,sol)
 ∂C1C2∂x(tx::Vector{ST},tn::Float64,int::PDEIntegrator{<:TrialNN_PDE_int},sol::SLT) where {ST,SLT} = ∂C1C2∂x(tx[1],tx[2],tn,int,sol)
 
-u_trial(tx::Vector{ST},all_params::Vector{DT},int::PDEIntegrator{<:TrialNN_PDE_int},sol::SLT) where {ST, DT,SLT} = u_trial(tx[1],tx[2],all_params,int,sol) 
+u_trial(tx::Vector{ST},all_params::Vector{DT},int::PDEIntegrator{<:TrialNN_PDE_int},sol::SLT) where {ST, DT,SLT} = u_trial(tx[1],tx[2],all_params,int,sol)
 u_trial(tx::NTuple{2,ST},all_params::Vector{DT},int::PDEIntegrator{<:TrialNN_PDE_int},sol::SLT) where {ST<:Real, DT,SLT} = u_trial(tx[1],tx[2],all_params,int,sol)
 v_trial_zygote(t::TT, x::XT, W2::AbstractVector{DT}, W1::AbstractMatrix{DT}, bias1::AbstractVector{DT}, int::PDEIntegrator{<:TrialNN_PDE_int}, sol::SLT) where {TT,XT, DT,SLT} = Zygote.gradient(tt -> u_trial(tt,x,W2,W1,bias1,int,sol),t)[1]
 w_trial_zygote(t::TT, x::XT, W2::AbstractVector{DT}, W1::AbstractMatrix{DT}, bias1::AbstractVector{DT}, int::PDEIntegrator{<:TrialNN_PDE_int}, sol::SLT) where {TT,XT, DT,SLT} = Zygote.gradient(xx -> u_trial(t,xx,W2,W1,bias1,int,sol),x)[1]
@@ -292,7 +284,7 @@ w_trial_zygote(tx::NTuple{2,ST}, W2::Vector{DT}, W1::Matrix{DT}, bias1::Vector{D
 
 v_trial(t::TT,x::XT,params::AbstractVector{DT},int::PDEIntegrator{<:TrialNN_PDE_int},sol::SLT) where {TT,XT, DT,SLT} = ForwardDiff.derivative(tt -> u_trial(tt,x,params,int,sol),t)[1]
 w_trial(t::TT,x::XT,params::AbstractVector{DT},int::PDEIntegrator{<:TrialNN_PDE_int},sol::SLT) where {TT,XT, DT,SLT} = ForwardDiff.derivative(xx -> u_trial(t,xx,params,int,sol),x)[1]
-    
+
 
 ∂u∂p(t::TT,x::XT,params::AbstractVector{DT},int::PDEIntegrator{<:TrialNN_PDE_int},sol::SLT) where {TT,XT, DT,SLT} = ForwardDiff.gradient(p -> u_trial(t,x,p,int,sol),params)
 ∂v∂p(t::TT,x::XT,params::AbstractVector{DT},int::PDEIntegrator{<:TrialNN_PDE_int},sol::SLT) where {TT,XT, DT,SLT} = ForwardDiff.gradient(p -> v_trial(t,x,p,int,sol),params)
@@ -381,7 +373,7 @@ function prior_initial_guess!(C::TrialNN_PDE_intCache, sol, int::PDEIntegrator{<
 
     for (name, layer) in zip(keys(PNN.params), values(PNN.params))
         if hasfield(typeof(layer), :b)
-            C.basis_nn_ps[name].W[:] = layer.W[:] 
+            C.basis_nn_ps[name].W[:] = layer.W[:]
             C.basis_nn_ps[name].b[:] = layer.b[:]
             BNN.params[name].W[:] = layer.W[:]
             BNN.params[name].b[:] = layer.b[:]
@@ -399,7 +391,7 @@ end
 function prior_initial_guess!(C::TrialNN_PDE_intCache, sol, int::PDEIntegrator{<:TrialNN_PDE_int{BT,IPMT}}) where {BT,IPMT<:OGA2D}
     local h = timestep(int)
 
-    local S = int.method.basis.S  
+    local S = int.method.basis.S
     local a,b = int.problem.xspan[1],int.problem.xspan[2]
     local exact_u = int.problem.exact_u
     local x_domain = b - a
@@ -415,17 +407,17 @@ function prior_initial_guess!(C::TrialNN_PDE_intCache, sol, int::PDEIntegrator{<
     # This performs up to `max_iter` outer iterations to account for boundary terms depending on PNN
     B = zeros(N, S)   # orthonormal basis columns
     coeffs_full = zeros(S)     # coefficients to write into PNN L2
-    Wsel = zeros(S, 2)        
+    Wsel = zeros(S, 2)
     Bsel = zeros(S)
     desired = zeros(N)
     corrs = zeros(M)
     selected = zeros(Int, S) # indices of selected atoms in the dictionary
-    
+
     # Build the desired internal PNN output on all quadrature nodes:
     # desired = target + T1NN - T2NN - C1 + C2  (evaluated with current PNN.params)
     for i in 1:N
         t = quad_nodes[1,i]; x = quad_nodes[2,i]
-        desired[i] = exact_u(tn+h * t, x) - u_trial(t, x, coeffs_full,Wsel,Bsel,int,sol) - C1C2_equispaced_quad_nodes[i]  
+        desired[i] = exact_u(tn+h * t, x) - u_trial(t, x, coeffs_full,Wsel,Bsel,int,sol) - C1C2_equispaced_quad_nodes[i]
     end
     # @show desired
 
@@ -488,7 +480,7 @@ function copy_internal_variables!(C::TrialNN_PDE_intCache,solstep::SolutionStep)
     haskey(internal(solstep), :previous_W2) && copyto!(C.previous_W2,internal(solstep).previous_W2)
     haskey(internal(solstep), :previous_W1) && copyto!(C.previous_W1,internal(solstep).previous_W1)
     haskey(internal(solstep), :previous_bias1) && copyto!(C.previous_bias1,internal(solstep).previous_bias1)
-    
+
     haskey(internal(solstep), :previous_C1C2_equispaced_quad_nodes) && copyto!(C.previous_C1C2_equispaced_quad_nodes,internal(solstep).previous_C1C2_equispaced_quad_nodes)
     haskey(internal(solstep), :previous_C1C2_quad) && copyto!(C.previous_C1C2_quad,internal(solstep).previous_C1C2_quad)
     haskey(internal(solstep), :previous_∂C1C2∂t_quad) && copyto!(C.previous_∂C1C2∂t_quad,internal(solstep).previous_∂C1C2∂t_quad)
@@ -515,7 +507,7 @@ end
 
 
 
-function initialize_bcs_ics!(sol,int::PDEIntegrator{<:TrialNN_PDE_int}) 
+function initialize_bcs_ics!(sol,int::PDEIntegrator{<:TrialNN_PDE_int})
     local N = int.method.initial_guess_method.N
     local quad_nodes = int.method.initial_guess_method.equispaced_quad_nodes
     local tn = sol.t - timestep(int)
@@ -576,7 +568,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Tr
     local ∂L∂U = int.problem.lagrangian_system.functions.∂L∂U
     local ∂L∂V = int.problem.lagrangian_system.functions.∂L∂V
     local ∂L∂W = int.problem.lagrangian_system.functions.∂L∂W
-    local D = int.problem.D 
+    local D = int.problem.D
     local RT = int.method.RT
     local RX = int.method.RX
     local xspan = int.problem.xspan
@@ -612,7 +604,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Tr
 
     for d in 1:D
         for i in 1:RT
-            for j in 1:RX 
+            for j in 1:RX
                 @views C.∂u∂θ_quad_values[d, i, j, :] = ∂u∂p_func(grid_matrix[i, j][1],grid_matrix[i, j][2],h,x)
                 @views C.∂v∂θ_quad_values[d, i, j, :] = ∂v∂p_func(grid_matrix[i, j][1],grid_matrix[i, j][2],h,x)
                 @views C.∂w∂θ_quad_values[d, i, j, :] = ∂w∂p_func(grid_matrix[i, j][1],grid_matrix[i, j][2],h,x)
@@ -643,12 +635,12 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Tr
                 current_u = C.u_quad_values[d, i, j]
                 current_v = C.v_quad_values[d, i, j]
                 current_w = C.w_quad_values[d, i, j]
-                
+
                 C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](current_u, current_v, current_w, lag_params)
                 C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](current_u, current_v, current_w, lag_params)
                 C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](current_u, current_v, current_w, lag_params)
             end
-        end 
+        end
     end
 
     if show_status
@@ -673,7 +665,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Tr
         ∂L∂U_truth_mat = similar(C.∂L∂U_quad_values)
         ∂L∂V_truth_mat = similar(C.∂L∂V_quad_values)
         ∂L∂W_truth_mat = similar(C.∂L∂W_quad_values)
-        
+
         for d in 1:D
             for i in 1:RT
                 for j in 1:RX
@@ -694,7 +686,7 @@ end
 post_initial_guess!(C, sol, int::PDEIntegrator{<:TrialNN_PDE_int}) = nothing
 
 function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<:TrialNN_PDE_int}) where {ST}
-    local D = int.problem.D 
+    local D = int.problem.D
     local RT = int.method.RT
     local RX = int.method.RX
     local NP = int.method.basis.NP
@@ -704,12 +696,12 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<:TrialNN_PDE_
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
     local show_status = int.method.show_status
 
-    for d in 1:D 
+    for d in 1:D
         for p in 1:NP
             z = zero(ST)
             for rt in 1:RT
                 for rx in 1:RX
-                    z +=  quad_b[rt,rx] * 
+                    z +=  quad_b[rt,rx] *
                         ( x_domain * timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * C.∂u∂θ_quad_values[d,rt,rx,p]
                         + x_domain                 * C.∂L∂V_quad_values[d,rt,rx] * C.∂v∂θ_quad_values[d,rt,rx,p]
                         + x_domain * timestep(int) * C.∂L∂W_quad_values[d,rt,rx] * C.∂w∂θ_quad_values[d,rt,rx,p])
@@ -759,7 +751,7 @@ function update!(sol, int::PDEIntegrator{<:TrialNN_PDE_int})
     @views copyto!(view(W1, :, 1), x[S+1:2*S])
     @views copyto!(view(W1, :, 2), x[2*S+1:3*S])
     @views copyto!(bias1, x[3*S+1:4*S])
-    
+
 
     # for d in 1:D
     #     for i in eachindex(x_nodes)
@@ -768,7 +760,7 @@ function update!(sol, int::PDEIntegrator{<:TrialNN_PDE_int})
     #         sol.w[i] = w_trial_zygote(1.0,x_nodes[i],W2,W1,bias1,int,sol)
     #     end
     # end
-    
+
     for d in 1:D
         for i in eachindex(x_nodes)
             sol.u[i] = u_func(1.0,x_nodes[i],h,x) + C1C2_result[d, i]
@@ -811,13 +803,13 @@ function internal_variables(method::TrialNN_PDE_int, problem::LPDEProblem)
     W2 = zeros(S)
     bias1 = zeros(S)
     C1C2_equispaced_quad_nodes = zeros(OGAN)
-    C1C2_quad=zeros(D, RT, RX) 
-    ∂C1C2∂t_quad=zeros(D, RT, RX) 
+    C1C2_quad=zeros(D, RT, RX)
+    ∂C1C2∂t_quad=zeros(D, RT, RX)
     ∂C1C2∂x_quad=zeros( D, RT, RX)
 
     x_nodes = collect(a:xstep:b)
-    C1C2_result=zeros(D, length(x_nodes)) 
-    ∂C1C2∂t_result=zeros(D, length(x_nodes)) 
+    C1C2_result=zeros(D, length(x_nodes))
+    ∂C1C2∂t_result=zeros(D, length(x_nodes))
     ∂C1C2∂x_result=zeros(D, length(x_nodes))
 
     return (previous_W1 = W1,
@@ -832,4 +824,3 @@ function internal_variables(method::TrialNN_PDE_int, problem::LPDEProblem)
         previous_∂C1C2∂x_result=∂C1C2∂x_result,
         )
 end
-

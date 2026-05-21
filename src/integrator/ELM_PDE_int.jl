@@ -24,7 +24,7 @@ struct ELM_PDE_int{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <:
 
     x_num_interval::Int
     Nbasis_λ_x::Int
-    k_λ_x::Int # order 
+    k_λ_x::Int # order
     λ_x::LT
 
     mλ_x::Matrix{Float64} # λ_x evaluated at quadrature points
@@ -50,7 +50,7 @@ struct ELM_PDE_int{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <:
         RT = length(t_quadrature.nodes)
         RX = length(x_quadrature.nodes)
 
-        R_list = [RT_per_interval,RX_per_interval]  
+        R_list = [RT_per_interval,RX_per_interval]
         grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
         # scale grid_matrix
         x0 = xspan[1]
@@ -78,7 +78,7 @@ struct ELM_PDE_int{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <:
         for i in 1:Nbasis_λ_x
             mλ_x[i,:] = λ_x.b[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes)
         end
-    
+
         for i in 1:Nbasis_μ_t
             mμ_t[i,:] = μ₀_t.b[i].(t_quadrature.nodes)
         end
@@ -112,7 +112,7 @@ struct ELM_PDE_intCache{ST,RT,RX,D,NP,Nbasis_μ_t,Nbasis_λ_x} <: PDEIntegratorC
     u_basis_quad_values::Array{ST} # (NP, RT, RX)
     v_basis_quad_values::Array{ST} # (NP, RT, RX)
     w_basis_quad_values::Array{ST} # (NP, RT, RX)
-    
+
     u_quad_values::Array{ST}
     v_quad_values::Array{ST}
     w_quad_values::Array{ST}
@@ -175,7 +175,7 @@ struct ELM_PDE_intCache{ST,RT,RX,D,NP,Nbasis_μ_t,Nbasis_λ_x} <: PDEIntegratorC
     init_condition_t₀::Matrix{ST}
     boundary_condition_x₀::Matrix{ST}
     boundary_condition_x₁::Matrix{ST}
-    
+
     system_matrix::Array{ST}
     system_rhs::Vector{ST}
 
@@ -202,7 +202,7 @@ struct ELM_PDE_intCache{ST,RT,RX,D,NP,Nbasis_μ_t,Nbasis_λ_x} <: PDEIntegratorC
         vt₁_basis_quad_values = zeros(ST, D, RX, NP)
         wt₀_basis_quad_values = zeros(ST, D, RX, NP)
         wt₁_basis_quad_values = zeros(ST, D, RX, NP)
-        
+
         ux₀_basis_quad_values = zeros(ST, D, RT, NP) # left boundary, i.e. x = 0
         ux₁_basis_quad_values = zeros(ST, D, RT, NP) # right boundary, i.e. x = L
         vx₀_basis_quad_values = zeros(ST, D, RT, NP)
@@ -210,15 +210,15 @@ struct ELM_PDE_intCache{ST,RT,RX,D,NP,Nbasis_μ_t,Nbasis_λ_x} <: PDEIntegratorC
         wx₀_basis_quad_values = zeros(ST, D, RT, NP)
         wx₁_basis_quad_values = zeros(ST, D, RT, NP)
 
-        ut₀_quad_values = zeros(ST, D, RX) 
-        ut₁_quad_values = zeros(ST, D, RX) 
+        ut₀_quad_values = zeros(ST, D, RX)
+        ut₁_quad_values = zeros(ST, D, RX)
         vt₀_quad_values = zeros(ST, D, RX)
         vt₁_quad_values = zeros(ST, D, RX)
         wt₀_quad_values = zeros(ST, D, RX)
         wt₁_quad_values = zeros(ST, D, RX)
 
-        ux₀_quad_values = zeros(ST, D, RT) 
-        ux₁_quad_values = zeros(ST, D, RT) 
+        ux₀_quad_values = zeros(ST, D, RT)
+        ux₁_quad_values = zeros(ST, D, RT)
         vx₀_quad_values = zeros(ST, D, RT)
         vx₁_quad_values = zeros(ST, D, RT)
         wx₀_quad_values = zeros(ST, D, RT)
@@ -281,21 +281,12 @@ end
 
 @inline CacheType(ST, problem::LPDEProblem, int::ELM_PDE_int) = ELM_PDE_intCache{ST,int.RT,int.RX,problem.D,int.basis.NP,int.Nbasis_μ_t,int.Nbasis_λ_x}
 
-@inline function Base.getindex(c::ELM_PDE_intCache, ST::DataType)
-    key = hash(Threads.threadid(), hash(ST))
-    if haskey(c.caches, key)
-        c.caches[key]
-    else
-        c.caches[key] = Cache{ST}(c.problem, c.method)
-    end::CacheType(ST, c.problem, c.method)
-end
-
 function prior_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int{MVT,LT,BT,IPMT}}) where {MVT,LT,BT,IPMT<:ELM}
     # Currently Unsupported!!!
-    local D = int.problem.D 
+    local D = int.problem.D
     local RT = int.method.RT
     local RX = int.method.RX
-    local lsq_assemble = int.problem.least_squares_assemble 
+    local lsq_assemble = int.problem.least_squares_assemble
     local grid_matrix = int.method.grid_matrix
     local nn_params = int.method.basis.u_basis.params
     local v_basis_func = int.method.basis.v_basis
@@ -369,12 +360,12 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int{MVT,LT,BT
     local u_basis_func = int.method.basis.u_basis
     local v_basis_func = int.method.basis.v_basis
     local w_basis_func = int.method.basis.w_basis
-    
+
     local nn_params = u_basis_func.params
     network_inputs, _ = construct_quadrature_grid_with_boundary([RT, RX])
     network_inputs[2,:] .= xspan[1] .+ x_domain .* network_inputs[2, :]
     labels = exact_u.(sol.t .- h .+ h .* network_inputs[1, :],network_inputs[2, :])
-    labels = reshape(labels, 1, :) 
+    labels = reshape(labels, 1, :)
 
     tem_ps = PNN.params[keys(PNN.params)[1:end-1]]
     opt = GeometricMachineLearning.Optimizer(GeometricMachineLearning.GradientOptimizer(GD_lr), tem_ps)
@@ -391,11 +382,11 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int{MVT,LT,BT
         gs = Zygote.gradient(p -> lsgd_loss(network_inputs, labels, PNN, p), PNN.params)[1]
         tem_gs = gs[keys(gs)[1:end-1]]
         GeometricMachineLearning.optimization_step!(opt, λ, tem_ps, tem_gs)
-        
+
         if show_status
             gd_err[ep] = lsgd_loss(network_inputs, labels, PNN, PNN.params)
             print("\n loss after gradient: $gd_err[ep] by $ep epochs")
-            
+
             NN_output = PNN(network_inputs, PNN.params)
             gd_max_err[ep] = maximum(abs.(labels .- NN_output))
             println("max error :",gd_max_err[ep])
@@ -403,7 +394,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int{MVT,LT,BT
 
         Φ = AbstractNeuralNetworks.Chain(PNN.model.layers[1:end-1]...)(network_inputs, tem_ps)
         PNN.params[keys(PNN.params)[end]].W[:] = (Φ' \ labels')'
-    
+
         ls_err[ep] = lsgd_loss(network_inputs, labels, PNN, PNN.params)
         print("\n loss after least square: $(ls_err[ep]) by $ep epochs")
 
@@ -667,7 +658,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:EL
     local ∂L∂U = int.problem.lagrangian_system.functions.∂L∂U
     local ∂L∂V = int.problem.lagrangian_system.functions.∂L∂V
     local ∂L∂W = int.problem.lagrangian_system.functions.∂L∂W
-    local D = int.problem.D 
+    local D = int.problem.D
     local RT = int.method.RT
     local RX = int.method.RX
     local xspan = int.problem.xspan
@@ -725,7 +716,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:EL
                 current_u = C.u_quad_values[d, i, j]
                 current_v = C.v_quad_values[d, i, j]
                 current_w = C.w_quad_values[d, i, j]
-                
+
                 C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](current_u, current_v, current_w, lag_params)
                 C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](current_u, current_v, current_w, lag_params)
                 C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](current_u, current_v, current_w, lag_params)
@@ -735,7 +726,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:EL
 
 
     cache(int).flag_done_initial_guess[1] == 0.0 ? post_initial_guess!(cache(int), sol, int, int.method) : nothing
-    
+
     for d in 1:D
         @views C.λ₁_x_coes[d, :] = x[NP+1:NP+Nbasis_λ_x]
         @views C.μ₀_t_coes[d, :] = x[NP+Nbasis_λ_x+1:NP+Nbasis_λ_x+Nbasis_μ_t]
@@ -776,7 +767,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:EL
         ∂L∂U_truth_mat = similar(C.∂L∂U_quad_values)
         ∂L∂V_truth_mat = similar(C.∂L∂V_quad_values)
         ∂L∂W_truth_mat = similar(C.∂L∂W_quad_values)
-        
+
         for d in 1:D
             for i in 1:RT
                 for j in 1:RX

@@ -1,22 +1,22 @@
 struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
     basis::BT
-    
+
     time_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RT::Int # Number of quadrature points in time
 
     spatial_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RX::Int # Number of quadrature points in spatial dimension, for simplicity, set the same for all dimensions
-    
+
     grid_matrix::Matrix{Vector{Float64}} # Quadrature grid points: [(t1,x1), (t1,x2), ]
     grid_weights::Matrix{Float64} # Quadrature weights
 
     Nbasis_μ_t::Int
-    # k_μ_t::Int # order 
+    # k_μ_t::Int # order
     # μ₀_t::MVT
     # μ₁_t::MVT
 
     Nbasis_λ_x::Int
-    # k_λ_x::Int # order 
+    # k_λ_x::Int # order
     # λ_x::LT
 
     mλ_x::Matrix{Float64} # λ_x evaluated at quadrature points
@@ -41,19 +41,19 @@ struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
     wx₁_basis_quad_values::Matrix{Float64}
 
     show_status::Bool
-    function Galerkin_Bspline_Integrator(basis; RT_per_interval::Int = 4,RX_per_interval::Int = 4,xspan::Tuple = (0.,1.0),show_status = false) 
+    function Galerkin_Bspline_Integrator(basis; RT_per_interval::Int = 4,RX_per_interval::Int = 4,xspan::Tuple = (0.,1.0),show_status = false)
         # Nbasis_μ_t::Int = 10,k_μ_t::Int = 4,μ::Symbol = :BSplineDirichlet,
         # Nbasis_λ_x::Int = 10,k_λ_x::Int = 3,λ::Symbol = :BSplineDirichlet,
-        
+
         # The quadrature nodes in [0.0,1.0]
         t_num_interval = length(basis.ts) - 1
         x_num_interval = length(basis.xs) - 1
         t_quadrature = composite_quadrature(t_num_interval ,RT_per_interval)
         x_quadrature = composite_quadrature(x_num_interval ,RX_per_interval)
 
-        R_list = [RT_per_interval,RX_per_interval]  
+        R_list = [RT_per_interval,RX_per_interval]
         grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
-        
+
         x0 = xspan[1]
         x_domain = xspan[2] - xspan[1]
         grid_matrix = [collect(grid_matrix[i, j]) for i in axes(grid_matrix, 1), j in axes(grid_matrix, 2)]
@@ -66,7 +66,7 @@ struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
         S = basis.S
         RT = length(t_quadrature.nodes)
         RX = length(x_quadrature.nodes)
-        
+
         u_collocation_matrix = zeros(S, RT, RX)
         v_collocation_matrix = zeros(S, RT, RX)
         w_collocation_matrix = zeros(S, RT, RX)
@@ -98,7 +98,7 @@ struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
             @views ut₀_basis_quad_values[:,rx] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
             @views ut₁_basis_quad_values[:,rx] = spline2D_coeff_derivatives((basis.Basis_t, basis.Basis_x),(1.0 ,xx)) # top
             @views vt₀_basis_quad_values[:,rx] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
-            @views vt₁_basis_quad_values[:,rx] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(1.0 ,xx))   
+            @views vt₁_basis_quad_values[:,rx] = spline2D_coeff_derivatives_time((basis.Basis_t, basis.Basis_x),(1.0 ,xx))
             @views wt₀_basis_quad_values[:,rx] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(0.0 ,xx))
             @views wt₁_basis_quad_values[:,rx] = spline2D_coeff_derivatives_space((basis.Basis_t, basis.Basis_x),(1.0 ,xx))
         end
@@ -134,14 +134,14 @@ struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
             @views mμ_t[i,:] = basis.Basis_t[i].(t_quadrature.nodes)#
         end
         Nbasis_μ_t = basis.Nbasis_t
-        
+
         mλ_x = zeros(basis.Nbasis_x, RX)
         for i in 1:basis.Nbasis_x
             @views mλ_x[i,:] = basis.Basis_x[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes)#
-        end 
+        end
         Nbasis_λ_x = basis.Nbasis_x
 
-        new{typeof(basis)}(basis, 
+        new{typeof(basis)}(basis,
             t_quadrature, RT,
             x_quadrature, RX,
             grid_matrix, grid_weights,
@@ -157,7 +157,7 @@ struct Galerkin_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
             wx₀_basis_quad_values,wx₁_basis_quad_values,
             show_status
             )
-    end 
+    end
 end
 
 default_solver(::Galerkin_Bspline_Integrator) = NewtonMethod()
@@ -185,10 +185,10 @@ struct Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S,Nbasis_μ_t,Nbasis_λ_x} <:
     μ₀_t_coes::Matrix{ST}
     μ₁_t_coes::Matrix{ST}
 
-    λ₀_quad_values::Matrix{ST} 
+    λ₀_quad_values::Matrix{ST}
     λ₁_quad_values::Matrix{ST}
     μ₀_quad_values::Matrix{ST}
-    μ₁_quad_values::Matrix{ST} 
+    μ₁_quad_values::Matrix{ST}
 
     ut₀_quad_values::Matrix{ST} # bottom boundary, i.e. t = 0
     ut₁_quad_values::Matrix{ST} # top boundary, i.e. t = T
@@ -239,10 +239,10 @@ struct Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S,Nbasis_μ_t,Nbasis_λ_x} <:
         μ₀_t_coes = zeros(ST, D, Nbasis_μ_t)
         μ₁_t_coes = zeros(ST, D, Nbasis_μ_t)
 
-        λ₀_quad_values = zeros(ST, D, RX) 
+        λ₀_quad_values = zeros(ST, D, RX)
         λ₁_quad_values = zeros(ST, D, RX)
-        μ₀_quad_values = zeros(ST, D, RT) 
-        μ₁_quad_values = zeros(ST, D, RT) 
+        μ₀_quad_values = zeros(ST, D, RT)
+        μ₁_quad_values = zeros(ST, D, RT)
 
         ut₀_quad_values = zeros(ST,D,RX) # bottom boundary, i.e. t = 0
         ut₁_quad_values = zeros(ST,D,RX) # top boundary, i.e. t = T
@@ -274,7 +274,7 @@ struct Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S,Nbasis_μ_t,Nbasis_λ_x} <:
         boundary_condition_x₀ = zeros(ST, D, RT)
         boundary_condition_x₁ = zeros(ST, D, RT)
         flag_done_initial_guess = zeros(ST, 1)
-        
+
         new(x,
             u_quad_values, v_quad_values, w_quad_values,
             ∂L∂U_quad_values, ∂L∂V_quad_values, ∂L∂W_quad_values,
@@ -285,7 +285,7 @@ struct Galerkin_Bspline_IntegratorCache{ST,RT,RX,D,S,Nbasis_μ_t,Nbasis_λ_x} <:
             ics_ut₀_quad_values, ics_vt₀_quad_values, ics_wt₀_quad_values,
             bc_ux₀_quad_values, bc_vx₀_quad_values, bc_wx₀_quad_values,
             bc_ux₁_quad_values, bc_vx₁_quad_values, bc_wx₁_quad_values,
-            init_condition_t₀, 
+            init_condition_t₀,
             boundary_condition_x₀, boundary_condition_x₁,
             flag_done_initial_guess
             )
@@ -300,14 +300,6 @@ end
 
 #{ST,RT,RX,D,NP}(NP) where {ST,RT,RX,D,NP}
 @inline CacheType(ST, problem::LPDEProblem, int::Galerkin_Bspline_Integrator) = Galerkin_Bspline_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.S,int.Nbasis_μ_t,int.Nbasis_λ_x}
-@inline function Base.getindex(c::Galerkin_Bspline_IntegratorCache, ST::DataType)
-    key = hash(Threads.threadid(), hash(ST))
-    if haskey(c.caches, key)
-        c.caches[key]
-    else
-        c.caches[key] = Cache{ST}(c.problem, c.method)
-    end::CacheType(ST, c.problem, c.method)
-end
 
 copy_internal_variables!(C::Galerkin_Bspline_IntegratorCache,solstep::SolutionStep) = nothing
 
@@ -324,7 +316,7 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
     local Bx = int.method.basis.Basis_x
     local Bt = int.method.basis.Basis_t
     local S = int.method.basis.S
-    local h = timestep(int) 
+    local h = timestep(int)
     local a = int.problem.xspan[1]
     local b = int.problem.xspan[2]
     local grid_matrix = int.method.grid_matrix
@@ -334,7 +326,7 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
     local tn = sol.t - timestep(int)
 
     udata = exact_u.(tn .+ h .* t_collocation_points, x_collocation_points') # fdata[i,j] = exact_u(h .* ts[i], xs[j])
-    
+
     # 2D B-spline coefficients (output)
     coefs = similar(udata)
 
@@ -394,7 +386,7 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
         println("Error Matrix between exact solution and B-spline approximation at grid points:")
         # @show u_approx .- fdata
         println("Max error in initial guess for u: ", maximum(abs.(udata .- u_approx)))
-        println("Max error in initial guess for v: ", maximum(abs.(vdata .- v_approx))) 
+        println("Max error in initial guess for v: ", maximum(abs.(vdata .- v_approx)))
         println("Max error in initial guess for w: ", maximum(abs.(wdata .- w_approx)))
 
         println("Error Matrix between exact solution and B-spline approximation at quadrature points:")
@@ -406,10 +398,10 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Bspline_Integr
     # @infiltrate
 end
 
-function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Galerkin_Bspline_Integrator},int_method::Galerkin_Bspline_Integrator) 
+function post_initial_guess!(internal_coes, C,sol_struct,int::PDEIntegrator{<:Galerkin_Bspline_Integrator},int_method::Galerkin_Bspline_Integrator)
     local RT = int_method.RT
     local RX = int_method.RX
-    local D = int.problem.D 
+    local D = int.problem.D
     local lag_sys = int.problem.lagrangian_system.functions
     local params = int.problem.lagrangian_system.params
     local Nbasis_λ_x = int_method.Nbasis_λ_x
@@ -470,7 +462,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     local Nbasis_μ_t = int.method.Nbasis_μ_t
     local mλ_x = int.method.mλ_x
     local mμ_t = int.method.mμ_t
-    
+
     local exact_u = int.problem.exact_u
     local exact_v = int.problem.exact_v
     local exact_w = int.problem.exact_w
@@ -486,7 +478,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
                 @views current_w_row = int.method.w_collocation_mat[:, i, j]
 
                 C.u_quad_values[d, i, j] = sum(spline_coeffs .* current_u_row)
-                C.v_quad_values[d, i, j] = sum(spline_coeffs .* current_v_row) / h 
+                C.v_quad_values[d, i, j] = sum(spline_coeffs .* current_v_row) / h
                 C.w_quad_values[d, i, j] = sum(spline_coeffs .* current_w_row)
             end
         end
@@ -498,7 +490,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
                 current_u = C.u_quad_values[d, i, j]
                 current_v = C.v_quad_values[d, i, j]
                 current_w = C.w_quad_values[d, i, j]
-                
+
                 C.∂L∂U_quad_values[d, i, j] = ∂L∂U[d](current_u, current_v, current_w, lag_params)
                 C.∂L∂V_quad_values[d, i, j] = ∂L∂V[d](current_u, current_v, current_w, lag_params)
                 C.∂L∂W_quad_values[d, i, j] = ∂L∂W[d](current_u, current_v, current_w, lag_params)
@@ -523,14 +515,14 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
             @views C.ux₁_quad_values[d,i] = sum(spline_coeffs .* int.method.ux₁_basis_quad_values[:,i])
             @views C.vx₀_quad_values[d,i] = sum(spline_coeffs .* int.method.vx₀_basis_quad_values[:,i])/ h
             @views C.vx₁_quad_values[d,i] = sum(spline_coeffs .* int.method.vx₁_basis_quad_values[:,i])/ h
-            @views C.wx₀_quad_values[d,i] = sum(spline_coeffs .* int.method.wx₀_basis_quad_values[:,i]) 
-            @views C.wx₁_quad_values[d,i] = sum(spline_coeffs .* int.method.wx₁_basis_quad_values[:,i]) 
+            @views C.wx₀_quad_values[d,i] = sum(spline_coeffs .* int.method.wx₀_basis_quad_values[:,i])
+            @views C.wx₁_quad_values[d,i] = sum(spline_coeffs .* int.method.wx₁_basis_quad_values[:,i])
         end
     end
 
     # initial guess for the coefficients of Lagrangian multipliers
     cache(int).flag_done_initial_guess[1] == 0.0 ? post_initial_guess!(x[1:S], cache(int),sol,int,int.method) : nothing
-    
+
     for d in 1:D
         @views C.λ₁_x_coes[d,:] = x[S+1:S+Nbasis_λ_x]
         @views C.μ₀_t_coes[d,:] = x[S+Nbasis_λ_x+1:S+Nbasis_λ_x+Nbasis_μ_t]
@@ -544,7 +536,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
         end
 
         for rt in 1:RT
-            C.μ₀_quad_values[d,rt] = sum(C.μ₀_t_coes[d,:] .* mμ_t[:,rt]) 
+            C.μ₀_quad_values[d,rt] = sum(C.μ₀_t_coes[d,:] .* mμ_t[:,rt])
             C.μ₁_quad_values[d,rt] = sum(C.μ₁_t_coes[d,:] .* mμ_t[:,rt])
         end
     end
@@ -579,7 +571,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
                     ∂L∂W_truth_mat[d, i, j] = ∂L∂W[d](u_truth_mat[d, i, j], v_truth_mat[d, i, j], w_truth_mat[d, i, j], lag_params)
 
                 end
-            end 
+            end
         end
         @show maximum(abs.(C.∂L∂U_quad_values .- ∂L∂U_truth_mat))
         @show maximum(abs.(C.∂L∂V_quad_values .- ∂L∂V_truth_mat))
@@ -646,7 +638,7 @@ end
 
 
 function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<: Galerkin_Bspline_Integrator}) where {ST}
-    local D = int.problem.D 
+    local D = int.problem.D
     local RT = int.method.RT
     local RX = int.method.RX
 
@@ -669,12 +661,12 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<: Galerkin_Bs
     local ux₁_basis_quad_values = int.method.ux₁_basis_quad_values
     local show_status = int.method.show_status
 
-    for d in 1:D 
+    for d in 1:D
         for p in 1:S
             z_in = zero(ST)
             for rt in 1:RT
                 for rx in 1:RX
-                    z_in +=  quad_b[rt,rx] * 
+                    z_in +=  quad_b[rt,rx] *
                         ( x_domain * timestep(int) * C.∂L∂U_quad_values[d,rt,rx] * u_coll_mat[p, rt, rx]
                         + x_domain                 * C.∂L∂V_quad_values[d,rt,rx] * v_coll_mat[p, rt, rx]
                         + x_domain * timestep(int) * C.∂L∂W_quad_values[d,rt,rx] * w_coll_mat[p, rt, rx])
@@ -739,7 +731,7 @@ function update!(sol, int::PDEIntegrator{<:Galerkin_Bspline_Integrator})
     local h = timestep(int)
     local Nbasis_x = int.method.basis.Nbasis_x
     local Nbasis_t = int.method.basis.Nbasis_t
-    
+
     x_nodes = collect(xspan[1]:xstep:xspan[2])
     coefs = reshape(x[1:S], Nbasis_t, Nbasis_x)
 
@@ -750,6 +742,5 @@ function update!(sol, int::PDEIntegrator{<:Galerkin_Bspline_Integrator})
             sol.w[i] = eval_spline2D_dx(coefs, (Basis_t, Basis_x), (1.0, x_nodes[i]))
         end
     end
-    
-end
 
+end
