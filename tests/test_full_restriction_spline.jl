@@ -1,7 +1,6 @@
-using Revise
 using BSplineKit
 using MultiSymplectic
-# using Infiltrator
+using Infiltrator
 using Base
 using GeometricIntegratorsBase
 using Plots
@@ -13,7 +12,7 @@ using JLD2
 
 k = 4
 t_knot_interval = 0.25
-t_step = 0.2
+t_step = 0.1
 
 regularization_factor = 0.0
 GeometricIntegratorsBase.default_options(::Galerkin_Full_Restriction_Bspline_Integrator) = (
@@ -56,14 +55,15 @@ end
 
 
 
-t_span = (0.,20.0)
+t_span = (0.,2.0)
 xspan = (0.0, 1.0)
 # for t_step in [0.1,0.2,0.4]
 
 lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=xspan, xstep=0.01)
 x_ls = xspan[1]:lpde.xstep:xspan[2]
 c = lpde.params.c
-for x_knot_interval in [0.2,0.5]
+# for x_knot_interval in [0.2,0.5]
+x_knot_interval = 0.05
     spline_basis = Dirichlet_BSpline2D(k,xspan = xspan, t_knot_interval = t_knot_interval,x_knot_interval = x_knot_interval)
     spline_int = Galerkin_Full_Restriction_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = false)
     println("Start Spline Integrator")
@@ -84,10 +84,10 @@ for x_knot_interval in [0.2,0.5]
     end
 
 
-    relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
+    relative_ham_err = (ham_ls .-  analytic_ham) ./ analytic_ham
     max_err = maximum(relative_ham_err)
     plot(relative_ham_err, xlabel="Time", ylabel="Relative Hamiltonian Error")
-    savefig("full_restriction_spline_1005/SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.pdf")
+    savefig("full_SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.pdf")
 
     record_results = Dict()
     record_results["maximum_relative_ham_err"] = maximum(relative_ham_err)
@@ -98,6 +98,6 @@ for x_knot_interval in [0.2,0.5]
     record_results["analytic_hamiltonian"] = analytic_ham
     record_results["relative_hamiltonian_error"] = relative_ham_err
 
-    save("full_restriction_spline_1005/SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.jld2", record_results)
+    save("full_SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.jld2", record_results)
     println("results saved: h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")
-end
+# end

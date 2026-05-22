@@ -1,12 +1,10 @@
-using Revise
 using BSplineKit
 using MultiSymplectic
-using Infiltrator
 using Base
 using GeometricIntegratorsBase
-using Plots
+using Infiltrator
 using JLD2
-
+using Plots
 # k = parse(Int, ARGS[1])
 # t_step = parse(Float64, ARGS[2])
 # t_knot_interval = parse(Float64, ARGS[3])
@@ -20,7 +18,7 @@ GeometricIntegratorsBase.default_options(::Galerkin_Dirichlet_Bspline_Integrator
     # x_suctol = 2eps(),
     # f_abstol = 2eps(),
     regularization_factor = regularization_factor,
-    max_iterations = 100,
+    max_iterations = 20,
     verbosity = 2
 )
 
@@ -56,7 +54,7 @@ end
 
 
 
-t_span = (0.,2.0)
+t_span = (0.,20*t_step)
 xspan = (0.0, 1.0)
 # for t_step in [0.1,0.2,0.4]
 
@@ -87,8 +85,13 @@ x_knot_interval = 0.05
 
     relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
     max_err = maximum(relative_ham_err)
-    plot(relative_ham_err, xlabel="Time", ylabel="Relative Hamiltonian Error")
-    savefig("SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.pdf")
+    plot_path = "SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.pdf"
+    if Base.find_package("Plots") !== nothing
+        Plots.plot(relative_ham_err, xlabel="Time", ylabel="Relative Hamiltonian Error")
+        Plots.savefig(plot_path)
+    else
+        @info "Skipping plot output because Plots is not available in the active environment" plot_path
+    end
 
     record_results = Dict()
     record_results["maximum_relative_ham_err"] = maximum(relative_ham_err)
@@ -99,6 +102,11 @@ x_knot_interval = 0.05
     record_results["analytic_hamiltonian"] = analytic_ham
     record_results["relative_hamiltonian_error"] = relative_ham_err
 
-    save("SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.jld2", record_results)
+    data_path = "SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.jld2"
+    if Base.find_package("JLD2") !== nothing
+        JLD2.save(data_path, record_results)
+    else
+        @info "Skipping JLD2 output because JLD2 is not available in the active environment" data_path
+    end
     println("results saved: h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")
-end/
+# end

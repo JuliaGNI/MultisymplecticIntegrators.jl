@@ -12,7 +12,6 @@ module Wave
     using LinearAlgebra
     using Symbolics
     using MultiSymplectic
-    using JLD2
 
     const D = 1
     const DX = 1
@@ -250,7 +249,7 @@ module Wave
             record_results["max_error"] = maximum(abs.(elm_pred - truth))
             record_results["u_basis_params"] = u_basis.params
             record_results["x"] = C.x[1:NP]
-            JLD2.save("LS_initial_guess_results.jld2", record_results)
+            # MultiSymplectic._save_jld2("LS_initial_guess_results.jld2", record_results)
 
         end
     end

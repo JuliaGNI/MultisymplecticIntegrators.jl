@@ -31,7 +31,7 @@ module MultiSymplectic
     using Zygote
     using Statistics
     using ForwardDiff
-    using Infiltrator
+    using Infiltrator: @infiltrate
 
     # abstract types
     include("methods.jl")

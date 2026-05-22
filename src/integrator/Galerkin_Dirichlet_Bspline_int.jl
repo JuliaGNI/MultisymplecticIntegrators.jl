@@ -159,7 +159,7 @@ struct Galerkin_Dirichlet_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
 
         mλ_x = zeros(basis.Nbasis_x, RX)
         for i in 1:basis.Nbasis_x
-            mλ_x[i,:] = basis.Basis_x[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes,BSplineKit.Derivative(1))#
+            mλ_x[i,:] = basis.Basis_x[i].(xspan[1] .+ (xspan[2] - xspan[1]) .* x_quadrature.nodes)#
         end
         Nbasis_λ_x = basis.Nbasis_x
 
@@ -190,6 +190,26 @@ struct Galerkin_Dirichlet_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
 end
 
 default_solver(::Galerkin_Dirichlet_Bspline_Integrator) = NewtonMethod()
+
+@inline function _active_dot(coeffs::AbstractVector{ST}, indices::AbstractArray{Int,3}, values::AbstractArray{Float64,3}, i::Int, j::Int) where {ST}
+    z = zero(ST)
+    @inbounds for n in axes(indices, 1)
+        p = indices[n, i, j]
+        iszero(p) && break
+        z += coeffs[p] * values[n, i, j]
+    end
+    return z
+end
+
+@inline function _active_dot(coeffs::AbstractVector{ST}, indices::AbstractMatrix{Int}, values::AbstractMatrix{Float64}, i::Int) where {ST}
+    z = zero(ST)
+    @inbounds for n in axes(indices, 1)
+        p = indices[n, i]
+        iszero(p) && break
+        z += coeffs[p] * values[n, i]
+    end
+    return z
+end
 
 struct Galerkin_Dirichlet_Bspline_IntegratorCache{ST,RT,RX,D,S,Nbasis_λ_x} <: PDEIntegratorCache{ST,D}
     """
@@ -379,8 +399,8 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Dirichlet_Bspl
     C.x[1:S] = reshape(coefs, :, 1)
 
     if show_status
-        vdata = exact_v.(h .* t_collocation_points, x_collocation_points')
-        wdata = exact_w.(h .* t_collocation_points, x_collocation_points')
+        vdata = exact_v.(tn .+ h .* t_collocation_points, x_collocation_points')
+        wdata = exact_w.(tn .+ h .* t_collocation_points, x_collocation_points')
 
         u_approx = similar(udata)
         v_approx = similar(vdata)
@@ -416,9 +436,9 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Dirichlet_Bspl
                 tt = grid_matrix[ti,xi][1]
                 xx = a + (b - a) * grid_matrix[ti,xi][2]
 
-                u_quad_value[ti,xi] = exact_u(h * tt, xx)
-                v_quad_value[ti,xi] = exact_v(h * tt, xx)
-                w_quad_value[ti,xi] = exact_w(h * tt, xx)
+                u_quad_value[ti,xi] = exact_u(tn + h * tt, xx)
+                v_quad_value[ti,xi] = exact_v(tn + h * tt, xx)
+                w_quad_value[ti,xi] = exact_w(tn + h * tt, xx)
             end
         end
 
@@ -486,27 +506,18 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     local exact_v = int.problem.exact_v
     local exact_w = int.problem.exact_w
     local show_status = int.method.show_status
+    local tn = sol.t - h
     coeffs = @view x[1:S]
-
-    function active_dot(indices, values, q...)
-        z = zero(ST)
-        for n in axes(indices, 1)
-            p = indices[n, q...]
-            iszero(p) && break
-            z += coeffs[p] * values[n, q...]
-        end
-        return z
-    end
 
     # interior values at quadrature points
     for d in 1:D
         for i in 1:RT
             for j in 1:RX
-                C.u_quad_values[d, i, j] = active_dot(
+                C.u_quad_values[d, i, j] = _active_dot(coeffs,
                     int.method.u_collocation_indices, int.method.u_collocation_values, i, j)
-                C.v_quad_values[d, i, j] = active_dot(
+                C.v_quad_values[d, i, j] = _active_dot(coeffs,
                     int.method.v_collocation_indices, int.method.v_collocation_values, i, j) / h
-                C.w_quad_values[d, i, j] = active_dot(
+                C.w_quad_values[d, i, j] = _active_dot(coeffs,
                     int.method.w_collocation_indices, int.method.w_collocation_values, i, j)
             end
         end
@@ -529,35 +540,35 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     # boundary values at quadrature points
     for d in 1:D
         for j in 1:RX
-            C.ut₀_quad_values[d,j] = active_dot(int.method.ut₀_basis_quad_indices, int.method.ut₀_basis_quad_values, j)
-            C.ut₁_quad_values[d,j] = active_dot(int.method.ut₁_basis_quad_indices, int.method.ut₁_basis_quad_values, j)
-            C.vt₀_quad_values[d,j] = active_dot(int.method.vt₀_basis_quad_indices, int.method.vt₀_basis_quad_values, j) / h
-            C.vt₁_quad_values[d,j] = active_dot(int.method.vt₁_basis_quad_indices, int.method.vt₁_basis_quad_values, j) / h
-            C.wt₀_quad_values[d,j] = active_dot(int.method.wt₀_basis_quad_indices, int.method.wt₀_basis_quad_values, j)
-            C.wt₁_quad_values[d,j] = active_dot(int.method.wt₁_basis_quad_indices, int.method.wt₁_basis_quad_values, j)
+            C.ut₀_quad_values[d,j] = _active_dot(coeffs, int.method.ut₀_basis_quad_indices, int.method.ut₀_basis_quad_values, j)
+            C.ut₁_quad_values[d,j] = _active_dot(coeffs, int.method.ut₁_basis_quad_indices, int.method.ut₁_basis_quad_values, j)
+            C.vt₀_quad_values[d,j] = _active_dot(coeffs, int.method.vt₀_basis_quad_indices, int.method.vt₀_basis_quad_values, j) / h
+            C.vt₁_quad_values[d,j] = _active_dot(coeffs, int.method.vt₁_basis_quad_indices, int.method.vt₁_basis_quad_values, j) / h
+            C.wt₀_quad_values[d,j] = _active_dot(coeffs, int.method.wt₀_basis_quad_indices, int.method.wt₀_basis_quad_values, j)
+            C.wt₁_quad_values[d,j] = _active_dot(coeffs, int.method.wt₁_basis_quad_indices, int.method.wt₁_basis_quad_values, j)
         end
 
         for i in 1:RT
-            C.ux₀_quad_values[d,i] = active_dot(int.method.ux₀_basis_quad_indices, int.method.ux₀_basis_quad_values, i)
-            C.ux₁_quad_values[d,i] = active_dot(int.method.ux₁_basis_quad_indices, int.method.ux₁_basis_quad_values, i)
-            C.vx₀_quad_values[d,i] = active_dot(int.method.vx₀_basis_quad_indices, int.method.vx₀_basis_quad_values, i) / h
-            C.vx₁_quad_values[d,i] = active_dot(int.method.vx₁_basis_quad_indices, int.method.vx₁_basis_quad_values, i) / h
-            C.wx₀_quad_values[d,i] = active_dot(int.method.wx₀_basis_quad_indices, int.method.wx₀_basis_quad_values, i)
-            C.wx₁_quad_values[d,i] = active_dot(int.method.wx₁_basis_quad_indices, int.method.wx₁_basis_quad_values, i)
+            C.ux₀_quad_values[d,i] = _active_dot(coeffs, int.method.ux₀_basis_quad_indices, int.method.ux₀_basis_quad_values, i)
+            C.ux₁_quad_values[d,i] = _active_dot(coeffs, int.method.ux₁_basis_quad_indices, int.method.ux₁_basis_quad_values, i)
+            C.vx₀_quad_values[d,i] = _active_dot(coeffs, int.method.vx₀_basis_quad_indices, int.method.vx₀_basis_quad_values, i) / h
+            C.vx₁_quad_values[d,i] = _active_dot(coeffs, int.method.vx₁_basis_quad_indices, int.method.vx₁_basis_quad_values, i) / h
+            C.wx₀_quad_values[d,i] = _active_dot(coeffs, int.method.wx₀_basis_quad_indices, int.method.wx₀_basis_quad_values, i)
+            C.wx₁_quad_values[d,i] = _active_dot(coeffs, int.method.wx₁_basis_quad_indices, int.method.wx₁_basis_quad_values, i)
         end
     end
 
     # initial guess for the coefficients of Lagrangian multipliers
-    cache(int).flag_done_initial_guess[1] == 0.0 ? post_initial_guess!(x[1:S], cache(int),sol,int,int.method) : nothing
+    cache(int).flag_done_initial_guess[1] == 0.0 ? post_initial_guess!(nothing, cache(int),sol,int,int.method) : nothing
 
-    for d in 1:D
-        C.λ₁_x_coes[d,:] = x[S+1:S+Nbasis_λ_x]
+    @views for d in 1:D
+        C.λ₁_x_coes[d,:] .= x[S+1:S+Nbasis_λ_x]
     end
 
     for d in 1:D
         for rx in 1:RX
-            @views C.λ₀_quad_values[d,rx] = dot(C.λ₀_x_coes[d,:], mλ_x[:,rx])
-            @views C.λ₁_quad_values[d,rx] = dot(C.λ₁_x_coes[d,:], mλ_x[:,rx])
+            C.λ₀_quad_values[d,rx] = dot(view(C.λ₀_x_coes, d, :), view(mλ_x, :, rx))
+            C.λ₁_quad_values[d,rx] = dot(view(C.λ₁_x_coes, d, :), view(mλ_x, :, rx))
         end
     end
 
@@ -569,9 +580,9 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
         for d in 1:D
             for i in 1:RT
                 for j in 1:RX
-                    u_truth_mat[d, i, j] = exact_u.(tn + h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
-                    v_truth_mat[d, i, j] = exact_v.(tn + h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
-                    w_truth_mat[d, i, j] = exact_w.(tn + h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                    u_truth_mat[d, i, j] = exact_u(tn + h * t_quad_nodes[i], xspan[1] + x_domain * x_quad_nodes[j])
+                    v_truth_mat[d, i, j] = exact_v(tn + h * t_quad_nodes[i], xspan[1] + x_domain * x_quad_nodes[j])
+                    w_truth_mat[d, i, j] = exact_w(tn + h * t_quad_nodes[i], xspan[1] + x_domain * x_quad_nodes[j])
                 end
             end
         end
@@ -613,21 +624,23 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
 
         for d in 1:D
             for j in 1:RX
-                ut₀_quad_values_truth[d,j] = exact_u.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
-                ut₁_quad_values_truth[d,j] = exact_u.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
-                vt₀_quad_values_truth[d,j] = exact_v.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
-                vt₁_quad_values_truth[d,j] = exact_v.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
-                wt₀_quad_values_truth[d,j] = exact_w.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
-                wt₁_quad_values_truth[d,j] = exact_w.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
+                xq = xspan[1] + x_domain * x_quad_nodes[j]
+                ut₀_quad_values_truth[d,j] = exact_u(tn, xq)
+                ut₁_quad_values_truth[d,j] = exact_u(sol.t, xq)
+                vt₀_quad_values_truth[d,j] = exact_v(tn, xq)
+                vt₁_quad_values_truth[d,j] = exact_v(sol.t, xq)
+                wt₀_quad_values_truth[d,j] = exact_w(tn, xq)
+                wt₁_quad_values_truth[d,j] = exact_w(sol.t, xq)
             end
 
             for i in 1:RT
-                ux₀_quad_values_truth[d,i] = exact_u.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
-                ux₁_quad_values_truth[d,i] = exact_u.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
-                vx₀_quad_values_truth[d,i] = exact_v.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
-                vx₁_quad_values_truth[d,i] = exact_v.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
-                wx₀_quad_values_truth[d,i] = exact_w.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
-                wx₁_quad_values_truth[d,i] = exact_w.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
+                tq = tn + h * t_quad_nodes[i]
+                ux₀_quad_values_truth[d,i] = exact_u(tq, xspan[1])
+                ux₁_quad_values_truth[d,i] = exact_u(tq, xspan[2])
+                vx₀_quad_values_truth[d,i] = exact_v(tq, xspan[1])
+                vx₁_quad_values_truth[d,i] = exact_v(tq, xspan[2])
+                wx₀_quad_values_truth[d,i] = exact_w(tq, xspan[1])
+                wx₁_quad_values_truth[d,i] = exact_w(tq, xspan[2])
             end
         end
 
@@ -649,7 +662,59 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
         @show maximum(abs.(C.wx₀_quad_values .- wx₀_quad_values_truth))
         @show maximum(abs.(C.wx₁_quad_values .- wx₁_quad_values_truth))
 
-        @show maximum(abs.(C.λ₁_quad_values[1,:] .- exact_v.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes)))
+        λ₀_bottom_momentum = similar(C.λ₀_quad_values)
+        λ₀_exact_momentum = similar(C.λ₀_quad_values)
+        λ₁_top_momentum = similar(C.λ₁_quad_values)
+        λ₁_exact_momentum = similar(C.λ₁_quad_values)
+        λ₀_projection_residual = zeros(ST, D, Nbasis_λ_x)
+        λ₁_projection_residual = zeros(ST, D, Nbasis_λ_x)
+        t₀_constraint_projection = zeros(ST, D, Nbasis_λ_x)
+        for d in 1:D
+            for rx in 1:RX
+                xq = xspan[1] + x_domain * x_quad_nodes[rx]
+                λ₀_bottom_momentum[d, rx] = ∂L∂V[d](
+                    C.ics_ut₀_quad_values[d, rx],
+                    C.ics_vt₀_quad_values[d, rx],
+                    C.ics_wt₀_quad_values[d, rx],
+                    lag_params,
+                )
+                λ₀_exact_momentum[d, rx] = exact_v(tn, xq)
+                λ₁_top_momentum[d, rx] = ∂L∂V[d](
+                    C.ut₁_quad_values[d, rx],
+                    C.vt₁_quad_values[d, rx],
+                    C.wt₁_quad_values[d, rx],
+                    lag_params,
+                )
+                λ₁_exact_momentum[d, rx] = exact_v(sol.t, xq)
+            end
+
+            for p in 1:Nbasis_λ_x
+                zλ₀ = zero(ST)
+                zλ₁ = zero(ST)
+                zt₀ = zero(ST)
+                for rx in 1:RX
+                    zλ₀ += x_domain * int.method.spatial_quadrature.weights[rx] *
+                        mλ_x[p, rx] * (C.λ₀_quad_values[d, rx] - λ₀_bottom_momentum[d, rx])
+                    zλ₁ += x_domain * int.method.spatial_quadrature.weights[rx] *
+                        mλ_x[p, rx] * (C.λ₁_quad_values[d, rx] - λ₁_top_momentum[d, rx])
+                    zt₀ += x_domain * int.method.spatial_quadrature.weights[rx] *
+                        mλ_x[p, rx] * (C.ut₀_quad_values[d, rx] - C.init_condition_t₀[d, rx])
+                end
+                λ₀_projection_residual[d, p] = zλ₀
+                λ₁_projection_residual[d, p] = zλ₁
+                t₀_constraint_projection[d, p] = zt₀
+            end
+        end
+
+        @show maximum(abs.(C.λ₀_quad_values .- λ₀_bottom_momentum))
+        @show maximum(abs.(C.λ₀_quad_values .- λ₀_exact_momentum))
+        @show maximum(abs.(λ₀_projection_residual))
+        @show maximum(abs.(C.λ₁_quad_values .- λ₁_top_momentum))
+        @show maximum(abs.(C.λ₁_quad_values .- λ₁_exact_momentum))
+        @show maximum(abs.(λ₁_projection_residual))
+        @show maximum(abs.(C.ut₀_quad_values .- C.init_condition_t₀))
+        @show maximum(abs.(t₀_constraint_projection))
+        @infiltrate
     end
 end
 

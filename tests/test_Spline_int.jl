@@ -1,11 +1,9 @@
-using Revise
 using BSplineKit
 using MultiSymplectic
 using Infiltrator
 using Base
 using GeometricIntegratorsBase
-using Plots
-using JLD2
+
 
 # k = parse(Int, ARGS[1])
 # t_step = parse(Float64, ARGS[2])
@@ -66,7 +64,7 @@ x_ls = xspan[1]:lpde.xstep:xspan[2]
 c = lpde.params.c
 # for x_knot_interval in [0.2,0.5]
     spline_basis = BSpline2D(k,xspan = xspan, t_knot_interval = t_knot_interval,x_knot_interval = x_knot_interval)
-    spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = false)
+    spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = true)
     println("Start Spline Integrator")
     sol_set = MultiSymplectic.integrate(lpde, spline_int)
     println("End Spline Integrator with h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")
