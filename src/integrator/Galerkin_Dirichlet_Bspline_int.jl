@@ -324,6 +324,23 @@ end
 
 copy_internal_variables!(C::Galerkin_Dirichlet_Bspline_IntegratorCache,solstep::SolutionStep) = nothing
 
+function internal_variables(method::Galerkin_Dirichlet_Bspline_Integrator, problem::LPDEProblem)
+    local D = problem.D
+    local RX = method.RX
+    local Nbasis_λ_x = method.Nbasis_λ_x
+
+    ut₁_quad_values = zeros(D,RX)
+    vt₁_quad_values = zeros(D,RX)
+    wt₁_quad_values = zeros(D,RX)
+    λ₁_x_coes = zeros(D,Nbasis_λ_x)
+
+    return (ut₁_quad_values = ut₁_quad_values,
+        vt₁_quad_values = vt₁_quad_values,
+        wt₁_quad_values = wt₁_quad_values,
+        λ₁_x_coes = λ₁_x_coes,
+        )
+end
+
 function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Dirichlet_Bspline_Integrator})
     local exact_u = int.problem.exact_u
     local exact_v = int.problem.exact_v
@@ -539,7 +556,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
 
     for d in 1:D
         for rx in 1:RX
-            C.λ₀_quad_values[d,rx] = ∂L∂V[d](C.ics_ut₀_quad_values[d,rx], C.ics_vt₀_quad_values[d,rx],C.ics_wt₀_quad_values[d,rx], lag_params)
+            @views C.λ₀_quad_values[d,rx] = dot(C.λ₀_x_coes[d,:], mλ_x[:,rx])
             @views C.λ₁_quad_values[d,rx] = dot(C.λ₁_x_coes[d,:], mλ_x[:,rx])
         end
     end

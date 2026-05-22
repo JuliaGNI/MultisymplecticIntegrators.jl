@@ -7,20 +7,20 @@ using GeometricIntegratorsBase
 using Plots
 using JLD2
 
-k = parse(Int, ARGS[1])
-t_step = parse(Float64, ARGS[2])
-t_knot_interval = parse(Float64, ARGS[3])
+# k = parse(Int, ARGS[1])
+# t_step = parse(Float64, ARGS[2])
+# t_knot_interval = parse(Float64, ARGS[3])
 
-# k = 4
-# t_knot_interval = 0.25
-# t_step = 0.2
+k = 4
+t_knot_interval = 0.25
+t_step = 0.1
 
 regularization_factor = 0.0
-GeometricIntegratorsBase.default_options(::Galerkin_Full_Restriction_Bspline_Integrator) = (
+GeometricIntegratorsBase.default_options(::Galerkin_Dirichlet_Bspline_Integrator) = (
     # x_suctol = 2eps(),
     # f_abstol = 2eps(),
     regularization_factor = regularization_factor,
-    max_iterations = 10,
+    max_iterations = 100,
     verbosity = 2
 )
 
@@ -56,14 +56,15 @@ end
 
 
 
-t_span = (0.,20.0)
+t_span = (0.,2.0)
 xspan = (0.0, 1.0)
 # for t_step in [0.1,0.2,0.4]
 
 lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=xspan, xstep=0.01)
 x_ls = xspan[1]:lpde.xstep:xspan[2]
 c = lpde.params.c
-for x_knot_interval in [0.2,0.5]
+# for x_knot_interval in [0.2,0.5]
+x_knot_interval = 0.05
     spline_basis = Dirichlet_BSpline2D(k,xspan = xspan, t_knot_interval = t_knot_interval,x_knot_interval = x_knot_interval)
     spline_int = Galerkin_Dirichlet_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = false)
     println("Start Spline Integrator")
@@ -87,7 +88,7 @@ for x_knot_interval in [0.2,0.5]
     relative_ham_err = abs.((ham_ls .-  analytic_ham) ./ analytic_ham)
     max_err = maximum(relative_ham_err)
     plot(relative_ham_err, xlabel="Time", ylabel="Relative Hamiltonian Error")
-    savefig("half_multiplier_spline_1005/SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.pdf")
+    savefig("SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.pdf")
 
     record_results = Dict()
     record_results["maximum_relative_ham_err"] = maximum(relative_ham_err)
@@ -98,6 +99,6 @@ for x_knot_interval in [0.2,0.5]
     record_results["analytic_hamiltonian"] = analytic_ham
     record_results["relative_hamiltonian_error"] = relative_ham_err
 
-    save("half_multiplier_spline_1005/SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.jld2", record_results)
+    save("SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.jld2", record_results)
     println("results saved: h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")
-end
+end/
