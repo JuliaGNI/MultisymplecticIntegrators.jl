@@ -233,6 +233,11 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator)
     local bc_fun = int.problem.bcs_function
     local xspan = int.problem.xspan
     local x_domain = int.problem.xspan[2] - int.problem.xspan[1]
+    local has_λ₀_coes = hasproperty(C, :λ₀_x_coes) && hasproperty(int.method, :mλ_x)
+    local mλ_x = has_λ₀_coes ? int.method.mλ_x : nothing
+    local lag_sys = has_λ₀_coes ? int.problem.lagrangian_system.functions : nothing
+    local lag_params = has_λ₀_coes ? int.problem.lagrangian_system.params : nothing
+    local carried_internal = internal(sol)
     for d in 1:D
         # println("update initial condition, current time = ", sol.t, "the initial condition is at time = ", sol.t - timestep(int))
 
@@ -243,12 +248,24 @@ function initialize_bcs_ics!(sol,int::PDEIntegrator)
             C.ics_ut₀_quad_values[d,:] .= ic_vals.u
             C.ics_vt₀_quad_values[d,:] .= ic_vals.v
             C.ics_wt₀_quad_values[d,:] .= ic_vals.w
-        else
-            C.init_condition_t₀[d,:] = internal(sol).ut₁_quad_values[d,:]
 
-            C.ics_ut₀_quad_values[d,:] = internal(sol).ut₁_quad_values[d,:]
-            C.ics_vt₀_quad_values[d,:] = internal(sol).vt₁_quad_values[d,:]
-            C.ics_wt₀_quad_values[d,:] = internal(sol).wt₁_quad_values[d,:]
+            if has_λ₀_coes
+                momentum = Vector{eltype(C.λ₀_x_coes)}(undef, size(mλ_x, 2))
+                for rx in eachindex(momentum)
+                    momentum[rx] = lag_sys.∂L∂V[d](C.ics_ut₀_quad_values[d,rx], C.ics_vt₀_quad_values[d,rx], C.ics_wt₀_quad_values[d,rx], lag_params)
+                end
+                @views C.λ₀_x_coes[d,:] .= mλ_x' \ momentum
+            end
+        else
+            C.init_condition_t₀[d,:] = carried_internal.ut₁_quad_values[d,:]
+
+            C.ics_ut₀_quad_values[d,:] = carried_internal.ut₁_quad_values[d,:]
+            C.ics_vt₀_quad_values[d,:] = carried_internal.vt₁_quad_values[d,:]
+            C.ics_wt₀_quad_values[d,:] = carried_internal.wt₁_quad_values[d,:]
+
+            if has_λ₀_coes && haskey(carried_internal, :λ₁_x_coes)
+                @views C.λ₀_x_coes[d,:] .= carried_internal.λ₁_x_coes[d,:]
+            end
         end
 
         for i in 1:RT
@@ -288,6 +305,7 @@ function copy_internal_variables!(solstep::SolutionStep,C::PDEIntegratorCache)
     haskey(internal(solstep), :ut₁_quad_values) && copyto!(internal(solstep).ut₁_quad_values,C.ut₁_quad_values)
     haskey(internal(solstep), :vt₁_quad_values) && copyto!(internal(solstep).vt₁_quad_values,C.vt₁_quad_values)
     haskey(internal(solstep), :wt₁_quad_values) && copyto!(internal(solstep).wt₁_quad_values,C.wt₁_quad_values)
+    haskey(internal(solstep), :λ₁_x_coes) && hasproperty(C, :λ₁_x_coes) && copyto!(internal(solstep).λ₁_x_coes,C.λ₁_x_coes)
 end
 
 # flat = flatten_params(pnn.params)

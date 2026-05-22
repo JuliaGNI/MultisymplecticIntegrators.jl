@@ -1,4 +1,3 @@
-using JLD2
 struct ELM_PDE_int{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PDEMethod
     basis::BT
 
@@ -409,7 +408,7 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:ELM_PDE_int{MVT,LT,BT
             record_results["ls_max_error"] = ls_max_err
             record_results["ls_err"] = ls_err
             record_results["PNN_params"] = PNN.params
-            JLD2.save("LSGD_initial_guess_results.jld2", record_results)
+            # _save_jld2("LSGD_initial_guess_results.jld2", record_results)
             print("Results saved!!!")
             @show PNN.params[keys(PNN.params)[end]].W[:]
         end

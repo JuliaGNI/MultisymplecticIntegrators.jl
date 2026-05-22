@@ -304,7 +304,15 @@ end
 #{ST,RT,RX,D,NP}(NP) where {ST,RT,RX,D,NP}
 @inline CacheType(ST, problem::LPDEProblem, int::Galerkin_Full_Restriction_Bspline_Integrator) = Galerkin_Full_Restriction_Bspline_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.S,int.basis.Nbasis_x,int.basis.Nbasis_t}
 
-copy_internal_variables!(C::Galerkin_Full_Restriction_Bspline_IntegratorCache,solstep::SolutionStep) = nothing
+function copy_internal_variables!(C::Galerkin_Full_Restriction_Bspline_IntegratorCache, solstep::SolutionStep)
+    carried_internal = internal(solstep)
+    haskey(carried_internal, :ut₁_quad_values) && copyto!(C.ics_ut₀_quad_values, carried_internal.ut₁_quad_values)
+    haskey(carried_internal, :vt₁_quad_values) && copyto!(C.ics_vt₀_quad_values, carried_internal.vt₁_quad_values)
+    haskey(carried_internal, :wt₁_quad_values) && copyto!(C.ics_wt₀_quad_values, carried_internal.wt₁_quad_values)
+    haskey(carried_internal, :known_dofs) && copyto!(C.known_dofs, carried_internal.known_dofs)
+    haskey(carried_internal, :p₀_quad_values) && copyto!(C.p₀_quad_values, carried_internal.p₀_quad_values)
+    return nothing
+end
 
 function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Full_Restriction_Bspline_Integrator})
     local exact_u = int.problem.exact_u
@@ -344,7 +352,11 @@ function prior_initial_guess!(C,sol,int::PDEIntegrator{<:Galerkin_Full_Restricti
         @views ldiv!(Cx, coefs[i, :])
     end
 
-    C.known_dofs[:] = coefs[1,:]
+    if iszero(tn)
+        C.known_dofs[:] = coefs[1,:]
+    else
+        C.known_dofs[:] = internal(sol).known_dofs
+    end
     C.x[:] = vec(coefs[2:end, :])
 
     if show_status
@@ -432,6 +444,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
     local exact_v = int.problem.exact_v
     local exact_w = int.problem.exact_w
     local show_status = int.method.show_status
+    local tn = sol.t - h
 
     local Nt = int.method.basis.Nbasis_t
     local Nx = int.method.basis.Nbasis_x
@@ -514,9 +527,9 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
         for d in 1:D
             for i in 1:RT
                 for j in 1:RX
-                    u_truth_mat[d, i, j] = exact_u.(tn + h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
-                    v_truth_mat[d, i, j] = exact_v.(tn + h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
-                    w_truth_mat[d, i, j] = exact_w.(tn + h * t_quad_nodes[i], xspan[1] .+ x_domain .* x_quad_nodes[j])
+                    u_truth_mat[d, i, j] = exact_u(tn + h * t_quad_nodes[i], xspan[1] + x_domain * x_quad_nodes[j])
+                    v_truth_mat[d, i, j] = exact_v(tn + h * t_quad_nodes[i], xspan[1] + x_domain * x_quad_nodes[j])
+                    w_truth_mat[d, i, j] = exact_w(tn + h * t_quad_nodes[i], xspan[1] + x_domain * x_quad_nodes[j])
                 end
             end
         end
@@ -558,21 +571,23 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
 
         for d in 1:D
             for j in 1:RX
-                ut₀_quad_values_truth[d,j] = exact_u.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
-                ut₁_quad_values_truth[d,j] = exact_u.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
-                vt₀_quad_values_truth[d,j] = exact_v.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
-                vt₁_quad_values_truth[d,j] = exact_v.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
-                wt₀_quad_values_truth[d,j] = exact_w.(sol.t - timestep(int), xspan[1] .+ x_domain .* x_quad_nodes[j])
-                wt₁_quad_values_truth[d,j] = exact_w.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes[j])
+                xq = xspan[1] + x_domain * x_quad_nodes[j]
+                ut₀_quad_values_truth[d,j] = exact_u(tn, xq)
+                ut₁_quad_values_truth[d,j] = exact_u(sol.t, xq)
+                vt₀_quad_values_truth[d,j] = exact_v(tn, xq)
+                vt₁_quad_values_truth[d,j] = exact_v(sol.t, xq)
+                wt₀_quad_values_truth[d,j] = exact_w(tn, xq)
+                wt₁_quad_values_truth[d,j] = exact_w(sol.t, xq)
             end
 
             for i in 1:RT
-                ux₀_quad_values_truth[d,i] = exact_u.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
-                ux₁_quad_values_truth[d,i] = exact_u.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
-                vx₀_quad_values_truth[d,i] = exact_v.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
-                vx₁_quad_values_truth[d,i] = exact_v.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
-                wx₀_quad_values_truth[d,i] = exact_w.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[1])
-                wx₁_quad_values_truth[d,i] = exact_w.(sol.t - timestep(int) + timestep(int)* t_quad_nodes[i], xspan[2])
+                tq = tn + h * t_quad_nodes[i]
+                ux₀_quad_values_truth[d,i] = exact_u(tq, xspan[1])
+                ux₁_quad_values_truth[d,i] = exact_u(tq, xspan[2])
+                vx₀_quad_values_truth[d,i] = exact_v(tq, xspan[1])
+                vx₁_quad_values_truth[d,i] = exact_v(tq, xspan[2])
+                wx₀_quad_values_truth[d,i] = exact_w(tq, xspan[1])
+                wx₁_quad_values_truth[d,i] = exact_w(tq, xspan[2])
             end
         end
 
@@ -594,7 +609,25 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
         @show maximum(abs.(C.wx₀_quad_values .- wx₀_quad_values_truth))
         @show maximum(abs.(C.wx₁_quad_values .- wx₁_quad_values_truth))
 
-        @show maximum(abs.(C.p₀_quad_values .- exact_v.(sol.t, xspan[1] .+ x_domain .* x_quad_nodes)))
+        p₀_bottom_momentum = similar(C.p₀_quad_values)
+        p₀_exact_momentum = similar(C.p₀_quad_values)
+        for d in 1:D
+            for rx in 1:RX
+                xq = xspan[1] + x_domain * x_quad_nodes[rx]
+                p₀_bottom_momentum[d, rx] = ∂L∂V[d](
+                    C.ics_ut₀_quad_values[d, rx],
+                    C.ics_vt₀_quad_values[d, rx],
+                    C.ics_wt₀_quad_values[d, rx],
+                    lag_params,
+                )
+                p₀_exact_momentum[d, rx] = exact_v(tn, xq)
+            end
+        end
+
+        @show maximum(abs.(C.p₀_quad_values .- p₀_bottom_momentum))
+        @show maximum(abs.(C.p₀_quad_values .- p₀_exact_momentum))
+        @show maximum(abs.(C.ut₀_quad_values .- C.init_condition_t₀))
+        @infiltrate
     end
 end
 
@@ -746,14 +779,23 @@ function internal_variables(method::Galerkin_Full_Restriction_Bspline_Integrator
         )
 end
 
-# function copy_internal_variables!(solstep::SolutionStep,C::Galerkin_Full_Restriction_Bspline_IntegratorCache)
-#     # copy internal variables from cache to internal,
-#     haskey(internal(solstep), :ut₁_quad_values) && copyto!(internal(solstep).ut₁_quad_values,C.ut₁_quad_values)
-#     haskey(internal(solstep), :vt₁_quad_values) && copyto!(internal(solstep).vt₁_quad_values,C.vt₁_quad_values)
-#     haskey(internal(solstep), :wt₁_quad_values) && copyto!(internal(solstep).wt₁_quad_values,C.wt₁_quad_values)
-#     haskey(internal(solstep), :known_dofs)      && copyto!(internal(solstep).known_dofs,C.known_dofs)
-#     haskey(internal(solstep), :p₀_quad_values)  && copyto!(internal(solstep).p₀_quad_values,C.p₀_quad_values)
-# end
+function copy_internal_variables!(solstep::SolutionStep, C::Galerkin_Full_Restriction_Bspline_IntegratorCache)
+    target_internal = internal(solstep)
+    haskey(target_internal, :ut₁_quad_values) && copyto!(target_internal.ut₁_quad_values, C.ut₁_quad_values)
+    haskey(target_internal, :vt₁_quad_values) && copyto!(target_internal.vt₁_quad_values, C.vt₁_quad_values)
+    haskey(target_internal, :wt₁_quad_values) && copyto!(target_internal.wt₁_quad_values, C.wt₁_quad_values)
+    haskey(target_internal, :p₀_quad_values) && copyto!(target_internal.p₀_quad_values, C.p₀_quad_values)
+
+    if haskey(target_internal, :known_dofs)
+        Nx = length(C.known_dofs)
+        Nt = length(C.x) ÷ Nx + 1
+        full_mat = Matrix{eltype(C.x)}(undef, Nt, Nx)
+        full_mat[1, :] .= C.known_dofs
+        full_mat[2:end, :] .= reshape(C.x, Nt - 1, Nx)
+        copyto!(target_internal.known_dofs, view(full_mat, Nt, :))
+    end
+    return nothing
+end
 
 # function copy_internal_variables!(C::Galerkin_Full_Restriction_Bspline_IntegratorCache,solstep::SolutionStep)
 #     # # copy internal variables from internal to cache, e.g. after the first iteration, we can update the initial guess for the Lagrangian multipliers at t = 0 based on the current solution

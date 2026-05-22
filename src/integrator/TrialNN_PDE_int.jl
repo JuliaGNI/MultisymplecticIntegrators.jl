@@ -798,6 +798,7 @@ function internal_variables(method::TrialNN_PDE_int, problem::LPDEProblem)
     local RT = method.RT
     local RX = method.RX
     local a,b = method.xspan[1],method.xspan[2]
+    local xstep = problem.xstep
 
     W1 = zeros(S, 2)
     W2 = zeros(S)

@@ -1,11 +1,9 @@
-using Revise
 using BSplineKit
 using MultiSymplectic
 using Infiltrator
 using Base
 using GeometricIntegratorsBase
-using Plots
-using JLD2
+
 
 k = parse(Int, ARGS[1])
 t_step = parse(Float64, ARGS[2])
@@ -59,7 +57,7 @@ end
 
 
 
-t_span = (0.,20.0)
+t_span = (0.,1.0)
 xspan = (0.0, 1.0)
 # for t_step in [0.1,0.2,0.4]
 
@@ -68,7 +66,7 @@ x_ls = xspan[1]:lpde.xstep:xspan[2]
 c = lpde.params.c
 # for x_knot_interval in [0.05,0.1]
     spline_basis = BSpline2D(k,xspan = xspan, t_knot_interval = t_knot_interval,x_knot_interval = x_knot_interval)
-    spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = false)
+    spline_int = Galerkin_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = true)
     println("Start Spline Integrator")
     sol_set = MultiSymplectic.integrate(lpde, spline_int)
     println("End Spline Integrator with h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")
@@ -87,19 +85,21 @@ c = lpde.params.c
     end
 
 
-    relative_ham_err = (ham_ls .-  analytic_ham) ./ analytic_ham
+    signed_relative_ham_err = (ham_ls .-  analytic_ham) ./ analytic_ham
+    relative_ham_err = abs.(signed_relative_ham_err)
     max_err = maximum(relative_ham_err)
     plot(relative_ham_err, xlabel="Time", ylabel="Relative Hamiltonian Error")
     savefig("full_multiplier_spline_2305/SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.pdf")
 
     record_results = Dict()
-    record_results["maximum_relative_ham_err"] = maximum(relative_ham_err)
+    record_results["maximum_relative_ham_err"] = max_err
     record_results["sol_u"] = sol_set.sol.u
     record_results["sol_v"] = sol_set.sol.v
     record_results["sol_w"] = sol_set.sol.w
     record_results["sol_hamiltonian"] = ham_ls
     record_results["analytic_hamiltonian"] = analytic_ham
     record_results["relative_hamiltonian_error"] = relative_ham_err
+    record_results["signed_relative_hamiltonian_error"] = signed_relative_ham_err
 
     save("full_multiplier_spline_2305/SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.jld2", record_results)
     println("results saved: h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")

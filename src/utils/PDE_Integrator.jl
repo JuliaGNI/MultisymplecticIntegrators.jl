@@ -109,10 +109,10 @@ function integrate!(solstep::SolutionStep, int::AbstractPDEIntegrator)
 
     integrate_step!(current(solstep), history(solstep), parameters(solstep), int)
 
-    # copy internal variables from cache to solution step
-    copy_internal_variables!(solstep,cache(int))
-
     components!(nlsolution(int), current(solstep), parameters(solstep), int)
+
+    # copy internal variables from the final nonlinear solution to solution step
+    copy_internal_variables!(solstep,cache(int))
 
     cache(int).flag_done_initial_guess[1] != 0.0 ? cache(int).flag_done_initial_guess[1] = 0.0 : nothing 
 

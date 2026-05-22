@@ -5,7 +5,6 @@ using LinearAlgebra
 using Statistics
 using Zygote
 using IterTools
-using Plots
 using Random
 using ForwardDiff
 using NonlinearSolve
