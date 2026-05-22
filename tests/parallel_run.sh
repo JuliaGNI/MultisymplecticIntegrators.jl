@@ -15,20 +15,23 @@ run_configuration() {
     local t_step=$2
     local t_knot_interval=$3
     local x_knot_interval=$4
+    local reg=$5
 
     # Print the activation for debugging
-    echo "Running Julia script with k=$k, t_step=$t_step, t_knot_interval=$t_knot_interval,x_knot_interval=$x_knot_interval" 
+    echo "Running Julia script with k=$k, t_step=$t_step, t_knot_interval=$t_knot_interval,x_knot_interval=$x_knot_interval,reg = $reg" 
 
     # Run the Julia script in the background
-    julia --project=. tests/test_Spline_int.jl $k $t_step $t_knot_interval $x_knot_interval &
+    julia --project=. tests/test_Spline_int.jl $k $t_step $t_knot_interval $x_knot_interval $reg &
 }
 
 # Loop through the activations
-for k in {3,4}; do # ,
+for k in {4,}; do # ,
     for t_step in {0.05,0.1,0.2}; do #  ,
-        for t_knot_interval in {0.5,0.25}; do # 
-            for x_knot_interval in {0.05,0.1}; do # 
-                run_configuration $k $t_step $t_knot_interval $x_knot_interval
+        for t_knot_interval in {0.5,0.2,0.1}; do # 
+            for x_knot_interval in {0.05,0.02}; do # 
+                for reg in {0.0,};do
+                    run_configuration $k $t_step $t_knot_interval $x_knot_interval $reg
+                done
             done
         done
     done
