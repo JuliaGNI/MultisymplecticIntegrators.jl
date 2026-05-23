@@ -38,3 +38,9 @@ struct BSpline2D{CXT,CTT,BXT,BTT} <: AbstractPDEBasis
     end
 
 end
+
+function Base.show(io::IO, basis::BSpline2D)
+    print(io, "\n 1+1 Tensor Product B-spline Basis with:\n")
+    print(io, "   Nbasis_x: $(basis.Nbasis_x), Nbasis_t: $(basis.Nbasis_t) \n")
+    print(io, "   Breaks_x: $(basis.xs), Breaks_t: $(basis.ts) \n")
+end

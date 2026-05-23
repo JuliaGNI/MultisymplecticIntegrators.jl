@@ -1,5 +1,7 @@
 struct Galerkin_Full_Restriction_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
     basis::BT
+    N_t_interval::Int
+    N_x_interval::Int
 
     time_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RT::Int # Number of quadrature points in time
@@ -48,13 +50,13 @@ struct Galerkin_Full_Restriction_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDE
         show_status = false)
 
         # The quadrature nodes in [0.0,1.0]
-        t_num_interval = length(unique(basis.ts)) - 1
-        x_num_interval = length(unique(basis.xs)) - 1
-        t_quadrature = composite_quadrature(t_num_interval ,RT_per_interval)
-        x_quadrature = composite_quadrature(x_num_interval ,RX_per_interval)
+        N_t_interval = length(unique(basis.ts)) - 1
+        N_x_interval = length(unique(basis.xs)) - 1
+        t_quadrature = composite_quadrature(N_t_interval ,RT_per_interval)
+        x_quadrature = composite_quadrature(N_x_interval ,RX_per_interval)
 
         R_list = [RT_per_interval,RX_per_interval]
-        grid_matrix, grid_weights = construct_quadrature_grid(R_list,[t_num_interval, x_num_interval])
+        grid_matrix, grid_weights = construct_quadrature_grid(R_list,[N_t_interval, N_x_interval])
 
         x0 = xspan[1]
         x_domain = xspan[2] - xspan[1]
@@ -153,7 +155,7 @@ struct Galerkin_Full_Restriction_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDE
         end
 
 
-        new{typeof(basis)}(basis,
+        new{typeof(basis)}(basis,N_t_interval,N_x_interval,
             t_quadrature, RT,
             x_quadrature, RX,
             grid_matrix, grid_weights,
@@ -175,6 +177,16 @@ struct Galerkin_Full_Restriction_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDE
             show_status
             )
     end
+end
+
+
+function Base.show(io::IO, method::Galerkin_Full_Restriction_Bspline_Integrator)
+    print(io, "\n Spline Integrator without Multipliers, Only for Zero Dirichlet Boundary Condition with:\n")
+    print(io, "   Basis Order in each dimension k:$(method.basis.k) \n")
+    print(io, "   Nbasis_x: $(basis.Nbasis_x), Nbasis_t: $(basis.Nbasis_t), total DOFs:$(basis.S) \n")
+    print(io, "   scaled Breaks_x: $(basis.xs) \n")
+    print(io, "   scaled Breaks_t: $(basis.ts) \n")
+
 end
 
 default_solver(::Galerkin_Full_Restriction_Bspline_Integrator) = NewtonMethod()
