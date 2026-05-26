@@ -117,8 +117,10 @@ end
 function main()
     mkpath("debug_results")
     regs = parse.(Float64, split(get(ENV, "SPLINE_REGS", "0,1e-8,1e-6,1e-4,1e-3"), ","))
+    k = parse(Int, get(ENV, "SPLINE_K", "3"))
     t_step = parse(Float64, get(ENV, "SPLINE_T_STEP", "0.1"))
     t_end = parse(Float64, get(ENV, "SPLINE_T_END", "1.0"))
+    t_knot_interval = parse(Float64, get(ENV, "SPLINE_T_KNOT_INTERVAL", "0.5"))
     x_knot_interval = parse(Float64, get(ENV, "SPLINE_X_KNOT_INTERVAL", "0.5"))
     max_iterations = parse(Int, get(ENV, "SPLINE_MAX_ITERATIONS", "10"))
     multiplier_stride = parse(Int, get(ENV, "SPLINE_MULTIPLIER_STRIDE", "1"))
@@ -127,8 +129,10 @@ function main()
     for reg in regs
         result = run_case(;
             regularization_factor=reg,
+            k=k,
             t_step=t_step,
             t_end=t_end,
+            t_knot_interval=t_knot_interval,
             x_knot_interval=x_knot_interval,
             max_iterations=max_iterations,
             multiplier_stride=multiplier_stride,

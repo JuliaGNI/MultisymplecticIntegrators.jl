@@ -216,6 +216,14 @@ end
 
 Base.length(Basis::BSplineDirichlet) = Basis.Nbasis
 
+function Base.show(io::IO, basis::BSplineDirichlet)
+    print(io, "\n Dirichlet B-spline Multiplier Basis with:\n")
+    print(io, "   Order k: $(basis.k) \n")
+    print(io, "   Number of intervals: $(basis.N_intervals) \n")
+    print(io, "   Number of basis functions: $(basis.Nbasis) \n")
+    print(io, "   Knots: $(basis.t) \n")
+end
+
 function Lagrangian_multiplier(::Val{:Lagrange},num_interval::Int,k::Integer,a,b)
     QGau = QuadratureRules.GaussLegendreQuadrature(num_interval+1)
     CompactBasisFunctions.Lagrange(a .+ (b - a) .* QGau.nodes)

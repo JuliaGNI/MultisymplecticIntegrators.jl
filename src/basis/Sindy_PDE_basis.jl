@@ -78,3 +78,10 @@ struct SindyPDEBasis{UPT,VPT,WPT,UFT,VFT,WFT} <: AbstractPDEBasis
         new{typeof(∂u∂P),typeof(∂v∂P),typeof(∂w∂P),typeof(u),typeof(v),typeof(w)}(u_expr, v_expr, w_expr, P, ∂u∂P, ∂v∂P, ∂w∂P, u, v, w, NP, P_sizes)
     end
 end
+
+function Base.show(io::IO, basis::SindyPDEBasis)
+    print(io, "\n SINDy PDE Basis with:\n")
+    print(io, "   Equation dimension D: $(length(basis.u_expr)) \n")
+    print(io, "   Number of optimized parameters NP: $(basis.NP) \n")
+    print(io, "   Parameter block sizes: $(basis.P_sizes) \n")
+end

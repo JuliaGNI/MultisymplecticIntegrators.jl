@@ -10,6 +10,14 @@ struct PDEIntegrator{
     solver::ST
 end
 
+function Base.show(io::IO, integrator::PDEIntegrator)
+    print(io, "\n PDE Integrator with:\n")
+    print(io, "   Problem: $(nameof(typeof(integrator.problem))) \n")
+    print(io, "   Method: $(nameof(typeof(integrator.method))) \n")
+    print(io, "   Solver: $(nameof(typeof(integrator.solver))) \n")
+    print(io, "   Cache type: $(nameof(typeof(integrator.caches))) \n")
+end
+
 function PDEIntegrator(problem::LPDEProblem,
     integratormethod::PDEMethod,
     solvermethod::NewtonMethod;

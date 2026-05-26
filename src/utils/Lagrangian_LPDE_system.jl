@@ -57,3 +57,12 @@ struct LPDESystem{LType,TType,XType,UType,VType,WType,EType,FType,PT<:NamedTuple
         return new{LType,TType,XType,UType,VType,WType,typeof(equs),typeof(functions),typeof(params)}(Ls,D, t, x, U,V,W, params, equs, functions)
     end
 end
+
+function Base.show(io::IO, system::LPDESystem)
+    print(io, "\n Lagrangian PDE System with:\n")
+    print(io, "   Dimension D: $(system.D) \n")
+    print(io, "   Time variable: $(system.t) \n")
+    print(io, "   Space variables: $(system.x) \n")
+    print(io, "   Parameters: $(keys(system.params)) \n")
+    print(io, "   Lagrangian: $(system.L) \n")
+end

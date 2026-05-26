@@ -96,6 +96,18 @@ struct ELM_PDE_int{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <:
     end
 end
 
+function Base.show(io::IO, method::ELM_PDE_int)
+    print(io, "\n ELM PDE Integrator with:\n")
+    print(io, "   Basis: $(nameof(typeof(method.basis))) \n")
+    print(io, "   Basis parameters NP: $(method.basis.NP) \n")
+    print(io, "   Time intervals: $(method.t_num_interval), quadrature points: $(method.RT), points per interval: $(_points_per_interval(method.RT, method.t_num_interval)) \n")
+    print(io, "   Space intervals: $(method.x_num_interval), quadrature points: $(method.RX), points per interval: $(_points_per_interval(method.RX, method.x_num_interval)) \n")
+    print(io, "   Lagrange multiplier basis functions in time: $(method.Nbasis_μ_t), order: $(method.k_μ_t) \n")
+    print(io, "   Lagrange multiplier basis functions in space: $(method.Nbasis_λ_x), order: $(method.k_λ_x) \n")
+    print(io, "   Initial guess method: $(nameof(typeof(method.initial_guess_method))) \n")
+    print(io, "   Epochs: $(method.nepochs), GD learning rate: $(method.GD_lr), show status: $(method.show_status) \n")
+end
+
 default_solver(::ELM_PDE_int) = NewtonMethod()
 
 struct ELM_PDE_intCache{ST,RT,RX,D,NP,Nbasis_μ_t,Nbasis_λ_x} <: PDEIntegratorCache{ST,D}

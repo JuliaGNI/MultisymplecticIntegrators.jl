@@ -62,3 +62,11 @@ struct NetworkPDEBasis_Symbolic{OMT,AF,UF,VF,WF,UPT,VPT,WPT} <: AbstractPDEBasis
             NP,optim_mode)
     end
 end
+
+function Base.show(io::IO, basis::NetworkPDEBasis_Symbolic)
+    print(io, "\n Symbolics.jl Neural Network PDE Basis with:\n")
+    print(io, "   Hidden units S: $(basis.S) \n")
+    print(io, "   Number of optimized parameters NP: $(basis.NP) \n")
+    print(io, "   Optim mode: $(basis.optim_mode) \n")
+    print(io, "   Activation function: $(basis.activation_function) \n")
+end

@@ -51,6 +51,16 @@ struct TrialNN_PDE_int{BT<:AbstractPDEBasis,IPMT<:InitialParametersMethod} <: PD
     end
 end
 
+function Base.show(io::IO, method::TrialNN_PDE_int)
+    print(io, "\n Trial Neural Network PDE Integrator with:\n")
+    print(io, "   Basis: $(nameof(typeof(method.basis))) \n")
+    print(io, "   Basis parameters NP: $(method.basis.NP), hidden units S: $(method.basis.S) \n")
+    print(io, "   Time quadrature points: $(method.RT), space quadrature points: $(method.RX) \n")
+    print(io, "   Space span: $(method.xspan) \n")
+    print(io, "   Initial guess method: $(nameof(typeof(method.initial_guess_method))) \n")
+    print(io, "   OGA dictionary sizes: Nw=$(method.Nw), Nb=$(method.Nb) \n")
+    print(io, "   Show status: $(method.show_status) \n")
+end
 
 default_solver(::TrialNN_PDE_int) = NewtonMethod()
 default_iguess(::TrialNN_PDE_int) = nothing

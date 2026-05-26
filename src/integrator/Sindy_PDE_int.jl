@@ -64,6 +64,16 @@ struct Sindy_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis} <: PDEMethod
     end
 end
 
+function Base.show(io::IO, method::Sindy_PDE_Integrator)
+    print(io, "\n SINDy PDE Integrator with:\n")
+    print(io, "   Basis: $(nameof(typeof(method.symbolic_expr_basis))) \n")
+    print(io, "   Initial parameter blocks: $(length(method.init_w)) \n")
+    print(io, "   Time quadrature points: $(method.RT), space quadrature points: $(method.RX) \n")
+    print(io, "   Lagrange multiplier basis functions in time: $(method.Nbasis_μ_t), order: $(method.k_μ_t) \n")
+    print(io, "   Lagrange multiplier basis functions in space: $(method.Nbasis_λ_x), order: $(method.k_λ_x) \n")
+    print(io, "   Show status: $(method.show_status) \n")
+end
+
 default_solver(::Sindy_PDE_Integrator) = NewtonMethod()
 
 struct Sindy_PDE_IntegratorCache{ST,RT,RX,D,NP,Nbasis_μ_t,Nbasis_λ_x} <: PDEIntegratorCache{ST,D}

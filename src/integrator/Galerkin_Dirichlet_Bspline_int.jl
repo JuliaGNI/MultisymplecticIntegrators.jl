@@ -189,6 +189,18 @@ struct Galerkin_Dirichlet_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
     end
 end
 
+function Base.show(io::IO, method::Galerkin_Dirichlet_Bspline_Integrator)
+    t_num_interval = length(unique(method.basis.ts)) - 1
+    x_num_interval = length(unique(method.basis.xs)) - 1
+    print(io, "\n Galerkin Dirichlet B-spline Integrator with:\n")
+    print(io, "   Basis order k: $(method.basis.k) \n")
+    print(io, "   Nbasis_x: $(method.basis.Nbasis_x), Nbasis_t: $(method.basis.Nbasis_t), total DOFs: $(method.basis.S) \n")
+    print(io, "   Time intervals: $(t_num_interval), quadrature points: $(method.RT), points per interval: $(_points_per_interval(method.RT, t_num_interval)) \n")
+    print(io, "   Space intervals: $(x_num_interval), quadrature points: $(method.RX), points per interval: $(_points_per_interval(method.RX, x_num_interval)) \n")
+    print(io, "   Space multiplier basis functions: $(method.Nbasis_λ_x) \n")
+    print(io, "   Show status: $(method.show_status) \n")
+end
+
 default_solver(::Galerkin_Dirichlet_Bspline_Integrator) = NewtonMethod()
 
 @inline function _active_dot(coeffs::AbstractVector{ST}, indices::AbstractArray{Int,3}, values::AbstractArray{Float64,3}, i::Int, j::Int) where {ST}
@@ -342,7 +354,14 @@ end
 #{ST,RT,RX,D,NP}(NP) where {ST,RT,RX,D,NP}
 @inline CacheType(ST, problem::LPDEProblem, int::Galerkin_Dirichlet_Bspline_Integrator) = Galerkin_Dirichlet_Bspline_IntegratorCache{ST,int.RT,int.RX,problem.D,int.basis.S,int.Nbasis_λ_x}
 
-copy_internal_variables!(C::Galerkin_Dirichlet_Bspline_IntegratorCache,solstep::SolutionStep) = nothing
+function copy_internal_variables!(C::Galerkin_Dirichlet_Bspline_IntegratorCache, solstep::SolutionStep)
+    carried_internal = internal(solstep)
+    haskey(carried_internal, :ut₁_quad_values) && copyto!(C.ics_ut₀_quad_values, carried_internal.ut₁_quad_values)
+    haskey(carried_internal, :vt₁_quad_values) && copyto!(C.ics_vt₀_quad_values, carried_internal.vt₁_quad_values)
+    haskey(carried_internal, :wt₁_quad_values) && copyto!(C.ics_wt₀_quad_values, carried_internal.wt₁_quad_values)
+    haskey(carried_internal, :λ₁_x_coes) && copyto!(C.λ₀_x_coes, carried_internal.λ₁_x_coes)
+    return nothing
+end
 
 function internal_variables(method::Galerkin_Dirichlet_Bspline_Integrator, problem::LPDEProblem)
     local D = problem.D
@@ -825,4 +844,13 @@ function update!(sol, int::PDEIntegrator{<:Galerkin_Dirichlet_Bspline_Integrator
         end
     end
 
+end
+
+function copy_internal_variables!(solstep::SolutionStep, C::Galerkin_Dirichlet_Bspline_IntegratorCache)
+    target_internal = internal(solstep)
+    haskey(target_internal, :ut₁_quad_values) && copyto!(target_internal.ut₁_quad_values, C.ut₁_quad_values)
+    haskey(target_internal, :vt₁_quad_values) && copyto!(target_internal.vt₁_quad_values, C.vt₁_quad_values)
+    haskey(target_internal, :wt₁_quad_values) && copyto!(target_internal.wt₁_quad_values, C.wt₁_quad_values)
+    haskey(target_internal, :λ₁_x_coes) && copyto!(target_internal.λ₁_x_coes, C.λ₁_x_coes)
+    return nothing
 end

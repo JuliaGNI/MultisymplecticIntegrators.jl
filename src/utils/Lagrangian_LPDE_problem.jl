@@ -3,6 +3,10 @@ struct LPDE{invType <: OptionalInvariants,
     perType <: OptionalPeriodicity} <: GeometricEquation{invType,parType,perType} 
 end
 
+function Base.show(io::IO, ::LPDE)
+    print(io, "Lagrangian PDE")
+end
+
 # const LPDEProblem = EquationProblem{LPDE}
 
 struct LPDEProblem{superType<:GeometricEquation,dType<:Number,tType<:Real,LSType,ICSType,BCSType,EUType,EVType,EWType,ICST<:NamedTuple,PT<:NamedTuple,IT<:Union{Nothing,NamedTuple},LSAT<:Union{Function,Nothing}} <: GeometricProblem{superType, dType, tType}
@@ -49,6 +53,17 @@ struct LPDEProblem{superType<:GeometricEquation,dType<:Number,tType<:Real,LSType
             least_squares_assemble
         )
     end
+end
+
+function Base.show(io::IO, problem::LPDEProblem)
+    print(io, "\n Lagrangian PDE Problem with:\n")
+    print(io, "   Dimension D: $(problem.D) \n")
+    print(io, "   Time span: $(problem.timespan), timestep: $(problem.timestep) \n")
+    print(io, "   Space span: $(problem.xspan), xstep: $(problem.xstep) \n")
+    print(io, "   Parameters: $(keys(problem.params)) \n")
+    print(io, "   Initial condition fields: $(keys(problem.ics)) \n")
+    print(io, "   Has internal variables: $(problem.internal !== nothing) \n")
+    print(io, "   Has least squares assemble: $(problem.least_squares_assemble !== nothing) \n")
 end
 
 datatype(problem::LPDEProblem) = eltype(problem.ics.u)

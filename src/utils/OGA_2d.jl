@@ -51,3 +51,9 @@ struct OGA2D <: InitialParametersMethod
     end
 
 end
+
+function Base.show(io::IO, method::OGA2D)
+    print(io, "\n OGA2D Initial Parameters Method with:\n")
+    print(io, "   Quadrature grid: nt=$(method.nt), nx=$(method.nx), total nodes=$(method.N) \n")
+    print(io, "   Dictionary sizes: Nw=$(method.Nw), Nb=$(method.Nb), atoms=$(method.M) \n")
+end

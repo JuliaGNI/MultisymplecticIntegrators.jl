@@ -105,6 +105,12 @@ module MultiSymplectic
     include("integrator/Galerkin_Full_Restriction_int.jl")
     export Galerkin_Full_Restriction_Bspline_Integrator
 
+    include("integrator/FEM_Multisymplectic_int.jl")
+    export FEM_Multisymplectic_Integrator
+
+    include("integrator/SpaceTime_Spline_Wave_int.jl")
+    export SpaceTime_Spline_Wave_Integrator
+
     #problems
     include("problem/sine_Gordon.jl")
     export SineGordon

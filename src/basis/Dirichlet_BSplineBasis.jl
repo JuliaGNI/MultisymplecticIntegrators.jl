@@ -26,8 +26,11 @@ struct Dirichlet_BSpline2D{CXT, CTT, BXT, BTT} <: AbstractPDEBasis
     Nbasis_t::Int
     S::Int # total number of basis functions
     function Dirichlet_BSpline2D(k;timestep = 0.1, xspan = (0.0,1.0), t_knot_interval = 0.1, x_knot_interval = 0.05) # tstep and xstep are used to generate the knots, not the same as the problem domain steps
-        xs = collect(xspan[1]:x_knot_interval:xspan[2])
-        ts = collect(0.0:t_knot_interval:1.0)
+        N_t_interval = Int(1/t_knot_interval)
+        N_x_interval = Int((xspan[2] - xspan[1])/x_knot_interval)
+
+        xs = collect(range(xspan[1],xspan[2],length= N_x_interval+1))
+        ts = collect(range(0,1,length= N_t_interval+1))
 
         # Create B-spline bases
         Bx = BSplineBasis(BSplineOrder(k), xs)
@@ -37,6 +40,9 @@ struct Dirichlet_BSpline2D{CXT, CTT, BXT, BTT} <: AbstractPDEBasis
 
         x_collocation_points = collocation_points(Rx)
         t_collocation_points = collocation_points(Bt)
+
+        x_collocation_points = round.(x_collocation_points, digits=16)
+        t_collocation_points = round.(t_collocation_points, digits=16)
 
         # Create and factorise interpolation matrices
         Cx = lu!(collocation_matrix(Rx, x_collocation_points))
@@ -54,7 +60,7 @@ function Base.show(io::IO, basis::Dirichlet_BSpline2D)
     print(io, "\n 1+1 Tensor Product B-spline Basis, Only for Zero Dirichlet Boundary Condition with:\n")
     print(io, "   Order in each dimension k:$(basis.k) \n")
     print(io, "   Nbasis_x: $(basis.Nbasis_x), Nbasis_t: $(basis.Nbasis_t), total DOFs:$(basis.S) \n")
-    print(io, "   Break Length x: $(basis.x_knot_interval), Break Length t:$(basis.t_knot_interval) \n")
-    print(io, "   Scaled Breaks_x: $(basis.xs) \n")
-    print(io, "   Scaled Breaks_t: $(basis.ts) \n")
+    print(io, "   Break Length x: $((basis.xspan[2]-basis.xspan[1]) * basis.x_knot_interval), Break Length t:$(basis.timestep * basis.t_knot_interval) \n")
+    print(io, "   Scaled Breaks_x: $((basis.xspan[2]-basis.xspan[1]).* basis.xs) \n")
+    print(io, "   Scaled Breaks_t: $(basis.timestep * basis.ts) \n")
 end

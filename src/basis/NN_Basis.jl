@@ -21,3 +21,9 @@ struct NN_Basis{NT,UT,VT,WT,UFT} <: AbstractPDEBasis
             NP)
     end
 end
+
+function Base.show(io::IO, basis::NN_Basis)
+    print(io, "\n Neural Network Basis with:\n")
+    print(io, "   Network architecture: $(basis.network_arch) \n")
+    print(io, "   Number of trainable coefficients NP: $(basis.NP) \n")
+end

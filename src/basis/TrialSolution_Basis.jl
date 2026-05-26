@@ -45,6 +45,13 @@ struct Trial_Solution_Basis{AF, UFT, VFT, WFT, UPFT, VPFT, WPFT} <: AbstractPDEB
     end
 end
 
+function Base.show(io::IO, basis::Trial_Solution_Basis)
+    print(io, "\n Trial Solution Neural Network Basis with:\n")
+    print(io, "   Hidden units S: $(basis.S) \n")
+    print(io, "   Number of optimized parameters NP: $(basis.NP) \n")
+    print(io, "   Activation function: $(basis.activation_function) \n")
+end
+
 function generate_symbolic_u_trial(S::Int, activation_fn; a=0.0, b=1.0)
     # 1. Define symbolic variables
     @variables t x h 

@@ -4,9 +4,11 @@ struct Galerkin_Full_Restriction_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDE
     N_x_interval::Int
 
     time_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
+    RT_per_interval::Int
     RT::Int # Number of quadrature points in time
 
     spatial_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
+    RX_per_interval::Int
     RX::Int # Number of quadrature points in spatial dimension, for simplicity, set the same for all dimensions
 
     grid_matrix::Matrix{Vector{Float64}} # Quadrature grid points: [[t1,x1], [t1,x2], ]
@@ -156,8 +158,8 @@ struct Galerkin_Full_Restriction_Bspline_Integrator{BT<:AbstractPDEBasis} <: PDE
 
 
         new{typeof(basis)}(basis,N_t_interval,N_x_interval,
-            t_quadrature, RT,
-            x_quadrature, RX,
+            t_quadrature,RT_per_interval, RT,
+            x_quadrature,RX_per_interval, RX,
             grid_matrix, grid_weights,
             u_collocation_indices, u_collocation_values,
             v_collocation_indices, v_collocation_values,
@@ -183,10 +185,16 @@ end
 function Base.show(io::IO, method::Galerkin_Full_Restriction_Bspline_Integrator)
     print(io, "\n Spline Integrator without Multipliers, Only for Zero Dirichlet Boundary Condition with:\n")
     print(io, "   Basis Order in each dimension k:$(method.basis.k) \n")
-    print(io, "   Nbasis_x: $(basis.Nbasis_x), Nbasis_t: $(basis.Nbasis_t), total DOFs:$(basis.S) \n")
-    print(io, "   scaled Breaks_x: $(basis.xs) \n")
-    print(io, "   scaled Breaks_t: $(basis.ts) \n")
-
+    print(io, "   Nbasis_x: $(method.basis.Nbasis_x), Nbasis_t: $(method.basis.Nbasis_t), total DOFs:$(method.basis.S) \n")
+    print(io, "   Break Length x: $((method.basis.xspan[2]-method.basis.xspan[1]) * method.basis.x_knot_interval), Break Length t:$(method.basis.timestep * method.basis.t_knot_interval) \n")
+    print(io, "   Scaled Breaks_x: $((method.basis.xspan[2]-method.basis.xspan[1]).* method.basis.xs) \n")
+    print(io, "   Scaled Breaks_t: $(method.basis.timestep * method.basis.ts) \n")
+    print(io, "    \n")
+    print(io, "   Number of  Time intervals: $(method.N_t_interval), Number of space intervals: $(method.N_x_interval) \n")
+    print(io, "   Time quadrature points per time Interval: $(method.RT_per_interval), Space quadrature points per space Interval: $(method.RX_per_interval) \n")
+    print(io, "   Number of Time quadrature points: $(method.RT), Number of space quadrature points: $(method.RX) \n")
+    print(io, "   Total quadrature points: $(method.RT * method.RX) \n")
+    print(io, "   Show Status: $(method.show_status) \n")
 end
 
 default_solver(::Galerkin_Full_Restriction_Bspline_Integrator) = NewtonMethod()
@@ -203,6 +211,8 @@ struct Galerkin_Full_Restriction_Bspline_IntegratorCache{ST,RT,RX,D,S,Nx,Nt} <: 
     known_dofs::Vector{ST}
 
     p₀_quad_values::Matrix{ST}
+    p₀_dofs::Matrix{ST}
+    p₁_dofs::Matrix{ST}
 
     u_quad_values::Array{ST}
     v_quad_values::Array{ST}
@@ -249,6 +259,8 @@ struct Galerkin_Full_Restriction_Bspline_IntegratorCache{ST,RT,RX,D,S,Nx,Nt} <: 
         known_dofs = zeros(ST,Nx)
 
         p₀_quad_values = zeros(ST, D, RX)
+        p₀_dofs = zeros(ST, D, Nx)
+        p₁_dofs = zeros(ST, D, Nx)
 
         # TODO:consider when DX is a vector
         # x = zeros(ST,S)
@@ -292,7 +304,7 @@ struct Galerkin_Full_Restriction_Bspline_IntegratorCache{ST,RT,RX,D,S,Nx,Nt} <: 
         flag_done_initial_guess = zeros(ST, 1)
 
         new(x,
-            known_dofs,p₀_quad_values,
+            known_dofs,p₀_quad_values,p₀_dofs,p₁_dofs,
             u_quad_values, v_quad_values, w_quad_values,
             ∂L∂U_quad_values, ∂L∂V_quad_values, ∂L∂W_quad_values,
             ut₀_quad_values, ut₁_quad_values,vt₀_quad_values, vt₁_quad_values,wt₀_quad_values, wt₁_quad_values,
@@ -323,6 +335,7 @@ function copy_internal_variables!(C::Galerkin_Full_Restriction_Bspline_Integrato
     haskey(carried_internal, :wt₁_quad_values) && copyto!(C.ics_wt₀_quad_values, carried_internal.wt₁_quad_values)
     haskey(carried_internal, :known_dofs) && copyto!(C.known_dofs, carried_internal.known_dofs)
     haskey(carried_internal, :p₀_quad_values) && copyto!(C.p₀_quad_values, carried_internal.p₀_quad_values)
+    haskey(carried_internal, :p₁_dofs) && copyto!(C.p₀_dofs, carried_internal.p₁_dofs)
     return nothing
 end
 
@@ -460,6 +473,10 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
 
     local Nt = int.method.basis.Nbasis_t
     local Nx = int.method.basis.Nbasis_x
+    local ut₀_basis_quad_indices = int.method.ut₀_basis_quad_indices
+    local ut₀_basis_quad_values = int.method.ut₀_basis_quad_values
+    local ut₁_basis_quad_indices = int.method.ut₁_basis_quad_indices
+    local ut₁_basis_quad_values = int.method.ut₁_basis_quad_values
 
     # interior values at quadrature points
     full_mat = zeros(ST,Nt,Nx)
@@ -531,7 +548,59 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
         end
     end
 
-    if show_status
+    if iszero(tn)
+        fill!(C.p₀_dofs, zero(ST))
+        for d in 1:D
+            for rx in 1:RX
+                z_p0 = x_domain * int.method.spatial_quadrature.weights[rx] * C.p₀_quad_values[d, rx]
+                for n in axes(ut₀_basis_quad_indices, 1)
+                    p = ut₀_basis_quad_indices[n, rx]
+                    iszero(p) && break
+                    i = p - (div(p - 1, Nt) * Nt)
+                    i == 1 || continue
+                    j = div(p - 1, Nt) + 1
+                    C.p₀_dofs[d, j] += z_p0 * ut₀_basis_quad_values[n, rx]
+                end
+            end
+        end
+    end
+
+    fill!(C.p₁_dofs, zero(ST))
+    for d in 1:D
+        for rt in 1:RT
+            for rx in 1:RX
+                zU = int.method.grid_weights[rt,rx] * x_domain * h * C.∂L∂U_quad_values[d,rt,rx]
+                zV = int.method.grid_weights[rt,rx] * x_domain * C.∂L∂V_quad_values[d,rt,rx]
+                zW = int.method.grid_weights[rt,rx] * x_domain * h * C.∂L∂W_quad_values[d,rt,rx]
+                for n in axes(int.method.u_collocation_indices, 1)
+                    p = int.method.u_collocation_indices[n, rt, rx]
+                    iszero(p) && break
+                    i = p - (div(p - 1, Nt) * Nt)
+                    i == Nt || continue
+                    j = div(p - 1, Nt) + 1
+                    C.p₁_dofs[d, j] += zU * int.method.u_collocation_values[n, rt, rx]
+                end
+                for n in axes(int.method.v_collocation_indices, 1)
+                    p = int.method.v_collocation_indices[n, rt, rx]
+                    iszero(p) && break
+                    i = p - (div(p - 1, Nt) * Nt)
+                    i == Nt || continue
+                    j = div(p - 1, Nt) + 1
+                    C.p₁_dofs[d, j] += zV * int.method.v_collocation_values[n, rt, rx]
+                end
+                for n in axes(int.method.w_collocation_indices, 1)
+                    p = int.method.w_collocation_indices[n, rt, rx]
+                    iszero(p) && break
+                    i = p - (div(p - 1, Nt) * Nt)
+                    i == Nt || continue
+                    j = div(p - 1, Nt) + 1
+                    C.p₁_dofs[d, j] += zW * int.method.w_collocation_values[n, rt, rx]
+                end
+            end
+        end
+    end
+
+    if show_status && ST == Float64 && !iszero(tn)
         u_truth_mat = similar(C.u_quad_values)
         v_truth_mat = similar(C.v_quad_values)
         w_truth_mat = similar(C.w_quad_values)
@@ -623,6 +692,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
 
         p₀_bottom_momentum = similar(C.p₀_quad_values)
         p₀_exact_momentum = similar(C.p₀_quad_values)
+        p₁_top_momentum = similar(C.p₀_quad_values)
         for d in 1:D
             for rx in 1:RX
                 xq = xspan[1] + x_domain * x_quad_nodes[rx]
@@ -633,11 +703,49 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:Ga
                     lag_params,
                 )
                 p₀_exact_momentum[d, rx] = exact_v(tn, xq)
+                p₁_top_momentum[d, rx] = ∂L∂V[d](
+                    C.ut₁_quad_values[d, rx],
+                    C.vt₁_quad_values[d, rx],
+                    C.wt₁_quad_values[d, rx],
+                    lag_params,
+                )
+            end
+        end
+
+        p₀_point_projected_dofs = zeros(ST, D, Nx)
+        p₁_point_projected_dofs = zeros(ST, D, Nx)
+        for d in 1:D
+            for rx in 1:RX
+                z_p0 = x_domain * int.method.spatial_quadrature.weights[rx] * p₀_bottom_momentum[d, rx]
+                z_p1 = x_domain * int.method.spatial_quadrature.weights[rx] * p₁_top_momentum[d, rx]
+                for n in axes(ut₀_basis_quad_indices, 1)
+                    p = ut₀_basis_quad_indices[n, rx]
+                    iszero(p) && break
+                    i = p - (div(p - 1, Nt) * Nt)
+                    i == 1 || continue
+                    j = div(p - 1, Nt) + 1
+                    p₀_point_projected_dofs[d, j] += z_p0 * ut₀_basis_quad_values[n, rx]
+                end
+                for n in axes(ut₁_basis_quad_indices, 1)
+                    p = ut₁_basis_quad_indices[n, rx]
+                    iszero(p) && break
+                    i = p - (div(p - 1, Nt) * Nt)
+                    i == Nt || continue
+                    j = div(p - 1, Nt) + 1
+                    p₁_point_projected_dofs[d, j] += z_p1 * ut₁_basis_quad_values[n, rx]
+                end
             end
         end
 
         @show maximum(abs.(C.p₀_quad_values .- p₀_bottom_momentum))
         @show maximum(abs.(C.p₀_quad_values .- p₀_exact_momentum))
+        @show maximum(abs.(C.p₀_dofs))
+        @show maximum(abs.(p₀_point_projected_dofs))
+        @show maximum(abs.(C.p₀_dofs .- p₀_point_projected_dofs))
+        @show maximum(abs.(C.p₁_dofs))
+        @show maximum(abs.(p₁_point_projected_dofs))
+        @show maximum(abs.(C.p₁_dofs .- p₁_point_projected_dofs))
+        @show maximum(abs.(C.p₁_dofs .+ p₁_point_projected_dofs))
         @show maximum(abs.(C.ut₀_quad_values .- C.init_condition_t₀))
         @infiltrate
     end
@@ -702,16 +810,8 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<: Galerkin_Fu
             end
         end
 
-        for rx in 1:RX
-            z_p0 = x_domain * brx[rx] * C.p₀_quad_values[d, rx]
-            for n in axes(ut₀_basis_quad_indices, 1)
-                p = ut₀_basis_quad_indices[n, rx]
-                iszero(p) && break
-                i = p - (div(p - 1, Nt) * Nt)
-                i == 1 || continue
-                b_idx = div(p - 1, Nt) * (Nt - 1) + i
-                b[b_idx] += z_p0 * ut₀_basis_quad_values[n, rx]
-            end
+        for j in 1:Nx
+            b[(j - 1) * (Nt - 1) + 1] += C.p₀_dofs[d, j]
         end
     end
 
@@ -732,7 +832,7 @@ function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<: Galerkin_Fu
     #     end
     # end
 
-    if show_status
+    if show_status && ST == Float64
         @show b
     end
 end
@@ -782,12 +882,14 @@ function internal_variables(method::Galerkin_Full_Restriction_Bspline_Integrator
 
     known_dofs = zeros(Nx)
     p₀_quad_values = zeros(D, RX)
+    p₁_dofs = zeros(D, Nx)
 
     return (ut₁_quad_values = ut₁_quad_values,
         vt₁_quad_values = vt₁_quad_values,
         wt₁_quad_values = wt₁_quad_values,
         known_dofs = known_dofs,
-        p₀_quad_values = p₀_quad_values
+        p₀_quad_values = p₀_quad_values,
+        p₁_dofs = p₁_dofs,
         )
 end
 
@@ -797,11 +899,12 @@ function copy_internal_variables!(solstep::SolutionStep, C::Galerkin_Full_Restri
     haskey(target_internal, :vt₁_quad_values) && copyto!(target_internal.vt₁_quad_values, C.vt₁_quad_values)
     haskey(target_internal, :wt₁_quad_values) && copyto!(target_internal.wt₁_quad_values, C.wt₁_quad_values)
     haskey(target_internal, :p₀_quad_values) && copyto!(target_internal.p₀_quad_values, C.p₀_quad_values)
+    haskey(target_internal, :p₁_dofs) && copyto!(target_internal.p₁_dofs, C.p₁_dofs)
 
     if haskey(target_internal, :known_dofs)
         Nx = length(C.known_dofs)
         Nt = length(C.x) ÷ Nx + 1
-        full_mat = Matrix{eltype(C.x)}(undef, Nt, Nx)
+        full_mat =zeros(Nt, Nx)
         full_mat[1, :] .= C.known_dofs
         full_mat[2:end, :] .= reshape(C.x, Nt - 1, Nx)
         copyto!(target_internal.known_dofs, view(full_mat, Nt, :))

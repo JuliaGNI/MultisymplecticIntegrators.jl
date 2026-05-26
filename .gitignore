@@ -12,3 +12,4 @@ Spline_int_logs4_077/
 Spline_int_logs5_078/
 *.jld2
 *.pdf
+.julia_depot

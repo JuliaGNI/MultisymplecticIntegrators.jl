@@ -100,6 +100,18 @@ struct NN_PDE_Integrator{MVT,LT,BT<:AbstractPDEBasis,IPMT<:InitialParametersMeth
     end
 end
 
+function Base.show(io::IO, method::NN_PDE_Integrator)
+    print(io, "\n Neural Network PDE Integrator with:\n")
+    print(io, "   Basis: $(nameof(typeof(method.basis))) \n")
+    print(io, "   Basis parameters NP: $(method.basis.NP) \n")
+    print(io, "   Time intervals: $(method.t_num_interval), quadrature points: $(method.RT), points per interval: $(_points_per_interval(method.RT, method.t_num_interval)) \n")
+    print(io, "   Space intervals: $(method.x_num_interval), quadrature points: $(method.RX), points per interval: $(_points_per_interval(method.RX, method.x_num_interval)) \n")
+    print(io, "   Lagrange multiplier basis functions in time: $(method.Nbasis_μ_t), order: $(method.k_μ_t) \n")
+    print(io, "   Lagrange multiplier basis functions in space: $(method.Nbasis_λ_x), order: $(method.k_λ_x) \n")
+    print(io, "   Initial guess method: $(nameof(typeof(method.initial_guess_method))) \n")
+    print(io, "   Epochs: $(method.nepochs), show status: $(method.show_status) \n")
+end
+
 default_solver(::NN_PDE_Integrator) = NewtonMethod()
 
 struct NN_PDE_IntegratorCache{ST,RT,RX,D,NP,S,Nbasis_μ_t,Nbasis_λ_x,N,M} <: PDEIntegratorCache{ST,D}
