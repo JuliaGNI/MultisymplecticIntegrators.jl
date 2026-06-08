@@ -23,28 +23,28 @@ module SineGordon
     const xspan = (0., 1.0)
 
     const c = 4.0 # wave speed square
-    const velocity = 1.0
-    const γ = 1 / sqrt(1 - velocity^2 / c)
+    const velocity = 0.25
+    const γ = 1 / sqrt(1 - c * velocity^2)
 
     const default_parameters = (
         c=4.0,
-        velocity = 1.0,
-        γ = 1 / sqrt(1 - velocity^2 / c),
+        velocity = 0.25,
+        γ = 1 / sqrt(1 - c * velocity^2),
     )
 
     function exact_u(t,x;params = default_parameters)
-        @unpack c, velocity, γ = params
-        c * atan(exp(γ * (x - velocity * t)))
+        @unpack velocity, γ = params
+        4.0 * atan(exp(γ * (x - velocity * t)))
     end
 
     function exact_v(t,x;params = default_parameters)
-        @unpack c, velocity, γ = params
-        (-c * γ * velocity * exp(γ * (x - velocity * t))) / (1 + exp(γ * (x - velocity * t))^2)
+        @unpack velocity, γ = params
+        (-4.0 * γ * velocity * exp(γ * (x - velocity * t))) / (1 + exp(γ * (x - velocity * t))^2)
     end
 
     function exact_w(t,x;params = default_parameters)
-        @unpack c, velocity, γ = params
-        (c * γ * exp(γ * (x - velocity * t))) / (1 + exp(γ * (x - velocity * t))^2)
+        @unpack velocity, γ = params
+        (4.0 * γ * exp(γ * (x - velocity * t))) / (1 + exp(γ * (x - velocity * t))^2)
     end
 
     function exact_solution(t::Float64, x::Float64)
@@ -116,12 +116,12 @@ module SineGordon
 
 
     function lagrangian(t, x, u, v, w, params = default_parameters)
-        @unpack c, velocity, γ = params
+        @unpack c = params
         1 / 2 * (c * v[1]^2 - w[1]^2) + (1 + cos(u[1]))
     end
 
     function hamiltonian(t, x, u, v, w, params = default_parameters)
-        @unpack c, velocity, γ = params
+        @unpack c = params
         1 / 2 * (c * v[1]^2 + w[1]^2) - (1 + cos(u[1]))
     end
 
@@ -129,6 +129,7 @@ module SineGordon
         exact_u = exact_u, exact_v = exact_v, exact_w = exact_w)
         @unpack c, velocity, γ = params
         # @assert tstep^2 < c * xstep^2 "tstep^2 < c*xstep^2 must hold for CFL condition"
+        @assert c * velocity^2 < 1 "Sine-Gordon kink requires c * velocity^2 < 1 for c*u_tt - u_xx = -sin(u)"
         @assert timespan[1] < timespan[2] "timespan must be increasing"
         @assert xspan[1] < xspan[2] "xspan must be increasing"
 
@@ -142,5 +143,4 @@ module SineGordon
     end
 
 end
-
 
