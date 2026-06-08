@@ -1,5 +1,13 @@
 #!/bin/bash
 
+max_jobs=${MAX_JOBS:-$(nproc)}
+
+wait_for_slot() {
+    while [ "$(jobs -r | wc -l)" -ge "$max_jobs" ]; do
+        sleep 1
+    done
+}
+
 # Function to run the Julia script with the specified SINDy configuration
 run_configuration() {
     local t_num_interval=$1
@@ -27,6 +35,7 @@ for t_num_interval in 2 4; do
                         for reg in 1e-5 1e-7 1e-3; do
                             for mu_basis in BSplineDirichlet; do
                                 for lambda_basis in BSplineDirichlet; do
+                                    wait_for_slot
                                     run_configuration $t_num_interval $x_num_interval $RT_per_interval $RX_per_interval $k_mu $k_lambda $reg $mu_basis $lambda_basis
                                 done
                             done
@@ -37,3 +46,5 @@ for t_num_interval in 2 4; do
         done
     done
 done
+
+wait
