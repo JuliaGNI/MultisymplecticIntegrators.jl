@@ -758,6 +758,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN
     end
 
     if show_status
+        local tn = sol.t - timestep(int)
         u_truth_mat = similar(C.u_quad_values)
         v_truth_mat = similar(C.v_quad_values)
         w_truth_mat = similar(C.w_quad_values)
@@ -848,6 +849,7 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN
         @show maximum(abs.(C.wx₁_quad_values .- wx₁_quad_values_truth))
 
         @show maximum(abs.(C.λ₁_quad_values .- vt₁_quad_values_truth))
+        @info "The following diagnostics are only valid for Wave equation"
         @show maximum(abs.(0.25 .* C.bc_wx₀_quad_values .+ C.μ₀_quad_values))
         @show maximum(abs.(0.25 .* C.bc_wx₁_quad_values .+ C.μ₁_quad_values))
     end

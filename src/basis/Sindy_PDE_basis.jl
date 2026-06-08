@@ -1,7 +1,7 @@
 struct SindyPDEBasis{UPT,VPT,WPT,UFT,VFT,WFT} <: AbstractPDEBasis
     u_expr::Vector{Num} # expression
     v_expr::Vector{Num}
-    w_expr::Vector{Num}
+    w_expr::Matrix{Num}
 
     expr_params::Vector{Symbolics.Arr{Num, 1}} # parameters from the expression
 
