@@ -415,7 +415,31 @@ function prior_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator{MVT
 
 end
 
-copy_internal_variables!(C::NN_PDE_IntegratorCache, solstep::SolutionStep) = nothing
+function copy_internal_variables!(C::NN_PDE_IntegratorCache, solstep::SolutionStep)
+    carried_internal = internal(solstep)
+    haskey(carried_internal, :ut₁_quad_values) && copyto!(C.ics_ut₀_quad_values, carried_internal.ut₁_quad_values)
+    haskey(carried_internal, :vt₁_quad_values) && copyto!(C.ics_vt₀_quad_values, carried_internal.vt₁_quad_values)
+    haskey(carried_internal, :wt₁_quad_values) && copyto!(C.ics_wt₀_quad_values, carried_internal.wt₁_quad_values)
+    haskey(carried_internal, :λ₁_x_coes) && copyto!(C.λ₀_x_coes, carried_internal.λ₁_x_coes)
+    return nothing
+end
+
+function internal_variables(method::NN_PDE_Integrator, problem::LPDEProblem)
+    local D = problem.D
+    local RX = method.RX
+    local Nbasis_λ_x = method.Nbasis_λ_x
+
+    ut₁_quad_values = zeros(D, RX)
+    vt₁_quad_values = zeros(D, RX)
+    wt₁_quad_values = zeros(D, RX)
+    λ₁_x_coes = zeros(D, Nbasis_λ_x)
+
+    return (ut₁_quad_values = ut₁_quad_values,
+        vt₁_quad_values = vt₁_quad_values,
+        wt₁_quad_values = wt₁_quad_values,
+        λ₁_x_coes = λ₁_x_coes,
+        )
+end
 
 function post_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator}, int_method::NN_PDE_Integrator{MVT,LT,BT,IPMT}) where {MVT<:BSplineDirichlet,LT<:BSplineDirichlet,BT,IPMT}
     local Nbasis_λ_x = int_method.Nbasis_λ_x
@@ -740,14 +764,17 @@ function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:NN
 
     cache(int).flag_done_initial_guess[1] == 0.0 ? post_initial_guess!(cache(int), sol, int, int.method) : nothing
     for d in 1:D
-        @views C.λ₁_x_coes[d, :] = x[NP+1:NP+Nbasis_λ_x]
-        @views C.μ₀_t_coes[d, :] = x[NP+Nbasis_λ_x+1:NP+Nbasis_λ_x+Nbasis_μ_t]
-        @views C.μ₁_t_coes[d, :] = x[NP+Nbasis_λ_x+Nbasis_μ_t+1:NP+Nbasis_λ_x+2*Nbasis_μ_t]
+        λ₁_offset = NP + (d - 1) * Nbasis_λ_x
+        μ₀_offset = NP + D * Nbasis_λ_x + (d - 1) * Nbasis_μ_t
+        μ₁_offset = NP + D * Nbasis_λ_x + D * Nbasis_μ_t + (d - 1) * Nbasis_μ_t
+        @views C.λ₁_x_coes[d, :] .= x[λ₁_offset+1:λ₁_offset+Nbasis_λ_x]
+        @views C.μ₀_t_coes[d, :] .= x[μ₀_offset+1:μ₀_offset+Nbasis_μ_t]
+        @views C.μ₁_t_coes[d, :] .= x[μ₁_offset+1:μ₁_offset+Nbasis_μ_t]
     end
 
     for d in 1:D
         for rx in 1:RX
-            C.λ₀_quad_values[d, rx] = Base.invokelatest(∂L∂V[d],C.ics_ut₀_quad_values[d, rx], C.ics_vt₀_quad_values[d, rx], C.ics_wt₀_quad_values[d, rx], lag_params)
+            @views C.λ₀_quad_values[d, rx] = sum(C.λ₀_x_coes[d, :] .* mλ_x[:, rx])
             @views C.λ₁_quad_values[d, rx] = sum(C.λ₁_x_coes[d, :] .* mλ_x[:, rx])
         end
 
