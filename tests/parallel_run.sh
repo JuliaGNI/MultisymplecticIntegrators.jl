@@ -19,25 +19,30 @@ wait_for_slot() {
 }
 
 run_configuration() {
-    local t_step=$1
-    local reg=$2
-    local S=$3
+    local k=$1
+    local t_step=$2
+    local t_knot_interval=$3
+    local x_knot_interval=$4
+    # local reg=$5
 
     # Print the activation for debugging
-    echo "Running Julia script with t_step=$t_step, S=$S,reg = $reg" 
+    echo "Running Julia script with $k $t_step $t_knot_interval $x_knot_interval  " 
 
     # Run the Julia script in the background
-    julia --project=. tests/test_NN_PDE_int.jl $t_step $reg $S &
+    julia --project=. tests/test_full_restriction_spline.jl $k $t_step $t_knot_interval $x_knot_interval &
 }
 
 # Loop through the activations
-for t_step in {0.5,0.2,0.1}; do #  ,
-    for reg in {1e-7,1e-9};do
-        for S in {70,60,80,50};do     
-            wait_for_slot
-            run_configuration $t_step $reg $S
+for k in {3,4,5};do
+    for t_step in {0.025,0.05,0.1,0.25,0.5}; do #  ,
+        for t_knot_interval in {0.125,0.25,0.5};do
+            for x_knot_interval in {0.0125,0.025,0.05,0.1};do
+                # for reg in {0.0,};do     
+                wait_for_slot
+                run_configuration $k $t_step $t_knot_interval $x_knot_interval $reg
+                # done
+            done
         done
     done
-
 done
 
