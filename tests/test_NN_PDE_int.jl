@@ -44,13 +44,13 @@ GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
 
 # begin # Wave equation with NN basis
     xspan = (0.0,1.0)
-    t_span = (0.0,5.0)
+    t_span = (0.0,50.0)
 
-    # c=0.5 #wave equation
-    c = 4.0 # sine-Gordon equation
+    c=0.5 #wave equation
+    # c = 4.0 # sine-Gordon equation
     function hamiltonian_density(t, x, u, v, w)
-        # 1 / 2 * (v[1]^2 + c^2 * w[1]^2)  #wave equation
-        1 / 2 * (c * v^2 + w^2) - (1 + cos(u)) # sine-Gordon equation
+        1 / 2 * (v[1]^2 + c^2 * w[1]^2)  #wave equation
+        # 1 / 2 * (c * v^2 + w^2) - (1 + cos(u)) # sine-Gordon equation
     end
 
     # Hamiltonian on a given spatial-temporal domain
@@ -118,7 +118,7 @@ GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
                         "relative_ham_err" => relative_ham_err,
                         "max_err" => max_err
                     )
-                    save("nnint_fully_sinegordon/NNInt_fully_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_Nw$(Nw)_Nb$(Nb)_tint$(t_interval)_xint$(x_interval).jld2", record)
+                    save("nnint_fully_0907/NNInt_fully_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_Nw$(Nw)_Nb$(Nb)_tint$(t_interval)_xint$(x_interval).jld2", record)
                 # end
         #     end 
         # end
