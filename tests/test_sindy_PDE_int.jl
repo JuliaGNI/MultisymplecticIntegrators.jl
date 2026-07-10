@@ -17,25 +17,26 @@ RT_per_interval = length(ARGS) >= 3 ? parse(Int, ARGS[3]) : 4
 RX_per_interval = length(ARGS) >= 4 ? parse(Int, ARGS[4]) : 4
 k_μ_t = length(ARGS) >= 5 ? parse(Int, ARGS[5]) : 3
 k_λ_x = length(ARGS) >= 6 ? parse(Int, ARGS[6]) : 3
-reg_factor = length(ARGS) >= 7 ? parse(Float64, ARGS[7]) : 1e-5
+reg_factor = length(ARGS) >= 7 ? parse(Float64, ARGS[7]) : 1e-11
 μ_basis = length(ARGS) >= 8 ? Symbol(ARGS[8]) : :BSplineDirichlet
 λ_basis = length(ARGS) >= 9 ? Symbol(ARGS[9]) : :BSplineDirichlet
+t_step = length(ARGS) >= 10 ? parse(Float64, ARGS[10]) : 0.05
 
 GeometricIntegratorsBase.default_options(::Sindy_PDE_Integrator) = (
     regularization_factor = reg_factor,
     verbosity = 2,
-    # f_suctol = -1.0,
-    # x_suctol = -1.0, 
-    max_iterations = 100,
+    f_suctol = -1.0,
+    x_suctol = -1.0, 
+    max_iterations = 10,
 )
 
-function hamiltonian_density(t, x, u, v, w)
-    c = 4.0
+function hamiltonian_density(t, x, u, v, w, params)
+    c = params.c
     1 / 2 * (c * v^2 + w^2) - (1 + cos(u))
 end
 
 function hamiltonian(u_quad_values::Matrix{Float64}, v_quad_values::Matrix{Float64}, w_quad_values::Matrix{Float64}, grid_quad_node::Matrix{Vector{ST}},
-    grid_quad_weights::Matrix{ST}, xspan, timestep) where {ST}
+    grid_quad_weights::Matrix{ST}, xspan, timestep, params) where {ST}
     ham = 0.0
 
     RT = size(u_quad_values, 1)
@@ -45,7 +46,7 @@ function hamiltonian(u_quad_values::Matrix{Float64}, v_quad_values::Matrix{Float
         for rx in 1:RX
             ham += x_domain * timestep * grid_quad_weights[rt, rx] *
                 hamiltonian_density(grid_quad_node[rt, rx][1], grid_quad_node[rt, rx][2],
-                    u_quad_values[rt, rx], v_quad_values[rt, rx], w_quad_values[rt, rx])
+                    u_quad_values[rt, rx], v_quad_values[rt, rx], w_quad_values[rt, rx], params)
         end
     end
 
@@ -58,21 +59,22 @@ end
     u_expr = p[1] * atan(exp(p[2] * (x - p[3] * t)))
     sindy_basis = SindyPDEBasis([u_expr], [p], t, [x])
 
+    t_span = (0.0, 5.0)
+    x_span = (0,1.0)
+    lpde = MultiSymplectic.SineGordon.lpdeproblem(timestep = t_step,timespan = t_span,xspan = x_span)
+
+    init_p = [4.0, lpde.params.γ, lpde.params.velocity]
 
     c2 = 3.9999951547393993
-    v2 = 1.0397741828102778
+    v2 = 0.2497741828102778
     γ2 = 1.1546989298112151
     init_p = [c2,γ2,v2]
 
-    t_step = 0.05
-    t_span = (0.0, 1.0)
-    x_span = (0,1.0)
     sindy_int = Sindy_PDE_Integrator(sindy_basis,init_p, xspan = x_span,
         t_num_interval = t_num_interval,μ = μ_basis,k_μ_t = k_μ_t,
         x_num_interval = x_num_interval,λ = λ_basis,k_λ_x = k_λ_x,
         RT_per_interval= RT_per_interval,RX_per_interval = RX_per_interval,
         show_status = false,)
-    lpde = MultiSymplectic.SineGordon.lpdeproblem(timestep = t_step,timespan = t_span,xspan = x_span)
     # log_file="logs/sindy_pde.txt"
     # open(log_file, "w") do io
     #     redirect_stdout(io) do
@@ -87,8 +89,8 @@ end
         analytic_v_values = [lpde.exact_v(t + t_step * sindy_int.grid_matrix[rt, rx][1], sindy_int.grid_matrix[rt, rx][2]; params=lpde.params) for rt in 1:size(sindy_int.grid_matrix, 1), rx in 1:size(sindy_int.grid_matrix, 2)]
         analytic_w_values = [lpde.exact_w(t + t_step * sindy_int.grid_matrix[rt, rx][1], sindy_int.grid_matrix[rt, rx][2]; params=lpde.params) for rt in 1:size(sindy_int.grid_matrix, 1), rx in 1:size(sindy_int.grid_matrix, 2)]
 
-        analytic_ham[i] = hamiltonian(analytic_u_values, analytic_v_values, analytic_w_values, sindy_int.grid_matrix, sindy_int.grid_weights, x_span, t_step)
-        ham_ls[i] = hamiltonian(sol_set.u_quad_values[i][1, :, :], sol_set.v_quad_values[i][1, :, :], sol_set.w_quad_values[i][1, :, :], sindy_int.grid_matrix, sindy_int.grid_weights, x_span, t_step)
+        analytic_ham[i] = hamiltonian(analytic_u_values, analytic_v_values, analytic_w_values, sindy_int.grid_matrix, sindy_int.grid_weights, x_span, t_step, lpde.params)
+        ham_ls[i] = hamiltonian(sol_set.u_quad_values[i][1, :, :], sol_set.v_quad_values[i][1, :, :], sol_set.w_quad_values[i][1, :, :], sindy_int.grid_matrix, sindy_int.grid_weights, x_span, t_step, lpde.params)
     end
 
     relative_ham_err = abs.((ham_ls .- analytic_ham) ./ analytic_ham)
@@ -116,12 +118,17 @@ end
         "reg_factor" => reg_factor,
         "μ" => μ_basis,
         "λ" => λ_basis,
+        "sine_gordon_params" => lpde.params,
+        "init_p" => init_p,
     )
 
-    mkdir("sindyint_results")
-    cd("sindyint_results")
+    output_dir = get(ENV, "SINDY_OUTPUT_DIR", "sindyint_results")
+    mkpath(output_dir)
+    cd(output_dir)
     err_tag = @sprintf("%.3e", max_err)
-    output_file = "SINDy_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_err$(err_tag)_mu$(μ_basis)_lambda$(λ_basis)_tint$(t_num_interval)_xint$(x_num_interval)_rt$(RT_per_interval)_rx$(RX_per_interval)_kmu$(k_μ_t)_klambda$(k_λ_x).jld2"
+    velocity_tag = @sprintf("%.3g", lpde.params.velocity)
+    gamma_tag = @sprintf("%.3g", lpde.params.γ)
+    output_file = "SINDy_T$(t_span[2])_h$(t_step)_v$(velocity_tag)_gamma$(gamma_tag)_reg$(reg_factor)_err$(err_tag)_mu$(μ_basis)_lambda$(λ_basis)_tint$(t_num_interval)_xint$(x_num_interval)_rt$(RT_per_interval)_rx$(RX_per_interval)_kmu$(k_μ_t)_klambda$(k_λ_x).jld2"
     save(output_file, record_results)
     println("saved $(output_file)")
 
