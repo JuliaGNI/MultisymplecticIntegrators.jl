@@ -2,16 +2,18 @@ using BSplineKit
 using MultiSymplectic
 using Base
 using GeometricIntegratorsBase
-using Infiltrator
-# using JLD2
+# using Infiltrator
+using JLD2
 using Plots
-# k = parse(Int, ARGS[1])
-# t_step = parse(Float64, ARGS[2])
-# t_knot_interval = parse(Float64, ARGS[3])
 
-k = 3
-t_knot_interval = 0.5
-t_step = 0.1
+k = parse(Int, ARGS[1])
+t_step = parse(Float64, ARGS[2])
+t_knot_interval = parse(Float64, ARGS[3])
+x_knot_interval = parse(Float64, ARGS[4])
+
+# k = 3
+# t_knot_interval = 0.5
+# t_step = 0.1
 
 regularization_factor = 0.0
 GeometricIntegratorsBase.default_options(::Galerkin_Dirichlet_Bspline_Integrator) = (
@@ -54,7 +56,7 @@ end
 
 
 
-t_span = (0.,50*t_step)
+t_span = (0.,5.0)
 xspan = (0.0, 1.0)
 # for t_step in [0.1,0.2,0.4]
 
@@ -62,9 +64,9 @@ lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=
 x_ls = xspan[1]:lpde.xstep:xspan[2]
 c = lpde.params.c
 # for x_knot_interval in [0.2,0.5]
-x_knot_interval = 0.05
+# x_knot_interval = 0.05
     spline_basis = Dirichlet_BSpline2D(k,xspan = xspan, t_knot_interval = t_knot_interval,x_knot_interval = x_knot_interval)
-    spline_int = Galerkin_Dirichlet_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = true)
+    spline_int = Galerkin_Dirichlet_Bspline_Integrator(spline_basis,xspan=xspan,RT_per_interval = k,RX_per_interval = k,show_status = false)
     println("Start Spline Integrator")
     sol_set = MultiSymplectic.integrate(lpde, spline_int)
     println("End Spline Integrator with h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")
@@ -87,26 +89,17 @@ x_knot_interval = 0.05
     max_err = maximum(relative_ham_err)
     # plot_path = "SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.pdf"
     # if Base.find_package("Plots") !== nothing
-        Plots.plot(relative_ham_err, xlabel="Time", ylabel="Relative Hamiltonian Error")
-#         Plots.savefig(plot_path)
-#     else
-#         @info "Skipping plot output because Plots is not available in the active environment" plot_path
-#     end
+    Plots.plot(relative_ham_err, xlabel="Time", ylabel="Relative Hamiltonian Error")
+    savefig("half_multiplier_spline_1106/SplineInt_Hamiltonian_Error_T=5_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.pdf")
 
-#     record_results = Dict()
-#     record_results["maximum_relative_ham_err"] = maximum(relative_ham_err)
-#     record_results["sol_u"] = sol_set.sol.u
-#     record_results["sol_v"] = sol_set.sol.v
-#     record_results["sol_w"] = sol_set.sol.w
-#     record_results["sol_hamiltonian"] = ham_ls
-#     record_results["analytic_hamiltonian"] = analytic_ham
-#     record_results["relative_hamiltonian_error"] = relative_ham_err
+    record_results = Dict()
+    record_results["maximum_relative_ham_err"] = maximum(relative_ham_err)
+    record_results["sol_u"] = sol_set.sol.u
+    record_results["sol_v"] = sol_set.sol.v
+    record_results["sol_w"] = sol_set.sol.w
+    record_results["sol_hamiltonian"] = ham_ls
+    record_results["analytic_hamiltonian"] = analytic_ham
+    record_results["relative_hamiltonian_error"] = relative_ham_err
 
-#     data_path = "SplineInt_Hamiltonian_Error_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.jld2"
-#     if Base.find_package("JLD2") !== nothing
-#         JLD2.save(data_path, record_results)
-#     else
-#         @info "Skipping JLD2 output because JLD2 is not available in the active environment" data_path
-#     end
-#     println("results saved: h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")
-# # end
+    save("SplineInt_Hamiltonian_Error_T=5_h=$(t_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=$(regularization_factor)_078.jld2", record_results)
+    println("results saved: h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")

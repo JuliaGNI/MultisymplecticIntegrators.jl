@@ -6,11 +6,11 @@ using Statistics
 # R_list = [8,16,4]
 # S_list = [4,6,8]
 
-h_list = [0.05,0.1,0.2,0.4]#2.0,5.0
-k_list = [3,4,5]
+h_list = [0.025,0.05,0.1]#2.0,5.0
+k_list = [3,4]
 # λ_list = [0.0,1e-3,1e-5,1e-7]
-t_knot_intervals = [0.5,0.25]
-x_knot_intervals = [0.5,0.2]
+t_knot_intervals = [0.5,]
+x_knot_intervals = [0.025,0.05]
 
 second_order_reference = h_list .^ 2
 third_order_reference = h_list .^ 3
@@ -26,11 +26,11 @@ begin
         for (ki,k) in enumerate(k_list)
             for (t_knot_interval_i,t_knot_interval) in enumerate(t_knot_intervals)
                 for (x_knot_interval_i,x_knot_interval) in enumerate(x_knot_intervals)
-                    data_file="full_restriction_spline_1005/SplineInt_Hamiltonian_Error_h=$(int_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=0.0_078.jld2"
+                    data_file="half_multiplier_spline_2605/SplineInt_Hamiltonian_Error_h=$(int_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=0.0_078.jld2"
                     # isfile(data_file) ? nothing : continue
                     try
                         result_data = load(data_file)
-                        err = result_data["maximum_relative_ham_err"]
+                        err = abs(result_data["maximum_relative_ham_err"])
                         # err = minimum(result_data["relative_hamiltonian_error"])
 
                         if err >10.0
@@ -51,33 +51,50 @@ begin
     label_size = 22
     fig = Figure(size = (1000, 1200))
     ax = Axis(fig[1, 1], xlabel = "Time Step h", ylabel = "Maximum Hamiltonian Error", 
-        yscale = log10,xticks=([0.05,0.1,0.2,0.4], ["0.05", "0.1", "0.2", "0.4"]),limits = (nothing, (1e-8, 10)),
+        xticks=([0.025,0.05,0.1], ["0.025","0.05", "0.1"]),
         yticklabelsize=tick_size, xticklabelsize=tick_size,xlabelsize=label_size, ylabelsize=label_size)
     global line_idx = 1
     line_styles = [:solid, :dash, :dot]
     for (ki,k) in enumerate(k_list)
         for (t_knot_interval_i,t_knot_interval) in enumerate(t_knot_intervals)
             for (x_knot_interval_i,x_knot_interval) in enumerate(x_knot_intervals)
+
                 global line_idx
-                scatterlines!(ax, h_list, spline_err_tensor[:,ki,t_knot_interval_i,x_knot_interval_i], label="k$(k)t_knot_interval$(t_knot_interval)x_knot_interval$(x_knot_interval)",
-                            markersize=6, linewidth=3,linestyle=line_styles[ki])                            
+
+                y = copy(spline_err_tensor[:,ki,t_knot_interval_i,x_knot_interval_i])
+
+                # 把 0 替换成 NaN
+                y[y .== 0] .= NaN
+
+                scatterlines!(
+                    ax,
+                    h_list,
+                    y,
+                    label = L"k = %$(k) \quad \Delta t = %$(t_knot_interval)h \quad \Delta x = %$(x_knot_interval)",
+                    markersize = 6,
+                    linewidth = 3,
+                    linestyle = line_styles[ki]
+                )
+
                 line_idx += 1
             end
         end
-    end
-    # axislegend(ax, position=:lt, labelsize=22)
+    end 
+    # axislegend(ax, position=:lc, labelsize=22)
     # axislegend(ax2, position=:rb,labelsize=22)
 
     # ref2 = lines!(ax2, h_list, 1e-4 .* second_order_reference, color=:black, linestyle=:dash)
     # ref3 = lines!(ax2, h_list, 1e-5 .* third_order_reference, color=:black, linestyle=:dot)
 
     Legend(
-        fig[1,2],
-        ax,
-        orientation = :vertical,fontsize=label_size
+        fig[2,1],
+        ax,nbanks = 2, orientation = :horizontal, # 或者设为水平方向
+        tellheight = true,
+        tellwidth = false,
+        labelsize =22,framevisible = false,
     )
-
-    save("full_restriction_spline_1005/Wave_hamiltonian_error.pdf", fig)
+    rowsize!(fig.layout, 1, Relative(0.9))
+    save("half_multiplier_spline_2605/Wave_hamiltonian_error.pdf", fig)
 end
 
 ### Harmonic Oscillator with Time-Reversible Neural Variational Integrators
