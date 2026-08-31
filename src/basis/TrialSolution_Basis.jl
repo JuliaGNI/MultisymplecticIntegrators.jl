@@ -11,14 +11,14 @@ struct Trial_Solution_Basis{AF, UFT, VFT, WFT, UPFT, VPFT, WPFT} <: AbstractPDEB
     ∂v∂p_func::VPFT
     ∂w∂p_func::WPFT
 
-    function Trial_Solution_Basis(S::Int, σ::AF,x_span) where {AF}
-        a,b = x_span[1], x_span[2]
+    function Trial_Solution_Basis(S::Int, σ::AF, x_span) where {AF}
+        a, b = x_span[1], x_span[2]
         funcs = build_trial_solution_functions(S, σ, a, b)
         u_func, v_func, w_func, ∂u∂p_func, ∂v∂p_func, ∂w∂p_func = funcs
 
-        new{AF, typeof(u_func), typeof(v_func), typeof(w_func), 
-        typeof(∂u∂p_func), typeof(∂v∂p_func), typeof(∂w∂p_func)}(σ, S, 4 * S, 
-        u_func, v_func, w_func, ∂u∂p_func, ∂v∂p_func, ∂w∂p_func)#, BNN, PNN
+        new{AF, typeof(u_func), typeof(v_func), typeof(w_func),
+            typeof(∂u∂p_func), typeof(∂v∂p_func), typeof(∂w∂p_func)}(σ, S, 4 * S,
+            u_func, v_func, w_func, ∂u∂p_func, ∂v∂p_func, ∂w∂p_func)#, BNN, PNN
     end
 end
 
@@ -29,9 +29,9 @@ function Base.show(io::IO, basis::Trial_Solution_Basis)
     print(io, "   Activation function: $(basis.activation_function) \n")
 end
 
-function generate_symbolic_u_trial(S::Int, activation_fn; a=0.0, b=1.0)
+function generate_symbolic_u_trial(S::Int, activation_fn; a = 0.0, b = 1.0)
     # 1. Define symbolic variables
-    @variables t x h 
+    @variables t x h
     @variables W2[1:S] W1[1:S, 1:2] bias1[1:S]
     # If C1 depends on previous-step weights, define them as symbolic constants (or pass values directly)
     # @variables previous_W2[1:S] previous_W1[1:S, 1:2] previous_bias1[1:S]
@@ -39,11 +39,12 @@ function generate_symbolic_u_trial(S::Int, activation_fn; a=0.0, b=1.0)
     # 2. Define the symbolic neural network
     # Map the activation function (for custom functions, register it first, e.g. @register_symbolic my_act(x))
     function sym_NN(_t, _x, _W2, _W1, _b1)
-        return sum(_W2[i] * activation_fn(_W1[i,1]*_t + _W1[i,2]*_x + _b1[i]) for i in 1:S)
+        return sum(_W2[i] * activation_fn(_W1[i, 1]*_t + _W1[i, 2]*_x + _b1[i])
+        for i in 1:S)
     end
 
     x_domain = b - a
-    
+
     # 3. Build auxiliary terms
     # T1NN_manual uses symbolic h
     t1_nn = (b - x) / x_domain * sym_NN(t, a, W2, W1, bias1) +
@@ -104,9 +105,9 @@ end
 function trial_solution_values(S::Int, σ, a, b, t, x, params)
     x_domain = b - a
     W2 = @view params[1:S]
-    W1t = @view params[S+1:2*S]
-    W1x = @view params[2*S+1:3*S]
-    bias1 = @view params[3*S+1:4*S]
+    W1t = @view params[(S + 1):(2 * S)]
+    W1x = @view params[(2 * S + 1):(3 * S)]
+    bias1 = @view params[(3 * S + 1):(4 * S)]
 
     L = (b - x) / x_domain
     R = (x - a) / x_domain
@@ -160,9 +161,9 @@ end
 function trial_solution_values_and_derivatives!(du, dv, dw, S::Int, σ, a, b, t, x, params)
     x_domain = b - a
     W2 = @view params[1:S]
-    W1t = @view params[S+1:2*S]
-    W1x = @view params[2*S+1:3*S]
-    bias1 = @view params[3*S+1:4*S]
+    W1t = @view params[(S + 1):(2 * S)]
+    W1x = @view params[(2 * S + 1):(3 * S)]
+    bias1 = @view params[(3 * S + 1):(4 * S)]
 
     L = (b - x) / x_domain
     R = (x - a) / x_domain
@@ -210,11 +211,13 @@ function trial_solution_values_and_derivatives!(du, dv, dw, S::Int, σ, a, b, t,
         w += W2[i] * φx
 
         φα = t * (Dtx - L * Dta - R * Dtb)
-        φβ = x * Dtx - L * a * Dta - R * b * Dtb - B * x * D0x + L * B * a * D0a + R * B * b * D0b
+        φβ = x * Dtx - L * a * Dta - R * b * Dtb - B * x * D0x + L * B * a * D0a +
+             R * B * b * D0b
         φγ = Dtx - L * Dta - R * Dtb - B * D0x + L * B * D0a + R * B * D0b
 
         φtα = (Dtx - L * Dta - R * Dtb) + α * t * (Htx - L * Hta - R * Htb)
-        φtβ = α * (x * Htx - L * a * Hta - R * b * Htb) + x * D0x - L * a * D0a - R * b * D0b
+        φtβ = α * (x * Htx - L * a * Hta - R * b * Htb) + x * D0x - L * a * D0a -
+              R * b * D0b
         φtγ = α * (Htx - L * Hta - R * Htb) + D0x - L * D0a - R * D0b
 
         φxα = β * t * Htx + t * (Dta - Dtb) / x_domain
@@ -223,19 +226,19 @@ function trial_solution_values_and_derivatives!(du, dv, dw, S::Int, σ, a, b, t,
         φxγ = β * Htx + (Dta - Dtb) / x_domain - B * β * H0x + B * (-D0a + D0b) / x_domain
 
         du[i] = φ
-        du[S+i] = W2[i] * φα
-        du[2*S+i] = W2[i] * φβ
-        du[3*S+i] = W2[i] * φγ
+        du[S + i] = W2[i] * φα
+        du[2 * S + i] = W2[i] * φβ
+        du[3 * S + i] = W2[i] * φγ
 
         dv[i] = φt
-        dv[S+i] = W2[i] * φtα
-        dv[2*S+i] = W2[i] * φtβ
-        dv[3*S+i] = W2[i] * φtγ
+        dv[S + i] = W2[i] * φtα
+        dv[2 * S + i] = W2[i] * φtβ
+        dv[3 * S + i] = W2[i] * φtγ
 
         dw[i] = φx
-        dw[S+i] = W2[i] * φxα
-        dw[2*S+i] = W2[i] * φxβ
-        dw[3*S+i] = W2[i] * φxγ
+        dw[S + i] = W2[i] * φxα
+        dw[2 * S + i] = W2[i] * φxβ
+        dw[3 * S + i] = W2[i] * φxγ
     end
 
     return u, v, w

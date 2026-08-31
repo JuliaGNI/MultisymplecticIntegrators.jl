@@ -8,20 +8,20 @@ using MultiSymplectic
         timestep = 0.05,
         timespan = (0.0, 0.1),
         xspan = (0.0, 1.0),
-        xstep = 0.05,
+        xstep = 0.05
     )
     basis = BSpline2D(
         3;
         xspan = lpde.xspan,
         t_knot_interval = 0.5,
-        x_knot_interval = 0.05,
+        x_knot_interval = 0.05
     )
     method = Galerkin_Bspline_Integrator(
         basis;
         xspan = lpde.xspan,
         RT_per_interval = 3,
         RX_per_interval = 3,
-        show_status = false,
+        show_status = false
     )
     int = MultiSymplectic.PDEIntegrator(lpde, method)
     sol = GeometricSolution(lpde)

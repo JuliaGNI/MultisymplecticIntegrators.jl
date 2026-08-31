@@ -8,11 +8,13 @@ using Printf
 const CURRENT_REGULARIZATION = Ref(0.0)
 const CURRENT_MAX_ITERATIONS = Ref(1)
 
-GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator) = (
-    regularization_factor = CURRENT_REGULARIZATION[],
-    max_iterations = CURRENT_MAX_ITERATIONS[],
-    verbosity = 0,
-)
+function GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator)
+    (
+        regularization_factor = CURRENT_REGULARIZATION[],
+        max_iterations = CURRENT_MAX_ITERATIONS[],
+        verbosity = 0
+    )
+end
 
 function time_call(label, f)
     f()
@@ -32,20 +34,20 @@ function main()
     xspan = (0.2, 0.8)
 
     lpde = MultiSymplectic.Wave.lpdeproblem(
-        timestep=t_step,
-        timespan=(0.0, t_end),
-        xspan=xspan,
-        xstep=0.01,
+        timestep = t_step,
+        timespan = (0.0, t_end),
+        xspan = xspan,
+        xstep = 0.01
     )
-    basis = BSpline2D(k; xspan=xspan, t_knot_interval=t_knot_interval,
-        x_knot_interval=x_knot_interval)
+    basis = BSpline2D(k; xspan = xspan, t_knot_interval = t_knot_interval,
+        x_knot_interval = x_knot_interval)
     method = Galerkin_Bspline_Integrator(
         basis;
-        xspan=xspan,
-        RT_per_interval=k,
-        RX_per_interval=k,
-        show_status=false,
-        multiplier_stride=multiplier_stride,
+        xspan = xspan,
+        RT_per_interval = k,
+        RX_per_interval = k,
+        show_status = false,
+        multiplier_stride = multiplier_stride
     )
     int = MultiSymplectic.PDEIntegrator(lpde, method)
     sol = GeometricSolution(lpde)
@@ -64,21 +66,25 @@ function main()
         method.basis.S, method.Nbasis_λ_x, method.Nbasis_μ_t,
         length(x), method.RT, method.RX)
 
-    time_call("components! Float64", () -> Base.invokelatest(
-        MultiSymplectic.components!, x, current(solstep), parameters(solstep), int))
-    time_call("residual! Float64", () -> Base.invokelatest(
-        MultiSymplectic.residual!, b, x, current(solstep), parameters(solstep), int))
-    time_call("jacobian! ForwardDiff", () -> ForwardDiff.jacobian!(
-        j,
-        (out, xin) -> Base.invokelatest(
-            MultiSymplectic.residual!, out, xin, current(solstep), parameters(solstep), int),
-        b,
-        x,
-    ))
+    time_call("components! Float64",
+        () -> Base.invokelatest(
+            MultiSymplectic.components!, x, current(solstep), parameters(solstep), int))
+    time_call("residual! Float64",
+        () -> Base.invokelatest(
+            MultiSymplectic.residual!, b, x, current(solstep), parameters(solstep), int))
+    time_call("jacobian! ForwardDiff",
+        () -> ForwardDiff.jacobian!(
+            j,
+            (out, xin) -> Base.invokelatest(
+                MultiSymplectic.residual!, out, xin, current(solstep), parameters(solstep), int),
+            b,
+            x
+        ))
 
     dual_x = ForwardDiff.Dual.(x, x)
-    time_call("residual! Dual once", () -> Base.invokelatest(
-        MultiSymplectic.residual!, ydual, dual_x, current(solstep), parameters(solstep), int))
+    time_call("residual! Dual once",
+        () -> Base.invokelatest(
+            MultiSymplectic.residual!, ydual, dual_x, current(solstep), parameters(solstep), int))
 end
 
 main()

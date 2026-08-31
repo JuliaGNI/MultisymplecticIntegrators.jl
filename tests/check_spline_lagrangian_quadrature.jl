@@ -23,7 +23,7 @@ function composite_gauss_legendre(num_intervals::Int, order::Int)
         append!(nodes, left .+ width .* rule.nodes)
         append!(weights, width .* rule.weights)
     end
-    return (nodes=nodes, weights=weights)
+    return (nodes = nodes, weights = weights)
 end
 
 function gauss_legendre_on_breaks(breaks::AbstractVector, order::Int)
@@ -31,7 +31,7 @@ function gauss_legendre_on_breaks(breaks::AbstractVector, order::Int)
     rule = QuadratureRules.GaussLegendreQuadrature(order)
     nodes = Float64[]
     weights = Float64[]
-    for i in 1:length(unique_breaks)-1
+    for i in 1:(length(unique_breaks) - 1)
         left = unique_breaks[i]
         right = unique_breaks[i + 1]
         width = right - left
@@ -39,7 +39,7 @@ function gauss_legendre_on_breaks(breaks::AbstractVector, order::Int)
         append!(nodes, left .+ width .* rule.nodes)
         append!(weights, width .* rule.weights)
     end
-    return (nodes=nodes, weights=weights, breaks=unique_breaks)
+    return (nodes = nodes, weights = weights, breaks = unique_breaks)
 end
 
 function lagrangian_density(c, v, w)
@@ -50,10 +50,10 @@ function method_quadrature(lpde, method)
     xspan = lpde.xspan
     x_domain = xspan[2] - xspan[1]
     return (
-        t_nodes=method.time_quadrature.nodes,
-        t_weights=method.time_quadrature.weights,
-        x_nodes=xspan[1] .+ x_domain .* method.spatial_quadrature.nodes,
-        x_weights=x_domain .* method.spatial_quadrature.weights,
+        t_nodes = method.time_quadrature.nodes,
+        t_weights = method.time_quadrature.weights,
+        x_nodes = xspan[1] .+ x_domain .* method.spatial_quadrature.nodes,
+        x_weights = x_domain .* method.spatial_quadrature.weights
     )
 end
 
@@ -61,10 +61,10 @@ function knot_quadrature(basis, order::Int)
     tq = gauss_legendre_on_breaks(basis.ts, order)
     xq = gauss_legendre_on_breaks(basis.xs, order)
     return (
-        t_nodes=tq.nodes,
-        t_weights=tq.weights,
-        x_nodes=xq.nodes,
-        x_weights=xq.weights,
+        t_nodes = tq.nodes,
+        t_weights = tq.weights,
+        x_nodes = xq.nodes,
+        x_weights = xq.weights
     )
 end
 
@@ -73,12 +73,13 @@ function integrate_exact_wave_lagrangian(lpde, quad, t_step, tn)
 
     action = 0.0
     for i in eachindex(quad.t_nodes), j in eachindex(quad.x_nodes)
+
         t_phys = tn + t_step * quad.t_nodes[i]
         x_phys = quad.x_nodes[j]
-        v = lpde.exact_v(t_phys, x_phys; params=lpde.params)
-        w = lpde.exact_w(t_phys, x_phys; params=lpde.params)
+        v = lpde.exact_v(t_phys, x_phys; params = lpde.params)
+        w = lpde.exact_w(t_phys, x_phys; params = lpde.params)
         action += t_step * quad.t_weights[i] * quad.x_weights[j] *
-            lagrangian_density(c, v, w)
+                  lagrangian_density(c, v, w)
     end
     return action
 end
@@ -89,6 +90,7 @@ function integrate_spline_lagrangian(coeffs, basis, lpde, quad, t_step)
 
     action = 0.0
     for i in eachindex(quad.t_nodes), j in eachindex(quad.x_nodes)
+
         t_ref = quad.t_nodes[i]
         x_phys = quad.x_nodes[j]
         v = MultiSymplectic.eval_spline2D_dt(coefs, (basis.Basis_t, basis.Basis_x),
@@ -96,7 +98,7 @@ function integrate_spline_lagrangian(coeffs, basis, lpde, quad, t_step)
         w = MultiSymplectic.eval_spline2D_dx(coefs, (basis.Basis_t, basis.Basis_x),
             (t_ref, x_phys))
         action += t_step * quad.t_weights[i] * quad.x_weights[j] *
-            lagrangian_density(c, v, w)
+                  lagrangian_density(c, v, w)
     end
     return action
 end
@@ -122,19 +124,19 @@ function main()
     xspan = parse_tuple("SPLINE_XSPAN", (0.0, 1.0))
 
     lpde = MultiSymplectic.Wave.lpdeproblem(
-        timestep=t_step,
-        timespan=(tn, tn + t_step),
-        xspan=xspan,
-        xstep=0.01,
+        timestep = t_step,
+        timespan = (tn, tn + t_step),
+        xspan = xspan,
+        xstep = 0.01
     )
-    basis = BSpline2D(k; xspan=xspan, t_knot_interval=t_knot_interval,
-        x_knot_interval=x_knot_interval)
+    basis = BSpline2D(k; xspan = xspan, t_knot_interval = t_knot_interval,
+        x_knot_interval = x_knot_interval)
     method = Galerkin_Bspline_Integrator(
         basis;
-        xspan=xspan,
-        RT_per_interval=k,
-        RX_per_interval=k,
-        show_status=false,
+        xspan = xspan,
+        RT_per_interval = k,
+        RX_per_interval = k,
+        show_status = false
     )
 
     @printf("k=%d  t_step=%g  tn=%g  xspan=(%g,%g)  t_knot_interval=%g  x_knot_interval=%g\n",
@@ -142,7 +144,8 @@ function main()
     @printf("RT=%d  RX=%d  S=%d  reference_order=%d\n",
         method.RT, method.RX, basis.S, ref_order)
     @printf("stored basis.ts length=%d  unique=%d  stored basis.xs length=%d  unique=%d\n",
-        length(basis.ts), length(unique(basis.ts)), length(basis.xs), length(unique(basis.xs)))
+        length(basis.ts), length(unique(basis.ts)), length(basis.xs),
+        length(unique(basis.xs)))
 
     current_quad = method_quadrature(lpde, method)
     knot_quad = knot_quadrature(basis, k)

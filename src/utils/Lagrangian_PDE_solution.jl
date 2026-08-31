@@ -1,4 +1,4 @@
-mutable struct LPDE_solution{TT,ST,PT,IT} #<: AbstractPDESolution
+mutable struct LPDE_solution{TT, ST, PT, IT} #<: AbstractPDESolution
     step::Int
     t::TT
     ntime::Int
@@ -7,12 +7,14 @@ mutable struct LPDE_solution{TT,ST,PT,IT} #<: AbstractPDESolution
 
     params::PT
     internal::IT
-    function LPDE_solution(t,ics::NamedTuple,ntime::Int,params::PT;internal::IT = nothing, kwargs...) where {IT,PT}
+    function LPDE_solution(t, ics::NamedTuple, ntime::Int, params::PT;
+            internal::IT = nothing, kwargs...) where {IT, PT}
         step = 1
 
         s = map(v -> (v, ntuple(_ -> zeros(size(v)...), ntime)...), ics)
 
-        return new{typeof(t),typeof(s),typeof(params),typeof(internal)}(step, t, ntime, s, params, internal)
+        return new{typeof(t), typeof(s), typeof(params), typeof(internal)}(
+            step, t, ntime, s, params, internal)
     end
 end
 
@@ -37,5 +39,5 @@ function Base.getindex(sol::LPDE_solution, n::Int)
     @assert n ≥ 0
     @assert n ≤ ntime(sol)
 
-    return map(v -> v[n+1], sol.s)
+    return map(v -> v[n + 1], sol.s)
 end

@@ -6,11 +6,11 @@ using Statistics
 # R_list = [8,16,4]
 # S_list = [4,6,8]
 
-h_list = [0.025,0.05,0.1]#2.0,5.0
-k_list = [3,4]
+h_list = [0.025, 0.05, 0.1]#2.0,5.0
+k_list = [3, 4]
 # λ_list = [0.0,1e-3,1e-5,1e-7]
 t_knot_intervals = [0.5,]
-x_knot_intervals = [0.025,0.05]
+x_knot_intervals = [0.025, 0.05]
 
 second_order_reference = h_list .^ 2
 third_order_reference = h_list .^ 3
@@ -20,12 +20,13 @@ num_lines = length(k_list) * length(t_knot_intervals) * length(x_knot_intervals)
 # line_colors = map(col -> (red(col), green(col), blue(col)), col)
 
 begin
-    spline_err_tensor = zeros(length(h_list),length(k_list),length(t_knot_intervals),length(x_knot_intervals))
+    spline_err_tensor = zeros(
+        length(h_list), length(k_list), length(t_knot_intervals), length(x_knot_intervals))
     # q_err_tensor = zeros(length(h_list),length(S_list),length(k_list),length(R_list),length(λ_list))
-    for (hi,int_step) in enumerate(h_list)
-        for (ki,k) in enumerate(k_list)
-            for (t_knot_interval_i,t_knot_interval) in enumerate(t_knot_intervals)
-                for (x_knot_interval_i,x_knot_interval) in enumerate(x_knot_intervals)
+    for (hi, int_step) in enumerate(h_list)
+        for (ki, k) in enumerate(k_list)
+            for (t_knot_interval_i, t_knot_interval) in enumerate(t_knot_intervals)
+                for (x_knot_interval_i, x_knot_interval) in enumerate(x_knot_intervals)
                     data_file="half_multiplier_spline_2605/SplineInt_Hamiltonian_Error_h=$(int_step)_k=$(k)_t_knot_interval=$(t_knot_interval)_x_knot_interval=$(x_knot_interval)_regulizer=0.0_078.jld2"
                     # isfile(data_file) ? nothing : continue
                     try
@@ -33,11 +34,12 @@ begin
                         err = abs(result_data["maximum_relative_ham_err"])
                         # err = minimum(result_data["relative_hamiltonian_error"])
 
-                        if err >10.0
+                        if err > 10.0
                             println("Warning: Unusually high error in $(data_file): $err")
                             continue
                         end
-                        spline_err_tensor[hi,ki,t_knot_interval_i,x_knot_interval_i] = err
+                        spline_err_tensor[
+                            hi, ki, t_knot_interval_i, x_knot_interval_i] = err
                     catch e
                         println("Failed to load data from $(data_file): $(e)")
                         continue
@@ -50,18 +52,17 @@ begin
     tick_size = 22
     label_size = 22
     fig = Figure(size = (1000, 1200))
-    ax = Axis(fig[1, 1], xlabel = "Time Step h", ylabel = "Maximum Hamiltonian Error", 
-        xticks=([0.025,0.05,0.1], ["0.025","0.05", "0.1"]),
-        yticklabelsize=tick_size, xticklabelsize=tick_size,xlabelsize=label_size, ylabelsize=label_size)
+    ax = Axis(fig[1, 1], xlabel = "Time Step h", ylabel = "Maximum Hamiltonian Error",
+        xticks = ([0.025, 0.05, 0.1], ["0.025", "0.05", "0.1"]),
+        yticklabelsize = tick_size, xticklabelsize = tick_size, xlabelsize = label_size, ylabelsize = label_size)
     global line_idx = 1
     line_styles = [:solid, :dash, :dot]
-    for (ki,k) in enumerate(k_list)
-        for (t_knot_interval_i,t_knot_interval) in enumerate(t_knot_intervals)
-            for (x_knot_interval_i,x_knot_interval) in enumerate(x_knot_intervals)
-
+    for (ki, k) in enumerate(k_list)
+        for (t_knot_interval_i, t_knot_interval) in enumerate(t_knot_intervals)
+            for (x_knot_interval_i, x_knot_interval) in enumerate(x_knot_intervals)
                 global line_idx
 
-                y = copy(spline_err_tensor[:,ki,t_knot_interval_i,x_knot_interval_i])
+                y = copy(spline_err_tensor[:, ki, t_knot_interval_i, x_knot_interval_i])
 
                 # 把 0 替换成 NaN
                 y[y .== 0] .= NaN
@@ -79,7 +80,7 @@ begin
                 line_idx += 1
             end
         end
-    end 
+    end
     # axislegend(ax, position=:lc, labelsize=22)
     # axislegend(ax2, position=:rb,labelsize=22)
 
@@ -87,11 +88,11 @@ begin
     # ref3 = lines!(ax2, h_list, 1e-5 .* third_order_reference, color=:black, linestyle=:dot)
 
     Legend(
-        fig[2,1],
-        ax,nbanks = 2, orientation = :horizontal, # 或者设为水平方向
+        fig[2, 1],
+        ax, nbanks = 2, orientation = :horizontal, # 或者设为水平方向
         tellheight = true,
         tellwidth = false,
-        labelsize =22,framevisible = false,
+        labelsize = 22, framevisible = false
     )
     rowsize!(fig.layout, 1, Relative(0.9))
     save("half_multiplier_spline_2605/Wave_hamiltonian_error.pdf", fig)
@@ -141,7 +142,7 @@ end
 #             TR_err_mean = zeros(length(h_list))
 #             TR_err_max = zeros(length(h_list))
 #             TR_err_min = zeros(length(h_list))
-            
+
 #             for (hi, h) in enumerate(h_list)
 #                 errors = TR_HO_err_tensor[hi, Si, ki, :, :, :]
 #                 valid_err = filter(!isnan, errors)
@@ -156,7 +157,7 @@ end
 #                 TR_err_max[hi] = maximum(valid_err)
 #                 TR_err_min[hi] = minimum(valid_err)
 #             end
-            
+
 #             TR_errlow = TR_err_mean .- TR_err_min
 #             TR_errhigh = TR_err_max .- TR_err_mean
 #             scatterlines!(ax2, h_list, TR_err_mean, label="S$(S)k$(k_relu)", color=line_colors[line_idx],
@@ -206,7 +207,6 @@ end
 #         end
 #     end
 
-
 #     fig3 = Figure(size = (700, 800))
 #     ax3 = Axis(fig3[1, 1], xlabel = "Time Step h", ylabel = "Maximum Hamiltonian Error", 
 #         xscale = log10, yscale = log10, title = "Neural Variational Integrators" ,limits = (nothing, (1e-10, 1e2)))
@@ -218,7 +218,7 @@ end
 #             err_mean = zeros(length(h_list))
 #             err_max = zeros(length(h_list))
 #             err_min = zeros(length(h_list))
-            
+
 #             for (hi, h) in enumerate(h_list)
 #                 errors = DP_err_tensor[hi, Si, ki, :, :, :]
 #                 if S == 6 && k_relu == 3 && h == 1.0
@@ -281,7 +281,6 @@ end
 #         end
 #     end
 
-
 #     fig4 = Figure(size = (700, 800))
 #     ax4 = Axis(fig4[1, 1], xlabel = "Time Step h", ylabel = "Maximum Hamiltonian Error", 
 #         xscale = log10, yscale = log10, title = "Time-Reversible Neural Variational Integrators",
@@ -294,7 +293,7 @@ end
 #             TR_err_mean = zeros(length(h_list))
 #             TR_err_max = zeros(length(h_list))
 #             TR_err_min = zeros(length(h_list))
-            
+
 #             for (hi, h) in enumerate(h_list)
 #                 errors = TR_DP_err_tensor[hi, Si, ki, :, :, :]
 #                 valid_err = filter(!isnan, errors)
@@ -309,7 +308,7 @@ end
 #                 TR_err_max[hi] = maximum(valid_err)
 #                 TR_err_min[hi] = minimum(valid_err)
 #             end
-            
+
 #             TR_errlow = TR_err_mean .- TR_err_min
 #             TR_errhigh = TR_err_max .- TR_err_mean
 #             scatterlines!(ax4, h_list, TR_err_mean, label="S$(S)k$(k_relu)", color=line_colors[line_idx],
@@ -356,7 +355,6 @@ end
 #         end
 #     end
 
-
 #     fig5 = Figure(size = (700, 800))
 #     ax5 = Axis(fig5[1, 1], xlabel = "Time Step h", ylabel = "Maximum Hamiltonian Error", 
 #         xscale = log10, yscale = log10, title = "Neural Variational Integrators" ,limits = (nothing, (1e-10, 1e2)))
@@ -368,7 +366,7 @@ end
 #             err_mean = zeros(length(h_list))
 #             err_max = zeros(length(h_list))
 #             err_min = zeros(length(h_list))
-            
+
 #             for (hi, h) in enumerate(h_list)
 #                 errors = HO_err_tensor_tanh[hi, Si, :, :, :]
 #                 valid_err = filter(!isnan, errors)
@@ -418,7 +416,6 @@ end
 #         end
 #     end
 
-
 #     fig6 = Figure(size = (700, 800))
 #     ax6 = Axis(fig6[1, 1], xlabel = "Time Step h", ylabel = "Maximum Hamiltonian Error", 
 #         xscale = log10, yscale = log10, title = "Neural Variational Integrators" ,limits = (nothing, (1e-10, 1e2)))
@@ -430,7 +427,7 @@ end
 #             err_mean = zeros(length(h_list))
 #             err_max = zeros(length(h_list))
 #             err_min = zeros(length(h_list))
-            
+
 #             for (hi, h) in enumerate(h_list)
 #                 errors = DP_err_tensor_tanh[hi, Si, :, :, :]
 #                 valid_err = filter(!isnan, errors)

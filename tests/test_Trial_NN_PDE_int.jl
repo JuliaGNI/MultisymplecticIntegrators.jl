@@ -11,45 +11,43 @@ using Profile
 using Base
 using Infiltrator
 
-
 # t_step = parse(Float64, ARGS[1])
 # reg_factor = parse(Float64, ARGS[2])
 # S = parse(Int, ARGS[3])
-
 
 t_step = 0.2
 reg_factor = 1e-5
 S = 70
 
-GeometricIntegratorsBase.default_options(::TrialNN_PDE_int) = (
-    max_iterations = 100,
-    regularization_factor = reg_factor,
-    # f_abstol = 2eps(),
-    # x_suctol = 2eps(),
-    verbosity = 1
-)
+function GeometricIntegratorsBase.default_options(::TrialNN_PDE_int)
+    (
+        max_iterations = 100,
+        regularization_factor = reg_factor,
+        # f_abstol = 2eps(),
+        # x_suctol = 2eps(),
+        verbosity = 1
+    )
+end
 
 x_step = 0.01
 x_span = (0.0, 1.0)
-t_span = (0.0,3*t_step)
-lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=t_span, xspan=x_span, xstep=x_step)
+t_span = (0.0, 3*t_step)
+lpde = MultiSymplectic.Wave.lpdeproblem(timestep = t_step, timespan = t_span, xspan = x_span, xstep = x_step)
 
 relu3(x) = max(0.0, x)^3
 activation = tanh
-trial_basis = Trial_Solution_Basis(S, activation,x_span)
+trial_basis = Trial_Solution_Basis(S, activation, x_span)
 
 # for rt in [8,12,24]
 # for rx in [16, 32, 64]
 # log_file = "trial_nn_int_debug.txt"
 # open(log_file, "w") do io
 #         redirect_stdio(stdout=log_file, stderr=log_file) do
-            trial_int = TrialNN_PDE_int(trial_basis, show_status=false,t_num_interval=4,x_num_interval=8)
-            sol= MultiSymplectic.integrate(lpde,trial_int)
-    #     end
-    # end
+trial_int = TrialNN_PDE_int(trial_basis, show_status = false, t_num_interval = 4, x_num_interval = 8)
+sol = MultiSymplectic.integrate(lpde, trial_int)
+#     end
 # end
-
-
+# end
 
 c=0.5
 A1 = 0.8
@@ -59,43 +57,54 @@ B2 = 0.0
 l = 1.0
 
 function hamiltonian_density(t, x, u, v, w)
-    1 / 2 * (v[1]^2 + c^2 * w[1]^2)  
+    1 / 2 * (v[1]^2 + c^2 * w[1]^2)
 end
 
 # Hamiltonian on a given spatial-temporal domain
-function hamiltonian(u_quad_values::Matrix{Float64}, v_quad_values::Matrix{Float64}, w_quad_values::Matrix{Float64}, grid_quad_node::Matrix{Vector{ST}}, 
-    grid_quad_weights::Matrix{ST}, xspan = x_span, timestep = t_step) where ST
+function hamiltonian(u_quad_values::Matrix{Float64}, v_quad_values::Matrix{Float64},
+        w_quad_values::Matrix{Float64}, grid_quad_node::Matrix{Vector{ST}},
+        grid_quad_weights::Matrix{ST}, xspan = x_span, timestep = t_step) where {ST}
     ham = 0.0
 
     RT = size(u_quad_values, 1)
     RX = size(u_quad_values, 2)
     x_domain = xspan[2] - xspan[1]
-        for rt in 1:RT
-            for rx in 1:RX
-                ham+= x_domain * timestep * grid_quad_weights[rt,rx] * 
-                hamiltonian_density(grid_quad_node[rt,rx][1], grid_quad_node[rt,rx][2], u_quad_values[rt, rx], v_quad_values[rt, rx], w_quad_values[rt, rx])
-            end
+    for rt in 1:RT
+        for rx in 1:RX
+            ham += x_domain * timestep * grid_quad_weights[rt, rx] *
+                   hamiltonian_density(
+                       grid_quad_node[rt, rx][1], grid_quad_node[rt, rx][2],
+                       u_quad_values[rt, rx], v_quad_values[rt, rx], w_quad_values[rt, rx])
         end
+    end
 
     return ham
 end
 
+ham_ls = zeros(length(t_span[1]:t_step:(t_span[2] - t_step)))
+analytic_ham = zeros(length(t_span[1]:t_step:(t_span[2] - t_step)))
+for (i, t) in enumerate(t_span[1]:t_step:(t_span[2] - t_step))
+    ham_ls[i] = hamiltonian(sol.u_quad_values[i][1, :, :], sol.v_quad_values[i][1, :, :],
+        sol.w_quad_values[i][1, :, :], trial_int.grid_matrix, trial_int.grid_weights)
 
-ham_ls = zeros(length(t_span[1]:t_step:t_span[2]-t_step))
-analytic_ham = zeros(length(t_span[1]:t_step:t_span[2]-t_step))
-for (i, t) in enumerate(t_span[1]:t_step:t_span[2]-t_step)
+    analytic_u_values = [lpde.exact_u(t + t_step * trial_int.grid_matrix[i, j][1],
+                             trial_int.grid_matrix[i, j][2]; params = lpde.params)
+                         for i in 1:size(trial_int.grid_matrix, 1),
+    j in 1:size(trial_int.grid_matrix, 2)]
+    analytic_v_values = [lpde.exact_v(t + t_step * trial_int.grid_matrix[i, j][1],
+                             trial_int.grid_matrix[i, j][2]; params = lpde.params)
+                         for i in 1:size(trial_int.grid_matrix, 1),
+    j in 1:size(trial_int.grid_matrix, 2)]
+    analytic_w_values = [lpde.exact_w(t + t_step * trial_int.grid_matrix[i, j][1],
+                             trial_int.grid_matrix[i, j][2]; params = lpde.params)
+                         for i in 1:size(trial_int.grid_matrix, 1),
+    j in 1:size(trial_int.grid_matrix, 2)]
 
-    ham_ls[i] = hamiltonian(sol.u_quad_values[i][1,:,:], sol.v_quad_values[i][1,:,:], sol.w_quad_values[i][1,:,:],  trial_int.grid_matrix,  trial_int.grid_weights)
-
-    analytic_u_values = [lpde.exact_u(t + t_step* trial_int.grid_matrix[i,j][1],  trial_int.grid_matrix[i,j][2]; params=lpde.params) for i in 1:size( trial_int.grid_matrix, 1), j in 1:size( trial_int.grid_matrix, 2)]
-    analytic_v_values = [lpde.exact_v(t + t_step* trial_int.grid_matrix[i,j][1],  trial_int.grid_matrix[i,j][2]; params=lpde.params) for i in 1:size( trial_int.grid_matrix, 1), j in 1:size( trial_int.grid_matrix, 2)]
-    analytic_w_values = [lpde.exact_w(t + t_step* trial_int.grid_matrix[i,j][1],  trial_int.grid_matrix[i,j][2]; params=lpde.params) for i in 1:size( trial_int.grid_matrix, 1), j in 1:size( trial_int.grid_matrix, 2)]
-
-    analytic_ham[i] = hamiltonian(analytic_u_values, analytic_v_values, analytic_w_values,  trial_int.grid_matrix,  trial_int.grid_weights)
+    analytic_ham[i] = hamiltonian(analytic_u_values, analytic_v_values, analytic_w_values,
+        trial_int.grid_matrix, trial_int.grid_weights)
 end
 
-
-relative_ham_err = abs.((ham_ls .-  analytic_ham ) ./ analytic_ham)
+relative_ham_err = abs.((ham_ls .- analytic_ham) ./ analytic_ham)
 max_err = maximum(relative_ham_err)
 
 record = Dict(
@@ -113,26 +122,11 @@ record = Dict(
 )
 save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_fabs0xuc0.jld2", record)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 #         end
 # end
 # end
 # end
 # (u_trial(grid_matrix[1,1][1] , xspan[1] + x_domain* grid_matrix[1,1][2]+ 3eps(),x,W1,bias1 ) - u_trial(grid_matrix[1,1][1] , xspan[1] + x_domain* grid_matrix[1,1][2]- 3eps(),x,W1,bias1 )) / 6eps()
-
-
 
 # # prepare x values for plotting
 # x_plot = collect(x_span[1]:x_step:x_span[2])
@@ -152,8 +146,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 #         # end
 # #     end
 # # end
-
-
 
 # wave_anim = @animate for (i, tt) in enumerate(0:0.1:2)
 #     plot(lpde.exact_u.(tt, collect(-1:0.01:1)), label="Exact")
@@ -199,7 +191,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 # #            (h - h * t) * exact_u(0.0, x) / h
 # # end
 
-
 # # function C2(t, x)
 # #     return (b - x) * (h - h * t) * exact_u(0, a) / x_domain / h +
 # #            (x - a) * (h - h * t) * exact_u(0, b) / x_domain / h
@@ -214,7 +205,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 # # truth_vals = [exact_u(ti,xi) for ti in t_ls, xi in x_ls]
 # # u_vals - truth_vals
 
-
 # # v_trial(t,x,dofs) = Zygote.gradient(tt -> u_trial(tt,x,dofs),t)[1]
 # # w_trial(t,x,dofs) = Zygote.gradient(xx -> u_trial(t,xx,dofs),x)[1]
 
@@ -222,7 +212,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 # tx_in = rand(2, N_in)
 # tx_in[1, :] = tx_in[1, :]
 # tx_in[2, :] = a .+ x_domain * tx_in[2, :]
-
 
 # # utt(t,x,dofs) = ForwardDiff.derivative(tt -> ForwardDiff.derivative(ttt -> u_trial(ttt, x, dofs), tt), t)
 # # uxx(t,x,dofs) = ForwardDiff.derivative(xx -> ForwardDiff.derivative(xxx -> u_trial(t, xxx, dofs), xx), x)
@@ -257,7 +246,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 # p3 = surface(t_plot, x_plot, error_plot', title="Absolute Error", xlabel="x", ylabel="y", zlabel="Error")
 
 # plot(p1, p2, p3, layout=(1, 3), size=(1500, 400))
-
 
 # begin
 #     ########
@@ -333,14 +321,12 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 #     prob = LinearProblem(A', rhs)
 #     sol2 = LinearSolve.solve(prob, KrylovJL_LSMR())
 
-
 #     t_plot = 0:0.01:h
 #     x_plot = a:0.01:b
 #     u_pred = [sol2' * (BNN([t, x]) - T1NN_BNN(t, x,BNN) + T2NN_BNN(t, x,BNN)) + C1(t, x) - C2(t, x) for t in t_plot, x in x_plot]
 #     u_exact = [target_function(t, x) for t in t_plot, x in x_plot]
 #     error_plot = abs.(u_pred - u_exact)
 #     @show maximum(error_plot)
-
 
 #     using Plots
 #     # Create plots
@@ -350,7 +336,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 
 #     plot(p1, p2, p3, layout=(1, 3), size=(1500, 400))
 # end
-
 
 # # initialize the parameters and train with LSGD
 # a = 0
@@ -372,7 +357,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 # using Plots
 # using Random
 
-
 # function C1(t, x)
 #     return (b - x) / x_domain * target_function(t, a) +
 #             (x - a) / x_domain * target_function(t, b) +
@@ -388,8 +372,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 #     NN_output = [u_trial(network_inputs[1,i],network_inputs[2,i], ps) for i in eachindex(network_inputs[1,:])]
 #     return sqrt(Statistics.mean((labels .- NN_output) .^ 2))
 # end
-
-
 
 # function T1NN(t, x,params)
 #     return (b - x) / x_domain * PNN([t, a], params)[1] +
@@ -408,7 +390,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 #            (h - h * t) * target_function(0.0, x) / h
 # end
 
-
 # function C2(t, x)
 #     return (b - x) * (h - h * t) * target_function(0, a) / x_domain / h +
 #            (x - a) * (h - h * t) * target_function(0, b) / x_domain / h
@@ -418,11 +399,8 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 #     PNN([t, x], params)[1] - T1NN(t, x,params) + T2NN(t, x,params) + C1(t, x) - C2(t, x)
 # end
 
-
 # t_plot = 0:0.01:h
 # x_plot = a:0.01:b
-
-
 
 # for S in [320,]#50,100,200,300
 #     for N_train = [320,]#, 800,1000,1500,2000
@@ -455,7 +433,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 #             return results
 #         end
 
-
 #             # N_train = 1000
 #             collocation_points = rand(Random.default_rng(1),2, N_train)
 #             collocation_points[2, :] = a .+ (b - a) * collocation_points[2, :]
@@ -467,7 +444,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 #             BNN = NeuralNetwork(Chain(Dense(2, S, tanh),))
 #             # PNN = NeuralNetwork(Chain(Dense(2, S, tanh), Dense(S, 1, identity, use_bias=false)))
 
-
 #             rhs = target_function.(h .* collocation_points[1, :], collocation_points[2, :]) .- C1.(collocation_points[1, :], collocation_points[2, :]) .+ C2.(collocation_points[1, :], collocation_points[2, :])
 #             A = BNN(collocation_points,BNN.params) .- T1NN_BNN(collocation_points[1, :], collocation_points[2, :],BNN, ps = BNN.params) .+ T2NN_BNN(collocation_points[1, :], collocation_points[2, :], BNN, ps = BNN.params)
 
@@ -476,7 +452,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 #             sol = LinearSolve.solve(prob, KrylovJL_LSMR())
 
 #             # u_pred = [sol' * (BNN([t, x]) - T1NN_BNN(t, x,BNN, ps = BNN.params) + T2NN_BNN(t, x,BNN, ps = BNN.params)) + C1(t, x) - C2(t, x) for (t,x) in zip(collocation_points[1, :], collocation_points[2, :])]
-
 
 #             u_pred = [sol' * (BNN([t, x]) - T1NN_BNN(t, x,BNN, ps = BNN.params) + T2NN_BNN(t, x,BNN, ps = BNN.params)) + C1(t, x) - C2(t, x) for t in t_plot, x in x_plot]
 #             u_exact = [target_function(t, x) for t in t_plot, x in x_plot]
@@ -511,11 +486,7 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 # err = 0
 # λ = GeometricMachineLearning.GlobalSection(tem_ps)
 
-
 # nepochs = 200
-
-
-
 
 # u_exact = [target_function(t, x) for (t,x ) in  zip(collocation_points[1, :], collocation_points[2, :])]
 
@@ -526,10 +497,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 # NN_output = [u_trial(collocation_points[1,i],collocation_points[2,i], PNN.params) for i in eachindex(collocation_points[2,:])]
 
 # u_pred = [sol' * (BNN([t, x],BNN.params)- T1NN_BNN(t, x,BNN, ps = BNN.params) + T2NN_BNN(t, x,BNN, ps = BNN.params)) + C1(t, x) - C2(t, x) for (t,x) in zip(collocation_points[1,:], collocation_points[2,:])]
-
-
-
-
 
 # for ep in 1:nepochs
 #     # @show BNN.params.L1.W
@@ -560,8 +527,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 #     println("After lsq, lsgd loss:",err)
 #     ls_loss[ep] = err
 
-
-
 #     for (name, layer) in zip(keys(PNN.params), values(PNN.params))
 #         in_size = size(layer.W, 2)
 #         out_size = size(layer.W, 1)
@@ -581,7 +546,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 #     # @show PNN.params.L1.b
 #     # @show PNN.params.L2.W
 
-
 #     gs = Zygote.gradient(p -> lsgd_loss(collocation_points, rhs, p), PNN.params)[1]
 #     # @show gs
 #     # tem_ps = PNN.params[keys(PNN.params)[1:end-1]]
@@ -598,7 +562,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 #     # @show PNN.params.L1.W
 #     # @show PNN.params.L1.b
 #     # @show PNN.params.L2.W
-
 
 #     # sol = PNN.params.L2.W[:]
 #     # BNN.params.L1.W[:] = PNN.params.L1.W[:]
@@ -633,7 +596,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 # plot(ds_loss)
 # plot(ls_loss)
 
-
 # using Symbolics, LinearAlgebra
 # using Symbolics: IfElse
 
@@ -654,7 +616,7 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 
 #     # 3. 构造辅助项 (T1, T2, C1, C2) 的符号表达式
 #     x_domain = b - a
-    
+
 #     # T1NN_manual
 #     t1_nn = (b - x) / x_domain * sym_NN(t, a, W2, W1, bias1) +
 #             (x - a) / x_domain * sym_NN(t, b, W2, W1, bias1) +
@@ -734,9 +696,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 # @benchmark ∂v∂p_func(t_val, x_val,tn_val, h_val, p_current, pw2, pw1, pb1)
 # @benchmark ∂v∂p(t_val, x_val, p_current)
 
-
-
-
 # c=0.5
 # A1 = 0.8
 # A2 = 0.0
@@ -801,7 +760,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 # v_trial_zygote(t::TT, x::XT, W2::AbstractVector{DT}, W1::AbstractMatrix{DT}, bias1::AbstractVector{DT}, sol) where {TT,XT, DT} = Zygote.gradient(tt -> u_trial(tt,x,W2,W1,bias1 ),t)[1]
 # w_trial_zygote(t::TT, x::XT, W2::AbstractVector{DT}, W1::AbstractMatrix{DT}, bias1::AbstractVector{DT}, sol) where {TT,XT, DT} = Zygote.gradient(xx -> u_trial(t,xx,W2,W1,bias1 ),x)[1]
 
-
 # u_trial(tx::Vector{ST}, W2::Vector{DT}, W1::Matrix{DT}, bias1::Vector{DT}, sol) where {ST, DT} = u_trial(tx[1],tx[2],W2,W1,bias1 )
 # u_trial(tx::NTuple{2,ST}, W2::Vector{DT}, W1::Matrix{DT}, bias1::Vector{DT}, sol) where {ST<:Real, DT} = u_trial(tx[1],tx[2],W2,W1,bias1 )
 # v_trial_zygote(tx::Vector{ST}, W2::Vector{DT}, W1::Matrix{DT}, bias1::Vector{DT}, sol) where {ST, DT} = v_trial_zygote(tx[1],tx[2],W2,W1,bias1 )
@@ -809,10 +767,8 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 # w_trial_zygote(tx::Vector{ST}, W2::Vector{DT}, W1::Matrix{DT}, bias1::Vector{DT}, sol) where {ST, DT} = w_trial_zygote(tx[1],tx[2],W2,W1,bias1 )
 # w_trial_zygote(tx::NTuple{2,ST}, W2::Vector{DT}, W1::Matrix{DT}, bias1::Vector{DT}, sol) where {ST<:Real, DT} = w_trial_zygote(tx[1],tx[2],W2,W1,bias1 )
 
-
 # v_trial(t::TT,x::XT,params::AbstractVector{DT} ) where {TT,XT, DT} = ForwardDiff.derivative(tt -> u_trial(tt,x,params ),t)[1]
 # w_trial(t::TT,x::XT,params::AbstractVector{DT} ) where {TT,XT, DT} = ForwardDiff.derivative(xx -> u_trial(t,xx,params ),x)[1]
-    
 
 # ∂u∂p(t::TT,x::XT,params::AbstractVector{DT} ) where {TT,XT, DT} = ForwardDiff.gradient(p -> u_trial(t,x,p ),params)
 # ∂v∂p(t::TT,x::XT,params::AbstractVector{DT} ) where {TT,XT, DT} = ForwardDiff.gradient(p -> v_trial(t,x,p ),params)
@@ -824,4 +780,3 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 # ∂u∂p(input::NTuple{2,ST}, params::Vector{DT}, sol) where {ST<:Real, DT} = ∂u∂p(input[1],input[2],params )
 # ∂v∂p(input::NTuple{2,ST}, params::Vector{DT}, sol) where {ST<:Real, DT} = ∂v∂p(input[1],input[2],params )
 # ∂w∂p(input::NTuple{2,ST}, params::Vector{DT}, sol) where {ST<:Real, DT} = ∂w∂p(input[1],input[2],params )
-

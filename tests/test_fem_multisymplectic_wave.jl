@@ -15,8 +15,8 @@ using MultiSymplectic
     xs = collect(lpde.xspan[1]:lpde.xstep:lpde.xspan[2])
     err = maximum(abs.(sol.sol.u[end] .- lpde.exact_u.(lpde.timespan[2], xs)))
 
-    hamiltonian_errors = zeros(length(lpde.timespan[1]:lpde.timestep:lpde.timespan[2]-lpde.timestep))
-    for (i, t) in enumerate(lpde.timespan[1]:lpde.timestep:lpde.timespan[2]-lpde.timestep)
+    hamiltonian_errors = zeros(length(lpde.timespan[1]:lpde.timestep:(lpde.timespan[2] - lpde.timestep)))
+    for (i, t) in enumerate(lpde.timespan[1]:lpde.timestep:(lpde.timespan[2] - lpde.timestep))
         numerical_hamiltonian = Wave.hamiltonian(
             sol.u_quad_values[i],
             sol.v_quad_values[i],
@@ -25,16 +25,23 @@ using MultiSymplectic
             method.grid_weights,
             lpde.params,
             lpde.xspan,
-            lpde.timestep,
+            lpde.timestep
         )
 
         exact_u = zeros(1, method.RT, method.RX)
         exact_v = zeros(1, method.RT, method.RX)
         exact_w = zeros(1, method.RT, method.RX)
         for rt in axes(method.grid_matrix, 1), rx in axes(method.grid_matrix, 2)
-            exact_u[1, rt, rx] = lpde.exact_u(t + lpde.timestep * method.grid_matrix[rt, rx][1], method.grid_matrix[rt, rx][2]; params = lpde.params)
-            exact_v[1, rt, rx] = lpde.exact_v(t + lpde.timestep * method.grid_matrix[rt, rx][1], method.grid_matrix[rt, rx][2]; params = lpde.params)
-            exact_w[1, rt, rx] = lpde.exact_w(t + lpde.timestep * method.grid_matrix[rt, rx][1], method.grid_matrix[rt, rx][2]; params = lpde.params)
+
+            exact_u[1, rt, rx] = lpde.exact_u(
+                t + lpde.timestep * method.grid_matrix[rt, rx][1],
+                method.grid_matrix[rt, rx][2]; params = lpde.params)
+            exact_v[1, rt, rx] = lpde.exact_v(
+                t + lpde.timestep * method.grid_matrix[rt, rx][1],
+                method.grid_matrix[rt, rx][2]; params = lpde.params)
+            exact_w[1, rt, rx] = lpde.exact_w(
+                t + lpde.timestep * method.grid_matrix[rt, rx][1],
+                method.grid_matrix[rt, rx][2]; params = lpde.params)
         end
         exact_hamiltonian = Wave.hamiltonian(
             exact_u,
@@ -44,10 +51,11 @@ using MultiSymplectic
             method.grid_weights,
             lpde.params,
             lpde.xspan,
-            lpde.timestep,
+            lpde.timestep
         )
 
-        hamiltonian_errors[i] = (numerical_hamiltonian - exact_hamiltonian) / exact_hamiltonian
+        hamiltonian_errors[i] = (numerical_hamiltonian - exact_hamiltonian) /
+                                exact_hamiltonian
     end
 
     @test err < 1e-2

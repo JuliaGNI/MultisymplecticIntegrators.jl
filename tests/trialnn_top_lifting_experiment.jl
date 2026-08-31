@@ -124,7 +124,7 @@ function compare_current_and_top_lifting!(sol, int)
         ∂x_quad = maximum(abs.(C.∂C1C2∂x_quad .- old_Cx_quad)),
         result = maximum(abs.(C.C1C2_result .- old_result)),
         ∂t_result = maximum(abs.(C.∂C1C2∂t_result .- old_Ct_result)),
-        ∂x_result = maximum(abs.(C.∂C1C2∂x_result .- old_Cx_result)),
+        ∂x_result = maximum(abs.(C.∂C1C2∂x_result .- old_Cx_result))
     )
 end
 
@@ -152,11 +152,13 @@ if abspath(PROGRAM_FILE) == @__FILE__
     using GeometricSolutions
     using MultiSymplectic
 
-    GeometricIntegratorsBase.default_options(::TrialNN_PDE_int) = (
-        max_iterations = 1,
-        regularization_factor = 1e-5,
-        verbosity = 0,
-    )
+    function GeometricIntegratorsBase.default_options(::TrialNN_PDE_int)
+        (
+            max_iterations = 1,
+            regularization_factor = 1e-5,
+            verbosity = 0
+        )
+    end
 
     function run_case(; use_top_lifting::Bool, S::Int = 70, nsteps::Int = 2)
         x_span = (0.0, 1.0)
@@ -166,7 +168,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
             timestep = h,
             timespan = (0.0, nsteps * h),
             xspan = x_span,
-            xstep = 0.01,
+            xstep = 0.01
         )
 
         basis = Trial_Solution_Basis(S, tanh, x_span)
@@ -181,7 +183,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
             nt = 20,
             Nw = 500,
             Nb = 500,
-            xspan = x_span,
+            xspan = x_span
         )
 
         int = MultiSymplectic.PDEIntegrator(lpde, method)
@@ -205,7 +207,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
             t = solstep.t,
             max_u_err = u_err,
             first_u = current(solstep).u[1],
-            last_u = current(solstep).u[end],
+            last_u = current(solstep).u[end]
         )
     end
 

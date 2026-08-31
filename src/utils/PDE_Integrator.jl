@@ -1,9 +1,8 @@
 struct PDEIntegrator{
-    MT<:PDEMethod,
-    PT<:LPDEProblem,
-    CT<:CacheDict{PT,MT},
-    ST <: Union{NonlinearSolver,SolverMethod}} <: AbstractPDEIntegrator 
-    
+    MT <: PDEMethod,
+    PT <: LPDEProblem,
+    CT <: CacheDict{PT, MT},
+    ST <: Union{NonlinearSolver, SolverMethod}} <: AbstractPDEIntegrator
     problem::PT
     method::MT
     caches::CT
@@ -19,21 +18,22 @@ function Base.show(io::IO, integrator::PDEIntegrator)
 end
 
 function PDEIntegrator(problem::LPDEProblem,
-    integratormethod::PDEMethod,
-    solvermethod::NewtonMethod;
-    method = initmethod(integratormethod, problem),
-    caches = CacheDict(problem, method),
-    options...
+        integratormethod::PDEMethod,
+        solvermethod::NewtonMethod;
+        method = initmethod(integratormethod, problem),
+        caches = CacheDict(problem, method),
+        options...
 )
-    solver = initsolver(solvermethod, method, caches; (length(options) == 0 ? default_options(integratormethod) : options)...)
-    PDEIntegrator(problem,integratormethod, caches, solver)
+    solver = initsolver(solvermethod, method, caches;
+        (length(options) == 0 ? default_options(integratormethod) : options)...)
+    PDEIntegrator(problem, integratormethod, caches, solver)
 end
 
 function PDEIntegrator(
-    problem::LPDEProblem,
-    method::PDEMethod;
-    solver = default_solver(method),
-    kwargs...
+        problem::LPDEProblem,
+        method::PDEMethod;
+        solver = default_solver(method),
+        kwargs...
 )
     PDEIntegrator(problem, method, solver; kwargs...)
 end
@@ -47,8 +47,8 @@ nlsolution(int::PDEIntegrator) = nlsolution(cache(int))
 solver(int::PDEIntegrator) = int.solver
 timestep(int::PDEIntegrator) = timestep(problem(int))
 method(int::PDEIntegrator) = int.method
-_state(a::Vector{TT}) where {TT} = zeros(TT,length(a))
-_vectorfield(a::Vector{TT}) where TT = missing
+_state(a::Vector{TT}) where {TT} = zeros(TT, length(a))
+_vectorfield(a::Vector{TT}) where {TT} = missing
 nlsolution(int::PDEIntegratorCache) = cache(int).x
 
 function integrate(problem::LPDEProblem, method::PDEMethod; kwargs...)
@@ -66,27 +66,28 @@ function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator)
     # return sol
 end
 
-function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator, n₁::Int, n₂::Int;kwargs...)
+function integrate!(
+        sol::GeometricSolution, int::AbstractPDEIntegrator, n₁::Int, n₂::Int; kwargs...)
     # check time steps range for consistency
     @assert n₁ ≥ 1
     @assert n₂ ≥ n₁
     @assert n₂ ≤ ntime(sol)
     # copy initial condition from solution to solutionstep and initialize
-    solstep = solutionstep(int, sol[n₁-1])
-    internal_solutions = Vector{Vector{Float64}}(undef,n₂ - n₁ + 1)
+    solstep = solutionstep(int, sol[n₁ - 1])
+    internal_solutions = Vector{Vector{Float64}}(undef, n₂ - n₁ + 1)
 
-    u_quad_values = Vector{Array{Float64,3}}(undef,n₂ - n₁ + 1)
-    v_quad_values = Vector{Array{Float64,3}}(undef,n₂ - n₁ + 1)
-    w_quad_values = Vector{Array{Float64,3}}(undef,n₂ - n₁ + 1)
+    u_quad_values = Vector{Array{Float64, 3}}(undef, n₂ - n₁ + 1)
+    v_quad_values = Vector{Array{Float64, 3}}(undef, n₂ - n₁ + 1)
+    w_quad_values = Vector{Array{Float64, 3}}(undef, n₂ - n₁ + 1)
 
     # loop over time steps
     for n in n₁:n₂
         sol[n] = integrate!(solstep, int)
         idx = n - n₁ + 1
-        internal_solutions[idx] = deepcopy(cache(int,Float64).x)
-        u_quad_values[idx] = deepcopy(cache(int,Float64).u_quad_values)
-        v_quad_values[idx] = deepcopy(cache(int,Float64).v_quad_values)
-        w_quad_values[idx] = deepcopy(cache(int,Float64).w_quad_values)
+        internal_solutions[idx] = deepcopy(cache(int, Float64).x)
+        u_quad_values[idx] = deepcopy(cache(int, Float64).u_quad_values)
+        v_quad_values[idx] = deepcopy(cache(int, Float64).v_quad_values)
+        w_quad_values[idx] = deepcopy(cache(int, Float64).w_quad_values)
 
         havenan = false
         for s in current(solstep)
@@ -97,40 +98,39 @@ function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator, n₁::In
             @warn "Solver encountered NaNs in solution at timestep n=$(n)."
             break
         end
-
     end
 
     return (sol = sol,
-    u_quad_values=u_quad_values,v_quad_values=v_quad_values,w_quad_values=w_quad_values,
-    internal_solutions=internal_solutions)
+        u_quad_values = u_quad_values, v_quad_values = v_quad_values, w_quad_values = w_quad_values,
+        internal_solutions = internal_solutions)
 end
 
 function integrate!(solstep::SolutionStep, int::AbstractPDEIntegrator)
     reset!(solstep, timestep(int))
 
     # copy internal variables from solution step to cache
-    copy_internal_variables!(cache(int),solstep)
+    copy_internal_variables!(cache(int), solstep)
 
-    initialize_bcs_ics!(solstep,int)
+    initialize_bcs_ics!(solstep, int)
 
-    prior_initial_guess!(cache(int),solstep,int)
+    prior_initial_guess!(cache(int), solstep, int)
 
     integrate_step!(current(solstep), history(solstep), parameters(solstep), int)
 
     components!(nlsolution(int), current(solstep), parameters(solstep), int)
 
     # copy internal variables from the final nonlinear solution to solution step
-    copy_internal_variables!(solstep,cache(int))
+    copy_internal_variables!(solstep, cache(int))
 
-    cache(int).flag_done_initial_guess[1] != 0.0 ? cache(int).flag_done_initial_guess[1] = 0.0 : nothing 
+    cache(int).flag_done_initial_guess[1] != 0.0 ?
+    cache(int).flag_done_initial_guess[1] = 0.0 : nothing
 
     return solstep
 end
 
-
 function integrate_step!(sol, history, params, int::AbstractPDEIntegrator)
     # call nonlinear solver
-    solve!(nlsolution(int), solver(int), (sol,params,int))
+    solve!(nlsolution(int), solver(int), (sol, params, int))
 
     # print solver status
     # println(status(solver))
@@ -142,7 +142,8 @@ function integrate_step!(sol, history, params, int::AbstractPDEIntegrator)
     update!(sol, int)
 end
 
-function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol, params, int::AbstractPDEIntegrator) where {ST}
+function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol,
+        params, int::AbstractPDEIntegrator) where {ST}
     # check that x and b are compatible
     @assert axes(x) == axes(b)
 

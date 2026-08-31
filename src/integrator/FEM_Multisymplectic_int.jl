@@ -1,7 +1,8 @@
 struct FEM_Multisymplectic_Integrator <: PDEMethod
     time_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RT::Int
-    spatial_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
+    spatial_quadrature::NamedTuple{
+        (:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RX::Int
     grid_matrix::Matrix{Vector{Float64}}
     grid_weights::Matrix{Float64}
@@ -31,7 +32,7 @@ struct FEM_Multisymplectic_Integrator <: PDEMethod
         h = problem.timestep
         cfl = abs(c) * h / dx
         @assert cfl ≤ 1 + sqrt(eps(Float64)) "Bilinear FEM multisymplectic wave integrator requires abs(c) * timestep / xstep ≤ 1; got $(cfl)."
-        interior = collect(2:N-1)
+        interior = collect(2:(N - 1))
         boundary = [1, N]
 
         mass_matrix = zeros(N, N)
@@ -79,15 +80,15 @@ end
 default_solver(::FEM_Multisymplectic_Integrator) = NewtonMethod()
 default_options(::FEM_Multisymplectic_Integrator) = (max_iterations = 1, verbosity = 0)
 
-struct FEM_Multisymplectic_IntegratorCache{ST,D,RX} <: PDEIntegratorCache{ST,D}
+struct FEM_Multisymplectic_IntegratorCache{ST, D, RX} <: PDEIntegratorCache{ST, D}
     x::Vector{ST}
     previous_u::Vector{ST}
     current_u::Vector{ST}
     next_u::Vector{ST}
     startup_done::Vector{Bool}
-    u_quad_values::Array{ST,3}
-    v_quad_values::Array{ST,3}
-    w_quad_values::Array{ST,3}
+    u_quad_values::Array{ST, 3}
+    v_quad_values::Array{ST, 3}
+    w_quad_values::Array{ST, 3}
     ut₁_quad_values::Matrix{ST}
     vt₁_quad_values::Matrix{ST}
     wt₁_quad_values::Matrix{ST}
@@ -105,7 +106,7 @@ struct FEM_Multisymplectic_IntegratorCache{ST,D,RX} <: PDEIntegratorCache{ST,D}
     bc_wx₁_quad_values::Matrix{ST}
     flag_done_initial_guess::Vector{ST}
 
-    function FEM_Multisymplectic_IntegratorCache{ST,D,RX}() where {ST,D,RX}
+    function FEM_Multisymplectic_IntegratorCache{ST, D, RX}() where {ST, D, RX}
         x = zeros(ST, RX - 2)
         previous_u = zeros(ST, RX)
         current_u = zeros(ST, RX)
@@ -149,10 +150,13 @@ function Cache{ST}(problem::LPDEProblem, int::FEM_Multisymplectic_Integrator; kw
     FEM_Multisymplectic_IntegratorCache{ST, problem.D, int.RX}(; kwargs...)
 end
 
-@inline CacheType(ST, problem::LPDEProblem, int::FEM_Multisymplectic_Integrator) =
-    FEM_Multisymplectic_IntegratorCache{ST, problem.D, int.RX}
+@inline CacheType(ST, problem::LPDEProblem,
+    int::FEM_Multisymplectic_Integrator) = FEM_Multisymplectic_IntegratorCache{
+    ST, problem.D, int.RX}
 
-copy_internal_variables!(C::FEM_Multisymplectic_IntegratorCache, solstep::SolutionStep) = nothing
+function copy_internal_variables!(C::FEM_Multisymplectic_IntegratorCache, solstep::SolutionStep)
+    nothing
+end
 prior_initial_guess!(C, sol, int::PDEIntegrator{<:FEM_Multisymplectic_Integrator}) = nothing
 
 function _fem_boundary_values(int::PDEIntegrator{<:FEM_Multisymplectic_Integrator}, t)
@@ -170,7 +174,8 @@ function _fem_start_previous!(C, sol, int::PDEIntegrator{<:FEM_Multisymplectic_I
     end
 
     C.previous_u .= sol.u .- h .* sol.v
-    acceleration = int.method.c^2 .* (int.method.laplace_matrix * sol.u) ./ int.problem.xstep^2
+    acceleration = int.method.c^2 .* (int.method.laplace_matrix * sol.u) ./
+                   int.problem.xstep^2
     C.previous_u[int.method.interior] .+= 0.5 * h^2 .* acceleration[int.method.interior]
     bc = _fem_boundary_values(int, t0 - h)
     C.previous_u[begin] = bc.left
@@ -178,7 +183,8 @@ function _fem_start_previous!(C, sol, int::PDEIntegrator{<:FEM_Multisymplectic_I
     return nothing
 end
 
-function _fem_step!(C::FEM_Multisymplectic_IntegratorCache, sol, int::PDEIntegrator{<:FEM_Multisymplectic_Integrator})
+function _fem_step!(C::FEM_Multisymplectic_IntegratorCache, sol,
+        int::PDEIntegrator{<:FEM_Multisymplectic_Integrator})
     h = timestep(int)
     dx = int.problem.xstep
     I = int.method.interior
@@ -200,23 +206,26 @@ function _fem_step!(C::FEM_Multisymplectic_IntegratorCache, sol, int::PDEIntegra
 
     lhs_full = M / h^2 - c2 * A / (6 * dx^2)
     rhs_full = 2 .* (M * C.current_u) ./ h^2 .- (M * C.previous_u) ./ h^2 .+
-        c2 .* (A * (C.previous_u .+ 4 .* C.current_u)) ./ (6 * dx^2)
+               c2 .* (A * (C.previous_u .+ 4 .* C.current_u)) ./ (6 * dx^2)
     rhs = rhs_full[I] .- lhs_full[I, B] * C.next_u[B]
 
     C.x .= int.method.lhs_factor \ rhs
     C.next_u[I] .= C.x
-    int.method.show_status && println("FEM multisymplectic max |u_next| = ", maximum(abs.(C.next_u)))
+    int.method.show_status &&
+        println("FEM multisymplectic max |u_next| = ", maximum(abs.(C.next_u)))
     return nothing
 end
 
-function _fem_fill_derivatives!(C::FEM_Multisymplectic_IntegratorCache, previous_u, current_u, int::PDEIntegrator{<:FEM_Multisymplectic_Integrator})
+function _fem_fill_derivatives!(
+        C::FEM_Multisymplectic_IntegratorCache, previous_u, current_u,
+        int::PDEIntegrator{<:FEM_Multisymplectic_Integrator})
     h = timestep(int)
     dx = int.problem.xstep
     N = length(int.method.x_nodes)
 
     C.u_quad_values[1, 1, :] .= C.next_u
     C.v_quad_values[1, 1, :] .= (3 .* C.next_u .- 4 .* current_u .+ previous_u) ./ (2 * h)
-    for i in 2:N-1
+    for i in 2:(N - 1)
         C.w_quad_values[1, 1, i] = (C.next_u[i + 1] - C.next_u[i - 1]) / (2 * dx)
     end
     C.w_quad_values[1, 1, 1] = (C.next_u[2] - C.next_u[1]) / dx
@@ -241,7 +250,8 @@ function integrate_step!(sol, history, params, int::PDEIntegrator{<:FEM_Multisym
     return nothing
 end
 
-function components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:FEM_Multisymplectic_Integrator}) where {ST}
+function components!(x::AbstractVector{ST}, sol, params,
+        int::PDEIntegrator{<:FEM_Multisymplectic_Integrator}) where {ST}
     return nothing
 end
 

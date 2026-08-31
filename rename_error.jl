@@ -29,7 +29,7 @@ function main()
     dir = isempty(dirs) ? joinpath(@__DIR__, "sindyint_results") : only(dirs)
 
     files = sort(filter(f -> endswith(f, ".jld2"), readdir(dir; join = true)))
-    plans = Tuple{String,String,Float64}[]
+    plans = Tuple{String, String, Float64}[]
 
     for file in files
         new_file, err = target_name(file)
@@ -57,7 +57,8 @@ function main()
     println("Files to rename: $(length(plans)) / $(length(files))")
 
     if apply
-        temp_plans = [(old_file, tempname(dirname(old_file)), new_file) for (old_file, new_file, _) in plans]
+        temp_plans = [(old_file, tempname(dirname(old_file)), new_file)
+                      for (old_file, new_file, _) in plans]
         for (old_file, temp_file, _) in temp_plans
             mv(old_file, temp_file)
         end

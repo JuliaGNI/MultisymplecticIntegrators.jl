@@ -7,17 +7,21 @@ const CURRENT_REGULARIZATION = Ref(0.0)
 const CURRENT_MAX_ITERATIONS = Ref(100)
 const CURRENT_VERBOSITY = Ref(0)
 
-GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator) = (
-    regularization_factor = CURRENT_REGULARIZATION[],
-    max_iterations = CURRENT_MAX_ITERATIONS[],
-    verbosity = CURRENT_VERBOSITY[],
-)
+function GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator)
+    (
+        regularization_factor = CURRENT_REGULARIZATION[],
+        max_iterations = CURRENT_MAX_ITERATIONS[],
+        verbosity = CURRENT_VERBOSITY[]
+    )
+end
 
-GeometricIntegratorsBase.default_options(::Galerkin_Full_Restriction_Bspline_Integrator) = (
-    regularization_factor = CURRENT_REGULARIZATION[],
-    max_iterations = CURRENT_MAX_ITERATIONS[],
-    verbosity = CURRENT_VERBOSITY[],
-)
+function GeometricIntegratorsBase.default_options(::Galerkin_Full_Restriction_Bspline_Integrator)
+    (
+        regularization_factor = CURRENT_REGULARIZATION[],
+        max_iterations = CURRENT_MAX_ITERATIONS[],
+        verbosity = CURRENT_VERBOSITY[]
+    )
+end
 
 function _parse_float_list(name, default)
     raw = get(ENV, name, "")
@@ -38,7 +42,7 @@ function _hamiltonian_error_series(lpde, method, sol_set)
     exact_v = zeros(1, method.RT, method.RX)
     exact_w = zeros(1, method.RT, method.RX)
 
-    for (step, t) in enumerate(lpde.timespan[1]:lpde.timestep:lpde.timespan[2]-lpde.timestep)
+    for (step, t) in enumerate(lpde.timespan[1]:lpde.timestep:(lpde.timespan[2] - lpde.timestep))
         numerical_hamiltonian = Wave.hamiltonian(
             sol_set.u_quad_values[step],
             sol_set.v_quad_values[step],
@@ -47,14 +51,15 @@ function _hamiltonian_error_series(lpde, method, sol_set)
             method.grid_weights,
             lpde.params,
             lpde.xspan,
-            lpde.timestep,
+            lpde.timestep
         )
 
         for rt in axes(method.grid_matrix, 1), rx in axes(method.grid_matrix, 2)
+
             tq, xq = method.grid_matrix[rt, rx]
-            exact_u[1, rt, rx] = lpde.exact_u(t + lpde.timestep * tq, xq; params=lpde.params)
-            exact_v[1, rt, rx] = lpde.exact_v(t + lpde.timestep * tq, xq; params=lpde.params)
-            exact_w[1, rt, rx] = lpde.exact_w(t + lpde.timestep * tq, xq; params=lpde.params)
+            exact_u[1, rt, rx] = lpde.exact_u(t + lpde.timestep * tq, xq; params = lpde.params)
+            exact_v[1, rt, rx] = lpde.exact_v(t + lpde.timestep * tq, xq; params = lpde.params)
+            exact_w[1, rt, rx] = lpde.exact_w(t + lpde.timestep * tq, xq; params = lpde.params)
         end
 
         exact_hamiltonian = Wave.hamiltonian(
@@ -65,7 +70,7 @@ function _hamiltonian_error_series(lpde, method, sol_set)
             method.grid_weights,
             lpde.params,
             lpde.xspan,
-            lpde.timestep,
+            lpde.timestep
         )
         errs[step] = (numerical_hamiltonian - exact_hamiltonian) / exact_hamiltonian
     end
@@ -78,7 +83,7 @@ function _envelope_drift(errs)
     n < 4 && return 0.0
     q = max(1, n ÷ 4)
     head = maximum(@view abs_errs[1:q])
-    tail = maximum(@view abs_errs[end-q+1:end])
+    tail = maximum(@view abs_errs[(end - q + 1):end])
     return tail - head
 end
 
@@ -88,41 +93,41 @@ function run_case(; family, k, t_step, t_end, xstep, t_knot_interval,
     CURRENT_MAX_ITERATIONS[] = max_iterations
 
     lpde = Wave.lpdeproblem(
-        timestep=t_step,
-        timespan=(0.0, t_end),
-        xspan=(0.0, 1.0),
-        xstep=xstep,
+        timestep = t_step,
+        timespan = (0.0, t_end),
+        xspan = (0.0, 1.0),
+        xstep = xstep
     )
 
     if family == :full_restriction
         basis = Dirichlet_BSpline2D(
             k;
-            timestep=t_step,
-            xspan=lpde.xspan,
-            t_knot_interval=t_knot_interval,
-            x_knot_interval=x_knot_interval,
+            timestep = t_step,
+            xspan = lpde.xspan,
+            t_knot_interval = t_knot_interval,
+            x_knot_interval = x_knot_interval
         )
         method = Galerkin_Full_Restriction_Bspline_Integrator(
             basis;
-            xspan=lpde.xspan,
-            RT_per_interval=k,
-            RX_per_interval=k,
-            show_status=false,
+            xspan = lpde.xspan,
+            RT_per_interval = k,
+            RX_per_interval = k,
+            show_status = false
         )
     elseif family == :multiplier
         basis = BSpline2D(
             k;
-            xspan=lpde.xspan,
-            t_knot_interval=t_knot_interval,
-            x_knot_interval=x_knot_interval,
+            xspan = lpde.xspan,
+            t_knot_interval = t_knot_interval,
+            x_knot_interval = x_knot_interval
         )
         method = Galerkin_Bspline_Integrator(
             basis;
-            xspan=lpde.xspan,
-            RT_per_interval=k,
-            RX_per_interval=k,
-            show_status=false,
-            multiplier_stride=multiplier_stride,
+            xspan = lpde.xspan,
+            RT_per_interval = k,
+            RX_per_interval = k,
+            show_status = false,
+            multiplier_stride = multiplier_stride
         )
     else
         error("Unknown family: $family")
@@ -131,18 +136,18 @@ function run_case(; family, k, t_step, t_end, xstep, t_knot_interval,
     elapsed = @elapsed sol_set = Base.invokelatest(MultiSymplectic.integrate, lpde, method)
     errs = _hamiltonian_error_series(lpde, method, sol_set)
     return (
-        family=family,
-        k=k,
-        t_step=t_step,
-        t_end=t_end,
-        xstep=xstep,
-        t_knot_interval=t_knot_interval,
-        x_knot_interval=x_knot_interval,
-        elapsed=elapsed,
-        max_abs=maximum(abs.(errs)),
-        drift=_envelope_drift(errs),
-        final=errs[end],
-        sign_changes=count(!=(0), diff(signbit.(errs))),
+        family = family,
+        k = k,
+        t_step = t_step,
+        t_end = t_end,
+        xstep = xstep,
+        t_knot_interval = t_knot_interval,
+        x_knot_interval = x_knot_interval,
+        elapsed = elapsed,
+        max_abs = maximum(abs.(errs)),
+        drift = _envelope_drift(errs),
+        final = errs[end],
+        sign_changes = count(!=(0), diff(signbit.(errs)))
     )
 end
 
@@ -162,16 +167,16 @@ function main()
         "family", "k", "t_knot", "x_knot", "max_abs", "drift", "final", "time", "sign")
     for family in families, k in ks, tk in t_knot_intervals, xk in x_knot_intervals
         result = run_case(
-            family=family,
-            k=k,
-            t_step=t_step,
-            t_end=t_end,
-            xstep=xstep,
-            t_knot_interval=tk,
-            x_knot_interval=xk,
-            regularization_factor=regularization_factor,
-            max_iterations=max_iterations,
-            multiplier_stride=multiplier_stride,
+            family = family,
+            k = k,
+            t_step = t_step,
+            t_end = t_end,
+            xstep = xstep,
+            t_knot_interval = tk,
+            x_knot_interval = xk,
+            regularization_factor = regularization_factor,
+            max_iterations = max_iterations,
+            multiplier_stride = multiplier_stride
         )
         @printf("%-17s %2d %8.3g %8.3g %10.3e %10.3e %+10.3e %8.2f %5d\n",
             string(result.family),
@@ -182,8 +187,7 @@ function main()
             result.drift,
             result.final,
             result.elapsed,
-            result.sign_changes,
-        )
+            result.sign_changes,)
     end
 end
 

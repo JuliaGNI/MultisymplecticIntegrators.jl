@@ -7,14 +7,14 @@ using MultiSymplectic
     GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
         max_iterations = 1,
         warn_iterations = 1,
-        verbosity = 0,
+        verbosity = 0
     )
 
     lpde = Wave.lpdeproblem(
         timestep = 0.05,
         timespan = (0.0, 0.1),
         xspan = (0.0, 1.0),
-        xstep = 0.05,
+        xstep = 0.05
     )
     basis = NetworkPDEBasis(2, tanh, :Partially)
     method = NN_PDE_Integrator(
@@ -26,7 +26,7 @@ using MultiSymplectic
         x_num_interval = 2,
         Nw = 2,
         Nb = 2,
-        show_status = false,
+        show_status = false
     )
     int = MultiSymplectic.PDEIntegrator(lpde, method)
     sol = GeometricSolution(lpde)

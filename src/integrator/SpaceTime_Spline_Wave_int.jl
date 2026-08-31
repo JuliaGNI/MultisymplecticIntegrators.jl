@@ -1,8 +1,9 @@
-struct SpaceTime_Spline_Wave_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
+struct SpaceTime_Spline_Wave_Integrator{BT <: AbstractPDEBasis} <: PDEMethod
     basis::BT
     time_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RT::Int
-    spatial_quadrature::NamedTuple{(:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
+    spatial_quadrature::NamedTuple{
+        (:nodes, :weights), Tuple{Vector{Float64}, Vector{Float64}}}
     RX::Int
     grid_matrix::Matrix{Vector{Float64}}
     grid_weights::Matrix{Float64}
@@ -37,30 +38,33 @@ struct SpaceTime_Spline_Wave_Integrator{BT<:AbstractPDEBasis} <: PDEMethod
         spatial_ref_quadrature = composite_quadrature(length(unique(basis.xs)) - 1, quadrature_order)
         spatial_nodes = xspan[1] .+ x_domain .* spatial_ref_quadrature.nodes
         spatial_weights = x_domain .* spatial_ref_quadrature.weights
-        spatial_quadrature = (nodes = spatial_ref_quadrature.nodes, weights = spatial_ref_quadrature.weights)
+        spatial_quadrature = (
+            nodes = spatial_ref_quadrature.nodes, weights = spatial_ref_quadrature.weights)
         RT = length(time_quadrature.nodes)
         RX = length(spatial_quadrature.nodes)
         grid_matrix = [Float64[τ, x] for τ in time_quadrature.nodes, x in spatial_nodes]
         grid_weights = [time_quadrature.weights[i] * spatial_quadrature.weights[j]
-            for i in eachindex(time_quadrature.nodes), j in eachindex(spatial_quadrature.nodes)]
+                        for i in eachindex(time_quadrature.nodes),
+        j in eachindex(spatial_quadrature.nodes)]
 
         Mt = _spline_gram_matrix(basis.Basis_t, time_quadrature.nodes, time_quadrature.weights)
-        Kt = _spline_gram_matrix(basis.Basis_t, time_quadrature.nodes, time_quadrature.weights; derivative=true)
+        Kt = _spline_gram_matrix(basis.Basis_t, time_quadrature.nodes,
+            time_quadrature.weights; derivative = true)
         Mx = _spline_gram_matrix(basis.Basis_x, spatial_nodes, spatial_weights)
-        Kx = _spline_gram_matrix(basis.Basis_x, spatial_nodes, spatial_weights; derivative=true)
+        Kx = _spline_gram_matrix(basis.Basis_x, spatial_nodes, spatial_weights; derivative = true)
 
         action_matrix = kron(Mx, Kt / h) - (h * c^2) * kron(Kx, Mt)
 
         bottom_indices = [_st_index(1, b, Nt) for b in 1:Nx]
         top_indices = [_st_index(Nt, b, Nt) for b in 1:Nx]
         unknown_indices = [_st_index(a, b, Nt) for b in 1:Nx for a in 2:Nt]
-        equation_indices = [_st_index(a, b, Nt) for b in 1:Nx for a in 1:Nt-1]
+        equation_indices = [_st_index(a, b, Nt) for b in 1:Nx for a in 1:(Nt - 1)]
         system_matrix = action_matrix[equation_indices, unknown_indices]
         system_factor = lu(system_matrix)
 
         x_nodes = collect(problem.xspan[1]:problem.xstep:problem.xspan[2])
         eval_matrix = _spline_value_matrix(basis.Basis_x, x_nodes)
-        eval_derivative_matrix = _spline_value_matrix(basis.Basis_x, x_nodes; derivative=true)
+        eval_derivative_matrix = _spline_value_matrix(basis.Basis_x, x_nodes; derivative = true)
 
         new{typeof(basis)}(
             basis,
@@ -76,7 +80,7 @@ end
 
 _st_index(a::Integer, b::Integer, Nt::Integer) = a + (b - 1) * Nt
 
-function _spline_value_matrix(B, nodes; derivative::Bool=false)
+function _spline_value_matrix(B, nodes; derivative::Bool = false)
     values = zeros(length(nodes), length(B))
     for (q, x) in enumerate(nodes)
         i, bx = derivative ? B(x, BSplineKit.Derivative(1)) : B(x)
@@ -90,8 +94,8 @@ function _spline_value_matrix(B, nodes; derivative::Bool=false)
     return values
 end
 
-function _spline_gram_matrix(B, nodes, weights; derivative::Bool=false)
-    V = _spline_value_matrix(B, nodes; derivative=derivative)
+function _spline_gram_matrix(B, nodes, weights; derivative::Bool = false)
+    V = _spline_value_matrix(B, nodes; derivative = derivative)
     return V' * Diagonal(weights) * V
 end
 
@@ -108,16 +112,17 @@ end
 default_solver(::SpaceTime_Spline_Wave_Integrator) = NewtonMethod()
 default_options(::SpaceTime_Spline_Wave_Integrator) = (max_iterations = 1, verbosity = 0)
 
-struct SpaceTime_Spline_Wave_IntegratorCache{ST,RT,RX,D,Nx,Nt,NFree} <: PDEIntegratorCache{ST,D}
+struct SpaceTime_Spline_Wave_IntegratorCache{ST, RT, RX, D, Nx, Nt, NFree} <:
+       PDEIntegratorCache{ST, D}
     x::Vector{ST}
     full_coeffs::Vector{ST}
     bottom_dofs::Vector{ST}
     top_dofs::Vector{ST}
     p₀_dofs::Matrix{ST}
     p₁_dofs::Matrix{ST}
-    u_quad_values::Array{ST,3}
-    v_quad_values::Array{ST,3}
-    w_quad_values::Array{ST,3}
+    u_quad_values::Array{ST, 3}
+    v_quad_values::Array{ST, 3}
+    w_quad_values::Array{ST, 3}
     ut₁_quad_values::Matrix{ST}
     vt₁_quad_values::Matrix{ST}
     wt₁_quad_values::Matrix{ST}
@@ -135,7 +140,8 @@ struct SpaceTime_Spline_Wave_IntegratorCache{ST,RT,RX,D,Nx,Nt,NFree} <: PDEInteg
     bc_wx₁_quad_values::Matrix{ST}
     flag_done_initial_guess::Vector{ST}
 
-    function SpaceTime_Spline_Wave_IntegratorCache{ST,RT,RX,D,Nx,Nt,NFree}() where {ST,RT,RX,D,Nx,Nt,NFree}
+    function SpaceTime_Spline_Wave_IntegratorCache{
+            ST, RT, RX, D, Nx, Nt, NFree}() where {ST, RT, RX, D, Nx, Nt, NFree}
         new(
             zeros(ST, NFree),
             zeros(ST, Nx * Nt),
@@ -161,7 +167,7 @@ struct SpaceTime_Spline_Wave_IntegratorCache{ST,RT,RX,D,Nx,Nt,NFree} <: PDEInteg
             zeros(ST, D, RT),
             zeros(ST, D, RT),
             zeros(ST, D, RT),
-            zeros(ST, 1),
+            zeros(ST, 1)
         )
     end
 end
@@ -169,13 +175,15 @@ end
 nlsolution(cache::SpaceTime_Spline_Wave_IntegratorCache) = cache.x
 
 function Cache{ST}(problem::LPDEProblem, int::SpaceTime_Spline_Wave_Integrator; kwargs...) where {ST}
-    SpaceTime_Spline_Wave_IntegratorCache{ST,int.RT,int.RX,problem.D,
-        int.basis.Nbasis_x,int.basis.Nbasis_t,length(int.unknown_indices)}(; kwargs...)
+    SpaceTime_Spline_Wave_IntegratorCache{ST, int.RT, int.RX, problem.D,
+        int.basis.Nbasis_x, int.basis.Nbasis_t, length(int.unknown_indices)}(;
+        kwargs...)
 end
 
-@inline CacheType(ST, problem::LPDEProblem, int::SpaceTime_Spline_Wave_Integrator) =
-    SpaceTime_Spline_Wave_IntegratorCache{ST,int.RT,int.RX,problem.D,
-        int.basis.Nbasis_x,int.basis.Nbasis_t,length(int.unknown_indices)}
+@inline CacheType(ST, problem::LPDEProblem,
+    int::SpaceTime_Spline_Wave_Integrator) = SpaceTime_Spline_Wave_IntegratorCache{
+    ST, int.RT, int.RX, problem.D,
+    int.basis.Nbasis_x, int.basis.Nbasis_t, length(int.unknown_indices)}
 
 function internal_variables(method::SpaceTime_Spline_Wave_Integrator, problem::LPDEProblem)
     D = problem.D
@@ -186,29 +194,39 @@ function internal_variables(method::SpaceTime_Spline_Wave_Integrator, problem::L
         vt₁_quad_values = zeros(D, RX),
         wt₁_quad_values = zeros(D, RX),
         bottom_dofs = zeros(Nx),
-        p₁_dofs = zeros(D, Nx),
+        p₁_dofs = zeros(D, Nx)
     )
 end
 
 function copy_internal_variables!(C::SpaceTime_Spline_Wave_IntegratorCache, solstep::SolutionStep)
     carried_internal = internal(solstep)
-    haskey(carried_internal, :bottom_dofs) && copyto!(C.bottom_dofs, carried_internal.bottom_dofs)
+    haskey(carried_internal, :bottom_dofs) &&
+        copyto!(C.bottom_dofs, carried_internal.bottom_dofs)
     haskey(carried_internal, :p₁_dofs) && copyto!(C.p₀_dofs, carried_internal.p₁_dofs)
     return nothing
 end
 
 function copy_internal_variables!(solstep::SolutionStep, C::SpaceTime_Spline_Wave_IntegratorCache)
     target_internal = internal(solstep)
-    haskey(target_internal, :ut₁_quad_values) && copyto!(target_internal.ut₁_quad_values, C.ut₁_quad_values)
-    haskey(target_internal, :vt₁_quad_values) && copyto!(target_internal.vt₁_quad_values, C.vt₁_quad_values)
-    haskey(target_internal, :wt₁_quad_values) && copyto!(target_internal.wt₁_quad_values, C.wt₁_quad_values)
-    haskey(target_internal, :bottom_dofs) && copyto!(target_internal.bottom_dofs, C.top_dofs)
+    haskey(target_internal, :ut₁_quad_values) &&
+        copyto!(target_internal.ut₁_quad_values, C.ut₁_quad_values)
+    haskey(target_internal, :vt₁_quad_values) &&
+        copyto!(target_internal.vt₁_quad_values, C.vt₁_quad_values)
+    haskey(target_internal, :wt₁_quad_values) &&
+        copyto!(target_internal.wt₁_quad_values, C.wt₁_quad_values)
+    haskey(target_internal, :bottom_dofs) &&
+        copyto!(target_internal.bottom_dofs, C.top_dofs)
     haskey(target_internal, :p₁_dofs) && copyto!(target_internal.p₁_dofs, C.p₁_dofs)
     return nothing
 end
 
-prior_initial_guess!(C, sol, int::PDEIntegrator{<:SpaceTime_Spline_Wave_Integrator}) = nothing
-components!(x::AbstractVector{ST}, sol, params, int::PDEIntegrator{<:SpaceTime_Spline_Wave_Integrator}) where {ST} = nothing
+function prior_initial_guess!(C, sol, int::PDEIntegrator{<:SpaceTime_Spline_Wave_Integrator})
+    nothing
+end
+function components!(x::AbstractVector{ST}, sol, params,
+        int::PDEIntegrator{<:SpaceTime_Spline_Wave_Integrator}) where {ST}
+    nothing
+end
 
 function _project_to_spatial_spline!(dofs, values, int::PDEIntegrator{<:SpaceTime_Spline_Wave_Integrator})
     tmp = copy(values)
@@ -227,7 +245,8 @@ function _project_momentum!(p_dofs, velocity_values, int::PDEIntegrator{<:SpaceT
         for δ in eachindex(bx)
             j = i - δ + 1
             if 1 ≤ j ≤ length(Bx)
-                p_dofs[j] += weights * int.method.spatial_quadrature.weights[rx] * velocity_values[rx] * bx[δ]
+                p_dofs[j] += weights * int.method.spatial_quadrature.weights[rx] *
+                             velocity_values[rx] * bx[δ]
             end
         end
     end
@@ -241,7 +260,8 @@ function _initialize_bottom_data!(C, sol, int::PDEIntegrator{<:SpaceTime_Spline_
         u0 = int.problem.ics_function(x_collocation).u
         _project_to_spatial_spline!(C.bottom_dofs, u0, int)
 
-        v0 = [int.problem.ics_function(int.method.grid_matrix[1, rx][2]).v for rx in 1:int.method.RX]
+        v0 = [int.problem.ics_function(int.method.grid_matrix[1, rx][2]).v
+              for rx in 1:int.method.RX]
         _project_momentum!(view(C.p₀_dofs, 1, :), v0, int)
     end
     return nothing
@@ -276,6 +296,7 @@ function _fill_spacetime_spline_values!(C, sol, int::PDEIntegrator{<:SpaceTime_S
     Bx = int.method.basis.Basis_x
 
     for rt in 1:int.method.RT, rx in 1:int.method.RX
+
         τ, x = int.method.grid_matrix[rt, rx]
         C.u_quad_values[1, rt, rx] = eval_spline2D(coeffs, (Bt, Bx), (τ, x))
         C.v_quad_values[1, rt, rx] = eval_spline2D_dt(coeffs, (Bt, Bx), (τ, x)) / h
