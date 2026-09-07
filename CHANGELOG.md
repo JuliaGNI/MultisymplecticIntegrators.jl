@@ -22,6 +22,12 @@ makes it worth keeping.
   that is the pre-existing state of the package, not a regression.
 - **A documentation build.** `docs/` now holds `make.jl`, `Project.toml` and a two-page manual, so
   `Documenter` has something to build and the doctest job has an environment.
+- **`test/runtests.jl`, so `Pkg.test()` runs something.** It includes the five files in `test/` that
+  actually assert — the three multiplier momentum-carry tests, the bilinear FEM wave integrator and
+  the space-time spline wave integrator. The other sixteen files there are numerical experiments
+  that integrate for thousands of steps and write `.jld2` archives and figures; they stay
+  hand-run. `test_spacetime_spline_wave_int.jl` states its assertions at top level, so the entry
+  point supplies the `@testset` it lacks.
 
 ### Bug Fixes
 
@@ -32,20 +38,42 @@ makes it worth keeping.
   the old path by name needs updating.
 - **`[compat] julia = "1.10"` added.** There was no Julia bound at all. 1.10 is the LTS and the
   floor across the tree, and the CI matrix resolves its lower entry from this field.
+- **`test/Manifest.toml` untracked.** The root one was already removed; this one survived the
+  `tests/` → `test/` rename while `.gitignore` claimed to ignore it. The test environment now
+  resolves from `test/Project.toml`, so anyone relying on the pinned versions it recorded will get
+  a fresh resolve instead.
 
 ## Open Issues
 
-Four blockers keep this package from loading or testing. Full detail, and the order to work in, in
-`~/Research/Tasks/Revive MultiSymplectic.md`. Recorded 2026-08-31:
+Full detail, and the order to work in, in `~/Research/Tasks/Revive MultiSymplectic.md`. Recorded
+2026-08-31:
 
-- No `test/runtests.jl` entry point — `test/` is ten ad-hoc scripts.
-- No `[extras]` and no `[targets]`, so there is no test environment to resolve.
+- **`Pkg.test()` is red: 21 pass, 2 fail, 1 errors.** The package itself loads and the test
+  environment resolves; the three failures are in the test files, which were written against a
+  source tree that has since moved. They are recorded rather than papered over — no tolerance was
+  widened and no assertion removed.
+  - `test_full_multiplier_momentum_carry.jl:37` — `C.λ₀_x_coes == carried.λ₁_x_coes` after
+    `copy_internal_variables!`; the carried multiplier arrives as all zeros.
+  - `test_full_multiplier_momentum_carry.jl:40` — `Galerkin_Bspline_IntegratorCache` has no field
+    `λ₁_carry_x_coes`. The test expects a separate carry slot that the struct does not define, so
+    the failure is outside a `@test` and takes the rest of that file with it.
+  - `test_fem_multisymplectic_wave.jl:61` — `err < 1e-2` against the exact solution, evaluated at
+    `0.131` after integrating to `t = 200`.
 - Stale bounds: `GeometricIntegratorsBase = "0.1.11"` against 0.6.4, `SimpleSolvers = "0.7.8"`
   against 0.13.2. Only 10 of 31 dependencies are bounded at all.
-- `Gtk4`, `ProfileView`, `PProf`, `Infiltrator`, `Revise` and `Plots` are hard dependencies; a
-  headless runner should not install a GUI toolkit to run tests.
+- `Infiltrator` and `Plots` are hard dependencies of the package, and `test/Project.toml` pulls in
+  `CairoMakie`, `Plots`, `BenchmarkTools` and `Revise` as well; a headless runner installs all of
+  it to run five test files. (`Gtk4`, `ProfileView` and `PProf` are `[weakdeps]` and are not.)
 
-Separately, `src/utils/common.jl` is one of two files in the tree that **JuliaFormatter cannot
-process** — four flat 64-element `Float64` literals, longest line 1624 characters, which take the
-Julia process down rather than raising a catchable error. It will block the pre-commit hook if ever
-staged.
+Separately, four files are **not formatted and cannot be**, and each will block the pre-commit hook
+if ever staged:
+
+- `src/utils/common.jl` is one of two files in the tree that JuliaFormatter cannot process at all —
+  four flat 64-element `Float64` literals, longest line 1624 characters, which take the Julia
+  process down rather than raising a catchable error.
+- `src/integrator/NN_PDE_int.jl`, `NN_PDE_int_symbolic.jl` and `NN_PDE_LSGD_int.jl` fail for a
+  different reason: JuliaFormatter's own output no longer parses. It moves the closing
+  `) where {IPMT,}` of a constructor signature behind the trailing `# hyperparameters for OGA2d`
+  comment on the same line. It detects this itself and declines to write, so the three are
+  unformatted rather than broken. Moving that comment onto its own line would fix them, but that
+  is a content change.
