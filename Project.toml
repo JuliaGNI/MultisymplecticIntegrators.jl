@@ -38,6 +38,7 @@ SymbolicNumericIntegration = "78aadeae-fbc0-11eb-17b6-c7ec0477ba9e"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
+AbstractNeuralNetworks = "0.8"
 BenchmarkTools = "1.6.3"
 CairoMakie = "0.13.10"
 GeometricIntegratorsBase = "0.1.11"
