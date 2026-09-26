@@ -26,8 +26,8 @@ makes it worth keeping.
   actually assert — the three multiplier momentum-carry tests, the bilinear FEM wave integrator and
   the space-time spline wave integrator. The other sixteen files there are numerical experiments
   that integrate for thousands of steps and write `.jld2` archives and figures; they stay
-  hand-run. `test/integrator/SpaceTime_Spline_Wave_int.jl` states its assertions at top level, so the entry
-  point supplies the `@testset` it lacks.
+  hand-run. `test/integrator/SpaceTime_Spline_Wave_int.jl` states its assertions at top level, so
+  the entry point supplies the `@testset` it lacks.
 - **The test suite follows the shared convention.** `test/runtests.jl` runs each test file in its
   own `@safetestset`, in the `core` group. The five test files are renamed after the source file
   they test, under `test/integrator/`. `test/quality/aqua.jl` is new. The sixteen experiment
@@ -62,9 +62,9 @@ Full detail, and the order to work in, in `~/Research/Tasks/Revive MultiSymplect
     `copy_internal_variables!`; the carried multiplier arrives as all zeros.
   - `test/integrator/Galerkin_Bspline_int.jl:40` (#7) — `Galerkin_Bspline_IntegratorCache` has no
     field `λ₁_carry_x_coes`. The test expects a separate carry slot that the struct does not
-    define, so the failure is outside a `@test` and takes the rest of that file with it.
-  - `test/integrator/FEM_Multisymplectic_int.jl:61` (#2) — `err < 1e-2` against the exact solution, evaluated at
-    `0.131` after integrating to `t = 200`.
+    define. The two assertions at `:46` and `:47` that depend on it are broken as well.
+  - `test/integrator/FEM_Multisymplectic_int.jl:61` (#2) — `err < 1e-2` against the exact
+    solution, evaluated at `0.131` after integrating to `t = 200`.
 - Stale bounds: `GeometricIntegratorsBase = "0.1.11"` against 0.6.4, `SimpleSolvers = "0.7.8"`
   against 0.13.2. Only 10 of 31 dependencies are bounded at all.
 - `Infiltrator` and `Plots` are hard dependencies of the package, and `test/Project.toml` pulls in
