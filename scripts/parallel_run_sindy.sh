@@ -22,7 +22,7 @@ run_configuration() {
     local t_step=${10}
     echo "Running Julia script with t_num_interval=$t_num_interval, x_num_interval=$x_num_interval, RT_per_interval=$RT_per_interval, RX_per_interval=$RX_per_interval, k_mu=$k_mu, k_lambda=$k_lambda, reg=$reg, mu=$mu_basis, lambda=$lambda_basis, t_step=$t_step"
 
-    SINDY_OUTPUT_DIR="sindyint_results" julia --project=. tests/test_sindy_PDE_int.jl \
+    SINDY_OUTPUT_DIR="sindyint_results" julia --project=. scripts/test_sindy_PDE_int.jl \
         $t_num_interval $x_num_interval $RT_per_interval $RX_per_interval $k_mu $k_lambda $reg $mu_basis $lambda_basis $t_step &
 }
 for t_num_interval in 6; do

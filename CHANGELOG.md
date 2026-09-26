@@ -26,8 +26,14 @@ makes it worth keeping.
   actually assert — the three multiplier momentum-carry tests, the bilinear FEM wave integrator and
   the space-time spline wave integrator. The other sixteen files there are numerical experiments
   that integrate for thousands of steps and write `.jld2` archives and figures; they stay
-  hand-run. `test_spacetime_spline_wave_int.jl` states its assertions at top level, so the entry
-  point supplies the `@testset` it lacks.
+  hand-run. `test/integrator/SpaceTime_Spline_Wave_int.jl` states its assertions at top level, so
+  the entry point supplies the `@testset` it lacks.
+- **The test suite follows the shared convention.** `test/runtests.jl` runs each test file in its
+  own `@safetestset`, in the `core` group. The five test files are renamed after the source file
+  they test, under `test/integrator/`. `test/quality/aqua.jl` is new. The sixteen experiment
+  scripts and the two batch scripts that held no test move from `test/` to `scripts/`. The four
+  broken marks of the full-multiplier test and the final-time error assertion of the FEM
+  test are `@test_broken`, and four Aqua checks are `broken` (issues #2–#7).
 
 ### Bug Fixes
 

@@ -1,22 +1,16 @@
-using Test
+using SafeTestsets
 
-# Only the files in this directory that actually assert something are run here. The rest are
-# numerical experiments -- they integrate for thousands of steps and write .jld2 archives and
-# figures -- and are run by hand, not by the suite.
-#
-# test_spacetime_spline_wave_int.jl states its assertions at top level, so it is given the
-# @testset it lacks. test_nn_multiplier_momentum_carry.jl is included last because it
-# redefines GeometricIntegratorsBase.default_options for NN_PDE_Integrator, which would
-# otherwise change what any test after it measures.
+const GROUPS = isempty(ARGS) ? ["core", "slow"] : ARGS
 
-@testset "MultiSymplectic" begin
-    include("test_dirichlet_multiplier_momentum_carry.jl")
-    include("test_full_multiplier_momentum_carry.jl")
-    include("test_fem_multisymplectic_wave.jl")
+# integrator/NN_PDE_int.jl is listed last because it redefines
+# GeometricIntegratorsBase.default_options for NN_PDE_Integrator, which would otherwise change
+# what any test after it measures.
 
-    @testset "space-time spline wave integrator" begin
-        include("test_spacetime_spline_wave_int.jl")
-    end
-
-    include("test_nn_multiplier_momentum_carry.jl")
+if "core" in GROUPS
+    @safetestset "Aqua" include("quality/aqua.jl")
+    @safetestset "Dirichlet multiplier momentum carry" include("integrator/Galerkin_Dirichlet_Bspline_int.jl")
+    @safetestset "Full multiplier momentum carry" include("integrator/Galerkin_Bspline_int.jl")
+    @safetestset "FEM multisymplectic wave integrator" include("integrator/FEM_Multisymplectic_int.jl")
+    @safetestset "Space-time spline wave integrator" include("integrator/SpaceTime_Spline_Wave_int.jl")
+    @safetestset "NN multiplier momentum carry" include("integrator/NN_PDE_int.jl")
 end
