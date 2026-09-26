@@ -39,7 +39,7 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
 BenchmarkTools = "1.6.3"
-CairoMakie = "0.13.10"
+CairoMakie = "0.13.10, 0.15"
 GeometricIntegratorsBase = "0.1.11"
 Gtk4 = "0.7.12"
 JLD2 = "0.6.3"
