@@ -27,7 +27,7 @@ run_configuration() {
     echo "Running Julia script with t_step=$t_step, S=$S,reg = $reg" 
 
     # Run the Julia script in the background
-    julia --project=. tests/test_NN_PDE_int.jl $t_step $reg $S &
+    julia --project=. scripts/test_NN_PDE_int.jl $t_step $reg $S &
 }
 
 # Loop through the activations
