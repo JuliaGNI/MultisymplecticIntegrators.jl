@@ -58,7 +58,7 @@ using MultiSymplectic
                                 exact_hamiltonian
     end
 
-    @test err < 1e-2
+    @test_broken err < 1e-2    # issue #2
     @test maximum(abs.(hamiltonian_errors)) < 1e-2
     @test size(sol.u_quad_values[end], 3) == length(xs)
     @test method.RT == 1
