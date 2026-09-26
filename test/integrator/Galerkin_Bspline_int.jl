@@ -34,17 +34,17 @@ using MultiSymplectic
 
     carried.λ₁_x_coes .= reshape(1.0:length(C.λ₀_x_coes), size(C.λ₀_x_coes))
     MultiSymplectic.copy_internal_variables!(C, solstep)
-    @test_broken C.λ₀_x_coes == carried.λ₁_x_coes    # issue #NN1
+    @test_broken C.λ₀_x_coes == carried.λ₁_x_coes    # issue #7
 
     C.λ₁_x_coes .= 2 .* carried.λ₁_x_coes
-    @test_broken (C.λ₁_carry_x_coes .= 3 .* carried.λ₁_x_coes; true)    # issue #NN1
+    @test_broken (C.λ₁_carry_x_coes .= 3 .* carried.λ₁_x_coes; true)    # issue #7
     C.ut₁_quad_values .= 3
     C.vt₁_quad_values .= 4
     C.wt₁_quad_values .= 5
     MultiSymplectic.copy_internal_variables!(solstep, C)
 
-    @test_broken carried.λ₁_x_coes == C.λ₁_carry_x_coes    # issue #NN1
-    @test_broken carried.λ₁_x_coes != C.λ₁_x_coes    # issue #NN1
+    @test_broken carried.λ₁_x_coes == C.λ₁_carry_x_coes    # issue #7
+    @test_broken carried.λ₁_x_coes != C.λ₁_x_coes    # issue #7
     @test carried.ut₁_quad_values == C.ut₁_quad_values
     @test carried.vt₁_quad_values == C.vt₁_quad_values
     @test carried.wt₁_quad_values == C.wt₁_quad_values

@@ -33,7 +33,7 @@ makes it worth keeping.
   they test, under `test/integrator/`. `test/quality/aqua.jl` is new. The sixteen experiment
   scripts and the two batch scripts that held no test move from `test/` to `scripts/`. The four
   failing assertions of the full-multiplier test and the final-time error assertion of the FEM
-  test are `@test_broken`, and four Aqua checks are `broken` (issues #2–#6).
+  test are `@test_broken`, and four Aqua checks are `broken` (issues #2–#7).
 
 ### Bug Fixes
 
