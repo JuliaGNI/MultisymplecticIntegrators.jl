@@ -32,7 +32,7 @@ makes it worth keeping.
   own `@safetestset`, in the `core` group. The five test files are renamed after the source file
   they test, under `test/integrator/`. `test/quality/aqua.jl` is new. The sixteen experiment
   scripts and the two batch scripts that held no test move from `test/` to `scripts/`. The four
-  failing assertions of the full-multiplier test and the final-time error assertion of the FEM
+  broken marks of the full-multiplier test and the final-time error assertion of the FEM
   test are `@test_broken`, and four Aqua checks are `broken` (issues #2–#7).
 
 ### Bug Fixes
@@ -54,7 +54,7 @@ makes it worth keeping.
 Full detail, and the order to work in, in `~/Research/Tasks/Revive MultiSymplectic.md`. Recorded
 2026-08-31:
 
-- **Five failing assertions are `@test_broken`, each with an issue.** The package itself loads and
+- **Five broken marks are `@test_broken`, each with an issue.** The package itself loads and
   the test environment resolves; the failures are in the test files, which were written against a
   source tree that has since moved. They are recorded rather than papered over — no tolerance was
   widened and no assertion removed.
@@ -69,7 +69,7 @@ Full detail, and the order to work in, in `~/Research/Tasks/Revive MultiSymplect
   against 0.13.2. Only 10 of 31 dependencies are bounded at all.
 - `Infiltrator` and `Plots` are hard dependencies of the package, and `test/Project.toml` pulls in
   `CairoMakie`, `Plots`, `BenchmarkTools` and `Revise` as well; a headless runner installs all of
-  it to run five test files. (`Gtk4`, `ProfileView` and `PProf` are `[weakdeps]` and are not.)
+  it to run six test files. (`Gtk4`, `ProfileView` and `PProf` are `[weakdeps]` and are not.)
 
 Separately, four files are **not formatted and cannot be**, and each will block the pre-commit hook
 if ever staged:
