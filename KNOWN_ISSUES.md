@@ -37,19 +37,19 @@ fix merges, and the CHANGELOG entry of the fix names its ID.
 ### K4 · `src/utils/common.jl` is one of two files in the tree that JuliaFormatter cannot process at all — four flat 64-element `Float64` literals, longest line 1624 characters, which take the Julia process down rather than raising a catchable error.
 
 - location: `src/utils/common.jl`
-- evidence: Separately, four files are **not formatted and cannot be**, and each will block the
-  pre-commit hook if ever staged:
+- evidence: —
 - kind: upstream
-- found: 2026-09-07
+- found: 2026-09-07; Separately, four files are **not formatted and cannot be**, and each will
+  block the pre-commit hook if ever staged:
 
 ### K5 · `src/integrator/NN_PDE_int.jl`, `NN_PDE_int_symbolic.jl` and `NN_PDE_LSGD_int.jl` fail for a different reason: JuliaFormatter's own output no longer parses.
 
 - location: `src/integrator/NN_PDE_int.jl`
-- evidence: Separately, four files are **not formatted and cannot be**, and each will block the
-  pre-commit hook if ever staged: It moves the closing
+- evidence: It moves the closing
   `) where {IPMT,}` of a constructor signature behind the trailing `# hyperparameters for OGA2d`
   comment on the same line. It detects this itself and declines to write, so the three are
   unformatted rather than broken. Moving that comment onto its own line would fix them, but that
   is a content change.
 - kind: upstream
-- found: 2026-09-07
+- found: 2026-09-07; Separately, four files are **not formatted and cannot be**, and each will
+  block the pre-commit hook if ever staged:
