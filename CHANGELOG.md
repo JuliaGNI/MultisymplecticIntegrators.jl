@@ -37,6 +37,12 @@ makes it worth keeping.
 
 ### Bug Fixes
 
+- **`src/utils/common.jl` is excluded from JuliaFormatter.** The file holds four 64-element
+  Gauss–Legendre literals on single lines, the longest 1 624 characters. JuliaFormatter 2.13.0
+  kills the Julia process on it, and 2.14.0 does not finish in 300 s, so the pre-commit hook
+  blocked any commit that staged the file. An `ignore` entry in `.JuliaFormatter.toml` skips it;
+  the file itself is unchanged.
+
 ### Breaking Changes
 
 - **`tests/` renamed to `test/`.** Neither `Pkg.test()` nor `julia-actions/julia-runtest` looks at
