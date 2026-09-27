@@ -29,6 +29,7 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 [compat]
 BenchmarkTools = "1.6.3"
 CairoMakie = "0.13.10"
+ForwardDiff = "1.4.6"
 GeometricIntegratorsBase = "0.1.11"
 JLD2 = "0.6.3"
 Plots = "1.41.6"
