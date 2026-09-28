@@ -26,13 +26,5 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
-[compat]
-BenchmarkTools = "1.6.3"
-CairoMakie = "0.13.10"
-GeometricIntegratorsBase = "0.1.11"
-JLD2 = "0.6.3"
-Plots = "1.41.6"
-Revise = "3.14.2"
-
 [sources]
 MultisymplecticIntegrators = {path = ".."}
