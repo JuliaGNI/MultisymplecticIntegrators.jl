@@ -1,7 +1,7 @@
 using Test
 using GeometricIntegratorsBase
 using GeometricSolutions
-using MultiSymplectic
+using MultisymplecticIntegrators
 
 @testset "Full multiplier carries top time momentum to next slab" begin
     lpde = Wave.lpdeproblem(
@@ -23,17 +23,17 @@ using MultiSymplectic
         RX_per_interval = 3,
         show_status = false
     )
-    int = MultiSymplectic.PDEIntegrator(lpde, method)
+    int = MultisymplecticIntegrators.PDEIntegrator(lpde, method)
     sol = GeometricSolution(lpde)
-    solstep = MultiSymplectic.solutionstep(int, sol[0])
-    C = MultiSymplectic.cache(int)
+    solstep = MultisymplecticIntegrators.solutionstep(int, sol[0])
+    C = MultisymplecticIntegrators.cache(int)
 
     carried = GeometricIntegratorsBase.internal(solstep)
     @test !haskey(carried, :μ₀_t_coes)
     @test !haskey(carried, :μ₁_t_coes)
 
     carried.λ₁_x_coes .= reshape(1.0:length(C.λ₀_x_coes), size(C.λ₀_x_coes))
-    MultiSymplectic.copy_internal_variables!(C, solstep)
+    MultisymplecticIntegrators.copy_internal_variables!(C, solstep)
     @test_broken C.λ₀_x_coes == carried.λ₁_x_coes    # issue #7
 
     C.λ₁_x_coes .= 2 .* carried.λ₁_x_coes
@@ -41,7 +41,7 @@ using MultiSymplectic
     C.ut₁_quad_values .= 3
     C.vt₁_quad_values .= 4
     C.wt₁_quad_values .= 5
-    MultiSymplectic.copy_internal_variables!(solstep, C)
+    MultisymplecticIntegrators.copy_internal_variables!(solstep, C)
 
     @test_broken carried.λ₁_x_coes == C.λ₁_carry_x_coes    # issue #7
     @test_broken carried.λ₁_x_coes != C.λ₁_x_coes    # issue #7

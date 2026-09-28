@@ -1,5 +1,5 @@
 using QuadratureRules
-using MultiSymplectic
+using MultisymplecticIntegrators
 using AbstractNeuralNetworks
 using Random
 using GeometricMachineLearning
@@ -17,31 +17,35 @@ using Plots
 relu2 = x -> max(0, x)^2
 relu3 = x -> max(0, x)^3
 
-GeometricIntegratorsBase.default_options(::NN_PDE_Integrator) = (
-    x_abstol=8eps(),
-    f_abstol=8eps(),
-    max_iterations=10,
-)
+function GeometricIntegratorsBase.default_options(::NN_PDE_Integrator)
+    (
+        x_abstol = 8eps(),
+        f_abstol = 8eps(),
+        max_iterations = 10
+    )
+end
 
 S = 150
 nn_pde_basis = NetworkPDEBasis(S, relu3, :Partially) # Partially, Fully
 xspan = (0.0, 1.0)
 
-nn_int = NN_PDE_Integrator(nn_pde_basis, xspan=xspan, μ=:BSplineDirichlet, λ=:BSplineDirichlet,
-    k_μ_t=4, k_λ_x=4, initial_guess_method=OGA2D(), show_status=false)
+nn_int = NN_PDE_Integrator(
+    nn_pde_basis, xspan = xspan, μ = :BSplineDirichlet, λ = :BSplineDirichlet,
+    k_μ_t = 4, k_λ_x = 4, initial_guess_method = OGA2D(), show_status = false)
 
 t_step = 0.1
-lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=(0.0, 0.1), xspan=xspan)
+lpde = MultisymplecticIntegrators.Wave.lpdeproblem(timestep = t_step, timespan = (0.0, 0.1), xspan = xspan)
 
-@time sol = MultiSymplectic.integrate(lpde, nn_int)
+@time sol = MultisymplecticIntegrators.integrate(lpde, nn_int)
 
-nn_int = NN_PDE_Integrator(nn_pde_basis, xspan=xspan, μ=:BSplineDirichlet, λ=:BSplineDirichlet,
-    k_μ_t=4, k_λ_x=4, initial_guess_method=OGA2D(), show_status=false)
+nn_int = NN_PDE_Integrator(
+    nn_pde_basis, xspan = xspan, μ = :BSplineDirichlet, λ = :BSplineDirichlet,
+    k_μ_t = 4, k_λ_x = 4, initial_guess_method = OGA2D(), show_status = false)
 
 t_step = 0.1
-lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan=(0.0, 0.1), xspan=xspan)
+lpde = MultisymplecticIntegrators.Wave.lpdeproblem(timestep = t_step, timespan = (0.0, 0.1), xspan = xspan)
 
-@time sol = MultiSymplectic.integrate(lpde, nn_int)
+@time sol = MultisymplecticIntegrators.integrate(lpde, nn_int)
 
 # p = @layout [a b c]
 # p1 = plot([lpde.exact_u(t_step,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_u")

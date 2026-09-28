@@ -1,16 +1,17 @@
-using MultiSymplectic
+using MultisymplecticIntegrators
 using Documenter
 
-DocMeta.setdocmeta!(MultiSymplectic, :DocTestSetup, :(using MultiSymplectic); recursive = true)
+DocMeta.setdocmeta!(MultisymplecticIntegrators, :DocTestSetup,
+    :(using MultisymplecticIntegrators); recursive = true)
 
 makedocs(;
-    modules = [MultiSymplectic],
+    modules = [MultisymplecticIntegrators],
     authors = "Michael Kraus",
-    repo = "https://github.com/ZeyuanLee/MultiSymplectic.jl/blob/{commit}{path}#{line}",
-    sitename = "MultiSymplectic.jl",
+    repo = "https://github.com/JuliaGNI/MultisymplecticIntegrators.jl/blob/{commit}{path}#{line}",
+    sitename = "MultisymplecticIntegrators.jl",
     format = Documenter.HTML(;
         prettyurls = get(ENV, "CI", "false") == "true",
-        canonical = "https://ZeyuanLee.github.io/MultiSymplectic.jl",
+        canonical = "https://JuliaGNI.github.io/MultisymplecticIntegrators.jl",
         edit_link = "main",
         assets = String[]
     ),
@@ -21,6 +22,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo = "github.com/ZeyuanLee/MultiSymplectic.jl",
+    repo = "github.com/JuliaGNI/MultisymplecticIntegrators.jl",
     devbranch = "main"
 )

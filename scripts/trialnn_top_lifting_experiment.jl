@@ -1,9 +1,9 @@
 module TrialNNTopLiftingExperiment
 
-using MultiSymplectic
+using MultisymplecticIntegrators
 using GeometricIntegratorsBase: current, history, parameters, reset!
 
-const MS = MultiSymplectic
+const MS = MultisymplecticIntegrators
 
 """
     previous_top_lifting(tn, x, int)
@@ -32,7 +32,7 @@ end
 """
     initialize_bcs_ics_top_lifting!(sol, int)
 
-Experimental replacement for `MultiSymplectic.initialize_bcs_ics!` for
+Experimental replacement for `MultisymplecticIntegrators.initialize_bcs_ics!` for
 `TrialNN_PDE_int`.
 
 The only intentional difference is the history carry-over:
@@ -150,7 +150,7 @@ end # module
 if abspath(PROGRAM_FILE) == @__FILE__
     using GeometricIntegratorsBase
     using GeometricSolutions
-    using MultiSymplectic
+    using MultisymplecticIntegrators
 
     function GeometricIntegratorsBase.default_options(::TrialNN_PDE_int)
         (
@@ -164,7 +164,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
         x_span = (0.0, 1.0)
         h = 0.2
 
-        lpde = MultiSymplectic.Wave.lpdeproblem(
+        lpde = MultisymplecticIntegrators.Wave.lpdeproblem(
             timestep = h,
             timespan = (0.0, nsteps * h),
             xspan = x_span,
@@ -186,7 +186,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
             xspan = x_span
         )
 
-        int = MultiSymplectic.PDEIntegrator(lpde, method)
+        int = MultisymplecticIntegrators.PDEIntegrator(lpde, method)
         sol = GeometricSolution(lpde)
         solstep = GeometricIntegratorsBase.solutionstep(int, sol[0])
 
@@ -194,11 +194,11 @@ if abspath(PROGRAM_FILE) == @__FILE__
             if use_top_lifting
                 TrialNNTopLiftingExperiment.integrate_top_lifting!(solstep, int)
             else
-                MultiSymplectic.integrate!(solstep, int)
+                MultisymplecticIntegrators.integrate!(solstep, int)
             end
         end
 
-        xs = MultiSymplectic.cache(int).x_nodes
+        xs = MultisymplecticIntegrators.cache(int).x_nodes
         u_err = maximum(abs.(current(solstep).u .- lpde.exact_u.(solstep.t, xs)))
 
         return (

@@ -1,6 +1,6 @@
 using AbstractNeuralNetworks
 using GeometricMachineLearning
-using MultiSymplectic
+using MultisymplecticIntegrators
 using LinearAlgebra
 using Statistics
 using Zygote
@@ -16,7 +16,7 @@ u_network = Chain(
 )
 
 PNN = NeuralNetwork(u_network)
-# exact_u = MultiSymplectic.LinearTransport.exact_u
+# exact_u = MultisymplecticIntegrators.LinearTransport.exact_u
 # exact_u(0.0,0.5)
 
 A1 = 0.4

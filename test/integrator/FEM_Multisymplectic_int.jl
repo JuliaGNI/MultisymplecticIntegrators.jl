@@ -1,5 +1,5 @@
 using Test
-using MultiSymplectic
+using MultisymplecticIntegrators
 
 @testset "FEM multisymplectic wave integrator" begin
     lpde = Wave.lpdeproblem(
@@ -10,7 +10,7 @@ using MultiSymplectic
     )
 
     method = FEM_Multisymplectic_Integrator(lpde; startup = :exact)
-    sol = MultiSymplectic.integrate(lpde, method)
+    sol = MultisymplecticIntegrators.integrate(lpde, method)
 
     xs = collect(lpde.xspan[1]:lpde.xstep:lpde.xspan[2])
     err = maximum(abs.(sol.sol.u[end] .- lpde.exact_u.(lpde.timespan[2], xs)))

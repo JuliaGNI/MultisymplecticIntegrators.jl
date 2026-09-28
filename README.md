@@ -1,4 +1,4 @@
-# MultiSymplectic.jl
+# MultisymplecticIntegrators.jl
 
 implementation of multi-symplectic schemes in julia
 

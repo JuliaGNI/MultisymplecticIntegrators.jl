@@ -1,4 +1,4 @@
-using MultiSymplectic
+using MultisymplecticIntegrators
 using GeometricIntegratorsBase
 using LinearAlgebra
 using Printf
@@ -133,7 +133,7 @@ function run_case(; family, k, t_step, t_end, xstep, t_knot_interval,
         error("Unknown family: $family")
     end
 
-    elapsed = @elapsed sol_set = Base.invokelatest(MultiSymplectic.integrate, lpde, method)
+    elapsed = @elapsed sol_set = Base.invokelatest(MultisymplecticIntegrators.integrate, lpde, method)
     errs = _hamiltonian_error_series(lpde, method, sol_set)
     return (
         family = family,

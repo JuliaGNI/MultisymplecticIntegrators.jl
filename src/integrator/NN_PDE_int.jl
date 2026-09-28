@@ -963,7 +963,7 @@ function update!(sol, int::PDEIntegrator{<:NN_PDE_Integrator})
     local xspan = int.problem.xspan
     local xstep = int.problem.xstep
 
-    local CT = MultiSymplectic.CacheType(Float64, int.problem, int.method)
+    local CT = MultisymplecticIntegrators.CacheType(Float64, int.problem, int.method)
     local C = cache(int, Float64)::CT
     local NP = int.method.basis.NP
     local x = nlsolution(int)

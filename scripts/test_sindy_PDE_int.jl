@@ -1,5 +1,5 @@
 using QuadratureRules
-using MultiSymplectic
+using MultisymplecticIntegrators
 using Symbolics
 using Parameters
 using Base
@@ -69,7 +69,7 @@ end
 
 #     t_span = (0.0, 5.0)
 #     x_span = (0,1.0)
-#     lpde = MultiSymplectic.SineGordon.lpdeproblem(timestep = t_step,timespan = t_span,xspan = x_span)
+#     lpde = MultisymplecticIntegrators.SineGordon.lpdeproblem(timestep = t_step,timespan = t_span,xspan = x_span)
 
 #     # init_p = [4.0, lpde.params.γ, lpde.params.velocity]
 
@@ -85,7 +85,7 @@ end
 #         x_num_interval = x_num_interval,λ = λ_basis,k_λ_x = k_λ_x,
 #         RT_per_interval= RT_per_interval,RX_per_interval = RX_per_interval,
 #         show_status = false,)
-#     sol_set =  MultiSymplectic.integrate(lpde,sindy_int)
+#     sol_set =  MultisymplecticIntegrators.integrate(lpde,sindy_int)
 
 #     ham_ls = zeros(length(t_span[1]:t_step:t_span[2]-t_step))
 #     analytic_ham = zeros(length(t_span[1]:t_step:t_span[2]-t_step))
@@ -149,7 +149,8 @@ begin
 
     t_span = (0.0, 5.0)
     x_span = (0, 1.0)
-    lpde = MultiSymplectic.SineGordon.lpdeproblem(timestep = t_step, timespan = t_span, xspan = x_span)
+    lpde = MultisymplecticIntegrators.SineGordon.lpdeproblem(
+        timestep = t_step, timespan = t_span, xspan = x_span)
 
     init_p = [4.0, lpde.params.γ, lpde.params.velocity]
 
@@ -166,7 +167,7 @@ begin
     # log_file="logs/sindy_pde.txt"
     # open(log_file, "w") do io
     #     redirect_stdout(io) do
-    sol_set = MultiSymplectic.integrate(lpde, sindy_int)
+    sol_set = MultisymplecticIntegrators.integrate(lpde, sindy_int)
 
     ham_ls = zeros(length(t_span[1]:t_step:(t_span[2] - t_step)))
     analytic_ham = zeros(length(t_span[1]:t_step:(t_span[2] - t_step)))

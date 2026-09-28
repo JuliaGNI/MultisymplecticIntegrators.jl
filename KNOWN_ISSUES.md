@@ -56,7 +56,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 ## KI-2 · dead code · unused test dependencies
 
 No file under `test/` uses 20 of the 26 dependencies in `test/Project.toml`: every one except
-Aqua, GeometricIntegratorsBase, GeometricSolutions, MultiSymplectic, SafeTestsets and Test. The
+Aqua, GeometricIntegratorsBase, GeometricSolutions, MultisymplecticIntegrators, SafeTestsets and Test. The
 experiment scripts in `scripts/` use them, and `scripts/` has no environment of its own. Evidence:
 `grep -rn "using\|import" test/` names only those six packages. Fix: remove the 20 from
 `test/Project.toml`, or give `scripts/` its own environment. Found 2026-09-26.

@@ -11,7 +11,7 @@ export lagrangian_density, hamiltonian_density, hamiltonian, initial_condition,
 using Parameters: @unpack
 using LinearAlgebra
 using Symbolics
-using MultiSymplectic
+using MultisymplecticIntegrators
 
 const D = 1
 const DX = 1
@@ -271,7 +271,7 @@ function problem_matrix_assemble(C, int::PDEIntegrator{<:ELM_PDE_int}, sol)
         record_results["max_error"] = maximum(abs.(elm_pred - truth))
         record_results["u_basis_params"] = u_basis.params
         record_results["x"] = C.x[1:NP]
-        # MultiSymplectic._save_jld2("LS_initial_guess_results.jld2", record_results)
+        # MultisymplecticIntegrators._save_jld2("LS_initial_guess_results.jld2", record_results)
 
     end
 end

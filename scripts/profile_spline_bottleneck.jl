@@ -1,4 +1,4 @@
-using MultiSymplectic
+using MultisymplecticIntegrators
 using GeometricBase
 using GeometricIntegratorsBase
 using GeometricSolutions
@@ -33,7 +33,7 @@ function main()
     multiplier_stride = parse(Int, get(ENV, "SPLINE_MULTIPLIER_STRIDE", "1"))
     xspan = (0.2, 0.8)
 
-    lpde = MultiSymplectic.Wave.lpdeproblem(
+    lpde = MultisymplecticIntegrators.Wave.lpdeproblem(
         timestep = t_step,
         timespan = (0.0, t_end),
         xspan = xspan,
@@ -49,15 +49,15 @@ function main()
         show_status = false,
         multiplier_stride = multiplier_stride
     )
-    int = MultiSymplectic.PDEIntegrator(lpde, method)
+    int = MultisymplecticIntegrators.PDEIntegrator(lpde, method)
     sol = GeometricSolution(lpde)
-    solstep = MultiSymplectic.solutionstep(int, sol[0])
+    solstep = MultisymplecticIntegrators.solutionstep(int, sol[0])
 
-    reset!(solstep, MultiSymplectic.timestep(int))
-    MultiSymplectic.initialize_bcs_ics!(solstep, int)
-    MultiSymplectic.prior_initial_guess!(MultiSymplectic.cache(int), solstep, int)
+    reset!(solstep, MultisymplecticIntegrators.timestep(int))
+    MultisymplecticIntegrators.initialize_bcs_ics!(solstep, int)
+    MultisymplecticIntegrators.prior_initial_guess!(MultisymplecticIntegrators.cache(int), solstep, int)
 
-    x = MultiSymplectic.nlsolution(int)
+    x = MultisymplecticIntegrators.nlsolution(int)
     b = similar(x)
     ydual = zeros(eltype(ForwardDiff.Dual.(x, x)), length(x))
     j = zeros(length(x), length(x))
@@ -68,15 +68,15 @@ function main()
 
     time_call("components! Float64",
         () -> Base.invokelatest(
-            MultiSymplectic.components!, x, current(solstep), parameters(solstep), int))
+            MultisymplecticIntegrators.components!, x, current(solstep), parameters(solstep), int))
     time_call("residual! Float64",
         () -> Base.invokelatest(
-            MultiSymplectic.residual!, b, x, current(solstep), parameters(solstep), int))
+            MultisymplecticIntegrators.residual!, b, x, current(solstep), parameters(solstep), int))
     time_call("jacobian! ForwardDiff",
         () -> ForwardDiff.jacobian!(
             j,
             (out, xin) -> Base.invokelatest(
-                MultiSymplectic.residual!, out, xin, current(solstep), parameters(solstep), int),
+                MultisymplecticIntegrators.residual!, out, xin, current(solstep), parameters(solstep), int),
             b,
             x
         ))
@@ -84,7 +84,7 @@ function main()
     dual_x = ForwardDiff.Dual.(x, x)
     time_call("residual! Dual once",
         () -> Base.invokelatest(
-            MultiSymplectic.residual!, ydual, dual_x, current(solstep), parameters(solstep), int))
+            MultisymplecticIntegrators.residual!, ydual, dual_x, current(solstep), parameters(solstep), int))
 end
 
 main()

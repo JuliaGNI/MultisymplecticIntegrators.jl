@@ -1,4 +1,4 @@
-module MultiSymplectic
+module MultisymplecticIntegrators
 
 # using GeometricIntegrators
 using GeometricBase

@@ -1,6 +1,6 @@
 using Revise
 using QuadratureRules
-using MultiSymplectic
+using MultisymplecticIntegrators
 using AbstractNeuralNetworks
 using Random
 using GeometricMachineLearning
@@ -52,9 +52,9 @@ nn_int = NN_PDE_Integrator_Symbolic(nn_pde_basis_sym, xspan = xspan, μ = :BSpli
     λ = :BSplineDirichlet, t_num_interval = 2, x_num_interval = 5,
     k_μ_t = 4, k_λ_x = 4, show_status = false)
 
-lpde = MultiSymplectic.Wave.lpdeproblem(timestep = t_step, timespan = t_span, xspan = xspan)
+lpde = MultisymplecticIntegrators.Wave.lpdeproblem(timestep = t_step, timespan = t_span, xspan = xspan)
 
-sol = MultiSymplectic.integrate(lpde, nn_int)
+sol = MultisymplecticIntegrators.integrate(lpde, nn_int)
 
 c=0.5
 A1 = 0.8
@@ -135,9 +135,9 @@ save("NNInt_fully_Symb_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_
 # import GeometricIntegratorsBase: solutionstep,nlsolution,current,parameters
 # solstep = solutionstep(integrator, sol[0])
 
-# MultiSymplectic.prior_initial_guess!(cache(integrator),solstep,integrator)
+# MultisymplecticIntegrators.prior_initial_guess!(cache(integrator),solstep,integrator)
 # Q1 = GeometricIntegratorsBase.current(solstep)
 # Q2 = GeometricIntegratorsBase.history(solstep)
 # Q3 = GeometricIntegratorsBase.parameters(solstep)
-# MultiSymplectic.integrate_step!(Q1, Q2, Q3, integrator)
-# VSCodeServer.@profview MultiSymplectic.integrate_step!(Q1, Q2, Q3, integrator)
+# MultisymplecticIntegrators.integrate_step!(Q1, Q2, Q3, integrator)
+# VSCodeServer.@profview MultisymplecticIntegrators.integrate_step!(Q1, Q2, Q3, integrator)

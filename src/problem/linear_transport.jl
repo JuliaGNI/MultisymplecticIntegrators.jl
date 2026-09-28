@@ -14,7 +14,7 @@ export lagrangian, hamiltonian, initial_condition, boundary_condition, lpdeprobl
 using Parameters: @unpack
 using LinearAlgebra
 using Symbolics
-using MultiSymplectic
+using MultisymplecticIntegrators
 using BSplineKit
 using AbstractNeuralNetworks
 using Zygote
