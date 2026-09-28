@@ -10,7 +10,7 @@ export lagrangian, hamiltonian, initial_condition, boundary_condition, lpdeprobl
 using Parameters: @unpack
 using LinearAlgebra
 using Symbolics
-using MultiSymplectic
+using MultisymplecticIntegrators
 
 const D = 1
 const DX = 1

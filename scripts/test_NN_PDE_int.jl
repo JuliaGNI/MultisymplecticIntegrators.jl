@@ -1,6 +1,6 @@
 # using Revise
 using QuadratureRules
-using MultiSymplectic
+using MultisymplecticIntegrators
 using AbstractNeuralNetworks
 using Random
 using GeometricMachineLearning
@@ -76,8 +76,8 @@ function hamiltonian(u_quad_values::Matrix{Float64}, v_quad_values::Matrix{Float
 end
 
 # for t_step in [0.2,0.5]#
-# lpde = MultiSymplectic.Wave.lpdeproblem(timestep=t_step, timespan = t_span,xspan = xspan)
-lpde = MultiSymplectic.SineGordon.lpdeproblem(timestep = t_step, timespan = t_span, xspan = xspan)
+# lpde = MultisymplecticIntegrators.Wave.lpdeproblem(timestep=t_step, timespan = t_span,xspan = xspan)
+lpde = MultisymplecticIntegrators.SineGordon.lpdeproblem(timestep = t_step, timespan = t_span, xspan = xspan)
 
 # for t_interval in [2,4,5]#
 #     for x_interval in [2,4,5]#
@@ -93,8 +93,8 @@ nn_int = NN_PDE_Integrator(
     t_num_interval = t_interval, x_num_interval = x_interval,
     k_μ_t = 4, k_λ_x = 4, show_status = false, Nw = Nw, Nb = Nb)
 
-sol = MultiSymplectic.integrate(lpde, nn_int)
-# @code_warntype MultiSymplectic.integrate(lpde,nn_int)
+sol = MultisymplecticIntegrators.integrate(lpde, nn_int)
+# @code_warntype MultisymplecticIntegrators.integrate(lpde,nn_int)
 # Profile.print(format=:flat, sortedby=:count)
 
 ham_ls = zeros(length(t_span[1]:t_step:(t_span[2] - t_step)))
@@ -150,15 +150,15 @@ save(
 # import GeometricIntegratorsBase: solutionstep,nlsolution,current,parameters,solver
 # solstep = solutionstep(integrator, sol[0])
 
-# MultiSymplectic.prior_initial_guess!(cache(integrator),solstep,integrator)
+# MultisymplecticIntegrators.prior_initial_guess!(cache(integrator),solstep,integrator)
 # Q1 = GeometricIntegratorsBase.current(solstep)
 # Q2 = GeometricIntegratorsBase.history(solstep)
 # Q3 = GeometricIntegratorsBase.parameters(solstep)
 
-# MultiSymplectic.integrate_step!(Q1, Q2, Q3, integrator)
+# MultisymplecticIntegrators.integrate_step!(Q1, Q2, Q3, integrator)
 
-# # @profview MultiSymplectic.integrate_step!(Q1, Q2, Q3, integrator)
-# @code_warntype MultiSymplectic.integrate_step!(Q1, Q2, Q3, integrator)
+# # @profview MultisymplecticIntegrators.integrate_step!(Q1, Q2, Q3, integrator)
+# @code_warntype MultisymplecticIntegrators.integrate_step!(Q1, Q2, Q3, integrator)
 
 # using SimpleSolvers
 # Q4 = nlsolution(integrator)
@@ -167,13 +167,13 @@ save(
 # @code_warntype SimpleSolvers.solve!(Q4, Q5, (Q1,Q3,integrator))
 # @time SimpleSolvers.solve!(Q4, Q5, (Q1,Q3,integrator))
 
-# MultiSymplectic.update!(solstep, integrator)
-# @code_warntype MultiSymplectic.update!(solstep, integrator)
+# MultisymplecticIntegrators.update!(solstep, integrator)
+# @code_warntype MultisymplecticIntegrators.update!(solstep, integrator)
 
 # nn_int.basis.u([0.1,0.2])
 # @profview  for _ in 1:10000  
 #     nn_int.basis.u([0.1,0.2])
 # end
 
-# # @benchmark  MultiSymplectic.components!(nlsolution($integrator),current($solstep), parameters($solstep), $integrator)
-# # @benchmark MultiSymplectic.residual!(nlsolution($integrator), current($solstep), parameters($solstep), $integrator)
+# # @benchmark  MultisymplecticIntegrators.components!(nlsolution($integrator),current($solstep), parameters($solstep), $integrator)
+# # @benchmark MultisymplecticIntegrators.residual!(nlsolution($integrator), current($solstep), parameters($solstep), $integrator)

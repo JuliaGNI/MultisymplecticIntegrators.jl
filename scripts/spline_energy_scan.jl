@@ -1,4 +1,4 @@
-using MultiSymplectic
+using MultisymplecticIntegrators
 using GeometricIntegratorsBase
 using JLD2
 using LinearAlgebra
@@ -37,7 +37,7 @@ function run_case(; regularization_factor, t_step = 0.1, t_end = 1.0, k = 3,
     CURRENT_REGULARIZATION[] = regularization_factor
     CURRENT_MAX_ITERATIONS[] = max_iterations
 
-    lpde = MultiSymplectic.Wave.lpdeproblem(
+    lpde = MultisymplecticIntegrators.Wave.lpdeproblem(
         timestep = t_step,
         timespan = (0.0, t_end),
         xspan = xspan,
@@ -55,7 +55,7 @@ function run_case(; regularization_factor, t_step = 0.1, t_end = 1.0, k = 3,
         multiplier_stride = multiplier_stride
     )
 
-    elapsed = @elapsed sol_set = Base.invokelatest(MultiSymplectic.integrate, lpde, method)
+    elapsed = @elapsed sol_set = Base.invokelatest(MultisymplecticIntegrators.integrate, lpde, method)
     nsteps = length(sol_set.u_quad_values)
     ham = zeros(nsteps)
     analytic_ham = zeros(nsteps)

@@ -1,6 +1,6 @@
 # Release Notes
 
-All notable changes to MultiSymplectic.jl.
+All notable changes to MultisymplecticIntegrators.jl.
 
 This package is pre-1.0, so *every* minor release is potentially breaking in the sense of
 [SemVer](https://semver.org) for `0.x` versions. The sections below name what actually
@@ -45,6 +45,11 @@ makes it worth keeping.
 
 ### Breaking Changes
 
+- **The package is renamed `MultiSymplectic` → `MultisymplecticIntegrators`.** The repository moved
+  from `ZeyuanLee/MultiSymplectic.jl` to `JuliaGNI/MultisymplecticIntegrators.jl`, and the package
+  name, the module and `src/MultisymplecticIntegrators.jl` follow it. The UUID is unchanged, as the
+  package was never registered. Replace `using MultiSymplectic` and every `MultiSymplectic.` prefix.
+  The documentation now deploys to `JuliaGNI.github.io/MultisymplecticIntegrators.jl`.
 - **`tests/` renamed to `test/`.** Neither `Pkg.test()` nor `julia-actions/julia-runtest` looks at
   `tests/`, so the ten scripts there were unreachable by any standard tool. Anything referring to
   the old path by name needs updating.

@@ -1,4 +1,4 @@
-using MultiSymplectic
+using MultisymplecticIntegrators
 using LinearAlgebra
 using Printf
 using QuadratureRules
@@ -93,9 +93,11 @@ function integrate_spline_lagrangian(coeffs, basis, lpde, quad, t_step)
 
         t_ref = quad.t_nodes[i]
         x_phys = quad.x_nodes[j]
-        v = MultiSymplectic.eval_spline2D_dt(coefs, (basis.Basis_t, basis.Basis_x),
+        v = MultisymplecticIntegrators.eval_spline2D_dt(
+            coefs, (basis.Basis_t, basis.Basis_x),
             (t_ref, x_phys)) / t_step
-        w = MultiSymplectic.eval_spline2D_dx(coefs, (basis.Basis_t, basis.Basis_x),
+        w = MultisymplecticIntegrators.eval_spline2D_dx(
+            coefs, (basis.Basis_t, basis.Basis_x),
             (t_ref, x_phys))
         action += t_step * quad.t_weights[i] * quad.x_weights[j] *
                   lagrangian_density(c, v, w)
@@ -123,7 +125,7 @@ function main()
     ref_order = parse(Int, get(ENV, "SPLINE_REF_ORDER", "32"))
     xspan = parse_tuple("SPLINE_XSPAN", (0.0, 1.0))
 
-    lpde = MultiSymplectic.Wave.lpdeproblem(
+    lpde = MultisymplecticIntegrators.Wave.lpdeproblem(
         timestep = t_step,
         timespan = (tn, tn + t_step),
         xspan = xspan,

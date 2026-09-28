@@ -1,9 +1,9 @@
 ```@meta
-CurrentModule = MultiSymplectic
+CurrentModule = MultisymplecticIntegrators
 ```
 
-# MultiSymplectic Library Functions
+# MultisymplecticIntegrators Library Functions
 
 ```@autodocs
-Modules = [MultiSymplectic]
+Modules = [MultisymplecticIntegrators]
 ```

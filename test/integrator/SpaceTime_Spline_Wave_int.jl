@@ -1,5 +1,5 @@
 using Test
-using MultiSymplectic
+using MultisymplecticIntegrators
 
 # @testset "space-time spline wave variational integrator" begin
 lpde = Wave.lpdeproblem(
@@ -16,7 +16,7 @@ basis = Dirichlet_BSpline2D(
     x_knot_interval = 0.05
 )
 method = SpaceTime_Spline_Wave_Integrator(basis, lpde)
-sol = MultiSymplectic.integrate(lpde, method)
+sol = MultisymplecticIntegrators.integrate(lpde, method)
 
 xs = collect(lpde.xspan[1]:lpde.xstep:lpde.xspan[2])
 err = maximum(abs.(sol.sol.u[end] .- lpde.exact_u.(lpde.timespan[2], xs)))

@@ -1,5 +1,5 @@
 using QuadratureRules
-using MultiSymplectic
+using MultisymplecticIntegrators
 using AbstractNeuralNetworks
 using Random
 using GeometricMachineLearning
@@ -34,12 +34,12 @@ xspan = (0.0, 1.0)
 h = 0.3
 elm_int = ELM_PDE_int(nn_elm_basis; RT_per_interval = 8, RX_per_interval = 8,
     xspan = xspan, initial_guess_method = LSGD(), show_status = true)
-lpde = MultiSymplectic.Wave.lpdeproblem(timestep = h, timespan = (0.0, h), xspan = xspan)
+lpde = MultisymplecticIntegrators.Wave.lpdeproblem(timestep = h, timespan = (0.0, h), xspan = xspan)
 
 # log_file="elmint.txt"
 # open(log_file, "w") do io
 #     redirect_stdio(stdout=log_file, stderr=log_file) do
-sol = MultiSymplectic.integrate(lpde, elm_int)
+sol = MultisymplecticIntegrators.integrate(lpde, elm_int)
 
 # p = @layout [a b c]
 # p1 = plot([lpde.exact_u(h,xx) for xx in xspan[1]:0.01:xspan[2]], label="exact_u")

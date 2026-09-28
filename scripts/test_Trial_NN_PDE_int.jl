@@ -1,9 +1,9 @@
-# cd("MultiSymplectic.jl")
+# cd("MultisymplecticIntegrators.jl")
 # using Pkg
 # Pkg.activate(".")
 using Revise
 using GeometricIntegratorsBase
-using MultiSymplectic
+using MultisymplecticIntegrators
 using AbstractNeuralNetworks
 using Zygote
 using JLD2
@@ -32,7 +32,8 @@ end
 x_step = 0.01
 x_span = (0.0, 1.0)
 t_span = (0.0, 3*t_step)
-lpde = MultiSymplectic.Wave.lpdeproblem(timestep = t_step, timespan = t_span, xspan = x_span, xstep = x_step)
+lpde = MultisymplecticIntegrators.Wave.lpdeproblem(
+    timestep = t_step, timespan = t_span, xspan = x_span, xstep = x_step)
 
 relu3(x) = max(0.0, x)^3
 activation = tanh
@@ -44,7 +45,7 @@ trial_basis = Trial_Solution_Basis(S, activation, x_span)
 # open(log_file, "w") do io
 #         redirect_stdio(stdout=log_file, stderr=log_file) do
 trial_int = TrialNN_PDE_int(trial_basis, show_status = false, t_num_interval = 4, x_num_interval = 8)
-sol = MultiSymplectic.integrate(lpde, trial_int)
+sol = MultisymplecticIntegrators.integrate(lpde, trial_int)
 #     end
 # end
 # end
