@@ -14,6 +14,11 @@ makes it worth keeping.
 
 ## [Unreleased] — targeting 0.1.0
 
+### Changed
+
+- **CI coverage and cache.** CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of
+  `Julia min`, and a test job saves the Julia cache only when it succeeds.
+
 ### New Features
 
 - **Continuous integration.** The repository had no `.github` directory at all; it now carries the
