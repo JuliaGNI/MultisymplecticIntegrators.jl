@@ -42,13 +42,19 @@ makes it worth keeping.
 - **Reference values of the current integrators.** `scripts/reference_values.jl` runs every
   integrator family on short `Wave` and `SineGordon` cases and writes
   `test/helpers/reference_values.jl`: the solution after each step, the energy error, and the
-  Newton iterations and tolerances, each entry with its constructor call. The file also holds the
-  error of the FEM stencil at `t = 5` and `t = 200` on three grids and at CFL 1, and the observed
-  order of the full-restriction spline integrator. Its header names the commit, the Julia version
-  and the dependency versions. A rewritten integrator must reproduce these values. Two cases fail
-  on the current code and record the exception: `TrialNN_PDE_int` on `Wave`, and
-  `Sindy_PDE_Integrator`. Both stop with a NaN in the Newton direction. No test includes the file
-  yet.
+  Newton iterations and residuals of each step, each entry with its constructor call. The solver
+  options that every Newton case shares are written once, as `SOLVER_OPTIONS`. `converged` is
+  SimpleSolvers' `isconverged`, which a small change of the iterate can meet at a large residual.
+  A network case runs twice from the same seed, and the script stops if the two runs differ. The
+  file also holds the error of the FEM stencil at `t = 5` and `t = 200` on three grids and at CFL
+  1, and the observed order of the full-restriction spline integrator. Its header names the
+  commit, the Julia version, the `--check-bounds` flag, the thread counts and the versions of the
+  22 direct dependencies and OpenBLAS_jll. The values can depend on the `--check-bounds` flag, so
+  a rewritten integrator must reproduce these values under the same flag. Two cases fail on the
+  current code and record the exception and the step that raised it: `TrialNN_PDE_int` on `Wave`,
+  and `Sindy_PDE_Integrator` on `Wave`, which fails at step 1. Both occur at the default
+  `regularization_factor = 0`, and both stop with a NaN in the Newton direction. No test includes
+  the file yet.
 
 ### Bug Fixes
 
