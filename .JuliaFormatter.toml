@@ -1,3 +1,4 @@
 style = "sciml"
 # Four 64-element Gauss–Legendre literals on single lines; formatting them kills the Julia process.
-ignore = ["src/utils/common.jl"]
+# The reference values are generated, one `repr` line per constant, by scripts/reference_values.jl.
+ignore = ["src/utils/common.jl", "test/helpers/reference_values.jl"]

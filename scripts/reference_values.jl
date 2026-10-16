@@ -5,10 +5,11 @@
 # commit 294f023, in an environment that resolves the versions named in the header of the output
 # file:
 #
-#     julia --startup-file=no --threads=1 --check-bounds=auto --project=<that environment> \
+#     julia --startup-file=no --threads=1 --check-bounds=yes --project=<that environment> \
 #         scripts/reference_values.jl
 #
-# The values can depend on the `--check-bounds` flag; the header of the output records it.
+# The values depend on the `--check-bounds` flag. The script runs only under
+# `--check-bounds=yes`, the flag of `julia-runtest` in CI and of `Pkg.test()` up to Julia 1.12.
 # The values describe the code at that commit, defects included. Every case steps the integrator
 # with the loop of `integrate!(::SolutionStep, ...)` of `src/utils/PDE_Integrator.jl`, written
 # out so that the Newton state of each step can be read. A case that throws records the
@@ -29,6 +30,8 @@ const SEED = 1234
 const OUTPUT = joinpath(@__DIR__, "..", "test", "helpers", "reference_values.jl")
 
 LinearAlgebra.BLAS.set_num_threads(1)
+
+Base.JLOptions().check_bounds == 1 || error("run this script with --check-bounds=yes")
 
 # The package source must be that of COMMIT: the values describe that code.
 cd(pkgdir(MSI)) do
@@ -301,30 +304,10 @@ function full_restriction_order()
         observed_order = [log2(errors[i] / errors[i + 1]) for i in 1:2])
 end
 
-# --- writing the literals ---------------------------------------------------------------------
+# --- writing the file -------------------------------------------------------------------------
 
-# The layout is the fixed point of JuliaFormatter's SciML style, so that the written file is
-# formatted as written: a vector on one line where it fits in 92 columns, else one element per
-# line; a matrix with one row per line.
-literal(x, prefix) = repr(x)
-
-function literal(x::AbstractVector, prefix)
-    line = "[" * join(repr.(x), ", ") * "]"
-    length(prefix) + length(line) + 1 ≤ 92 && return line
-    "[\n" * join("        " .* repr.(x), ",\n") * "]"
-end
-
-function literal(x::AbstractMatrix, prefix)
-    rows = [join(repr.(row), " ") for row in eachrow(x)]
-    "[" * join(rows, ";\n" * " "^(length(prefix) + 1)) * "]"
-end
-
-function constant(name, entry)
-    fields = ["    $key = " * literal(value, "    $key = ")
-              for (key, value) in pairs(entry)]
-    "const $name = (\n" * join(fields, ",\n") * ")\n"
-end
-
+# Each entry is written with `repr`, one line per constant. `.JuliaFormatter.toml` excludes the
+# output from formatting.
 function header()
     deps = Dict(d.name => d.version for d in values(Pkg.dependencies()))
     direct = sort([d.name for d in values(Pkg.dependencies()) if d.is_direct_dep])
@@ -336,6 +319,8 @@ function header()
         "# Julia: $VERSION, --check-bounds=$check_bounds, $(Threads.nthreads()) thread(s), " *
         "$(BLAS.get_num_threads()) BLAS thread(s)",
         ["# $name $(deps[name])" for name in [direct; "OpenBLAS_jll"]]...,
+        "#",
+        "# The values depend on the `--check-bounds` flag; compare them under the flag above.",
         "#",
         "# Each Wave and SineGordon entry: `u`, `v`, `w` hold one row per step, on the nodes",
         "# of the problem's output grid. `energy_error` is the relative error of the quadrature",
@@ -370,7 +355,8 @@ function main()
     @info "full-restriction order"
     constants = [wave; sine_gordon; "SOLVER_OPTIONS" => only(OPTIONS); fem;
                  "WAVE_FULL_RESTRICTION_ORDER" => full_restriction_order()]
-    text = header() * join("\n" * constant(name, entry) for (name, entry) in constants)
+    text = header() *
+           join("\nconst $name = $(repr(entry))\n" for (name, entry) in constants)
     mkpath(dirname(OUTPUT))
     write(OUTPUT, text)
     @info "wrote $(normpath(OUTPUT)), $(count(==('\n'), text)) lines"
