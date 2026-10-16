@@ -39,6 +39,16 @@ makes it worth keeping.
   scripts and the two batch scripts that held no test move from `test/` to `scripts/`. The four
   broken marks of the full-multiplier test and the final-time error assertion of the FEM
   test are `@test_broken`, and four Aqua checks are `broken` (issues #2–#7).
+- **Reference values of the current integrators.** `scripts/reference_values.jl` runs every
+  integrator family on short `Wave` and `SineGordon` cases and writes
+  `test/helpers/reference_values.jl`: the solution after each step, the energy error, and the
+  Newton iterations and tolerances, each entry with its constructor call. The file also holds the
+  error of the FEM stencil at `t = 5` and `t = 200` on three grids and at CFL 1, and the observed
+  order of the full-restriction spline integrator. Its header names the commit, the Julia version
+  and the dependency versions. A rewritten integrator must reproduce these values. Two cases fail
+  on the current code and record the exception: `TrialNN_PDE_int` on `Wave`, and
+  `Sindy_PDE_Integrator`. Both stop with a NaN in the Newton direction. No test includes the file
+  yet.
 
 ### Bug Fixes
 
