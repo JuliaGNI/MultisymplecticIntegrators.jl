@@ -39,6 +39,22 @@ makes it worth keeping.
   scripts and the two batch scripts that held no test move from `test/` to `scripts/`. The four
   broken marks of the full-multiplier test and the final-time error assertion of the FEM
   test are `@test_broken`, and four Aqua checks are `broken` (issues #2–#7).
+- **Reference values of the current integrators.** `scripts/reference_values.jl` runs every
+  integrator family on short `Wave` and `SineGordon` cases and writes
+  `test/helpers/reference_values.jl`: the solution after each step, the energy error, and the
+  Newton iterations and residuals of each step, each entry with its constructor call. The solver
+  options that every Newton case shares are written once, as `SOLVER_OPTIONS`. `converged` is
+  SimpleSolvers' `isconverged`, which a small change of the iterate can meet at a large residual.
+  A network case runs twice from the same seed, and the script stops if the two runs differ. The
+  file also holds the error of the FEM stencil at `t = 5` and `t = 200` on three grids and at CFL
+  1, and the observed order of the full-restriction spline integrator. Its header names the
+  commit, the Julia version, the `--check-bounds` flag, the thread counts and the versions of the
+  22 direct dependencies and OpenBLAS_jll. The values can depend on the `--check-bounds` flag, so
+  a rewritten integrator must reproduce these values under the same flag. Two cases fail on the
+  current code and record the exception and the step that raised it: `TrialNN_PDE_int` on `Wave`,
+  and `Sindy_PDE_Integrator` on `Wave`, which fails at step 1. Both occur at the default
+  `regularization_factor = 0`, and both stop with a NaN in the Newton direction. No test includes
+  the file yet.
 
 ### Bug Fixes
 
