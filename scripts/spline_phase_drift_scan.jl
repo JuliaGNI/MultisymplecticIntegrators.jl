@@ -112,7 +112,6 @@ function run_case(; family, k, t_step, t_end, xstep, t_knot_interval,
             xspan = lpde.xspan,
             RT_per_interval = k,
             RX_per_interval = k,
-            show_status = false
         )
     elseif family == :multiplier
         basis = BSpline2D(
@@ -126,7 +125,6 @@ function run_case(; family, k, t_step, t_end, xstep, t_knot_interval,
             xspan = lpde.xspan,
             RT_per_interval = k,
             RX_per_interval = k,
-            show_status = false,
             multiplier_stride = multiplier_stride
         )
     else
