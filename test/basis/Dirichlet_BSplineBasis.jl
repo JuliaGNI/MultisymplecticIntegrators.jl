@@ -2,8 +2,8 @@ using Test
 using MultisymplecticIntegrators
 
 @testset "Dirichlet_BSpline2D shows its physical x-breaks" begin
-    # On xspan = (0, 2) the width is 2, so a break scaled by the width once more shows twice its
-    # value: `Break Length x: 1.0` and `[0.0, 0.0, 0.0, 1.0, …]`.
+    # The knot interval and the knots are in physical x, so neither is scaled by the width of
+    # xspan: on `xspan = (0.0, 2.0)` a break of 0.5 prints as 0.5, not as 1.0.
     basis = Dirichlet_BSpline2D(
         3;
         timestep = 0.1,

@@ -32,8 +32,7 @@ const TABLES = Dict(
 end
 
 @testset "construct_quadrature_grid_with_boundary matches the 64- and 128-node tables" begin
-    grid, weights = MultisymplecticIntegrators.construct_quadrature_grid_with_boundary([
-        64, 128])
+    grid, _ = MultisymplecticIntegrators.construct_quadrature_grid_with_boundary([64, 128])
     interior = grid[:, 1:(64 * 128)]
     for (dim, k) in ((1, 64), (2, 128))
         nodes = sort(unique(interior[dim, :]))
