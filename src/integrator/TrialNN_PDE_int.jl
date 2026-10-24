@@ -514,6 +514,7 @@ function prior_initial_guess!(C::TrialNN_PDE_intCache, sol,
     desired = zeros(N)
     corrs = zeros(M)
     weighted_residual = zeros(N)
+    selected = zeros(Int, S) # indices of selected atoms in the dictionary
 
     # Build the desired internal PNN output on all quadrature nodes:
     # desired = target + T1NN - T2NN - C1 + C2  (evaluated with current PNN.params)
@@ -535,6 +536,9 @@ function prior_initial_guess!(C::TrialNN_PDE_intCache, sol,
         corrs .= abs.(corrs)
 
         idx = argmax(corrs)
+        selected[s] = idx
+        length(Set(selected)) - 1 != s &&
+            @warn "atom repeated at s=$s, idx=$idx"
 
         # extract raw atom (already normalized) and orthogonalize (Gram-Schmidt)
         φ = copy(Φ_raw[idx, :])

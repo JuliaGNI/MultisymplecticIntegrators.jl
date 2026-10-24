@@ -22,7 +22,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 ### K2 · Stale bounds: `GeometricIntegratorsBase = "0.1.11"` against 0.6.4, `SimpleSolvers = "0.7.8"` against 0.13.2.
 
 - location: —
-- evidence: Only 10 of 31 dependencies are bounded at all.
+- evidence: Only 10 of 30 dependencies are bounded at all.
 - kind: defect
 - found: 2026-08-31
 
@@ -40,10 +40,9 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `) where {IPMT,}` of a constructor signature behind the trailing `# hyperparameters for OGA2d`
   comment on the same line. It detects this itself and declines to write, so the two are
   unformatted rather than broken. Moving that comment onto its own line would fix them, but that
-  is a content change.
+  is a content change. The two block the pre-commit hook if staged.
 - kind: upstream
-- found: 2026-09-07; Separately, four files are **not formatted and cannot be**, and each will
-  block the pre-commit hook if ever staged:
+- found: 2026-09-07
 
 ## KI-2 · dead code · unused test dependencies
 
