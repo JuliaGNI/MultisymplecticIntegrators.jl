@@ -45,18 +45,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - found: 2026-09-07; Separately, four files are **not formatted and cannot be**, and each will
   block the pre-commit hook if ever staged:
 
-### K6 · Three scripts are not formatted to `.JuliaFormatter.toml`, so a commit that stages any of them carries `--no-verify`.
-
-- location: `scripts/check_spline_lagrangian_quadrature.jl:140`
-- evidence: `scripts/check_spline_lagrangian_quadrature.jl:140`,
-  `scripts/spline_phase_drift_scan.jl:114` and `scripts/test_sindy_PDE_int.jl:165` each end in a
-  comma before the closing `)` of a call whose last keyword argument, `show_status = false`, is
-  deleted. `format(f; overwrite = false)` returns `false` for each, and the formatter's only
-  change is to drop that comma. The comma stays so that the three scripts change only by the
-  deleted argument, and the pre-commit formatter stage refuses a commit that stages them.
-- kind: defect
-- found: 2026-10-24
-
 ## KI-2 · dead code · unused test dependencies
 
 No file under `test/` uses 19 of the 25 dependencies in `test/Project.toml`: every one except

@@ -137,7 +137,7 @@ function main()
         basis;
         xspan = xspan,
         RT_per_interval = k,
-        RX_per_interval = k,
+        RX_per_interval = k
     )
 
     @printf("k=%d  t_step=%g  tn=%g  xspan=(%g,%g)  t_knot_interval=%g  x_knot_interval=%g\n",

@@ -111,7 +111,7 @@ function run_case(; family, k, t_step, t_end, xstep, t_knot_interval,
             basis;
             xspan = lpde.xspan,
             RT_per_interval = k,
-            RX_per_interval = k,
+            RX_per_interval = k
         )
     elseif family == :multiplier
         basis = BSpline2D(
