@@ -23,10 +23,10 @@ makes it worth keeping.
   `composite_quadrature` and `construct_quadrature_grid_with_boundary` build a rule of 64 nodes or
   more as `GaussLegendreQuadrature(k; fast = true)`, since the exact default needs more than five
   minutes for 128 nodes. Below 64 nodes they keep the exact default: there the fast rule differs
-  from it, by 1 to 2 ulp at 3 to 5 nodes, and a run with it changes the reference values of
-  `test/helpers/reference_values.jl`. The fast rules agree with the deleted tables to within
-  `4 eps()`, which `test/utils/common.jl` checks. Without the 1 624-character table lines,
-  JuliaFormatter processes `src/utils/common.jl`, and the file is formatted.
+  from it, by 1 to 2 ulp at 3 to 5 nodes, the sizes the reference values of
+  `test/helpers/reference_values.jl` were recorded with. The fast rules agree with the deleted
+  tables to within `4 eps()`, which `test/utils/common.jl` checks. Without the 1 624-character
+  table lines, JuliaFormatter processes `src/utils/common.jl`, and the file is formatted.
 - **Repository hygiene.** `figures/` (13 files that nothing referenced), the tracked `.DS_Store`
   files and `rename_error.jl` are deleted.
 
