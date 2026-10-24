@@ -29,6 +29,10 @@ makes it worth keeping.
   table lines, JuliaFormatter processes `src/utils/common.jl`, and the file is formatted.
 - **Repository hygiene.** `figures/` (13 files that nothing referenced), the tracked `.DS_Store`
   files and `rename_error.jl` are deleted.
+- **Julia 1.12 is the floor** (`[compat] julia = "1.12"`, raised from 1.10). A breaking change under
+  this package's pre-1.0 convention: a caller on Julia 1.10 or 1.11 can no longer install this
+  version. The package's code does not change: it holds no version-conditional code and no
+  workaround for the older floor, so none was deleted.
 
 ### New Features
 
@@ -85,8 +89,8 @@ makes it worth keeping.
 - **`tests/` renamed to `test/`.** Neither `Pkg.test()` nor `julia-actions/julia-runtest` looks at
   `tests/`, so the ten scripts there were unreachable by any standard tool. Anything referring to
   the old path by name needs updating.
-- **`[compat] julia = "1.10"` added.** There was no Julia bound at all. 1.10 is the LTS and the
-  floor across the tree, and the CI matrix resolves its lower entry from this field.
+- **`[compat] julia = "1.12"` added.** There was no Julia bound at all. The CI matrix resolves its
+  lower entry from this field.
 - **`test/Manifest.toml` untracked.** The root one was already removed; this one survived the
   `tests/` → `test/` rename while `.gitignore` claimed to ignore it. The test environment now
   resolves from `test/Project.toml`, so anyone relying on the pinned versions it recorded will get
