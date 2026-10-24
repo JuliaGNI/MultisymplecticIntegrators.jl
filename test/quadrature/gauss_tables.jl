@@ -30,3 +30,15 @@ const TABLES = Dict(
     @test all(abs.(rule.nodes[idx] .- TABLES[k].nodes) .<= 4eps())
     @test all(abs.(rule.weights[idx] .- TABLES[k].weights) .<= 4eps())
 end
+
+@testset "construct_quadrature_grid_with_boundary uses the 64- and 128-node tables" begin
+    grid, weights = MultisymplecticIntegrators.construct_quadrature_grid_with_boundary([
+        64, 128])
+    interior = grid[:, 1:(64 * 128)]
+    for (dim, k) in ((1, 64), (2, 128))
+        nodes = sort(unique(interior[dim, :]))
+        idx = round.(Int, range(1, k; length = 10))
+        @test length(nodes) == k
+        @test all(abs.(nodes[idx] .- TABLES[k].nodes) .<= 4eps())
+    end
+end
