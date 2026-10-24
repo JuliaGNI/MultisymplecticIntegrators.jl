@@ -15,12 +15,10 @@ struct FEM_Multisymplectic_Integrator <: PDEMethod
     boundary::Vector{Int}
     c::Float64
     startup::Symbol
-    show_status::Bool
 
     function FEM_Multisymplectic_Integrator(problem::LPDEProblem;
             c = problem.params.c,
-            startup::Symbol = :taylor,
-            show_status::Bool = false)
+            startup::Symbol = :taylor)
         @assert problem.D == 1 "FEM_Multisymplectic_Integrator currently supports scalar 1+1 PDEs."
         @assert hasproperty(problem.params, :c) "The wave speed parameter `c` is required."
         @assert startup in (:taylor, :exact) "startup must be :taylor or :exact."
@@ -64,7 +62,7 @@ struct FEM_Multisymplectic_Integrator <: PDEMethod
             grid_matrix, grid_weights,
             x_nodes,
             mass_matrix, laplace_matrix, lhs_matrix, lhs_factor,
-            interior, boundary, Float64(c), startup, show_status)
+            interior, boundary, Float64(c), startup)
     end
 end
 
@@ -74,7 +72,6 @@ function Base.show(io::IO, method::FEM_Multisymplectic_Integrator)
     print(io, "   Spatial nodes: $(length(method.x_nodes)), interior unknowns: $(length(method.interior)) \n")
     print(io, "   Wave speed c: $(method.c) \n")
     print(io, "   Startup: $(method.startup) \n")
-    print(io, "   Show status: $(method.show_status) \n")
 end
 
 default_solver(::FEM_Multisymplectic_Integrator) = NewtonMethod()
@@ -211,8 +208,6 @@ function _fem_step!(C::FEM_Multisymplectic_IntegratorCache, sol,
 
     C.x .= int.method.lhs_factor \ rhs
     C.next_u[I] .= C.x
-    int.method.show_status &&
-        println("FEM multisymplectic max |u_next| = ", maximum(abs.(C.next_u)))
     return nothing
 end
 
@@ -252,29 +247,5 @@ end
 
 function components!(x::AbstractVector{ST}, sol, params,
         int::PDEIntegrator{<:FEM_Multisymplectic_Integrator}) where {ST}
-    return nothing
-end
-
-function residual!(b::Vector{ST}, sol, params, int::PDEIntegrator{<:FEM_Multisymplectic_Integrator}) where {ST}
-    C = cache(int, ST)
-    h = timestep(int)
-    dx = int.problem.xstep
-    I = int.method.interior
-    M = int.method.mass_matrix
-    A = int.method.laplace_matrix
-    c2 = int.method.c^2
-    full_next = copy(C.next_u)
-    full_next[I] .= C.x
-    r = (M * (full_next .- 2 .* C.current_u .+ C.previous_u)) ./ h^2 .-
-        c2 .* (A * (C.previous_u .+ 4 .* C.current_u .+ full_next)) ./ (6 * dx^2)
-    b .= r[I]
-    return nothing
-end
-
-function update!(sol, int::PDEIntegrator{<:FEM_Multisymplectic_Integrator})
-    C = cache(int)
-    sol.u .= C.next_u
-    sol.v .= C.v_quad_values[1, 1, :]
-    sol.w .= C.w_quad_values[1, 1, :]
     return nothing
 end

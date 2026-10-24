@@ -57,13 +57,12 @@ function integrate(problem::LPDEProblem, method::PDEMethod; kwargs...)
 end
 
 function integrate(integrator::AbstractPDEIntegrator)
-    sol = GeometricSolution(problem(integrator)) #,internal = internal_variables(integrator,problem(integrator)
+    sol = GeometricSolution(problem(integrator))
     integrate!(sol, integrator)
 end
 
 function integrate!(sol::GeometricSolution, int::AbstractPDEIntegrator)
     integrate!(sol, int, 1, ntime(sol))
-    # return sol
 end
 
 function integrate!(
@@ -131,13 +130,6 @@ end
 function integrate_step!(sol, history, params, int::AbstractPDEIntegrator)
     # call nonlinear solver
     solve!(nlsolution(int), solver(int), (sol, params, int))
-
-    # print solver status
-    # println(status(solver))
-
-    # check if solution contains NaNs or error bounds are violated
-    # println(meets_stopping_criteria(status(solver)))
-
     # compute final update
     update!(sol, int)
 end

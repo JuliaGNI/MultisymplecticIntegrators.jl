@@ -23,13 +23,6 @@ struct LPDESystem{LType, TType, XType, UType, VType, WType, EType, FType, PT <: 
         ∂L∂V_expr = [Symbolics.derivative(Ls, V[i]) for i in eachindex(V)]
         ∂L∂W_expr = [Symbolics.derivative(Ls, W[i]) for i in eachindex(W)]
 
-        # ∂L∂W_expr = zeros(Num,D,DX)
-        # for d in 1:D
-        #     for dx in 1:DX
-        #         ∂L∂W_expr[d,dx] = Symbolics.derivative(Ls, W[d,dx])
-        #     end
-        # end
-
         equs = (
             L = Ls,
             ∂L∂U = ∂L∂U_expr,
@@ -50,13 +43,6 @@ struct LPDESystem{LType, TType, XType, UType, VType, WType, EType, FType, PT <: 
                     Symbolics.build_function(
                         ∂L∂W_expr[i], U, V, W, sparams...; nanmath = false),
                     sparams)) for i in eachindex(∂L∂W_expr)]
-
-        # ∂L∂W = Array{Function}(undef,D,DX)
-        # for d in 1:D
-        #     for dx in 1:DX
-        #         ∂L∂W[d,dx] = Symbolics.eval(substitute_parameters(Symbolics.build_function(∂L∂W_expr[d,dx], U, V, W,sparams...; nanmath = false),sparams))
-        #     end
-        # end
 
         functions = (
             ∂L∂U = ∂L∂U,

@@ -1,9 +1,6 @@
 using GeometricIntegratorsBase: GeometricMethod
 abstract type PDEMethod <: GeometricMethod end
 
-# using GeometricBase:AbstractProblem
-# abstract type PDEProblem <: AbstractProblem end
-
 using GeometricEquations: GeometricEquation
 using GeometricBase: OptionalInvariants, OptionalParameters, OptionalPeriodicity
 
@@ -13,18 +10,12 @@ abstract type PDEIntegratorCache{DT, D} <: IntegratorCache{DT, D} end
 using GeometricBase: AbstractIntegrator
 abstract type AbstractPDEIntegrator <: AbstractIntegrator end
 
-# using GeometricBase:AbstractSolution
-# abstract type AbstractPDESolution <: AbstractSolution end
-
-# using CompactBasisFunctions: Basis
-abstract type AbstractPDEBasis end #<: Basis 
+abstract type AbstractPDEBasis end
 
 abstract type InitialParametersMethod end
 struct LSGD <: InitialParametersMethod end
-# struct OGA2D <: InitialParametersMethod end
 struct ELM <: InitialParametersMethod end
 struct PINN <: InitialParametersMethod end
-struct TrialOGA2D <: InitialParametersMethod end
 
 _show_typename(io::IO, obj) = print(io, nameof(typeof(obj)))
 _hasfield(obj, field::Symbol) = field in fieldnames(typeof(obj))
@@ -72,5 +63,4 @@ function Base.show(io::IO, method::PDEMethod)
     _show_field(io, method, :Nbasis_μ_t)
     _show_field(io, method, :Nbasis_λ_x)
     _show_type_field(io, method, :initial_guess_method)
-    _show_field(io, method, :show_status)
 end

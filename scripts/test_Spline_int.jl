@@ -69,7 +69,7 @@ c = lpde.params.c
 # for x_knot_interval in [0.05,0.1]
 spline_basis = BSpline2D(k, xspan = xspan, t_knot_interval = t_knot_interval, x_knot_interval = x_knot_interval)
 spline_int = Galerkin_Bspline_Integrator(spline_basis, xspan = xspan, RT_per_interval = k,
-    RX_per_interval = k, show_status = true)
+    RX_per_interval = k)
 println("Start Spline Integrator")
 sol_set = MultisymplecticIntegrators.integrate(lpde, spline_int)
 println("End Spline Integrator with h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")

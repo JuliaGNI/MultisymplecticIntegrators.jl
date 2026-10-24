@@ -9,7 +9,6 @@ struct NN_Basis{NT, UT, VT, WT, UFT} <: AbstractPDEBasis
     NP::Int
     function NN_Basis(u_basis_arch, NP; input_dim = 2)
         u_basis = AbstractNeuralNetworks.NeuralNetwork(u_basis_arch)
-        # u_grad(x) = Zygote.jacobian(input -> u_func(input),x)[1]
         v_basis(x, ps) = Zygote.jacobian(input -> u_basis(input, ps), x)[1][:, 1]
         w_basis(x, ps) = Zygote.jacobian(input -> u_basis(input, ps), x)[1][:, 2]
 

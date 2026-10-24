@@ -50,7 +50,7 @@ xspan = (0.0, 1.0)
 t_span = (0.0, 10.0)
 nn_int = NN_PDE_Integrator_Symbolic(nn_pde_basis_sym, xspan = xspan, μ = :BSplineDirichlet,
     λ = :BSplineDirichlet, t_num_interval = 2, x_num_interval = 5,
-    k_μ_t = 4, k_λ_x = 4, show_status = false)
+    k_μ_t = 4, k_λ_x = 4)
 
 lpde = MultisymplecticIntegrators.Wave.lpdeproblem(timestep = t_step, timespan = t_span, xspan = xspan)
 

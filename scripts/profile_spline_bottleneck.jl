@@ -46,7 +46,6 @@ function main()
         xspan = xspan,
         RT_per_interval = k,
         RX_per_interval = k,
-        show_status = false,
         multiplier_stride = multiplier_stride
     )
     int = MultisymplecticIntegrators.PDEIntegrator(lpde, method)

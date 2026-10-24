@@ -17,14 +17,12 @@ struct SpaceTime_Spline_Wave_Integrator{BT <: AbstractPDEBasis} <: PDEMethod
     eval_matrix::Matrix{Float64}
     eval_derivative_matrix::Matrix{Float64}
     c::Float64
-    show_status::Bool
 
     function SpaceTime_Spline_Wave_Integrator(
             basis::Dirichlet_BSpline2D,
             problem::LPDEProblem;
             c = problem.params.c,
-            quadrature_order::Int = basis.k + 2,
-            show_status::Bool = false)
+            quadrature_order::Int = basis.k + 2)
         @assert problem.D == 1 "SpaceTime_Spline_Wave_Integrator currently supports scalar 1+1 wave problems."
         @assert hasproperty(problem.params, :c) "The wave speed parameter `c` is required."
 
@@ -74,7 +72,7 @@ struct SpaceTime_Spline_Wave_Integrator{BT <: AbstractPDEBasis} <: PDEMethod
             action_matrix, system_matrix, system_factor,
             unknown_indices, equation_indices, bottom_indices, top_indices,
             eval_matrix, eval_derivative_matrix,
-            Float64(c), show_status)
+            Float64(c))
     end
 end
 
@@ -106,7 +104,6 @@ function Base.show(io::IO, method::SpaceTime_Spline_Wave_Integrator)
     print(io, "   Unknowns per slab: $(length(method.unknown_indices)) \n")
     print(io, "   Quadrature points: RT=$(method.RT), RX=$(method.RX) \n")
     print(io, "   Wave speed c: $(method.c) \n")
-    print(io, "   Show status: $(method.show_status) \n")
 end
 
 default_solver(::SpaceTime_Spline_Wave_Integrator) = NewtonMethod()
@@ -317,7 +314,6 @@ function integrate_step!(sol, history, params, int::PDEIntegrator{<:SpaceTime_Sp
     _solve_spacetime_spline_slab!(C, sol, int)
     _fill_spacetime_spline_values!(C, sol, int)
     update!(sol, int)
-    int.method.show_status && println("Space-time spline max |u| = ", maximum(abs.(sol.u)))
     return nothing
 end
 

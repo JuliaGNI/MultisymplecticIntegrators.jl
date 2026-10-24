@@ -25,8 +25,7 @@ using MultisymplecticIntegrators
         t_num_interval = 2,
         x_num_interval = 2,
         Nw = 2,
-        Nb = 2,
-        show_status = false
+        Nb = 2
     )
     int = MultisymplecticIntegrators.PDEIntegrator(lpde, method)
     sol = GeometricSolution(lpde)

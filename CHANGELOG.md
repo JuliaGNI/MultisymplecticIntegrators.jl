@@ -18,6 +18,16 @@ makes it worth keeping.
 
 - **CI coverage and cache.** CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of
   `Julia min`, and a test job saves the Julia cache only when it succeeds.
+- **The 64- and 128-node Gauss–Legendre rules come from QuadratureRules.** `GaussQuadrature64`
+  and `GaussQuadrature128`, two functions that returned hard-coded tables, are deleted.
+  `composite_quadrature` and `construct_quadrature_grid_with_boundary` build every rule as
+  `GaussLegendreQuadrature(k; fast = true)`; the exact default needs more than five minutes for 128
+  nodes. The fast rules agree with the deleted tables to within `4 eps()`, which
+  `test/quadrature/gauss_tables.jl` checks. Without the 1 624-character table lines,
+  `src/utils/common.jl` is formatted and is no longer in the `ignore` list of
+  `.JuliaFormatter.toml`, which supersedes the *Bug Fixes* entry that excluded it.
+- **Repository hygiene.** `figures/` (13 files that nothing referenced), the tracked `.DS_Store`
+  files and `rename_error.jl` are deleted.
 
 ### New Features
 
@@ -63,6 +73,11 @@ makes it worth keeping.
   kills the Julia process on it, and 2.14.0 does not finish in 300 s, so the pre-commit hook
   blocked any commit that staged the file. An `ignore` entry in `.JuliaFormatter.toml` skips it;
   the file itself is unchanged.
+- **Two `show` methods print the x-breaks of the basis once.** `Dirichlet_BSpline2D` stores its
+  knot interval and its knots in physical x, and its `show` and that of
+  `Galerkin_Full_Restriction_Bspline_Integrator` multiplied both by the width of `xspan` again: on
+  `xspan = (0.0, 2.0)` with a knot interval of 0.5 they showed `Break Length x: 1.0`. They print the
+  stored values now.
 
 ### Breaking Changes
 
@@ -87,3 +102,21 @@ makes it worth keeping.
   dependency; a test bound could only narrow them, and tests that run on narrower bounds than the
   package claims do not test what the package admits. This is the tree-wide rule of the test-suite
   unification.
+- **Code that nothing reached is deleted; it stays reachable at `294f023`.** The four files that
+  no `include` loaded go: `src/integrator/NN_PDE_LSGD_int.jl`, an older copy of
+  `NN_PDE_int.jl`; `src/utils/PINN_for_init.jl`, a prototype script;
+  `src/utils/Lagrangian_PDE_solution.jl` and `src/utils/solvers.jl`. So do the functions that
+  nothing called: `box_init_plain`, `lagrangianPDE_derivatives`, the dense
+  `spline2D_coeff_derivatives` with its `_time` and `_space` variants, `spacestep`,
+  `generate_symbolic_u_trial`, the 4-argument `residual!` of `TrialNN_PDE_int`, and the
+  `residual!` and `update!` of `FEM_Multisymplectic_Integrator`, which overrides
+  `integrate_step!`. `TrialOGA2D` is gone, and so is the export of `GeometricPDESolution`, which no
+  file defined (#3). Every integrator family stays. `src/` is 3 698 lines shorter than at
+  `294f023`.
+- **`show_status` is removed.** No integrator takes the keyword or stores the field any more, and
+  a call that passes it throws a `MethodError`. The reports it switched on, errors against the
+  exact solution printed during a step, are deleted, together with every unconditional `@show`,
+  `println` and `@info`, every `@infiltrate` and the commented-out code in `src/`. With them goes
+  the read of an undefined `tn` in `components!` of `NN_PDE_Integrator_Symbolic` and `ELM_PDE_int`
+  under `show_status = true`. `Infiltrator` is no longer a dependency of the package or of its
+  tests. The scripts in `scripts/` no longer pass the keyword.

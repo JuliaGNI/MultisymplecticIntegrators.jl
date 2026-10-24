@@ -200,7 +200,6 @@ function lpdeproblem(; lagrangian_function = lagrangian_density,
         xstep::Float64 = xstep, params = default_parameters,
         exact_u = exact_u, exact_v = exact_v, exact_w = exact_w,
         least_squares_assemble = problem_matrix_assemble)
-    # @assert timestep^2 < c * xstep^2 "timestep^2 < c*xstep^2 must hold for CFL condition"
     @assert timespan[1] < timespan[2] "timespan must be increasing"
     @assert xspan[1] < xspan[2] "xspan must be increasing"
 
@@ -220,12 +219,8 @@ function problem_matrix_assemble(C, int::PDEIntegrator{<:ELM_PDE_int}, sol)
     local RX = int.method.RX
     local NP = int.method.basis.NP
     local u_basis = int.method.basis.u_basis
-    local show_status = int.method.show_status
-    local h = int.problem.timestep
-    local tn = sol.t - h
     local xspan = int.problem.xspan
     local x_domain = xspan[2] - xspan[1]
-    local exact_u = int.problem.exact_u
     local t_quad_nodes = int.method.time_quadrature.nodes
     local x_quad_nodes = int.method.spatial_quadrature.nodes
 
@@ -251,29 +246,6 @@ function problem_matrix_assemble(C, int::PDEIntegrator{<:ELM_PDE_int}, sol)
     C.system_rhs[(RT * RX + RX + RT + 1):(RT * RX + RX + 2 * RT)] = C.boundary_condition_x₁[1, :]'
 
     C.x[1:NP] = C.system_matrix \ C.system_rhs
-
-    if show_status
-        @show C.x[1:NP]
-        elm_pred = zeros(Float64, RT, RX)
-        truth = zeros(Float64, RT, RX)
-        for rt in 1:RT
-            for rx in 1:RX
-                elm_pred[rt, rx] = sum(C.x[1:NP] .* C.u_basis_quad_values[1, :, rt, rx])
-                truth[rt, rx] = exact_u(tn + h * t_quad_nodes[rt], xspan[1] +
-                                                                   x_domain *
-                                                                   x_quad_nodes[rx])
-            end
-        end
-        @show maximum(abs.(elm_pred - truth))
-        # u_func.params[keys(u_func.params)[end]].W[:] = C.x[1:NP]
-
-        record_results = Dict()
-        record_results["max_error"] = maximum(abs.(elm_pred - truth))
-        record_results["u_basis_params"] = u_basis.params
-        record_results["x"] = C.x[1:NP]
-        # MultisymplecticIntegrators._save_jld2("LS_initial_guess_results.jld2", record_results)
-
-    end
 end
 
 end

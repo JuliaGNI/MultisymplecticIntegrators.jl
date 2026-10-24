@@ -91,7 +91,7 @@ nn_pde_basis = NetworkPDEBasis(S, tanh, :Fully) # Partially, Fully
 nn_int = NN_PDE_Integrator(
     nn_pde_basis, xspan = xspan, μ = :BSplineDirichlet, λ = :BSplineDirichlet,
     t_num_interval = t_interval, x_num_interval = x_interval,
-    k_μ_t = 4, k_λ_x = 4, show_status = false, Nw = Nw, Nb = Nb)
+    k_μ_t = 4, k_λ_x = 4, Nw = Nw, Nb = Nb)
 
 sol = MultisymplecticIntegrators.integrate(lpde, nn_int)
 # @code_warntype MultisymplecticIntegrators.integrate(lpde,nn_int)

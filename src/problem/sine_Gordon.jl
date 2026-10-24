@@ -132,7 +132,6 @@ function lpdeproblem(;
         xstep::Float64 = xstep, params = default_parameters,
         exact_u = exact_u, exact_v = exact_v, exact_w = exact_w)
     @unpack c, velocity, γ = params
-    # @assert tstep^2 < c * xstep^2 "tstep^2 < c*xstep^2 must hold for CFL condition"
     @assert c * velocity^2 < 1 "Sine-Gordon kink requires c * velocity^2 < 1 for c*u_tt - u_xx = -sin(u)"
     @assert timespan[1] < timespan[2] "timespan must be increasing"
     @assert xspan[1] < xspan[2] "xspan must be increasing"
