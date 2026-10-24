@@ -111,8 +111,8 @@ makes it worth keeping.
   `generate_symbolic_u_trial`, the 4-argument `residual!` of `TrialNN_PDE_int`, and the
   `residual!` and `update!` of `FEM_Multisymplectic_Integrator`, which overrides
   `integrate_step!`. `TrialOGA2D` is gone, and so is the export of `GeometricPDESolution`, which no
-  file defined (#3). Every integrator family stays. `src/` is 3 698 lines shorter than at
-  `294f023`.
+  file defined (#3); Aqua's undefined-exports check, `broken` until now, passes and is no longer
+  marked. Every integrator family stays. `src/` is 3 698 lines shorter than at `294f023`.
 - **`show_status` is removed.** No integrator takes the keyword or stores the field any more, and
   a call that passes it throws a `MethodError`. The reports it switched on, errors against the
   exact solution printed during a step, are deleted, together with every unconditional `@show`,
