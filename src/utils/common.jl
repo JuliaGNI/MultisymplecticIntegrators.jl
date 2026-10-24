@@ -23,14 +23,26 @@ function construct_quadrature_grid(R_list::Vector{Int}, Num_intervals_list::Vect
 end
 
 """
+    gauss_legendre(k::Int)
+
+The `k`-node Gauss–Legendre rule on [0, 1]: QuadratureRules' exact `GaussLegendreQuadrature(k)`
+below 64 nodes, and its `fast = true` rule from 64 nodes on, where the exact `BigFloat`
+construction takes more than five minutes.
+"""
+function gauss_legendre(k::Int)
+    k < 64 ? QuadratureRules.GaussLegendreQuadrature(k) :
+    QuadratureRules.GaussLegendreQuadrature(k; fast = true)
+end
+
+"""
     composite_quadrature(num_intervals, k::Int)
 
 Composite Gauss–Legendre rule on [0, 1], split into `num_intervals` equal intervals with `k`
-nodes in each. The rule on one interval is QuadratureRules' `GaussLegendreQuadrature(k; fast = true)`.
+nodes in each, each interval with the rule of `gauss_legendre(k)`.
 return: `(nodes, weights)`
 """
 function composite_quadrature(num_intervals, k::Int)
-    QGau = QuadratureRules.GaussLegendreQuadrature(k; fast = true)
+    QGau = gauss_legendre(k)
     nodes_01, weights_01 = QGau.nodes, QGau.weights
 
     breaks = 0:(1 / num_intervals):1
@@ -294,7 +306,7 @@ function construct_quadrature_grid_with_boundary(dimensions::Vector{Int})
     d = length(dimensions)
 
     # Create quadrature rules for each dimension
-    quad_rules(R) = QuadratureRules.GaussLegendreQuadrature(R; fast = true)
+    quad_rules(R) = gauss_legendre(R)
 
     quadrature_rules = [quad_rules(R) for R in dimensions]
     nodes = [rule.nodes for rule in quadrature_rules]

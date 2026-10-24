@@ -20,11 +20,13 @@ makes it worth keeping.
   `Julia min`, and a test job saves the Julia cache only when it succeeds.
 - **The 64- and 128-node Gauss–Legendre rules come from QuadratureRules.** `GaussQuadrature64`
   and `GaussQuadrature128`, two functions that returned hard-coded tables, are deleted.
-  `composite_quadrature` and `construct_quadrature_grid_with_boundary` build every rule as
-  `GaussLegendreQuadrature(k; fast = true)`; the exact default needs more than five minutes for 128
-  nodes. The fast rules agree with the deleted tables to within `4 eps()`, which
-  `test/quadrature/gauss_tables.jl` checks. Without the 1 624-character table lines,
-  `src/utils/common.jl` is formatted and is no longer in the `ignore` list of
+  `composite_quadrature` and `construct_quadrature_grid_with_boundary` build a rule of 64 nodes or
+  more as `GaussLegendreQuadrature(k; fast = true)`, since the exact default needs more than five
+  minutes for 128 nodes. Below 64 nodes they keep the exact default: there the fast rule differs
+  from it, by 1 to 2 ulp at 3 to 5 nodes, and a run with it changes the reference values of
+  `test/helpers/reference_values.jl`. The fast rules agree with the deleted tables to within
+  `4 eps()`, which `test/quadrature/gauss_tables.jl` checks. Without the 1 624-character table
+  lines, `src/utils/common.jl` is formatted and is no longer in the `ignore` list of
   `.JuliaFormatter.toml`, which supersedes the *Bug Fixes* entry that excluded it.
 - **Repository hygiene.** `figures/` (13 files that nothing referenced), the tracked `.DS_Store`
   files and `rename_error.jl` are deleted.
