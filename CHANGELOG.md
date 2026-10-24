@@ -25,9 +25,8 @@ makes it worth keeping.
   minutes for 128 nodes. Below 64 nodes they keep the exact default: there the fast rule differs
   from it, by 1 to 2 ulp at 3 to 5 nodes, and a run with it changes the reference values of
   `test/helpers/reference_values.jl`. The fast rules agree with the deleted tables to within
-  `4 eps()`, which `test/quadrature/gauss_tables.jl` checks. Without the 1 624-character table
-  lines, `src/utils/common.jl` is formatted and is no longer in the `ignore` list of
-  `.JuliaFormatter.toml`, which supersedes the *Bug Fixes* entry that excluded it.
+  `4 eps()`, which `test/utils/common.jl` checks. Without the 1 624-character table lines,
+  JuliaFormatter processes `src/utils/common.jl`, and the file is formatted.
 - **Repository hygiene.** `figures/` (13 files that nothing referenced), the tracked `.DS_Store`
   files and `rename_error.jl` are deleted.
 
@@ -70,11 +69,6 @@ makes it worth keeping.
 
 ### Bug Fixes
 
-- **`src/utils/common.jl` is excluded from JuliaFormatter.** The file holds four 64-element
-  Gauss–Legendre literals on single lines, the longest 1 624 characters. JuliaFormatter 2.13.0
-  kills the Julia process on it, and 2.14.0 does not finish in 300 s, so the pre-commit hook
-  blocked any commit that staged the file. An `ignore` entry in `.JuliaFormatter.toml` skips it;
-  the file itself is unchanged.
 - **Two `show` methods print the x-breaks of the basis once.** `Dirichlet_BSpline2D` stores its
   knot interval and its knots in physical x, and its `show` and that of
   `Galerkin_Full_Restriction_Bspline_Integrator` multiplied both by the width of `xspan` again: on
