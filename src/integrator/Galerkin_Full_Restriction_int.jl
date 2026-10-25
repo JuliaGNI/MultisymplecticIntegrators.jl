@@ -219,7 +219,7 @@ function Base.show(io::IO, method::Galerkin_Full_Restriction_Bspline_Integrator)
         "   Nbasis_x: $(method.basis.Nbasis_x), Nbasis_t: $(method.basis.Nbasis_t), total DOFs:$(method.basis.S) \n")
     print(io,
         "   Break Length x: $(method.basis.x_knot_interval), Break Length t:$(method.basis.timestep * method.basis.t_knot_interval) \n")
-    print(io, "   Scaled Breaks_x: $(method.basis.xs) \n")
+    print(io, "   Breaks_x: $(method.basis.xs) \n")
     print(io, "   Scaled Breaks_t: $(method.basis.timestep * method.basis.ts) \n")
     print(io, "    \n")
     print(io,

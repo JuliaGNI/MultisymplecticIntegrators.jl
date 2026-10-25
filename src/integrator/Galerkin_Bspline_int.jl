@@ -498,9 +498,6 @@ function components!(x::AbstractVector{ST}, sol, params,
     local ∂L∂V = int.problem.lagrangian_system.functions.∂L∂V
     local ∂L∂W = int.problem.lagrangian_system.functions.∂L∂W
 
-    local x_quad_nodes = int.method.spatial_quadrature.nodes
-    local t_quad_nodes = int.method.time_quadrature.nodes
-
     local lag_params = int.problem.lagrangian_system.params
     local Nbasis_λ_x = int.method.Nbasis_λ_x
     local Nbasis_μ_t = int.method.Nbasis_μ_t

@@ -516,11 +516,8 @@ function post_initial_guess!(C,
     local h = timestep(int)
     local nn_params = u_basis_func.params
 
-    ut₀_quad_values_tem = zeros(Nbasis_λ_x)
     ut₁_quad_values_tem = zeros(Nbasis_λ_x)
-    vt₀_quad_values_tem = zeros(Nbasis_λ_x)
     vt₁_quad_values_tem = zeros(Nbasis_λ_x)
-    wt₀_quad_values_tem = zeros(Nbasis_λ_x)
     wt₁_quad_values_tem = zeros(Nbasis_λ_x)
 
     ux₀_quad_values_tem = zeros(Nbasis_μ_t)
@@ -533,13 +530,9 @@ function post_initial_guess!(C,
     for d in 1:D
         for rx in 1:Nbasis_λ_x
             xx = λ_x.x[rx]
-            ut₀_quad_values_tem[rx] = sum(u_basis_func([0.0, xx], nn_params) .* C.x[1:NP])
             ut₁_quad_values_tem[rx] = sum(u_basis_func([1.0, xx], nn_params) .* C.x[1:NP])
-            vt₀_quad_values_tem[rx] = sum(v_basis_func([0.0, xx], nn_params) .* C.x[1:NP]) /
-                                      h
             vt₁_quad_values_tem[rx] = sum(v_basis_func([1.0, xx], nn_params) .* C.x[1:NP]) /
                                       h
-            wt₀_quad_values_tem[rx] = sum(w_basis_func([0.0, xx], nn_params) .* C.x[1:NP])
             wt₁_quad_values_tem[rx] = sum(w_basis_func([1.0, xx], nn_params) .* C.x[1:NP])
         end
 

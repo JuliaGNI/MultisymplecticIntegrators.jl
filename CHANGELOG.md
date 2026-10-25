@@ -77,7 +77,9 @@ makes it worth keeping.
   knot interval and its knots in physical x, and its `show` and that of
   `Galerkin_Full_Restriction_Bspline_Integrator` multiplied both by the width of `xspan` again: on
   `xspan = (0.0, 2.0)` with a knot interval of 0.5 they showed `Break Length x: 1.0`. They print the
-  stored values now.
+  stored values now, under the label `Breaks_x:` that `BSpline2D` uses, since no
+  factor scales them. The `Scaled Breaks_t:` line keeps its label, because the
+  timestep does multiply the t-knots.
 
 ### Breaking Changes
 
@@ -112,7 +114,7 @@ makes it worth keeping.
   `residual!` and `update!` of `FEM_Multisymplectic_Integrator`, which overrides
   `integrate_step!`. `TrialOGA2D` is gone, and so is the export of `GeometricPDESolution`, which no
   file defined (#3); Aqua's undefined-exports check, `broken` until now, passes and is no longer
-  marked. Every integrator family stays. `src/` is 3 682 lines shorter than at `294f023`.
+  marked. Every integrator family stays. `src/` is 3 712 lines shorter than at `294f023`.
 - **`show_status` is removed.** No integrator takes the keyword or stores the field any more, and
   a call that passes it throws a `MethodError`. The reports it switched on, errors against the
   exact solution printed during a step, are deleted, together with every unconditional `@show`,

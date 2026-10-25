@@ -65,6 +65,6 @@ function Base.show(io::IO, basis::Dirichlet_BSpline2D)
     print(io, "   Nbasis_x: $(basis.Nbasis_x), Nbasis_t: $(basis.Nbasis_t), total DOFs:$(basis.S) \n")
     print(io,
         "   Break Length x: $(basis.x_knot_interval), Break Length t:$(basis.timestep * basis.t_knot_interval) \n")
-    print(io, "   Scaled Breaks_x: $(basis.xs) \n")
+    print(io, "   Breaks_x: $(basis.xs) \n")
     print(io, "   Scaled Breaks_t: $(basis.timestep * basis.ts) \n")
 end

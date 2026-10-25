@@ -428,11 +428,8 @@ function post_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator_Symb
     local μ₀_t = int_method.μ₀_t
     local h = timestep(int)
 
-    ut₀_quad_values_tem = zeros(Nbasis_λ_x)
     ut₁_quad_values_tem = zeros(Nbasis_λ_x)
-    vt₀_quad_values_tem = zeros(Nbasis_λ_x)
     vt₁_quad_values_tem = zeros(Nbasis_λ_x)
-    wt₀_quad_values_tem = zeros(Nbasis_λ_x)
     wt₁_quad_values_tem = zeros(Nbasis_λ_x)
 
     ux₀_quad_values_tem = zeros(Nbasis_μ_t)
@@ -445,11 +442,8 @@ function post_initial_guess!(C, sol, int::PDEIntegrator{<:NN_PDE_Integrator_Symb
     for d in 1:D
         for rx in 1:Nbasis_λ_x
             xx = λ_x.x[rx]
-            ut₀_quad_values_tem[rx] = (u[d])([0.0, xx], C.params)[1]
             ut₁_quad_values_tem[rx] = (u[d])([1.0, xx], C.params)[1]
-            vt₀_quad_values_tem[rx] = (v[d])([0.0, xx], C.params)[1] / h
             vt₁_quad_values_tem[rx] = (v[d])([1.0, xx], C.params)[1] / h
-            wt₀_quad_values_tem[rx] = (w[d])([0.0, xx], C.params)[1]
             wt₁_quad_values_tem[rx] = (w[d])([1.0, xx], C.params)[1]
         end
 

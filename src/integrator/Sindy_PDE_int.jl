@@ -364,11 +364,8 @@ function post_initial_guess!(C,
     local w = int.method.symbolic_expr_basis.w
     local xspan = int.problem.xspan
 
-    ut₀_quad_values_tem = zeros(Nbasis_λ_x)
     ut₁_quad_values_tem = zeros(Nbasis_λ_x)
-    vt₀_quad_values_tem = zeros(Nbasis_λ_x)
     vt₁_quad_values_tem = zeros(Nbasis_λ_x)
-    wt₀_quad_values_tem = zeros(Nbasis_λ_x)
     wt₁_quad_values_tem = zeros(Nbasis_λ_x)
 
     ux₀_quad_values_tem = zeros(Nbasis_μ_t)
@@ -381,11 +378,8 @@ function post_initial_guess!(C,
     for d in 1:D
         for rx in 1:Nbasis_λ_x
             xx = λ_x.x[rx]
-            ut₀_quad_values_tem[rx] = (u[d])(C.tem_P, sol.t - timestep(int), xx)
             ut₁_quad_values_tem[rx] = (u[d])(C.tem_P, sol.t, xx)
-            vt₀_quad_values_tem[rx] = (v[d])(C.tem_P, sol.t - timestep(int), xx)
             vt₁_quad_values_tem[rx] = (v[d])(C.tem_P, sol.t, xx)
-            wt₀_quad_values_tem[rx] = (w[d])(C.tem_P, sol.t - timestep(int), xx)
             wt₁_quad_values_tem[rx] = (w[d])(C.tem_P, sol.t, xx)
         end
 

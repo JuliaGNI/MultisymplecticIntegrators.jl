@@ -14,5 +14,5 @@ using MultisymplecticIntegrators
     method = Galerkin_Full_Restriction_Bspline_Integrator(basis; xspan = (0.0, 2.0))
     shown = sprint(show, method)
     @test occursin("Break Length x: 0.5,", shown)
-    @test occursin("Scaled Breaks_x: [0.0, 0.0, 0.0, 0.5, 1.0, 1.5, 2.0, 2.0, 2.0]", shown)
+    @test occursin("\n   Breaks_x: [0.0, 0.0, 0.0, 0.5, 1.0, 1.5, 2.0, 2.0, 2.0]", shown)
 end
