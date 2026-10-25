@@ -174,7 +174,6 @@ if abspath(PROGRAM_FILE) == @__FILE__
         basis = Trial_Solution_Basis(S, tanh, x_span)
         method = TrialNN_PDE_int(
             basis;
-            show_status = false,
             t_num_interval = 2,
             x_num_interval = 10,
             RT_per_interval = 4,

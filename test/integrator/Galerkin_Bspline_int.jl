@@ -20,8 +20,7 @@ using MultisymplecticIntegrators
         basis;
         xspan = lpde.xspan,
         RT_per_interval = 3,
-        RX_per_interval = 3,
-        show_status = false
+        RX_per_interval = 3
     )
     int = MultisymplecticIntegrators.PDEIntegrator(lpde, method)
     sol = GeometricSolution(lpde)

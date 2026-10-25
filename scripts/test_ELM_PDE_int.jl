@@ -6,7 +6,6 @@ using GeometricMachineLearning
 using Zygote
 using Plots
 using ForwardDiff
-using Infiltrator
 using GeometricIntegratorsBase
 using JLD2
 
@@ -33,7 +32,7 @@ nn_elm_basis = NN_Basis(u_basis, S)
 xspan = (0.0, 1.0)
 h = 0.3
 elm_int = ELM_PDE_int(nn_elm_basis; RT_per_interval = 8, RX_per_interval = 8,
-    xspan = xspan, initial_guess_method = LSGD(), show_status = true)
+    xspan = xspan, initial_guess_method = LSGD())
 lpde = MultisymplecticIntegrators.Wave.lpdeproblem(timestep = h, timespan = (0.0, h), xspan = xspan)
 
 # log_file="elmint.txt"

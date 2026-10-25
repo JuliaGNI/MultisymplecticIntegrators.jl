@@ -9,7 +9,6 @@ using Zygote
 using JLD2
 using Profile
 using Base
-using Infiltrator
 
 # t_step = parse(Float64, ARGS[1])
 # reg_factor = parse(Float64, ARGS[2])
@@ -44,7 +43,7 @@ trial_basis = Trial_Solution_Basis(S, activation, x_span)
 # log_file = "trial_nn_int_debug.txt"
 # open(log_file, "w") do io
 #         redirect_stdio(stdout=log_file, stderr=log_file) do
-trial_int = TrialNN_PDE_int(trial_basis, show_status = false, t_num_interval = 4, x_num_interval = 8)
+trial_int = TrialNN_PDE_int(trial_basis, t_num_interval = 4, x_num_interval = 8)
 sol = MultisymplecticIntegrators.integrate(lpde, trial_int)
 #     end
 # end
@@ -601,7 +600,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 # using Symbolics: IfElse
 
 # # 假设 S 是隐藏层神经元数量
-# function generate_symbolic_u_trial(S::Int, activation_fn, exact_u_sym_fn; a=0.0, b=1.0, h=0.1, tn=0.0)
 #     # 1. 定义符号变量
 #     @variables t x
 #     @variables W2[1:S] W1[1:S, 1:2] bias1[1:S]
@@ -657,7 +655,6 @@ save("NNInt_trial_T$(t_span[2])_h$(t_step)_reg$(reg_factor)_S$(S)_err$(max_err)_
 
 # # 生成表达式
 # u_expr, (t_sym, x_sym), (W2_s, W1_s, b1_s, pW2_s, pW1_s, pb1_s) = 
-#     generate_symbolic_u_trial(S, σ, exact_u_expr,tn=2.0)
 
 # # 1. 对时间 t 求导 (v_trial)
 # v_expr = Symbolics.derivative(u_expr, t_sym)

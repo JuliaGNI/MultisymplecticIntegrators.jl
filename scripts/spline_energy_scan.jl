@@ -51,7 +51,6 @@ function run_case(; regularization_factor, t_step = 0.1, t_end = 1.0, k = 3,
         xspan = xspan,
         RT_per_interval = k,
         RX_per_interval = k,
-        show_status = false,
         multiplier_stride = multiplier_stride
     )
 

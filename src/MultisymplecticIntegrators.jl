@@ -1,6 +1,5 @@
 module MultisymplecticIntegrators
 
-# using GeometricIntegrators
 using GeometricBase
 using GeometricIntegratorsBase
 import GeometricIntegratorsBase: default_solver, default_options, initsolver, CacheDict,
@@ -33,18 +32,14 @@ import BSplineKit.SplineInterpolations: make_knots
 using Zygote
 using Statistics
 using ForwardDiff
-using Infiltrator: @infiltrate
 
 # abstract types
 include("methods.jl")
-export PDEMethod, PDEIntegratorCache, AbstractPDEIntegrator, GeometricPDESolution
-export InitialParametersMethod, LSGD, ELM, PINN, TrialOGA2D, OGA2D
+export PDEMethod, PDEIntegratorCache, AbstractPDEIntegrator
+export InitialParametersMethod, LSGD, ELM, PINN, OGA2D
 
 include("utils/Lagrangian_LPDE_problem.jl")
 export LPDEProblem
-
-# include("utils/Lagrangian_PDE_solution.jl")
-# export LPDE_solution
 
 include("utils/Lagrangian_LPDE_system.jl")
 export LPDESystem

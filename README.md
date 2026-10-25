@@ -43,10 +43,6 @@ git commit --no-verify
 git push --no-verify
 ```
 
-Note that `src/utils/common.jl` is a file **JuliaFormatter cannot process** — it takes the Julia
-process down rather than raising an error — so staging it will make the `pre-commit` hook fail with
-a misleading "not formatted" message.
-
 The hooks are generated from one shared copy and are byte-identical across the related
 repositories, so edit them there rather than here — a local edit is silently undone by the next
 install.

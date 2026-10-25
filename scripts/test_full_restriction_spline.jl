@@ -3,7 +3,6 @@
 # Pkg.activate(".")
 using BSplineKit
 using MultisymplecticIntegrators
-using Infiltrator
 using Base
 using GeometricIntegratorsBase
 using Base.Threads
@@ -79,7 +78,7 @@ spline_basis = Dirichlet_BSpline2D(k, timestep = t_step, xspan = xspan,
     t_knot_interval = t_knot_interval, x_knot_interval = x_knot_interval)
 spline_int = Galerkin_Full_Restriction_Bspline_Integrator(
     spline_basis, xspan = xspan, RT_per_interval = k,
-    RX_per_interval = k, show_status = false)
+    RX_per_interval = k)
 println("Start Spline Integrator")
 sol_set = MultisymplecticIntegrators.integrate(lpde, spline_int)
 println("End Spline Integrator with h=$(t_step), k=$(k), t_knot_interval=$(t_knot_interval), x_knot_interval=$(x_knot_interval)")

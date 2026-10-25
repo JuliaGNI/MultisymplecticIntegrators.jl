@@ -7,8 +7,6 @@ function Base.show(io::IO, ::LPDE)
     print(io, "Lagrangian PDE")
 end
 
-# const LPDEProblem = EquationProblem{LPDE}
-
 struct LPDEProblem{superType <: GeometricEquation, dType <: Number, tType <: Real, LSType,
     ICSType, BCSType, EUType, EVType, EWType, ICST <: NamedTuple, PT <: NamedTuple,
     IT <: Union{Nothing, NamedTuple}, LSAT <: Union{Function, Nothing}} <:
@@ -39,7 +37,6 @@ struct LPDEProblem{superType <: GeometricEquation, dType <: Number, tType <: Rea
         superType = LPDE
         tType = eltype(tspan)
         dType = eltype(ics_values.u)
-        # ics_values = merge((t = tspan[begin],), ics_values)
         new{superType, dType, tType, typeof(lag_sys), typeof(ics_function),
             typeof(bcs_function), typeof(exact_u), typeof(exact_v),
             typeof(exact_w), typeof(ics_values), typeof(params),
@@ -77,7 +74,6 @@ end
 datatype(problem::LPDEProblem) = eltype(problem.ics.u)
 timetype(problem::LPDEProblem) = typeof(problem.timestep)
 timestep(problem::LPDEProblem) = problem.timestep
-spacestep(problem::LPDEProblem) = problem.xstep
 timespan(problem::LPDEProblem) = problem.timespan
 function periodicity(problem::LPDEProblem)
     (u = NullPeriodicity(), v = NullPeriodicity(), w = NullPeriodicity())

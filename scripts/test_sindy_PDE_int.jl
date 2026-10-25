@@ -3,7 +3,6 @@ using MultisymplecticIntegrators
 using Symbolics
 using Parameters
 using Base
-using Infiltrator
 using GeometricIntegratorsBase
 using JLD2
 using Plots
@@ -162,8 +161,8 @@ begin
     sindy_int = Sindy_PDE_Integrator(sindy_basis, init_p, xspan = x_span,
         t_num_interval = t_num_interval, μ = μ_basis, k_μ_t = k_μ_t,
         x_num_interval = x_num_interval, λ = λ_basis, k_λ_x = k_λ_x,
-        RT_per_interval = RT_per_interval, RX_per_interval = RX_per_interval,
-        show_status = false)
+        RT_per_interval = RT_per_interval, RX_per_interval = RX_per_interval
+    )
     # log_file="logs/sindy_pde.txt"
     # open(log_file, "w") do io
     #     redirect_stdout(io) do
