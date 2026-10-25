@@ -536,9 +536,9 @@ function prior_initial_guess!(C::TrialNN_PDE_intCache, sol,
         corrs .= abs.(corrs)
 
         idx = argmax(corrs)
-        selected[s] = idx
-        length(Set(selected)) - 1 != s &&
+        idx in view(selected, 1:(s - 1)) &&
             @warn "atom repeated at s=$s, idx=$idx"
+        selected[s] = idx
 
         # extract raw atom (already normalized) and orthogonalize (Gram-Schmidt)
         φ = copy(Φ_raw[idx, :])

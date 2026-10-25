@@ -306,9 +306,7 @@ function construct_quadrature_grid_with_boundary(dimensions::Vector{Int})
     d = length(dimensions)
 
     # Create quadrature rules for each dimension
-    quad_rules(R) = gauss_legendre(R)
-
-    quadrature_rules = [quad_rules(R) for R in dimensions]
+    quadrature_rules = [gauss_legendre(R) for R in dimensions]
     nodes = [rule.nodes for rule in quadrature_rules]
     weights = [rule.weights for rule in quadrature_rules]
 

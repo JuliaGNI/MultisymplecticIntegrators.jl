@@ -8,7 +8,6 @@ using Plots
 using ForwardDiff
 using Base
 
-using Infiltrator
 using Base
 using GeometricIntegratorsBase
 using Plots

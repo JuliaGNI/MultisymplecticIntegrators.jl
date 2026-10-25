@@ -6,7 +6,6 @@ using GeometricMachineLearning
 using Zygote
 using Plots
 using ForwardDiff
-using Infiltrator
 using GeometricIntegratorsBase
 using JLD2
 

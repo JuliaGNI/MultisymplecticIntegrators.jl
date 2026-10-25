@@ -3,7 +3,6 @@ using MultisymplecticIntegrators
 using Symbolics
 using Parameters
 using Base
-using Infiltrator
 using GeometricIntegratorsBase
 using JLD2
 using Plots

@@ -9,7 +9,6 @@ using Zygote
 using JLD2
 using Profile
 using Base
-using Infiltrator
 
 # t_step = parse(Float64, ARGS[1])
 # reg_factor = parse(Float64, ARGS[2])

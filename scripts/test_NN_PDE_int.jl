@@ -8,7 +8,6 @@ using Zygote
 using ForwardDiff
 using Base
 
-using Infiltrator
 using Base
 using GeometricIntegratorsBase
 # using BenchmarkTools

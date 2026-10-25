@@ -1,6 +1,5 @@
 using BSplineKit
 using MultisymplecticIntegrators
-using Infiltrator
 using Base
 using GeometricIntegratorsBase
 

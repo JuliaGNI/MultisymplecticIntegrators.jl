@@ -3,7 +3,6 @@
 # Pkg.activate(".")
 using BSplineKit
 using MultisymplecticIntegrators
-using Infiltrator
 using Base
 using GeometricIntegratorsBase
 using Base.Threads

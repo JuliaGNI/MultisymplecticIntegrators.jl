@@ -118,5 +118,9 @@ makes it worth keeping.
   exact solution printed during a step, are deleted, together with every unconditional `@show`,
   `println` and `@info`, every `@infiltrate` and the commented-out code in `src/`. With them goes
   the read of an undefined `tn` in `components!` of `NN_PDE_Integrator_Symbolic` and `ELM_PDE_int`
-  under `show_status = true`. `Infiltrator` is no longer a dependency of the package or of its
-  tests. The scripts in `scripts/` no longer pass the keyword.
+  under `show_status = true`. The `atom repeated` warning of the OGA2D initial guess in
+  `TrialNN_PDE_int` is the exception: it was printed only under `show_status = true` and now
+  prints whenever OGA selects an atom it already holds, on any run. `Infiltrator` is no longer a
+  dependency of the package or of its tests. The scripts in `scripts/` no longer pass the keyword,
+  except `scripts/reference_values.jl`, which records the integrators at `294f023` and runs only
+  against that commit.
