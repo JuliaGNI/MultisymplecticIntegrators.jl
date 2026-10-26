@@ -11,8 +11,6 @@ equation, and the exact solution is the Gaussian
 u(t, x) = \\frac{1}{2\\sqrt{\\pi}} \\exp\\!\\big(-(x + 2 - ct)^2\\big),
 ```
 
-which the symbolic and network families of the plan are verified against.
-
 ```julia
 problem = LinearTransport.problem(timespan = (0.0, 10.0), timestep = 1.0, xstep = 0.01)
 ```
@@ -73,8 +71,8 @@ end
     problem(; T = Float64, D = 1, params = default_parameters(), timespan = (0.0, 10.0),
             timestep = 1.0, xspan = (-0.5, 0.0), xstep = 0.01)
 
-A [`LagrangianPDEProblem`](@ref) of the linear transport equation. The default `xspan` is the
-interval on which the exact profile is the one the reference values were recorded from.
+A [`LagrangianPDEProblem`](@ref) of the linear transport equation. The default `xspan` is
+`(-0.5, 0.0)`, where the initial profile is smooth and nonzero over the whole slab.
 """
 function problem(; T::Type = Float64, D::Integer = 1, params = default_parameters(),
         timespan = (zero(T), T(10)), timestep = T(1.0), xspan = (T(-0.5), zero(T)),

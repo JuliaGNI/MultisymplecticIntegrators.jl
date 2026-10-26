@@ -2,7 +2,7 @@
     Wave
 
 The scalar wave equation `∂ₜ²u − c² ∂ₓ²u = 0` on `x ∈ [0, l]`, with the standing-wave exact
-solution that the reference values of this package were recorded from.
+solution of the two lowest harmonics.
 
 The Lagrangian density is `L = ½v² − ½c²w²`, and the exact solution is
 

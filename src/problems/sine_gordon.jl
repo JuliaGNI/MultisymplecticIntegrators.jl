@@ -1,8 +1,8 @@
 """
     SineGordon
 
-The nonlinear sine-Gordon equation `c ∂ₜ²u − ∂ₓ²u = −sin(u)` on `x ∈ [0, l]`, with the kink exact
-solution that the reference values of this package were recorded from.
+The nonlinear sine-Gordon equation `c ∂ₜ²u − ∂ₓ²u = −sin(u)` on `x ∈ [0, l]`, with the exact
+solution of the travelling kink.
 
 The Lagrangian density is `L = ½(c v² − w²) + 1 + cos(u)`, and the exact solution is
 

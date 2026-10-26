@@ -201,9 +201,16 @@ function initial_conditions(problem::LagrangianPDEProblem)
     return merge((t = problem.timespan[1],), problem.ics)
 end
 
+# The state already carries the field and its two derivatives, so there is no vector field to
+# compute from the initial data.
 compute_vectorfields!(state, ::LagrangianPDEProblem) = nothing
 
-function GeometricIntegratorsBase._extrapolate!(newsolution, oldsolution, ::LagrangianPDEProblem, extrap)
+# The ecosystem extrapolates the initial guess of a multi-step method. This problem type has no
+# initial guess to extrapolate from, so the history states keep the initial data, which is what
+# `NoExtrapolation` leaves them at.
+function GeometricIntegratorsBase._extrapolate!(
+        newsolution, oldsolution, ::LagrangianPDEProblem,
+        extrap)
     nothing
 end
 

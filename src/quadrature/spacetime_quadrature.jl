@@ -31,8 +31,8 @@ function SpaceTimeQuadrature{T}(n::Integer;
         xbreaks::Union{Nothing, AbstractVector} = nothing) where {T <: AbstractFloat}
     n ≥ 1 || throw(ArgumentError("n must be ≥ 1, got $n"))
     xbreaks === nothing &&
-        throw(ArgumentError("xbreaks is required: the space interval is the " *
-                            "problem's, and no rule may assume one (Audit 2.4)"))
+        throw(ArgumentError("xbreaks is required: the space interval is the problem's, and no " *
+                            "rule may assume one"))
     tb = _breakpoints(T, tbreaks)
     xb = _breakpoints(T, xbreaks)
     tb[1] == zero(T) && tb[end] == one(T) ||
