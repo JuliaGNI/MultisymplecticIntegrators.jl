@@ -9,6 +9,10 @@ is a `GeometricMethod`, so `GeometricIntegrator(problem, method)` accepts it.
 """
 abstract type SpaceTimeAnsatz <: GeometricMethod end
 
+# A slab is advanced from its bottom trace alone, so there is no past to extrapolate to: the history
+# states of the solution step hold the initial data, which `NoExtrapolation` copies into them.
+default_extrapolation(::SpaceTimeAnsatz) = NoExtrapolation()
+
 """
     SlabCoupling
 

@@ -29,25 +29,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
-### K8 · The second component's boundary data has no closed-form test.
-
-- location: `test/problems/lagrangian_problem.jl`
-- evidence: the `D = 2` case of the boundary testset asserts the lengths of `bottom` and `left` and
-  the first component's values, but nothing compares the second component with a closed form. A
-  mutant that zeroes component 2 in `across` or in `at` of `field_boundary_data` survives every
-  core test file. The code is right: the full vector matches the exact functions.
-- kind: missing test
-- found: 2026-10-26
-
-### K9 · A boundary call with one time throws `BoundsError`.
-
-- location: `src/problems/lagrangian_problem.jl`
-- evidence: `problem.bcs_function(0.3, params)` destructures `times` and so throws
-  `BoundsError: attempt to access Float64 at index [2]`, where an `ArgumentError` naming the
-  `(t₀, t₁)` form would say what is wrong. No clause covers a single time.
-- kind: defect
-- found: 2026-10-26
-
 ### K10 · `integrate(integrator; keyword)` falls through to the ecosystem's method.
 
 - location: `src/core/integrate.jl`
@@ -63,48 +44,20 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 - location: `src/problems/lagrangian_problem.jl`
 - evidence: `Base.return_types(problem.exact_u, Tuple{Float64, Float64, typeof(problem.params)})`
-  gives `Union{Float64, Vector{Float64}}`, because the runtime `D` stops the `x isa AbstractVector`
-  branch from folding; `Wave.exact_u` itself infers `Float64`. A branch order, not a type
-  parameter, closes it.
-- kind: quality
-- found: 2026-10-26
-
-### K12 · The field data helpers concatenate twice.
-
-- location: `src/problems/lagrangian_problem.jl`
-- evidence: `field_initial_data` and `field_boundary_data` apply `reduce(vcat, …)` to a
-  comprehension that already built the vector: 10 960 B against 1 568 B for the same three vectors
-  as plain comprehensions, for a result of 960 B (fresh process, minimum of 20 warm calls).
-- kind: quality
-- found: 2026-10-26
-
-### K13 · The scalar path of `field_exact` allocates 64 B.
-
-- location: `src/problems/lagrangian_problem.jl`
-- evidence: `problem.exact_u(0.1, 0.3, params)` allocates 64 B for the one-element `Vector` the
-  wrapper builds before returning the scalar; `Wave.exact_u(0.1, 0.3, params)` allocates nothing.
-- kind: quality
+  gives `Union{Float64, Vector{Float64}}`, because `D` is a runtime value: a scalar `x` returns a
+  scalar for `D = 1` and a vector of `D` values otherwise. `Wave.exact_u` itself infers `Float64`.
+  Closing it needs `D` in the type of the wrapper, or one wrapper per case.
+- kind: defect
 - found: 2026-10-26
 
 ### K14 · `∂L/∂u` of the wave density is a literal zero of type `Int`.
 
 - location: `src/problems/lagrangian_density.jl`
 - evidence: the wave density has no `u` term, so `build_function` returns the literal `0`:
-  `derivatives(Wave.density(), 0.3, 0.7, -0.2).u` is `0 :: Int64` where A1a asks for the element
-  type of the arguments, and the kept test asserts the type of `.v` only. A density with a mass
+  `derivatives(Wave.density(), 0.3, 0.7, -0.2).u` is `0 :: Int64` where the other two derivatives
+  have the element type of the arguments, and the kept test asserts the type of `.v` only. A density with a mass
   term returns `Float64`, so the clause holds wherever `∂L/∂u` is not identically zero.
 - kind: defect
-- found: 2026-10-26
-
-### K15 · The grid-coverage check's tolerance is the default `≈`.
-
-- location: `src/problems/lagrangian_problem.jl`
-- evidence: `last(xgrid) ≈ xsp[2]` accepts a grid that stops within `sqrt(eps(T))` of the end,
-  whatever the step. A tolerance scaled by the step, such as
-  `abs(last(xgrid) - xsp[2]) ≤ sqrt(eps(T)) * max(xh, abs(xsp[2]))`, says the same thing in the
-  units of the grid. The hazard the check guards — an `xstep` that stops a tenth of a span short —
-  is rejected either way, which the `xstep = 0.3` test shows.
-- kind: nit
 - found: 2026-10-26
 
 ### K16 · The transport density is a null Lagrangian.
@@ -112,7 +65,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - location: `src/problems/linear_transport.jl`
 - evidence: `L = ½u(v + c w)` is a total divergence: its Euler–Lagrange expression is
   `(v + c w)/2 − ∂ₜu/2 − c ∂ₓu/2 ≡ 0`, so the density alone carries no dynamics. The transport
-  equation enters through the constraint `v = c w`, which the ansatz of the family that integrates
+  equation enters through the constraint `v = −c w`, which the ansatz of the family that integrates
   this problem imposes; this package ships no integrator, so nothing here uses it. A density with a
   non-zero Euler–Lagrange equation, such as a potential formulation with an auxiliary field, is a
   design question for the part that integrates the symbolic and network families.

@@ -21,9 +21,10 @@ A Lagrangian field theory in one space dimension on a space-time slab, with a ge
 `(u = …, v = …, w = …)` of the initial data on the vector `x` of grid points; each entry is a
 vector of length `D * length(x)`, laid out component-major, `θ = [θ¹; θ²; …]`, so that one scalar
 ansatz serves every component. `bcs_function(times, params)` returns the boundary data of the slab
-whose two times are `times = (t₀, t₁)`: the exact values on the bottom and top traces, across the
-space nodes, and at the two ends of `xspan`, at both times. `exact_u`, `exact_v` and `exact_w` are
-`(t, x, params)` functions, or `nothing` where the problem has no exact solution.
+whose two times are `times = (t₀, t₁)`: the exact values on the bottom and top traces, at the
+grid points of `xspan` and `xstep`, and at the two ends of `xspan`, at both times. `exact_u`,
+`exact_v` and `exact_w` are `(t, x, params)` functions, or `nothing` where the problem has no
+exact solution.
 
 `timespan`, `timestep`, `xspan` and `xstep` are converted to the element type `T` of `timespan`.
 The functions of the problem take its parameters, never a module-level default.
@@ -77,7 +78,9 @@ function LagrangianPDEProblem(density::LagrangianDensity;
     xgrid = collect(xsp[1]:xh:xsp[2])
     length(xgrid) ≥ 2 ||
         throw(ArgumentError("xspan with xstep holds $(length(xgrid)) points; two are needed"))
-    last(xgrid) ≈ xsp[2] ||
+    # The grid's last point carries the rounding of the range, which is relative to the span's
+    # magnitude and is not small relative to an end at zero.
+    abs(last(xgrid) - xsp[2]) ≤ sqrt(eps(T)) * max(xh, abs(xsp[1]), abs(xsp[2])) ||
         throw(ArgumentError("xstep $xh does not reach the end of xspan $xsp: the grid stops at " *
                             "$(last(xgrid))"))
     ics = ics_function(xgrid, params)
@@ -111,8 +114,8 @@ length `D * length(x)` in component-major order.
 """
 function field_initial_data(exact_u, exact_v, exact_w, x::AbstractVector, params,
         D::Integer, t)
-    stack(f) = reduce(vcat, [f(t, xi, params) for _ in 1:D for xi in x])
-    return (u = stack(exact_u), v = stack(exact_v), w = stack(exact_w))
+    across(f) = vec([f(t, xi, params) for xi in x, _ in 1:D])
+    return (u = across(exact_u), v = across(exact_v), w = across(exact_w))
 end
 
 """
@@ -131,10 +134,9 @@ component-major for `D > 1` and returned elementwise for `D = 1`.
 """
 function field_exact(f, D::Integer)
     return function (t, x, params)
-        points = x isa AbstractVector ? x : [x]
         D == 1 && !(x isa AbstractVector) && return f(t, x, params)
-        D == 1 && return [f(t, xi, params) for xi in points]
-        return reduce(vcat, [f(t, xi, params) for _ in 1:D for xi in points])
+        points = x isa AbstractVector ? x : (x,)
+        return vec([f(t, xi, params) for xi in points, _ in 1:D])
     end
 end
 
@@ -153,9 +155,11 @@ component-major order.
 function field_boundary_data(
         exact_u, exact_v, exact_w, times, xbreaks::AbstractVector, params,
         D::Integer = 1)
+    length(times) == 2 ||
+        throw(ArgumentError("times must be the two times (t₀, t₁) of the slab, got $times"))
     t₀, t₁ = times
-    across(f, t) = reduce(vcat, [f(t, xi, params) for _ in 1:D for xi in xbreaks])
-    at(f, x) = reduce(vcat, [[f(t, x, params) for t in (t₀, t₁)] for _ in 1:D])
+    across(f, t) = vec([f(t, xi, params) for xi in xbreaks, _ in 1:D])
+    at(f, x) = vec([f(t, x, params) for t in (t₀, t₁), _ in 1:D])
     return (
         bottom = (u = across(exact_u, t₀), v = across(exact_v, t₀),
             w = across(exact_w, t₀)),
@@ -192,7 +196,7 @@ xstep(problem::LagrangianPDEProblem) = problem.xstep
 components(problem::LagrangianPDEProblem) = problem.D
 
 """The vector of grid points in space."""
-function xgrid(problem::LagrangianPDEProblem{T}) where {T}
+function xgrid(problem::LagrangianPDEProblem)
     return collect(problem.xspan[1]:problem.xstep:problem.xspan[2])
 end
 
@@ -204,15 +208,6 @@ end
 # The state already carries the field and its two derivatives, so there is no vector field to
 # compute from the initial data.
 compute_vectorfields!(state, ::LagrangianPDEProblem) = nothing
-
-# The ecosystem extrapolates the initial guess of a multi-step method. This problem type has no
-# initial guess to extrapolate from, so the history states keep the initial data, which is what
-# `NoExtrapolation` leaves them at.
-function GeometricIntegratorsBase._extrapolate!(
-        newsolution, oldsolution, ::LagrangianPDEProblem,
-        extrap)
-    nothing
-end
 
 function Base.show(io::IO, problem::LagrangianPDEProblem{T}) where {T}
     print(io, "LagrangianPDEProblem{$T} with $(problem.D) component(s) on ")

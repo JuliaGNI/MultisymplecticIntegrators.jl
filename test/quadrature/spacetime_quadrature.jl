@@ -14,7 +14,6 @@ include("../helpers/testsetup.jl")
             domain = (T(xbreaks[1]), T(xbreaks[end]))
             for a in 0:(2n - 1), b in 0:(2n - 1)
 
-                a + b ≤ 2n - 1 || continue
                 exact = (1 / (a + 1)) * (domain[2]^(b + 1) - domain[1]^(b + 1)) / (b + 1)
                 @test q((t, x)->t^a*x^b)≈exact rtol=tolerance(T) atol=tolerance(T)
                 @test typeof(q((t, x) -> t^a * x^b)) === T

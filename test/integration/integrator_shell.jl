@@ -4,32 +4,38 @@ using GeometricSolutions
 using MultisymplecticIntegrators
 using Test
 
-import GeometricIntegratorsBase: Cache, CacheType, IntegratorCache, integrate_step!
+import GeometricIntegratorsBase: Cache, CacheType, IntegratorCache, integrate_step!, method,
+                                 solutionstep
 
 include("../helpers/testsetup.jl")
 
-# A fixture method: it advances nothing, because this package ships no integrator. It exists to
+# A fixture method: it solves nothing, because this package ships no integrator. It exists to
 # exercise the shell — the solution the integrator builds, and the trace it stores beside it. Its
-# cache holds the trace at the nodes of a space quadrature, as a method's cache does.
+# cache holds the trace at the nodes of a space quadrature, as a method's cache does. Each step adds
+# one to `u`, so the solution at step `n` is the initial data plus `n`, and the step `nan_at` writes
+# a NaN into the state.
 struct FixtureMethod{T} <: SpaceTimeAnsatz
     quadrature::SpaceTimeQuadrature{T}
+    nan_at::Int
 end
 
-function FixtureMethod(xspan; n::Integer = 1)
-    FixtureMethod(SpaceTimeQuadrature{Float64}(n; xbreaks = collect(xspan)))
+function FixtureMethod(xspan; n::Integer = 1, nan_at::Integer = 0)
+    FixtureMethod(SpaceTimeQuadrature{Float64}(n; xbreaks = collect(xspan)), Int(nan_at))
 end
 
 struct FixtureCache{DT} <: IntegratorCache{DT}
     u::Vector{DT}
     v::Vector{DT}
     w::Vector{DT}
+    steps::Base.RefValue{Int}
 end
 
 function Cache{ST}(problem::LagrangianPDEProblem, method::FixtureMethod; kwargs...) where {ST}
     nodes = length(method.quadrature.x)
     return FixtureCache{ST}([problem.ics.u[1] for _ in 1:nodes],
         [problem.ics.v[1] for _ in 1:nodes],
-        [problem.ics.w[1] for _ in 1:nodes])
+        [problem.ics.w[1] for _ in 1:nodes],
+        Ref(0))
 end
 
 CacheType(ST, ::LagrangianPDEProblem, ::FixtureMethod) = FixtureCache{ST}
@@ -45,6 +51,9 @@ function integrate_step!(sol, history, params,
     # repeats the last value instead of holding each step's own.
     c = cache(int)
     c.u .+= 1
+    c.steps[] += 1
+    sol.u .+= 1
+    c.steps[] == method(int).nan_at && (sol.u[1] = NaN)
     return nothing
 end
 
@@ -77,7 +86,29 @@ end
     @testset "the solution carries the problem's state" begin
         @test keys(result.solution.dataser) == (:t, :u, :v, :w)
         @test result.solution.u[0] ≈ problem.ics.u
-        @test result.solution.u[ntime(result.solution)] ≈ problem.ics.u
+        for n in 1:ntime(result.solution)
+            @test result.solution.u[n] ≈ problem.ics.u .+ n
+        end
+        @test result.solution.v[ntime(result.solution)] ≈ problem.ics.v
+    end
+
+    @testset "the history states hold the initial data" begin
+        @test default_extrapolation(method) isa NoExtrapolation
+        solstep = solutionstep(GeometricIntegrator(problem, method),
+            GeometricSolution(problem)[0])
+        for state in history(solstep)
+            @test collect(state.u) == problem.ics.u
+            @test collect(state.v) == problem.ics.v
+            @test collect(state.w) == problem.ics.w
+        end
+    end
+
+    @testset "a NaN in the state stops the run" begin
+        failing = FixtureMethod((-0.5, 0.0); n = 2, nan_at = 2)
+        stopped = @test_logs (:warn, r"NaN at timestep n=2") integrate(problem, failing)
+        @test length(stopped.traces) == 2
+        @test isnan(stopped.solution.u[2][1])
+        @test stopped.solution.u[1] ≈ problem.ics.u .+ 1
     end
 
     @testset "a run that starts at a time other than zero" begin
@@ -87,7 +118,7 @@ end
         @test [steps.solution.t[n] for n in 1:4] ≈ [1.1, 1.2, 1.3, 1.4]
         @test length(steps.traces) == 4
         @test steps.traces[1] !== nothing
-        @test steps.solution.u[1] ≈ late.ics.u
+        @test steps.solution.u[1] ≈ late.ics.u .+ 1
         @test steps.solution.u[0] ≈ late.ics.u
     end
 

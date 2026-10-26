@@ -37,8 +37,6 @@ function SpaceTimeQuadrature{T}(n::Integer;
     xb = _breakpoints(T, xbreaks)
     tb[1] == zero(T) && tb[end] == one(T) ||
         throw(ArgumentError("tbreaks must run from 0 to 1, got $(tb[1]) to $(tb[end])"))
-    xb[1] < xb[end] ||
-        throw(ArgumentError("xbreaks must increase, got $(xb[1]) to $(xb[end])"))
     rule = GaussLegendreQuadrature(T, Int(n); fast = true)
     ξ, η = nodes(rule), weights(rule)
     t̂, ωt = _composite(T, ξ, η, tb)
@@ -86,7 +84,7 @@ function _breakpoints(::Type{T}, breaks::AbstractVector) where {T}
     length(breaks) ≥ 2 ||
         throw(ArgumentError("at least two breakpoints are needed, got $(length(breaks))"))
     b = T[convert(T, x) for x in breaks]
-    issorted(b) && all(diff(b) .> zero(T)) ||
+    all(>(zero(T)), diff(b)) ||
         throw(ArgumentError("the breakpoints must increase, got $b"))
     return b
 end

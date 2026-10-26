@@ -113,7 +113,18 @@ include("../helpers/testsetup.jl")
         vector_data = vector.bcs_function(times, params)
         @test length(vector_data.bottom.u) == 2 * length(x)
         @test length(vector_data.left.u) == 2 * length(times)
-        @test vector_data.bottom.u[1:length(x)] ≈ data.bottom.u
+        for component in 1:2
+            span = ((component - 1) * length(x) + 1):(component * length(x))
+            ends = ((component - 1) * length(times) + 1):(component * length(times))
+            @test vector_data.bottom.u[span] ≈
+                  [phase(times[1]) * sin(π * xi / params.l) for xi in x]
+            @test vector_data.top.u[span] ≈
+                  [phase(times[2]) * sin(π * xi / params.l) for xi in x]
+            @test vector_data.left.w[ends] ≈ [phase(t) * π / params.l for t in times]
+            @test vector_data.right.w[ends] ≈ [-phase(t) * π / params.l for t in times]
+        end
+
+        @test_throws ArgumentError problem.bcs_function(0.3, params)
     end
 
     @testset "initial conditions merge the initial time" begin
@@ -146,6 +157,13 @@ include("../helpers/testsetup.jl")
         @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics,
             bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0),
             xstep = 0.3)
+
+        # A Float32 range that ends at zero stops a rounding error past it, which a relative
+        # comparison with zero rejects.
+        ending_at_zero = LinearTransport.problem(T = Float32, xspan = (-0.3f0, 0.0f0),
+            xstep = 0.3f0 / 15)
+        @test length(xgrid(ending_at_zero)) == 16
+        @test abs(last(xgrid(ending_at_zero))) ≤ eps(Float32)
     end
 
     @testset "a run that starts at a non-zero time" begin

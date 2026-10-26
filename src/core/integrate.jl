@@ -21,7 +21,9 @@ quadrature nodes rather than the interior ones because the energy diagnostics in
 the accuracy of the Gauss rule.
 
 The steps are driven one at a time, because the trace of a step exists only while its cache does.
-The keyword arguments go to the integrator's constructor, and to nothing else.
+As in the ecosystem's `integrate!`, a step whose state holds a NaN ends the run with a warning;
+`traces` then ends at that step, and the solution holds the NaN there. The keyword arguments go to
+the integrator's constructor, and to nothing else.
 """
 function integrate(problem::LagrangianPDEProblem, method::SpaceTimeAnsatz; kwargs...)
     return integrate(GeometricIntegrator(problem, method; kwargs...))
@@ -32,13 +34,17 @@ function integrate(integrator::GeometricIntegrator{
     solution = GeometricSolution(problem(integrator))
     steps = ntime(solution)
     sample = top_trace(cache(integrator))
-    traces = Vector{typeof(sample)}(undef, steps)
+    traces = sizehint!(Vector{typeof(sample)}(), steps)
     solstep = solutionstep(integrator, solution[0])
     for n in 1:steps
         reset!(solstep, timesteps(solution)[n])
         integrate!(solstep, integrator)
         copy!(solution, current(solstep), n)
-        traces[n] = deepcopy(top_trace(cache(integrator)))
+        push!(traces, deepcopy(top_trace(cache(integrator))))
+        if isnan(current(solstep))
+            @warn "The state holds a NaN at timestep n=$(n); the integration stops there."
+            break
+        end
     end
     return (; solution, traces)
 end

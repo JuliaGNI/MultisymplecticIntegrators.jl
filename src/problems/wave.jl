@@ -182,8 +182,8 @@ end
 function derivatives(density::VectorDensity, u, v, w, params)
     length(u) == density.D ||
         throw(ArgumentError("expected $(density.D) components, got $(length(u))"))
-    one = [derivatives(density.density, u[i], v[i], w[i], params) for i in eachindex(u)]
-    return (u = [d.u for d in one], v = [d.v for d in one], w = [d.w for d in one])
+    each = [derivatives(density.density, u[i], v[i], w[i], params) for i in eachindex(u)]
+    return (u = [d.u for d in each], v = [d.v for d in each], w = [d.w for d in each])
 end
 
 """The scalar density of one component of the vector wave equation."""

@@ -6,8 +6,9 @@ CurrentModule = MultisymplecticIntegrators
 
 Documentation for [MultisymplecticIntegrators](https://github.com/JuliaGNI/MultisymplecticIntegrators.jl).
 
-Multi-symplectic schemes for partial differential equations: Galerkin discretisations in
-B-spline and neural-network bases, together with the integrators built on them.
+Multi-symplectic schemes for Lagrangian partial differential equations in one space dimension:
+the Lagrangian problems with their exact solutions, a space-time quadrature, and the shell that
+drives an integrator over the slabs of the time span.
 
 !!! note "The package is mid-rebuild"
     The problem layer, the space-time quadrature and the integrator shell are in place, and the

@@ -14,7 +14,7 @@ import GeometricEquations: initial_conditions, GeometricProblem, GeometricEquati
                            compute_vectorfields!, problem, equation
 import GeometricIntegratorsBase: GeometricIntegrator, solutionstep, reset!, integrate!,
                                  cache,
-                                 current
+                                 current, default_extrapolation, NoExtrapolation
 
 # abstract types
 include("methods.jl")

@@ -39,18 +39,18 @@ include("../helpers/testsetup.jl")
 
     @testset "the angular momentum of the exact solution is conserved" begin
         x = collect(0.0:0.05:1.0)
-        first = (c = 0.5, A1 = 0.8, A2 = 0.0, B1 = 0.4, B2 = 0.0, l = 1.0)
-        second = (c = 0.5, A1 = 0.8, A2 = 0.0, B1 = 0.0, B2 = 0.0, l = 1.0)
+        p₁ = (c = 0.5, A1 = 0.8, A2 = 0.0, B1 = 0.4, B2 = 0.0, l = 1.0)
+        p₂ = (c = 0.5, A1 = 0.8, A2 = 0.0, B1 = 0.0, B2 = 0.0, l = 1.0)
         momentum(t) = begin
-            a = Wave.initial_data(x, first, 1, t)
-            b = Wave.initial_data(x, second, 1, t)
+            a = Wave.initial_data(x, p₁, 1, t)
+            b = Wave.initial_data(x, p₂, 1, t)
             VectorWave.angular_momentum(a.u, b.u, a.v, b.v, x)
         end
         j₀ = momentum(0.0)
         # The closed form of `J = ∫ (u₁v₂ − u₂v₁) dx` for this data, whose second component has
         # `B₁ = 0` and therefore a vanishing velocity at t = 0.
-        ω = π * first.c / first.l
-        @test j₀ ≈ -first.A1 * first.B1 * ω * cos(π / 6) / 2 rtol = 16 * eps(Float64)
+        ω = π * p₁.c / p₁.l
+        @test j₀ ≈ -p₁.A1 * p₁.B1 * ω * cos(π / 6) / 2 rtol = 16 * eps(Float64)
         @test momentum(0.35) ≈ j₀ rtol = 16 * eps(Float64)
         @test momentum(1.25) ≈ j₀ rtol = 16 * eps(Float64)
     end

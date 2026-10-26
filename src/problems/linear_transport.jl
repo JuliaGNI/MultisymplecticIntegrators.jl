@@ -6,7 +6,7 @@ initial profile shifted by `c t`.
 
 The Lagrangian density is `L = ½u (v + c w)`. It is a null Lagrangian: its Euler–Lagrange
 expression vanishes identically, because `∂L/∂u = (v + c w)/2`, `∂ₜ(∂L/∂v) = ∂ₜu/2` and
-`∂ₓ(∂L/∂w) = c ∂ₓu/2`. The transport equation is therefore carried by the constraint `v = c w`,
+`∂ₓ(∂L/∂w) = c ∂ₓu/2`. The transport equation is therefore carried by the constraint `v = −c w`,
 which the ansatz of the family that integrates this problem imposes, and not by the density alone.
 The exact solution is the Gaussian
 

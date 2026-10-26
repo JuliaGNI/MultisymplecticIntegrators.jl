@@ -26,6 +26,9 @@ include("../helpers/testsetup.jl")
             @test LinearTransport.exact_v(t, x, params) ≈
                   params.c * ξ * exp(-ξ^2) / sqrt(π)
             @test LinearTransport.exact_w(t, x, params) ≈ -ξ * exp(-ξ^2) / sqrt(π)
+            # The constraint `v = −c w` that carries the transport equation.
+            @test LinearTransport.exact_v(t, x, params) ≈
+                  -params.c * LinearTransport.exact_w(t, x, params)
         end
     end
 
