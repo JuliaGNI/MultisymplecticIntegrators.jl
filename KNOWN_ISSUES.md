@@ -17,6 +17,18 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
+### K7 · The three problem constructors repeat themselves.
+
+- location: `src/problems/wave.jl`, `src/problems/sine_gordon.jl`,
+  `src/problems/linear_transport.jl`
+- evidence: each `problem` function converts its spans, builds the two closures and calls
+  `LagrangianPDEProblem` in the same way, about twenty lines three times. One shared constructor
+  taking the three exact functions would remove about forty lines. Recorded rather than done,
+  because the shared form has to be chosen against the boundary interface that the slab core
+  defines.
+- kind: defect
+- found: 2026-10-26
+
 ### K8 · The second component's boundary data has no closed-form test.
 
 - location: `test/problems/lagrangian_problem.jl`
@@ -47,14 +59,3 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
-### K7 · The three problem constructors repeat themselves.
-
-- location: `src/problems/wave.jl`, `src/problems/sine_gordon.jl`,
-  `src/problems/linear_transport.jl`
-- evidence: each `problem` function converts its spans, builds the two closures and calls
-  `LagrangianPDEProblem` in the same way, about twenty lines three times. One shared constructor
-  taking the three exact functions would remove about forty lines. Recorded rather than done,
-  because the shared form has to be chosen against the boundary interface that the slab core
-  defines.
-- kind: defect
-- found: 2026-10-26
