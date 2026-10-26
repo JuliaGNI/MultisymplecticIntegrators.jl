@@ -1,66 +1,27 @@
-using GeometricIntegratorsBase: GeometricMethod
-abstract type PDEMethod <: GeometricMethod end
+"""
+    SpaceTimeAnsatz
 
-using GeometricEquations: GeometricEquation
-using GeometricBase: OptionalInvariants, OptionalParameters, OptionalPeriodicity
+Abstract type of a space-time ansatz of one slab.
 
-using GeometricIntegratorsBase: IntegratorCache
-abstract type PDEIntegratorCache{DT, D} <: IntegratorCache{DT, D} end
+An ansatz discretises the field `u` and its derivatives `v = ∂ₜu` and `w = ∂ₓu` on the slab, and
+gives the integrator the basis functions and the Jacobian from which it assembles the residual. It
+is a `GeometricMethod`, so `GeometricIntegrator(problem, method)` accepts it.
+"""
+abstract type SpaceTimeAnsatz <: GeometricMethod end
 
-using GeometricBase: AbstractIntegrator
-abstract type AbstractPDEIntegrator <: AbstractIntegrator end
+"""
+    SlabCoupling
 
-abstract type AbstractPDEBasis end
+Abstract type of a coupling of one slab.
 
-abstract type InitialParametersMethod end
-struct LSGD <: InitialParametersMethod end
-struct ELM <: InitialParametersMethod end
-struct PINN <: InitialParametersMethod end
+A coupling adds the terms that the interior weak form alone does not enforce: the initial
+condition, the boundary conditions, or both.
+"""
+abstract type SlabCoupling end
 
-_show_typename(io::IO, obj) = print(io, nameof(typeof(obj)))
-_hasfield(obj, field::Symbol) = field in fieldnames(typeof(obj))
+"""
+    SlabInitialGuess
 
-function _show_field(io::IO, obj, field::Symbol; label::AbstractString = String(field))
-    _hasfield(obj, field) || return false
-    print(io, "   ", label, ": ", getfield(obj, field), "\n")
-    return true
-end
-
-function _show_type_field(io::IO, obj, field::Symbol; label::AbstractString = String(field))
-    _hasfield(obj, field) || return false
-    print(io, "   ", label, ": ", nameof(typeof(getfield(obj, field))), "\n")
-    return true
-end
-
-function _points_per_interval(npoints::Integer, nintervals::Integer)
-    nintervals > 0 && npoints % nintervals == 0 ? npoints ÷ nintervals : missing
-end
-
-function Base.show(io::IO, method::InitialParametersMethod)
-    _show_typename(io, method)
-end
-
-function Base.show(io::IO, basis::AbstractPDEBasis)
-    print(io, "\n ")
-    _show_typename(io, basis)
-    print(io, " with:\n")
-    _show_field(io, basis, :S; label = "basis functions")
-    _show_field(io, basis, :NP; label = "parameters")
-    _show_field(io, basis, :optim_mode)
-    _show_field(io, basis, :activation_function)
-end
-
-function Base.show(io::IO, method::PDEMethod)
-    print(io, "\n ")
-    _show_typename(io, method)
-    print(io, " with:\n")
-    _show_type_field(io, method, :basis)
-    _show_type_field(io, method, :symbolic_expr_basis; label = "basis")
-    _show_field(io, method, :RT; label = "time quadrature points")
-    _show_field(io, method, :RX; label = "space quadrature points")
-    _show_field(io, method, :t_num_interval; label = "time intervals")
-    _show_field(io, method, :x_num_interval; label = "space intervals")
-    _show_field(io, method, :Nbasis_μ_t)
-    _show_field(io, method, :Nbasis_λ_x)
-    _show_type_field(io, method, :initial_guess_method)
-end
+Abstract type of a construction of the initial guess of one slab.
+"""
+abstract type SlabInitialGuess end

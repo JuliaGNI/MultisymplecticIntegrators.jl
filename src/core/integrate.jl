@@ -1,0 +1,44 @@
+"""
+    top_trace(cache)
+
+The top trace `(u, v, w)` of the last step, at the nodes of the space quadrature.
+
+A method whose cache keeps no trace returns `nothing`, which is the default. A method that keeps one
+extends this function, and the trace is stored beside the solution by [`integrate`](@ref).
+"""
+top_trace(::Any) = nothing
+
+"""
+    integrate(problem::LagrangianPDEProblem, method::SpaceTimeAnsatz; kwargs...)
+    integrate(integrator::GeometricIntegrator; kwargs...)
+
+Integrate `problem` with `method` and return the named tuple `(; solution, traces)`.
+
+`solution` is the `GeometricSolution` on the output grid, and `traces` holds one entry per stored
+step: the top trace `(u, v, w)` of that step at the nodes of the space quadrature, as the method's
+[`top_trace`](@ref) gives it, or `nothing` where the method keeps none. The trace is needed at the
+quadrature nodes rather than the interior ones because the energy diagnostics integrate it there, at
+the accuracy of the Gauss rule.
+
+The steps are driven one at a time, because the trace of a step exists only while its cache does.
+```
+"""
+function integrate(problem::LagrangianPDEProblem, method::SpaceTimeAnsatz; kwargs...)
+    return integrate(GeometricIntegrator(problem, method; kwargs...); kwargs...)
+end
+
+function integrate(
+        integrator::GeometricIntegrator{<:SpaceTimeAnsatz, <:LagrangianPDEProblem};
+        kwargs...)
+    solution = GeometricSolution(problem(integrator))
+    steps = ntime(solution)
+    traces = Vector{Any}(undef, steps)
+    solstep = solutionstep(integrator, solution[0]; kwargs...)
+    for n in 1:steps
+        reset!(solstep, timesteps(solution)[n])
+        integrate!(solstep, integrator)
+        copy!(solution, current(solstep), n)
+        traces[n] = top_trace(cache(integrator))
+    end
+    return (; solution, traces)
+end

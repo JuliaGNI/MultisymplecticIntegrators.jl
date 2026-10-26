@@ -1,120 +1,42 @@
 module MultisymplecticIntegrators
 
 using GeometricBase
+using GeometricEquations
 using GeometricIntegratorsBase
-import GeometricIntegratorsBase: default_solver, default_options, initsolver, CacheDict,
-                                 Cache, cache, CacheType, solutionstep, reset!
-import GeometricIntegratorsBase: problem, method, parameters, SolverMethod, history, solver,
-                                 residual!, copy_internal_variables!, internal
-import GeometricIntegratorsBase: compute_vectorfields!, _extrapolate!, internal_variables,
-                                 nlsolution
-import GeometricIntegratorsBase: _state, _vectorfield, compute_vectorfields!, _extrapolate!,
-                                 internal_variables, nlsolution
-import GeometricBase: datatype, timetype, ntime
-import GeometricBase: initialtime, finaltime, timespan, timestep, periodicity,
-                      NullPeriodicity
-import GeometricEquations: initial_conditions, GeometricProblem
-using GeometricSolutions: GeometricSolution
-
-using Symbolics
-using AbstractNeuralNetworks
-using SymbolicNeuralNetworks
-using GeometricMachineLearning
-using CompactBasisFunctions
-using QuadratureRules
-using Parameters: @unpack
+using GeometricSolutions
 using LinearAlgebra
-using IterTools: product
-using SimpleSolvers: NewtonMethod, Options, NonlinearSolver, Newton, solve!
-using Random
-using BSplineKit
-import BSplineKit.SplineInterpolations: make_knots
-using Zygote
-using Statistics
-using ForwardDiff
+using QuadratureRules
+using Symbolics
+
+import QuadratureRules: nodes, weights, nnodes
+import GeometricBase: datatype, timetype, arrtype, equtype, timespan, timestep, parameters,
+                      periodicity, ntime, initialtime, finaltime, initialstate, timesteps
+import GeometricEquations: initial_conditions, GeometricProblem, GeometricEquation,
+                           compute_vectorfields!
+import GeometricIntegratorsBase: GeometricIntegrator, Cache, CacheType, IntegratorCache,
+                                 solutionstep, reset!, integrate!, integrate_step!, cache,
+                                 current, problem, method, _extrapolate!
 
 # abstract types
 include("methods.jl")
-export PDEMethod, PDEIntegratorCache, AbstractPDEIntegrator
-export InitialParametersMethod, LSGD, ELM, PINN, OGA2D
+export SpaceTimeAnsatz, SlabCoupling, SlabInitialGuess
 
-include("utils/Lagrangian_LPDE_problem.jl")
-export LPDEProblem
+# problems
+include("problems/lagrangian_density.jl")
+export LagrangianDensity, derivative_u, derivative_v, derivative_w, derivatives
 
-include("utils/Lagrangian_LPDE_system.jl")
-export LPDESystem
+include("problems/lagrangian_problem.jl")
+export LagrangianEquation, LagrangianPDEProblem, xspan, xstep, xgrid, components
 
-include("utils/PDE_Integrator.jl")
-export PDEIntegrator
+include("problems/wave.jl")
+export Wave, VectorWave, VectorDensity
 
-# utils
-include("utils/common.jl")
-export LPDE_variables, symbolize, substitute_parameters, Lagrangian_multiplier
-export initialize_bcs_ics!, vector_hessian
+# quadrature
+include("quadrature/spacetime_quadrature.jl")
+export SpaceTimeQuadrature, boundary_points, nodes, weights, nnodes
 
-include("utils/OGA_2d.jl")
-export OGA2D
-# basis
-include("basis/Sindy_PDE_basis.jl")
-export SindyPDEBasis
+# the integrator shell
+include("core/integrate.jl")
+export integrate, top_trace
 
-include("basis/BSplineBasis.jl")
-export BSplineDirichlet, BSpline2D
-
-include("basis/Dirichlet_BSplineBasis.jl")
-export Dirichlet_BSpline2D
-
-include("basis/Network_PDE_Basis.jl")
-export NetworkPDEBasis
-
-include("basis/Network_PDE_basis_symbolic.jl")
-export NetworkPDEBasis_Symbolic
-
-include("basis/NN_Basis.jl")
-export NN_Basis
-
-include("basis/TrialSolution_Basis.jl")
-export Trial_Solution_Basis
-
-# integrators
-include("integrator/Sindy_PDE_int.jl")
-export Sindy_PDE_Integrator
-
-include("integrator/NN_PDE_int.jl")
-export NN_PDE_Integrator
-
-include("integrator/NN_PDE_int_symbolic.jl")
-export NN_PDE_Integrator_Symbolic
-
-include("integrator/ELM_PDE_int.jl")
-export ELM_PDE_int
-
-include("integrator/TrialNN_PDE_int.jl")
-export TrialNN_PDE_int
-
-# Spline integrators
-include("integrator/Galerkin_Bspline_int.jl")
-export Galerkin_Bspline_Integrator
-
-include("integrator/Galerkin_Dirichlet_Bspline_int.jl")
-export Galerkin_Dirichlet_Bspline_Integrator
-
-include("integrator/Galerkin_Full_Restriction_int.jl")
-export Galerkin_Full_Restriction_Bspline_Integrator
-
-include("integrator/FEM_Multisymplectic_int.jl")
-export FEM_Multisymplectic_Integrator
-
-include("integrator/SpaceTime_Spline_Wave_int.jl")
-export SpaceTime_Spline_Wave_Integrator
-
-#problems
-include("problem/sine_Gordon.jl")
-export SineGordon
-
-include("problem/wave.jl")
-export Wave
-
-include("problem/linear_transport.jl")
-export LinearTransport
 end
