@@ -59,3 +59,39 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
+### K11 · `field_exact` infers a small union on a scalar call.
+
+- location: `src/problems/lagrangian_problem.jl`
+- evidence: `Base.return_types(problem.exact_u, Tuple{Float64, Float64, typeof(problem.params)})`
+  gives `Union{Float64, Vector{Float64}}`, because the runtime `D` stops the `x isa AbstractVector`
+  branch from folding; `Wave.exact_u` itself infers `Float64`. A branch order, not a type
+  parameter, closes it.
+- kind: quality
+- found: 2026-10-26
+
+### K12 · The field data helpers concatenate twice.
+
+- location: `src/problems/lagrangian_problem.jl`
+- evidence: `field_initial_data` and `field_boundary_data` apply `reduce(vcat, …)` to a
+  comprehension that already built the vector: 10 960 B against 1 568 B for the same three vectors
+  as plain comprehensions, for a result of 960 B (fresh process, minimum of 20 warm calls).
+- kind: quality
+- found: 2026-10-26
+
+### K13 · The scalar path of `field_exact` allocates 64 B.
+
+- location: `src/problems/lagrangian_problem.jl`
+- evidence: `problem.exact_u(0.1, 0.3, params)` allocates 64 B for the one-element `Vector` the
+  wrapper builds before returning the scalar; `Wave.exact_u(0.1, 0.3, params)` allocates nothing.
+- kind: quality
+- found: 2026-10-26
+
+### K14 · `∂L/∂u` of the wave density is a literal zero of type `Int`.
+
+- location: `src/problems/lagrangian_density.jl`
+- evidence: the wave density has no `u` term, so `build_function` returns the literal `0`:
+  `derivatives(Wave.density(), 0.3, 0.7, -0.2).u` is `0 :: Int64` where A1a asks for the element
+  type of the arguments, and the kept test asserts the type of `.v` only. A density with a mass
+  term returns `Float64`, so the clause holds wherever `∂L/∂u` is not identically zero.
+- kind: defect
+- found: 2026-10-26
