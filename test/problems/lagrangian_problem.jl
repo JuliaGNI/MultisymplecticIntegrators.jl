@@ -106,6 +106,14 @@ include("../helpers/testsetup.jl")
         @test kink_data.top.u ≈ [4 * atan(exp(γ * (xi - kink.velocity * times[2])))
                for xi in kx]
         @test kink_data.left.u ≈ [4 * atan(exp(γ * (-kink.velocity * t))) for t in times]
+
+        vector = Wave.problem(
+            D = 2, params = params, timespan = (0.0, 1.0), timestep = 0.1,
+            xspan = (0.0, 2.0), xstep = 0.5)
+        vector_data = vector.bcs_function(times, params)
+        @test length(vector_data.bottom.u) == 2 * length(x)
+        @test length(vector_data.left.u) == 2 * length(times)
+        @test vector_data.bottom.u[1:length(x)] ≈ data.bottom.u
     end
 
     @testset "initial conditions merge the initial time" begin
