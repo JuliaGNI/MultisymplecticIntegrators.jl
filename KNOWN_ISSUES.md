@@ -17,6 +17,36 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
+### K8 · The second component's boundary data has no closed-form test.
+
+- location: `test/problems/lagrangian_problem.jl`
+- evidence: the `D = 2` case of the boundary testset asserts the lengths of `bottom` and `left` and
+  the first component's values, but nothing compares the second component with a closed form. A
+  mutant that zeroes component 2 in `across` or in `at` of `field_boundary_data` survives every
+  core test file. The code is right: the full vector matches the exact functions.
+- kind: missing test
+- found: 2026-10-26
+
+### K9 · A boundary call with one time throws `BoundsError`.
+
+- location: `src/problems/lagrangian_problem.jl`
+- evidence: `problem.bcs_function(0.3, params)` destructures `times` and so throws
+  `BoundsError: attempt to access Float64 at index [2]`, where an `ArgumentError` naming the
+  `(t₀, t₁)` form would say what is wrong. No clause covers a single time.
+- kind: defect
+- found: 2026-10-26
+
+### K10 · `integrate(integrator; keyword)` falls through to the ecosystem's method.
+
+- location: `src/core/integrate.jl`
+- evidence: the package's `integrate(::GeometricIntegrator…)` takes no keyword, so Julia's keyword
+  dispatch chooses `GeometricIntegratorsBase`'s, whose body throws
+  `MethodError: no method matching Solution(::LagrangianPDEProblem…)`. The documented forms are
+  `integrate(problem, method; kwargs...)` and `integrate(integrator)`. A guard that names the
+  supported form would read better.
+- kind: defect
+- found: 2026-10-26
+
 ### K7 · The three problem constructors repeat themselves.
 
 - location: `src/problems/wave.jl`, `src/problems/sine_gordon.jl`,
