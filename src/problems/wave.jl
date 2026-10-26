@@ -45,29 +45,33 @@ function density(; params = default_parameters(), m = 0.0, β = 0.0)
 end
 
 function exact_u(t, x, params = default_parameters())
-    ω₁ = π * params.c / params.l
-    return (params.A1 * cos(ω₁ * t) + params.B1 * sin(ω₁ * t + π / 6)) *
-           sin(π * x / params.l) +
-           (params.A2 * cos(2ω₁ * t) + params.B2 * sin(2ω₁ * t + π / 6)) *
-           sin(2π * x / params.l)
+    T = promote_type(typeof(t), typeof(x))
+    p = convert_parameters(T, params)
+    ω₁ = T(π) * p.c / p.l
+    return (p.A1 * cos(ω₁ * t) + p.B1 * sin(ω₁ * t + T(π) / 6)) * sin(T(π) * x / p.l) +
+           (p.A2 * cos(2ω₁ * t) + p.B2 * sin(2ω₁ * t + T(π) / 6)) *
+           sin(2 * T(π) * x / p.l)
 end
 
 function exact_v(t, x, params = default_parameters())
-    ω₁ = π * params.c / params.l
-    return (-params.A1 * ω₁ * sin(ω₁ * t) + params.B1 * ω₁ * cos(ω₁ * t + π / 6)) *
-           sin(π * x / params.l) +
-           (-2 * params.A2 * ω₁ * sin(2ω₁ * t) +
-            2 * params.B2 * ω₁ * cos(2ω₁ * t + π / 6)) *
-           sin(2π * x / params.l)
+    T = promote_type(typeof(t), typeof(x))
+    p = convert_parameters(T, params)
+    ω₁ = T(π) * p.c / p.l
+    return (-p.A1 * ω₁ * sin(ω₁ * t) + p.B1 * ω₁ * cos(ω₁ * t + T(π) / 6)) *
+           sin(T(π) * x / p.l) +
+           (-2 * p.A2 * ω₁ * sin(2ω₁ * t) + 2 * p.B2 * ω₁ * cos(2ω₁ * t + T(π) / 6)) *
+           sin(2 * T(π) * x / p.l)
 end
 
 function exact_w(t, x, params = default_parameters())
-    return (params.A1 * cos(π * params.c * t / params.l) +
-            params.B1 * sin(π * params.c * t / params.l + π / 6)) * π / params.l *
-           cos(π * x / params.l) +
-           (params.A2 * cos(2π * params.c * t / params.l) +
-            params.B2 * sin(2π * params.c * t / params.l + π / 6)) * 2π / params.l *
-           cos(2π * x / params.l)
+    T = promote_type(typeof(t), typeof(x))
+    p = convert_parameters(T, params)
+    return (p.A1 * cos(T(π) * p.c * t / p.l) +
+            p.B1 * sin(T(π) * p.c * t / p.l + T(π) / 6)) * T(π) / p.l *
+           cos(T(π) * x / p.l) +
+           (p.A2 * cos(2 * T(π) * p.c * t / p.l) +
+            p.B2 * sin(2 * T(π) * p.c * t / p.l + T(π) / 6)) * 2 * T(π) / p.l *
+           cos(2 * T(π) * x / p.l)
 end
 
 """
@@ -77,10 +81,7 @@ The initial data `(u = …, v = …, w = …)` at `t = timespan[1]`, each entry 
 `D * length(x)`, laid out component-major.
 """
 function initial_data(x::AbstractVector, params = default_parameters(), D::Integer = 1, t = 0.0)
-    u = reduce(vcat, [exact_u(t, xi, params) for _ in 1:D for xi in x])
-    v = reduce(vcat, [exact_v(t, xi, params) for _ in 1:D for xi in x])
-    w = reduce(vcat, [exact_w(t, xi, params) for _ in 1:D for xi in x])
-    return (u = u, v = v, w = w)
+    return field_initial_data(exact_u, exact_v, exact_w, x, params, D, t)
 end
 
 function exact_u(t, x::AbstractVector, params = default_parameters())
@@ -99,11 +100,7 @@ end
 The four boundary point sets of a slab at physical time `t`, with zero Dirichlet data in space.
 """
 function boundary_data(t, xbreaks, params = default_parameters())
-    u = exact_u(t, xbreaks, params)
-    v = exact_v(t, xbreaks, params)
-    w = exact_w(t, xbreaks, params)
-    return (bottom = (u = u, v = v, w = w), top = (u = zero(u), v = zero(v), w = zero(w)),
-        left = zero(eltype(u)), right = zero(eltype(u)))
+    return field_boundary_data(exact_u, exact_v, exact_w, t, xbreaks, params)
 end
 
 """
@@ -122,9 +119,9 @@ function problem(; T::Type = Float64, D::Integer = 1, params = default_parameter
         D = D,
         ics_function = ics,
         bcs_function = bcs,
-        exact_u = (t, x, p) -> reduce(vcat, [exact_u(t, xi, p) for _ in 1:D for xi in x]),
-        exact_v = (t, x, p) -> reduce(vcat, [exact_v(t, xi, p) for _ in 1:D for xi in x]),
-        exact_w = (t, x, p) -> reduce(vcat, [exact_w(t, xi, p) for _ in 1:D for xi in x]),
+        exact_u = field_exact(exact_u, D),
+        exact_v = field_exact(exact_v, D),
+        exact_w = field_exact(exact_w, D),
         timespan = (T(timespan[1]), T(timespan[2])),
         timestep = T(timestep),
         xspan = (T(xspan[1]), T(xspan[2])),

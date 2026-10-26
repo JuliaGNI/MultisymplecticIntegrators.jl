@@ -31,16 +31,6 @@ S = parse(Int, ARGS[3])
 # S = 5
 
 max_iters = 100
-function GeometricIntegratorsBase.default_options(::NN_PDE_Integrator)
-    (
-        max_iterations = max_iters,
-        warn_iterations = max_iters,
-        regularization_factor = reg_factor,
-        # f_abstol = 2eps(),
-        # x_suctol = 2eps(),
-        verbosity = 2
-    )
-end
 
 # begin # Wave equation with NN basis
 xspan = (0.0, 1.0)

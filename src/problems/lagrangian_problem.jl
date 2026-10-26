@@ -9,7 +9,7 @@ is a different density. The type exists so that a `LagrangianPDEProblem` has the
 """
 struct LagrangianEquation{P} <: GeometricEquation{NullInvariants, P, NullPeriodicity} end
 
-GeometricBase.periodicity(::LagrangianEquation) = NullPeriodicity()
+periodicity(::LagrangianEquation) = NullPeriodicity()
 
 """
     LagrangianPDEProblem(density; D = 1, ics_function, bcs_function, exact_u, exact_v, exact_w,
@@ -99,21 +99,71 @@ function _interval(::Type{T}, span, name::Symbol) where {T}
     return (a, b)
 end
 
-GeometricBase.datatype(::LagrangianPDEProblem{T}) where {T} = T
-GeometricBase.timetype(::LagrangianPDEProblem{T}) where {T} = T
-GeometricBase.arrtype(::LagrangianPDEProblem{T}) where {T} = Vector{T}
-GeometricBase.equtype(::LagrangianPDEProblem{<:Any, PT}) where {PT} = LagrangianEquation{PT}
+"""
+    field_initial_data(exact_u, exact_v, exact_w, x, params, D, t)
 
-GeometricBase.timespan(problem::LagrangianPDEProblem) = problem.timespan
-GeometricBase.timestep(problem::LagrangianPDEProblem) = problem.timestep
-GeometricBase.parameters(problem::LagrangianPDEProblem) = problem.params
-function GeometricBase.initialstate(problem::LagrangianPDEProblem)
+The initial data `(u = …, v = …, w = …)` of `D` components at time `t`, each entry a vector of
+length `D * length(x)` in component-major order.
+"""
+function field_initial_data(exact_u, exact_v, exact_w, x::AbstractVector, params,
+        D::Integer, t)
+    stack(f) = reduce(vcat, [f(t, xi, params) for _ in 1:D for xi in x])
+    return (u = stack(exact_u), v = stack(exact_v), w = stack(exact_w))
+end
+
+"""
+    convert_parameters(::Type{T}, params)
+
+The parameters of a problem as a named tuple whose entries are all of type `T`, so that a closed
+form written with `π` and with the default parameters keeps the element type of its arguments.
+"""
+convert_parameters(::Type{T}, params) where {T} = map(value -> convert(T, value), params)
+
+"""
+    field_exact(f, D)
+
+The exact function of `D` components: `f(t, x, params)` evaluated on the points of `x`, stacked
+component-major for `D > 1` and returned elementwise for `D = 1`.
+"""
+function field_exact(f, D::Integer)
+    return function (t, x, params)
+        points = x isa AbstractVector ? x : [x]
+        D == 1 && !(x isa AbstractVector) && return f(t, x, params)
+        D == 1 && return [f(t, xi, params) for xi in points]
+        return reduce(vcat, [f(t, xi, params) for _ in 1:D for xi in points])
+    end
+end
+
+"""
+    field_boundary_data(exact_u, exact_v, exact_w, t, xbreaks, params)
+
+The boundary data of a slab at time `t`: the exact values on the bottom trace, at the two ends of
+the interval for the side traces, and the exact values on the top trace.
+"""
+function field_boundary_data(exact_u, exact_v, exact_w, t, xbreaks::AbstractVector, params)
+    u = [exact_u(t, xi, params) for xi in xbreaks]
+    v = [exact_v(t, xi, params) for xi in xbreaks]
+    w = [exact_w(t, xi, params) for xi in xbreaks]
+    return (bottom = (u = u, v = v, w = w), top = (u = u, v = v, w = w),
+        left = zero(eltype(u)), right = zero(eltype(u)))
+end
+
+datatype(::LagrangianPDEProblem{T}) where {T} = T
+timetype(::LagrangianPDEProblem{T}) where {T} = T
+equation(::LagrangianPDEProblem{<:Any, PT}) where {PT} = LagrangianEquation{PT}()
+arrtype(::LagrangianPDEProblem{T}) where {T} = Vector{T}
+equtype(::LagrangianPDEProblem{<:Any, PT}) where {PT} = LagrangianEquation{PT}
+
+timespan(problem::LagrangianPDEProblem) = problem.timespan
+timestep(problem::LagrangianPDEProblem) = problem.timestep
+parameters(problem::LagrangianPDEProblem) = problem.params
+function initialstate(problem::LagrangianPDEProblem)
     State(problem.timespan[1], map(AlgebraicVariable, problem.ics))
 end
-function GeometricBase.periodicity(problem::LagrangianPDEProblem)
+function periodicity(problem::LagrangianPDEProblem)
     map(_ -> NullPeriodicity(), problem.ics)
 end
-function GeometricBase.ntime(problem::LagrangianPDEProblem)
+function ntime(problem::LagrangianPDEProblem)
     Int(abs(div(problem.timespan[end] - problem.timespan[1], problem.timestep, RoundUp)))
 end
 
@@ -131,11 +181,11 @@ function xgrid(problem::LagrangianPDEProblem{T}) where {T}
 end
 
 """The initial conditions of the problem, merged with its initial time."""
-function GeometricEquations.initial_conditions(problem::LagrangianPDEProblem)
+function initial_conditions(problem::LagrangianPDEProblem)
     return merge((t = problem.timespan[1],), problem.ics)
 end
 
-GeometricEquations.compute_vectorfields!(state, ::LagrangianPDEProblem) = nothing
+compute_vectorfields!(state, ::LagrangianPDEProblem) = nothing
 
 function GeometricIntegratorsBase._extrapolate!(newsolution, oldsolution, ::LagrangianPDEProblem, extrap)
     nothing

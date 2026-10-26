@@ -8,14 +8,6 @@ using Printf
 const CURRENT_REGULARIZATION = Ref(0.0)
 const CURRENT_MAX_ITERATIONS = Ref(1)
 
-function GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator)
-    (
-        regularization_factor = CURRENT_REGULARIZATION[],
-        max_iterations = CURRENT_MAX_ITERATIONS[],
-        verbosity = 0
-    )
-end
-
 function time_call(label, f)
     f()
     GC.gc()

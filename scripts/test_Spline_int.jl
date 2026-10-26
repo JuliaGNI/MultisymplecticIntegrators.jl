@@ -15,15 +15,6 @@ regularization_factor = parse(Float64, ARGS[5])
 # t_step = 0.1
 
 # regularization_factor = 0.0
-function GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator)
-    (
-        # x_suctol = 2eps(),
-        # f_abstol = 2eps(),
-        regularization_factor = regularization_factor,
-        max_iterations = 100,
-        verbosity = 2
-    )
-end
 
 c=0.5
 A1 = 0.8

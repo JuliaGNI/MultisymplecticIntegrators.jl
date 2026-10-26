@@ -7,14 +7,6 @@ using Printf
 const CURRENT_REGULARIZATION = Ref(0.0)
 const CURRENT_MAX_ITERATIONS = Ref(10)
 
-function GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator)
-    (
-        regularization_factor = CURRENT_REGULARIZATION[],
-        max_iterations = CURRENT_MAX_ITERATIONS[],
-        verbosity = 1
-    )
-end
-
 function hamiltonian_density(c, u, v, w)
     return 0.5 * (v^2 + c^2 * w^2)
 end

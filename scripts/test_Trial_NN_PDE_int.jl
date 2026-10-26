@@ -18,16 +18,6 @@ t_step = 0.2
 reg_factor = 1e-5
 S = 70
 
-function GeometricIntegratorsBase.default_options(::TrialNN_PDE_int)
-    (
-        max_iterations = 100,
-        regularization_factor = reg_factor,
-        # f_abstol = 2eps(),
-        # x_suctol = 2eps(),
-        verbosity = 1
-    )
-end
-
 x_step = 0.01
 x_span = (0.0, 1.0)
 t_span = (0.0, 3*t_step)

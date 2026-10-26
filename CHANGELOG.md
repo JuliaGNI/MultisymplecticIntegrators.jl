@@ -14,6 +14,37 @@ makes it worth keeping.
 
 ## [Unreleased] — targeting 0.1.0
 
+### Breaking Changes
+
+- **The package is rebuilt on the current GeometricBase stack, and every integrator family leaves
+  `src/`** for a return of its own. `LPDEProblem`, `LPDESystem`, `PDEIntegrator` and every
+  `*_Integrator` type are gone. The names that replace them are `LagrangianPDEProblem`,
+  `LagrangianDensity` and `SpaceTimeQuadrature`, together with the `SpaceTimeAnsatz`,
+  `SlabCoupling` and `SlabInitialGuess` abstract types. A caller of a family that has not returned
+  yet works at `294f023`.
+- **`julia = "1.11"` is the floor**, down from 1.12, and every dependency has a `[compat]` entry.
+  `BSplineKit`, `Plots`, `IterTools`, `Parameters`, `Zygote`, `Infiltrator` and
+  `GeometricMachineLearning` leave the dependency list, `[weakdeps]` holds only what an extension
+  loads, and the ecosystem entries name the minor of its current release.
+
+### New Features
+
+- **The problem layer.** `LagrangianDensity` builds `∂L/∂u`, `∂L/∂v` and `∂L/∂w` once with
+  `Symbolics.build_function`, so an evaluation is a Julia call and not a re-derivation.
+  `LagrangianPDEProblem{T}` holds its spans at the element type, passes its parameters to the
+  initial, boundary and exact functions, and states its state as a `GeometricBase.State` of
+  algebraic variables, so neither `_state` nor `_vectorfield` is pirated.
+- **`Wave`, `VectorWave`, `SineGordon` and `LinearTransport`.** The scalar and vector wave
+  equations, the sine-Gordon kink and the transport of a Gaussian, each with its closed-form exact
+  solution and its parameters. `Wave` takes the keyword `D`, and `VectorWave` carries the angular
+  momentum `J` as the conserved diagnostic of the vector case.
+- **`SpaceTimeQuadrature{T}`.** Composite Gauss–Legendre nodes and weights on given breakpoints, in
+  `t̂ ∈ [0, 1]` and in `x`, with the four boundary point sets of a slab and the element type kept.
+- **`integrate` returns `(; solution, traces)`.** The solution on the output grid, and per step the
+  top trace at the nodes of the space quadrature, where the energy diagnostics integrate it.
+- **The suite is the standard layout**: `core` testsets for the problem layer, the quadrature and
+  the shell, `Aqua.test_all` with no `broken` mark, and `test_explicit_imports`.
+
 ### Changed
 
 - **CI coverage and cache.** CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of

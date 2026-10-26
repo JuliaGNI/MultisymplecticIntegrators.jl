@@ -20,16 +20,6 @@ reg_factor = length(ARGS) >= 7 ? parse(Float64, ARGS[7]) : 1e-11
 λ_basis = length(ARGS) >= 9 ? Symbol(ARGS[9]) : :BSplineDirichlet
 t_step = length(ARGS) >= 10 ? parse(Float64, ARGS[10]) : 0.05
 
-function GeometricIntegratorsBase.default_options(::Sindy_PDE_Integrator)
-    (
-        regularization_factor = reg_factor,
-        verbosity = 2,
-        f_suctol = -1.0,
-        x_suctol = -1.0,
-        max_iterations = 10
-    )
-end
-
 function hamiltonian_density(t, x, u, v, w, params)
     c = params.c
     1 / 2 * (c * v^2 + w^2) - (1 + cos(u))

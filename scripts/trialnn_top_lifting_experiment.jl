@@ -152,14 +152,6 @@ if abspath(PROGRAM_FILE) == @__FILE__
     using GeometricSolutions
     using MultisymplecticIntegrators
 
-    function GeometricIntegratorsBase.default_options(::TrialNN_PDE_int)
-        (
-            max_iterations = 1,
-            regularization_factor = 1e-5,
-            verbosity = 0
-        )
-    end
-
     function run_case(; use_top_lifting::Bool, S::Int = 70, nsteps::Int = 2)
         x_span = (0.0, 1.0)
         h = 0.2
