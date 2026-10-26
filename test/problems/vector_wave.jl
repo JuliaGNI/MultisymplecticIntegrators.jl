@@ -47,9 +47,10 @@ include("../helpers/testsetup.jl")
             VectorWave.angular_momentum(a.u, b.u, a.v, b.v, x)
         end
         j₀ = momentum(0.0)
-        # The sign is pinned: the second component is in phase with the first, and its velocity
-        # vanishes at t = 0, so the charge is positive there.
-        @test j₀ > 0.0
+        # The closed form of `J = ∫ (u₁v₂ − u₂v₁) dx` for this data, whose second component has
+        # `B₁ = 0` and therefore a vanishing velocity at t = 0.
+        ω = π * first.c / first.l
+        @test j₀ ≈ -first.A1 * first.B1 * ω * cos(π / 6) / 2 rtol = 16 * eps(Float64)
         @test momentum(0.35) ≈ j₀ rtol = 16 * eps(Float64)
         @test momentum(1.25) ≈ j₀ rtol = 16 * eps(Float64)
     end

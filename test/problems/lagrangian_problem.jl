@@ -80,6 +80,34 @@ include("../helpers/testsetup.jl")
         @test data.right.w[1] != data.left.w[1]
     end
 
+    @testset "the boundary data sees the problem's parameters" begin
+        params = (c = 0.9, A1 = 1.0, A2 = 0.0, B1 = 0.5, B2 = 0.0, l = 2.0)
+        problem = Wave.problem(params = params, timespan = (0.0, 1.0), timestep = 0.1,
+            xspan = (0.0, 2.0), xstep = 0.5)
+        times = (0.3, 0.7)
+        ω = π * params.c / params.l
+        phase(t) = params.A1 * cos(ω * t) + params.B1 * sin(ω * t + π / 6)
+        data = problem.bcs_function(times, params)
+        x = xgrid(problem)
+        @test data.bottom.u ≈ [phase(times[1]) * sin(π * xi / params.l) for xi in x]
+        @test data.top.u ≈ [phase(times[2]) * sin(π * xi / params.l) for xi in x]
+        @test data.left.w ≈ [phase(t) * π / params.l for t in times]
+        @test data.right.w ≈ [-phase(t) * π / params.l for t in times]
+
+        kink = (c = 4.0, velocity = 0.1)
+        nonlinear = SineGordon.problem(
+            params = kink, timespan = (0.0, 2.0), timestep = 1.0,
+            xstep = 0.25)
+        γ = 1 / sqrt(1 - kink.c * kink.velocity^2)
+        kink_data = nonlinear.bcs_function(times, kink)
+        kx = xgrid(nonlinear)
+        @test kink_data.bottom.u ≈ [4 * atan(exp(γ * (xi - kink.velocity * times[1])))
+               for xi in kx]
+        @test kink_data.top.u ≈ [4 * atan(exp(γ * (xi - kink.velocity * times[2])))
+               for xi in kx]
+        @test kink_data.left.u ≈ [4 * atan(exp(γ * (-kink.velocity * t))) for t in times]
+    end
+
     @testset "initial conditions merge the initial time" begin
         problem = Wave.problem(timespan = (1.0, 2.0), timestep = 0.5, xstep = 0.5)
         ics = initial_conditions(problem)

@@ -10,7 +10,7 @@ top_trace(::Any) = nothing
 
 """
     integrate(problem::LagrangianPDEProblem, method::SpaceTimeAnsatz; kwargs...)
-    integrate(integrator::GeometricIntegrator; kwargs...)
+    integrate(integrator::GeometricIntegrator)
 
 Integrate `problem` with `method` and return the named tuple `(; solution, traces)`.
 
@@ -38,7 +38,7 @@ function integrate(integrator::GeometricIntegrator{
         reset!(solstep, timesteps(solution)[n])
         integrate!(solstep, integrator)
         copy!(solution, current(solstep), n)
-        traces[n] = top_trace(cache(integrator))
+        traces[n] = deepcopy(top_trace(cache(integrator)))
     end
     return (; solution, traces)
 end

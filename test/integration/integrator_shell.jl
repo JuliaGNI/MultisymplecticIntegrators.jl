@@ -41,6 +41,10 @@ end
 
 function integrate_step!(sol, history, params,
         int::GeometricIntegrator{<:FixtureMethod, <:LagrangianPDEProblem})
+    # The fixture counts its steps in the cache, so that a stored trace that aliases the cache
+    # repeats the last value instead of holding each step's own.
+    c = cache(int)
+    c.u .+= 1
     return nothing
 end
 
@@ -66,6 +70,8 @@ end
 
             @test length(entry) == quadrature_nodes
         end
+        @test result.traces[1].u != result.traces[2].u
+        @test result.traces[2].u != result.traces[end].u
     end
 
     @testset "the solution carries the problem's state" begin

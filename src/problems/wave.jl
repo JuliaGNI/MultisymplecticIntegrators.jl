@@ -138,7 +138,7 @@ L = \\tfrac{1}{2}|u_t|^2 - \\tfrac{c^2}{2}|u_x|^2 - \\tfrac{m^2}{2}|u|^2 - \\tfr
 ```
 
 the exact solution of the uncoupled case `m = β = 0`, each component a standing wave of `Wave`, and
-the angular momentum `J = ∫ (u₂ ∂ₜu₁ − u₁ ∂ₜu₂) dx` of the `D = 2` field.
+the angular momentum `J = ∫ (u₁ ∂ₜu₂ − u₂ ∂ₜu₁) dx` of the `D = 2` field.
 
 `L` is invariant under a rotation of `u`, so `J` is conserved; a numerical integration that loses
 it has lost the symmetry, which is the oracle of the vector case.
@@ -199,11 +199,11 @@ end
 """
     angular_momentum(u₁, u₂, v₁, v₂, x)
 
-`J = ∫ (u₂ v₁ − u₁ v₂) dx` by the trapezoidal rule on the grid `x`. It is the charge of the
+`J = ∫ (u₁ v₂ − u₂ v₁) dx` by the trapezoidal rule on the grid `x`. It is the charge of the
 rotation that leaves the density invariant, so an exact solution conserves it.
 """
 function angular_momentum(u₁, u₂, v₁, v₂, x::AbstractVector)
-    f = @. u₂ * v₁ - u₁ * v₂
+    f = @. u₁ * v₂ - u₂ * v₁
     s = zero(eltype(f))
     for i in 1:(length(x) - 1)
         s += (f[i] + f[i + 1]) * (x[i + 1] - x[i]) / 2

@@ -20,10 +20,10 @@ A Lagrangian field theory in one space dimension on a space-time slab, with a ge
 `density` is a [`LagrangianDensity`](@ref). `ics_function(x, params)` returns the named tuple
 `(u = …, v = …, w = …)` of the initial data on the vector `x` of grid points; each entry is a
 vector of length `D * length(x)`, laid out component-major, `θ = [θ¹; θ²; …]`, so that one scalar
-ansatz serves every component. `bcs_function(t, params)` returns the boundary data of the slab at
-the physical time `t`, at the two ends of `xspan` and across the space nodes. `exact_u`, `exact_v`
-and `exact_w` are `(t, x, params)` functions,
-or `nothing` where the problem has no exact solution.
+ansatz serves every component. `bcs_function(times, params)` returns the boundary data of the slab
+whose two times are `times = (t₀, t₁)`: the exact values on the bottom and top traces, across the
+space nodes, and at the two ends of `xspan`, at both times. `exact_u`, `exact_v` and `exact_w` are
+`(t, x, params)` functions, or `nothing` where the problem has no exact solution.
 
 `timespan`, `timestep`, `xspan` and `xstep` are converted to the element type `T` of `timespan`.
 The functions of the problem take its parameters, never a module-level default.
@@ -31,7 +31,7 @@ The functions of the problem take its parameters, never a module-level default.
 ```julia
 problem = LagrangianPDEProblem(density;
     ics_function = (x, p) -> (u = …, v = …, w = …),
-    bcs_function = (t, p) -> …,
+    bcs_function = (times, p) -> …,
     timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0), xstep = 0.01)
 ```
 """
