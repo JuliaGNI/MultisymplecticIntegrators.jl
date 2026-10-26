@@ -49,6 +49,12 @@ makes it worth keeping.
   dependencies), KI-3 (the mark that asserts nothing) and KI-4 (the README and the manual saying
   the package does not load).
 
+#### Earlier development notes
+
+Everything below this line records the development that precedes the rebuild described above, and
+is kept as the record. Where the two disagree, the rebuild's entries above hold: the floor is
+`1.11`, not `1.12`, and the families are out of `src/`, not kept.
+
 ### Changed
 
 - **CI coverage and cache.** CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of

@@ -95,3 +95,26 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   term returns `Float64`, so the clause holds wherever `∂L/∂u` is not identically zero.
 - kind: defect
 - found: 2026-10-26
+
+### K15 · The grid-coverage check's tolerance is the default `≈`.
+
+- location: `src/problems/lagrangian_problem.jl`
+- evidence: `last(xgrid) ≈ xsp[2]` accepts a grid that stops within `sqrt(eps(T))` of the end,
+  whatever the step. A tolerance scaled by the step, such as
+  `abs(last(xgrid) - xsp[2]) ≤ sqrt(eps(T)) * max(xh, abs(xsp[2]))`, says the same thing in the
+  units of the grid. The hazard the check guards — an `xstep` that stops a tenth of a span short —
+  is rejected either way, which the `xstep = 0.3` test shows.
+- kind: nit
+- found: 2026-10-26
+
+### K16 · The transport density is a null Lagrangian.
+
+- location: `src/problems/linear_transport.jl`
+- evidence: `L = ½u(v + c w)` is a total divergence: its Euler–Lagrange expression is
+  `(v + c w)/2 − ∂ₜu/2 − c ∂ₓu/2 ≡ 0`, so the density alone carries no dynamics. The transport
+  equation enters through the constraint `v = c w`, which the ansatz of the family that integrates
+  this problem imposes; this package ships no integrator, so nothing here uses it. A density with a
+  non-zero Euler–Lagrange equation, such as a potential formulation with an auxiliary field, is a
+  design question for the part that integrates the symbolic and network families.
+- kind: defect
+- found: 2026-10-26

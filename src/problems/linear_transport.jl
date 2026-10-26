@@ -4,8 +4,11 @@
 The linear transport equation `∂ₜu + c ∂ₓu = 0` on `x ∈ [-0.5, 0.0]`, whose exact solution is the
 initial profile shifted by `c t`.
 
-The Lagrangian density is `L = ½u (v + c w)`, the density of the first-order form of the transport
-equation, and the exact solution is the Gaussian
+The Lagrangian density is `L = ½u (v + c w)`. It is a null Lagrangian: its Euler–Lagrange
+expression vanishes identically, because `∂L/∂u = (v + c w)/2`, `∂ₜ(∂L/∂v) = ∂ₜu/2` and
+`∂ₓ(∂L/∂w) = c ∂ₓu/2`. The transport equation is therefore carried by the constraint `v = c w`,
+which the ansatz of the family that integrates this problem imposes, and not by the density alone.
+The exact solution is the Gaussian
 
 ```math
 u(t, x) = \\frac{1}{2\\sqrt{\\pi}} \\exp\\!\\big(-(x + 2 - ct)^2\\big),
