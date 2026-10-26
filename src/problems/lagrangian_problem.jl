@@ -77,6 +77,9 @@ function LagrangianPDEProblem(density::LagrangianDensity;
     xgrid = collect(xsp[1]:xh:xsp[2])
     length(xgrid) ≥ 2 ||
         throw(ArgumentError("xspan with xstep holds $(length(xgrid)) points; two are needed"))
+    last(xgrid) ≈ xsp[2] ||
+        throw(ArgumentError("xstep $xh does not reach the end of xspan $xsp: the grid stops at " *
+                            "$(last(xgrid))"))
     ics = ics_function(xgrid, params)
     for name in (:u, :v, :w)
         haskey(ics, name) ||
@@ -95,6 +98,7 @@ end
 function _interval(::Type{T}, span, name::Symbol) where {T}
     length(span) == 2 || throw(ArgumentError("$name must hold two values, got $span"))
     a, b = convert(T, span[1]), convert(T, span[2])
+    isfinite(a) && isfinite(b) || throw(ArgumentError("$name must be finite, got $a to $b"))
     a < b || throw(ArgumentError("$name must increase, got $a to $b"))
     return (a, b)
 end
@@ -135,17 +139,31 @@ function field_exact(f, D::Integer)
 end
 
 """
-    field_boundary_data(exact_u, exact_v, exact_w, t, xbreaks, params)
+    field_boundary_data(exact_u, exact_v, exact_w, times, xbreaks, params, D)
 
-The boundary data of a slab at time `t`: the exact values on the bottom trace, at the two ends of
-the interval for the side traces, and the exact values on the top trace.
+The boundary data of a slab whose two times are `times = (t₀, t₁)`:
+
+- `bottom`: the exact values over the points `xbreaks` at `t₀`;
+- `top`: the same at `t₁`;
+- `left` and `right`: the exact values at the two ends of `xbreaks`, at both times.
+
+Every entry is a vector of length `D * length(xbreaks)`, or `2 * D` for the two side traces, in
+component-major order.
 """
-function field_boundary_data(exact_u, exact_v, exact_w, t, xbreaks::AbstractVector, params)
-    u = [exact_u(t, xi, params) for xi in xbreaks]
-    v = [exact_v(t, xi, params) for xi in xbreaks]
-    w = [exact_w(t, xi, params) for xi in xbreaks]
-    return (bottom = (u = u, v = v, w = w), top = (u = u, v = v, w = w),
-        left = zero(eltype(u)), right = zero(eltype(u)))
+function field_boundary_data(
+        exact_u, exact_v, exact_w, times, xbreaks::AbstractVector, params,
+        D::Integer = 1)
+    t₀, t₁ = times
+    across(f, t) = reduce(vcat, [f(t, xi, params) for _ in 1:D for xi in xbreaks])
+    at(f, x) = reduce(vcat, [[f(t, x, params) for t in (t₀, t₁)] for _ in 1:D])
+    return (
+        bottom = (u = across(exact_u, t₀), v = across(exact_v, t₀),
+            w = across(exact_w, t₀)),
+        top = (u = across(exact_u, t₁), v = across(exact_v, t₁), w = across(exact_w, t₁)),
+        left = (u = at(exact_u, first(xbreaks)), v = at(exact_v, first(xbreaks)),
+            w = at(exact_w, first(xbreaks))),
+        right = (u = at(exact_u, last(xbreaks)), v = at(exact_v, last(xbreaks)),
+            w = at(exact_w, last(xbreaks))))
 end
 
 datatype(::LagrangianPDEProblem{T}) where {T} = T
@@ -169,8 +187,6 @@ end
 
 xspan(problem::LagrangianPDEProblem) = problem.xspan
 xstep(problem::LagrangianPDEProblem) = problem.xstep
-density(problem::LagrangianPDEProblem) = problem.density
-ndof(problem::LagrangianPDEProblem) = problem.D
 
 """The number of components of the field."""
 components(problem::LagrangianPDEProblem) = problem.D

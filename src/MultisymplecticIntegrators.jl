@@ -4,7 +4,6 @@ using GeometricBase
 using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra
 using QuadratureRules
 using Symbolics
 

@@ -20,17 +20,64 @@ include("../helpers/testsetup.jl")
         end
     end
 
-    @testset "the functions see the problem's parameters" begin
+    @testset "the wave functions see the problem's parameters" begin
+        # The closed form is written here, and not read from the module: a test that calls the
+        # routine under test twice compares nothing.
         params = (c = 0.9, A1 = 1.0, A2 = 0.0, B1 = 0.5, B2 = 0.0, l = 2.0)
         problem = Wave.problem(params = params, timespan = (0.0, 1.0), timestep = 0.1,
             xspan = (0.0, 2.0), xstep = 0.5)
         x = xgrid(problem)
-        @test problem.ics.u ≈ Wave.exact_u(0.0, x, params)
-        @test problem.ics.v ≈ Wave.exact_v(0.0, x, params)
-        @test problem.ics.w ≈ Wave.exact_w(0.0, x, params)
-        @test problem.bcs_function(0.3, params).bottom.u ≈ Wave.exact_u(0.3, x, params)
-        @test problem.exact_u(0.3, 0.7, params) ≈ Wave.exact_u(0.3, 0.7, params)
+        ω = π * params.c / params.l
+        phase = params.A1 * cos(0.0) + params.B1 * sin(π / 6)
+        @test problem.ics.u ≈ [phase * sin(π * xi / params.l) for xi in x]
+        @test problem.ics.v ≈
+              [params.B1 * ω * cos(π / 6) * sin(π * xi / params.l) for xi in x]
+        @test problem.ics.w ≈ [phase * π / params.l * cos(π * xi / params.l) for xi in x]
+        @test problem.exact_u(0.3, 0.7, params) ≈
+              (params.A1 * cos(ω * 0.3) + params.B1 * sin(ω * 0.3 + π / 6)) *
+              sin(π * 0.7 / params.l)
         @test parameters(problem) === params
+    end
+
+    @testset "the sine-Gordon functions see the problem's parameters" begin
+        params = (c = 4.0, velocity = 0.1)
+        problem = SineGordon.problem(
+            params = params, timespan = (0.0, 2.0), timestep = 1.0,
+            xstep = 0.25)
+        γ = 1 / sqrt(1 - params.c * params.velocity^2)
+        x = xgrid(problem)
+        @test problem.ics.u ≈ [4 * atan(exp(γ * xi)) for xi in x]
+        @test problem.exact_u(0.5, 0.3, params) ≈
+              4 * atan(exp(γ * (0.3 - params.velocity * 0.5)))
+        @test parameters(problem) === params
+        @test_throws ArgumentError SineGordon.problem(params = (c = 4.0, velocity = 0.75))
+    end
+
+    @testset "the transport functions see the problem's parameters" begin
+        params = (c = 0.5,)
+        problem = LinearTransport.problem(params = params, timespan = (0.0, 2.0),
+            timestep = 0.5, xstep = 0.25)
+        x = xgrid(problem)
+        @test problem.ics.u ≈ [0.5 * exp(-(xi + 2)^2) / sqrt(π) for xi in x]
+        @test problem.exact_u(1.0, -0.25, params) ≈
+              0.5 * exp(-(−0.250 + 2 - params.c * 1.0)^2) / sqrt(π)
+        @test parameters(problem) === params
+    end
+
+    @testset "the boundary data of a slab" begin
+        problem = Wave.problem(
+            params = (c = 0.5, A1 = 0.8, A2 = 0.0, B1 = 0.4, B2 = 0.0,
+                l = 1.0),
+            timespan = (0.0, 1.0), timestep = 0.1, xstep = 0.25)
+        x = xgrid(problem)
+        times = (0.0, 1.0)
+        data = problem.bcs_function(times, problem.params)
+        @test keys(data) == (:bottom, :top, :left, :right)
+        @test length(data.bottom.u) == length(x)
+        @test length(data.left.u) == length(times)
+        @test data.bottom.u != data.top.u
+        @test data.left.u[1] == 0.0
+        @test data.right.w[1] != data.left.w[1]
     end
 
     @testset "initial conditions merge the initial time" begin
@@ -44,7 +91,7 @@ include("../helpers/testsetup.jl")
     @testset "the decided edges" begin
         density = Wave.density()
         ics = (x, p) -> (u = zeros(length(x)), v = zeros(length(x)), w = zeros(length(x)))
-        bcs = (t, p) -> nothing
+        bcs = (times, p) -> nothing
         @test_throws ArgumentError LagrangianPDEProblem(density; D = 2, ics_function = ics,
             bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0),
             xstep = 0.25)
@@ -57,11 +104,20 @@ include("../helpers/testsetup.jl")
         @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics,
             bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.0, xspan = (0.0, 1.0),
             xstep = 0.25)
+        @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics,
+            bcs_function = bcs, timespan = (0.0, Inf), timestep = 0.1, xspan = (0.0, 1.0),
+            xstep = 0.25)
+        @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics,
+            bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0),
+            xstep = 0.3)
     end
 
     @testset "a run that starts at a non-zero time" begin
         problem = Wave.problem(timespan = (1.0, 1.4), timestep = 0.1, xstep = 0.5)
+        params = Wave.default_parameters()
+        ω = π * params.c / params.l
+        phase = params.A1 * cos(ω) + params.B1 * sin(ω + π / 6)
         @test ntime(problem) == 4
-        @test problem.ics.u ≈ Wave.exact_u(1.0, xgrid(problem), Wave.default_parameters())
+        @test problem.ics.u ≈ [phase * sin(π * xi / params.l) for xi in xgrid(problem)]
     end
 end

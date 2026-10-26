@@ -22,8 +22,8 @@ density: every built function takes their values as further positional arguments
 using Symbolics
 @variables u v w
 d = LagrangianDensity(v^2 / 2 - w^2 / 2, u, v, w; params = (c = 0.5,))
-d(0.0, 1.0, 0.0, 0.5)        # the density
-d.∂v(0.0, 1.0, 0.0, 0.5)     # ∂L/∂v
+d(0.0, 1.0, 0.0, (c = 0.5,))   # the density, with the parameters named
+d.∂v(0.0, 1.0, 0.0, 0.5)       # ∂L/∂v, with the values in argument order
 ```
 """
 struct LagrangianDensity{LT, UT, VT, WT, NT, PT}
@@ -46,9 +46,6 @@ function LagrangianDensity(L, u, v, w; params = NamedTuple())
         build(Symbolics.derivative(L, w)),
         names, params)
 end
-
-"""The default parameters of a density, or the ones given."""
-default_parameters(density::LagrangianDensity) = density.params
 
 """The values of `params` in the order of the density's built functions."""
 function parameter_values(density::LagrangianDensity, params)

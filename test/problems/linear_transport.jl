@@ -34,8 +34,8 @@ include("../helpers/testsetup.jl")
             timestep = 0.5, xstep = 0.25)
         slow = LinearTransport.problem(params = (c = 0.2,), timespan = (0.0, 1.0),
             timestep = 0.5, xstep = 0.25)
-        @test fast.bcs_function(0.4, fast.params).bottom.u !=
-              slow.bcs_function(0.4, slow.params).bottom.u
+        @test fast.bcs_function((0.0, 0.4), fast.params).top.u !=
+              slow.bcs_function((0.0, 0.4), slow.params).top.u
         @test fast.exact_u(0.4, -0.25, fast.params) != slow.exact_u(0.4, -0.25, slow.params)
         @test fast.exact_u(0.4, -0.25, fast.params) ≈
               LinearTransport.exact_u(0.4, -0.25, (c = 0.5,))

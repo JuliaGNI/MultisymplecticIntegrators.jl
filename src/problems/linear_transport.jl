@@ -4,7 +4,7 @@
 The linear transport equation `∂ₜu + c ∂ₓu = 0` on `x ∈ [-0.5, 0.0]`, whose exact solution is the
 initial profile shifted by `c t`.
 
-The Lagrangian density is `L = ½u (v + c w)`, whose Euler–Lagrange equation is the transport
+The Lagrangian density is `L = ½u (v + c w)`, the density of the first-order form of the transport
 equation, and the exact solution is the Gaussian
 
 ```math
@@ -64,9 +64,9 @@ function initial_data(x::AbstractVector, params = default_parameters(), D::Integ
     field_initial_data(exact_u, exact_v, exact_w, x, params, D, t)
 end
 
-"""The boundary data of a slab at time `t`."""
-function boundary_data(t, xbreaks::AbstractVector, params = default_parameters())
-    field_boundary_data(exact_u, exact_v, exact_w, t, xbreaks, params)
+"""The boundary data of the slab whose two times are `times = (t₀, t₁)`."""
+function boundary_data(times, xbreaks::AbstractVector, params = default_parameters(), D::Integer = 1)
+    field_boundary_data(exact_u, exact_v, exact_w, times, xbreaks, params, D)
 end
 
 """
@@ -80,8 +80,11 @@ function problem(; T::Type = Float64, D::Integer = 1, params = default_parameter
         timespan = (zero(T), T(10)), timestep = T(1.0), xspan = (T(-0.5), zero(T)),
         xstep = T(0.01))
     d = density(; params = params)
-    ics = (x, p) -> initial_data(x, p, D, timespan[1])
-    bcs = (t, p) -> boundary_data(t, collect(xspan[1]:xstep:xspan[2]), p)
+    tspan = (T(timespan[1]), T(timespan[2]))
+    xsp = (T(xspan[1]), T(xspan[2]))
+    h = T(xstep)
+    ics = (x, p) -> initial_data(x, p, D, tspan[1])
+    bcs = (times, p) -> boundary_data(times, collect(xsp[1]:h:xsp[2]), p, D)
     return LagrangianPDEProblem(d;
         D = D,
         ics_function = ics,
@@ -89,10 +92,10 @@ function problem(; T::Type = Float64, D::Integer = 1, params = default_parameter
         exact_u = field_exact(exact_u, D),
         exact_v = field_exact(exact_v, D),
         exact_w = field_exact(exact_w, D),
-        timespan = (T(timespan[1]), T(timespan[2])),
+        timespan = tspan,
         timestep = T(timestep),
-        xspan = (T(xspan[1]), T(xspan[2])),
-        xstep = T(xstep),
+        xspan = xsp,
+        xstep = h,
         params = params)
 end
 

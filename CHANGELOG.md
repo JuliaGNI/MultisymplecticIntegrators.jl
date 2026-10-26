@@ -43,7 +43,11 @@ makes it worth keeping.
 - **`integrate` returns `(; solution, traces)`.** The solution on the output grid, and per step the
   top trace at the nodes of the space quadrature, where the energy diagnostics integrate it.
 - **The suite is the standard layout**: `core` testsets for the problem layer, the quadrature and
-  the shell, `Aqua.test_all` with no `broken` mark, and `test_explicit_imports`.
+  the shell, `Aqua.test_all` with no `broken` mark, and `test_explicit_imports`. This closes the
+  known issues K1 (the broken marks), K2 (the stale bounds), K3 (`Plots` and the GUI packages in
+  the test environment), K5 (the two files the formatter could not write), KI-2 (the unused test
+  dependencies), KI-3 (the mark that asserts nothing) and KI-4 (the README and the manual saying
+  the package does not load).
 
 ### Changed
 

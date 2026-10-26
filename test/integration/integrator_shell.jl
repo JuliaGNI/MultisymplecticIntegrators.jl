@@ -6,9 +6,18 @@ using Test
 
 import GeometricIntegratorsBase: Cache, CacheType, IntegratorCache, integrate_step!
 
-# A fixture method: it advances nothing, because part C ships no integrator. It exists to exercise
-# the shell — the solution the integrator builds, and the trace it stores beside it.
-struct FixtureMethod <: SpaceTimeAnsatz end
+include("../helpers/testsetup.jl")
+
+# A fixture method: it advances nothing, because this package ships no integrator. It exists to
+# exercise the shell — the solution the integrator builds, and the trace it stores beside it. Its
+# cache holds the trace at the nodes of a space quadrature, as a method's cache does.
+struct FixtureMethod{T} <: SpaceTimeAnsatz
+    quadrature::SpaceTimeQuadrature{T}
+end
+
+function FixtureMethod(xspan; n::Integer = 1)
+    FixtureMethod(SpaceTimeQuadrature{Float64}(n; xbreaks = collect(xspan)))
+end
 
 struct FixtureCache{DT} <: IntegratorCache{DT}
     u::Vector{DT}
@@ -16,8 +25,11 @@ struct FixtureCache{DT} <: IntegratorCache{DT}
     w::Vector{DT}
 end
 
-function Cache{ST}(problem::LagrangianPDEProblem, ::FixtureMethod; kwargs...) where {ST}
-    FixtureCache{ST}(copy(problem.ics.u), copy(problem.ics.v), copy(problem.ics.w))
+function Cache{ST}(problem::LagrangianPDEProblem, method::FixtureMethod; kwargs...) where {ST}
+    nodes = length(method.quadrature.x)
+    return FixtureCache{ST}([problem.ics.u[1] for _ in 1:nodes],
+        [problem.ics.v[1] for _ in 1:nodes],
+        [problem.ics.w[1] for _ in 1:nodes])
 end
 
 CacheType(ST, ::LagrangianPDEProblem, ::FixtureMethod) = FixtureCache{ST}
@@ -34,7 +46,8 @@ end
 
 @testset "Integrator shell" begin
     problem = Wave.problem(timespan = (0.0, 0.4), timestep = 0.1, xstep = 0.25)
-    result = integrate(problem, FixtureMethod())
+    method = FixtureMethod((-0.5, 0.0); n = 2)
+    result = integrate(problem, method)
 
     @testset "the named tuple of the shell" begin
         @test keys(result) == (:solution, :traces)
@@ -42,13 +55,16 @@ end
         @test datatype(result.solution) === Float64
     end
 
-    @testset "the trace of every step" begin
+    @testset "the trace of every step, at the quadrature nodes" begin
         @test length(result.traces) == ntime(result.solution)
         @test !isempty(result.traces)
-        nodes = length(xgrid(problem))
+        @test isconcretetype(eltype(result.traces))
+        quadrature_nodes = length(method.quadrature.x)
+        interior_nodes = length(xgrid(problem))
+        @test quadrature_nodes != interior_nodes
         for trace in result.traces, entry in values(trace)
 
-            @test length(entry) == nodes
+            @test length(entry) == quadrature_nodes
         end
     end
 
@@ -56,6 +72,30 @@ end
         @test keys(result.solution.dataser) == (:t, :u, :v, :w)
         @test result.solution.u[0] ≈ problem.ics.u
         @test result.solution.u[ntime(result.solution)] ≈ problem.ics.u
+    end
+
+    @testset "a run that starts at a time other than zero" begin
+        late = Wave.problem(timespan = (1.0, 1.4), timestep = 0.1, xstep = 0.25)
+        steps = integrate(late, method)
+        @test ntime(steps.solution) == 4
+        @test [steps.solution.t[n] for n in 1:4] ≈ [1.1, 1.2, 1.3, 1.4]
+        @test length(steps.traces) == 4
+        @test steps.traces[1] !== nothing
+        @test steps.solution.u[1] ≈ late.ics.u
+        @test steps.solution.u[0] ≈ late.ics.u
+    end
+
+    @testset "no silent upcast" begin
+        small = Wave.problem(T = Float32, timespan = (Float32(0), Float32(0.4)),
+            timestep = Float32(0.1), xstep = Float32(0.25))
+        small_method = FixtureMethod((Float32(-0.5), Float32(0.0)); n = 2)
+        small_result = integrate(small, small_method)
+        assert_no_upcast(small.ics.u, Float32)
+        assert_no_upcast(small_result.solution.u, Float32)
+        for trace in small_result.traces, entry in values(trace)
+
+            assert_no_upcast(entry, Float32)
+        end
     end
 
     @testset "a method without a trace stores nothing" begin

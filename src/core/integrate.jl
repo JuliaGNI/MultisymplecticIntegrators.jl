@@ -21,19 +21,19 @@ quadrature nodes rather than the interior ones because the energy diagnostics in
 the accuracy of the Gauss rule.
 
 The steps are driven one at a time, because the trace of a step exists only while its cache does.
-```
+The keyword arguments go to the integrator's constructor, and to nothing else.
 """
 function integrate(problem::LagrangianPDEProblem, method::SpaceTimeAnsatz; kwargs...)
-    return integrate(GeometricIntegrator(problem, method; kwargs...); kwargs...)
+    return integrate(GeometricIntegrator(problem, method; kwargs...))
 end
 
-function integrate(
-        integrator::GeometricIntegrator{<:SpaceTimeAnsatz, <:LagrangianPDEProblem};
-        kwargs...)
+function integrate(integrator::GeometricIntegrator{
+        <:SpaceTimeAnsatz, <:LagrangianPDEProblem})
     solution = GeometricSolution(problem(integrator))
     steps = ntime(solution)
-    traces = Vector{Any}(undef, steps)
-    solstep = solutionstep(integrator, solution[0]; kwargs...)
+    sample = top_trace(cache(integrator))
+    traces = Vector{typeof(sample)}(undef, steps)
+    solstep = solutionstep(integrator, solution[0])
     for n in 1:steps
         reset!(solstep, timesteps(solution)[n])
         integrate!(solstep, integrator)
