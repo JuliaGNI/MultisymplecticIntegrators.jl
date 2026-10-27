@@ -3,7 +3,7 @@
 
 A tensor B-spline ansatz of one space-time slab, on `SimpleSplines`.
 
-The slab is the square `[0, 1] × xspan` in the normalised time coordinate `t̂` and the physical
+The slab is the rectangle `[0, 1] × xspan` in the normalised time coordinate `t̂` and the physical
 space coordinate `x`. The ansatz approximates the field by
 
 ```math
