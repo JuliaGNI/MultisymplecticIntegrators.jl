@@ -26,12 +26,12 @@ makes it worth keeping.
   The floor goes down from 1.12 to 1.11, and CI's `min` job resolves this bound. The dependency
   list drops `AbstractNeuralNetworks`, `BSplineKit`, `CompactBasisFunctions`, `ForwardDiff`,
   `GeometricMachineLearning`, `IterTools`, `Parameters`, `Plots`, `StaticArrays`,
-  `SymbolicNeuralNetworks`, `Zygote`, `LinearAlgebra`, `Random` and `Statistics`. The package has
+  `SymbolicNeuralNetworks`, `Zygote`, `Random` and `Statistics`. The package has
   no `[weakdeps]` and no `[extensions]`. Every `[compat]` entry is a patch-level floor
   (`GeometricBase = "0.15.0"`, `GeometricEquations = "0.21.5"`, `GeometricIntegratorsBase = "0.6.9"`,
   `GeometricSolutions = "0.6.6"`, `QuadratureRules = "0.2.2"`, `SimpleSplines = "0.3.1"`,
-  `SimpleSolvers = "0.14.1"`, `Symbolics = "7.18.1"`), except `SparseArrays = "1"`, which names the
-  major. `SimpleSplines` requires `DomainSets = "0.8"`, which `Symbolics` accepts only from `7.18.1`,
+  `SimpleSolvers = "0.14.1"`, `Symbolics = "7.18.1"`), except `LinearAlgebra = "1"` and `SparseArrays = "1"`,
+  which name the major. `SimpleSplines` requires `DomainSets = "0.8"`, which `Symbolics` accepts only from `7.18.1`,
   so the `Symbolics` floor is that patch rather than the major.
 - **The package is renamed `MultiSymplectic` → `MultisymplecticIntegrators`.** The repository moved
   from `ZeyuanLee/MultiSymplectic.jl` to `JuliaGNI/MultisymplecticIntegrators.jl`, and the package
@@ -103,7 +103,7 @@ makes it worth keeping.
 - **`SpaceTimeQuadrature{T}`.** Composite Gauss–Legendre nodes and weights on given breakpoints, in
   `t̂ ∈ [0, 1]` and in `x`, with the four boundary point sets of a slab and the element type kept.
 - **The first integrator family returns: the space-time Galerkin slab core.**
-  `SpaceTimeGalerkin{A, C, G} <: SpaceTimeAnsatz` holds a tensor B-spline ansatz, a coupling of
+  `SpaceTimeGalerkin{A, C, G} <: SpaceTimeMethod` holds a tensor B-spline ansatz, a coupling of
   consecutive slabs and an initial guess, and one step of it solves one slab.
   `TensorBSplineAnsatz`, on `SimpleSplines`, is a clamped B-spline basis in `t̂ ∈ [0, 1]` and a
   B-spline basis in `x`, each of given degree and cell count — a number for both directions or a
@@ -136,7 +136,7 @@ makes it worth keeping.
   `LagrangianDensity` alone, so the density built by `VectorWave.vector_density`, which couples the
   components, reaches a problem; the problem's parameters default to the density's own `params`
   field where it has one. `Project.toml` gains `SimpleSplines` (compat `0.3.1`), `SimpleSolvers`
-  (compat `0.14.1`) and `SparseArrays` (compat `1`). Three new test files — the tensor B-spline
+  (compat `0.14.1`), `LinearAlgebra` and `SparseArrays` (compat `1`). Three new test files — the tensor B-spline
   ansatz, the coefficient restriction and the initial guess — join the `core` group, with
   `test/helpers/fem_stencil.jl`, an independent FEM stencil oracle for the assembly. The §A
   oracle, `test/helpers/reference_values.jl`, which part C's test-tree commit had removed, is back
@@ -146,8 +146,22 @@ makes it worth keeping.
   call starts a new run: the method's cache is reset first, so the first slab takes the problem's
   initial data and the steps a method records belong to that run alone. A step whose state holds a
   NaN ends the run with a warning: `traces` ends at that step, and the solution holds the NaN
-  there. `SpaceTimeAnsatz` defaults to `NoExtrapolation()`, so the history states of the solution
+  there. `SpaceTimeMethod` defaults to `NoExtrapolation()`, so the history states of the solution
   step hold the initial data.
+- **The method, the ansatz and the three roles of an initial guess have abstract types of their
+  own.** `SpaceTimeMethod <: GeometricMethod` is the supertype of `SpaceTimeGalerkin`, and
+  `SpaceTimeAnsatz` is the supertype of `TensorBSplineAnsatz` alone, which is no
+  `GeometricMethod` any more. `SlabInitialGuess` covers `Continuation` and `FitTo`;
+  `InitialCondition`, `PreviousSlab`, `ExactSolution` and `TargetFunction` are `SlabTarget`s, and
+  `Projection` is a `SlabFitMethod`. A value in the wrong role fails where it is given:
+  `SpaceTimeGalerkin(ansatz; initial_guess = InitialCondition())`, `FitTo(Continuation())` and
+  `FitTo(target; method = Continuation())` raise a `TypeError` or a `MethodError` at
+  construction, where each failed with a `MethodError` at the first step. `SpaceTimeGalerkin` of
+  a method and `integrate(problem, ansatz)` raise a named `ArgumentError`. A user-defined target
+  subtypes `SlabTarget`, and a user-defined fit method `SlabFitMethod`, whose `fit!` takes the
+  cache as a fifth argument: the cache now holds the buffers of the guess, so `initial_guess!`
+  allocates 0 B for `Continuation()` and for every `FitTo` guess, where a `FitTo` guess allocated
+  about 17 kB per step.
 - **A failed nonlinear solve ends the run with a warning, as a NaN does.** When a slab's Newton
   solve raises SimpleSolvers' `NonlinearSolverException`, `integrate` warns with the timestep and
   returns the steps already taken: `traces` ends at the step before, and the solution is valid up

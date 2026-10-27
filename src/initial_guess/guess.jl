@@ -11,14 +11,14 @@ ended. At the first slab there is nothing to carry, and the guess falls back to
 struct Continuation <: SlabInitialGuess end
 
 """
-    InitialCondition() <: SlabInitialGuess
+    InitialCondition() <: SlabTarget
 
 The problem's initial condition `u₀(x)`, constant in time over the slab.
 """
-struct InitialCondition <: SlabInitialGuess end
+struct InitialCondition <: SlabTarget end
 
 """
-    PreviousSlab() <: SlabInitialGuess
+    PreviousSlab() <: SlabTarget
 
 The previous slab's solution, extrapolated in time beyond the top of that slab.
 
@@ -27,20 +27,20 @@ expanded about its top and evaluated at the displacement `t̂` beyond it: a spli
 each cell, so that piece extends the solution without inventing anything. At the first slab, where
 there is no previous solution, the target falls back to `InitialCondition()`.
 """
-struct PreviousSlab <: SlabInitialGuess end
+struct PreviousSlab <: SlabTarget end
 
 """
-    ExactSolution() <: SlabInitialGuess
+    ExactSolution() <: SlabTarget
 
 The problem's exact solution `u(t, x)` at the physical time of the slab.
 
 A problem without an exact solution cannot supply it, and `FitTo(ExactSolution())` on one throws an
 `ArgumentError` at construction.
 """
-struct ExactSolution <: SlabInitialGuess end
+struct ExactSolution <: SlabTarget end
 
 """
-    TargetFunction(f) <: SlabInitialGuess
+    TargetFunction(f) <: SlabTarget
 
 A user-defined target: `f(t, x, params)` in physical time.
 
@@ -48,7 +48,7 @@ The result is converted to the problem's element type, so a `Float32` problem st
 that returns `Float64` keeps `Float32` coefficients. A `D`-component problem may return a number,
 which every component takes, or a vector of the `D` values.
 """
-struct TargetFunction{F} <: SlabInitialGuess
+struct TargetFunction{F} <: SlabTarget
     f::F
 end
 
@@ -62,22 +62,25 @@ A target is evaluated on the slab — see [`InitialCondition`](@ref), [`Previous
 `method` that is named is used as it is; an unnamed one resolves through
 [`default_fit`](@ref)`(ansatz)`, so that an ansatz with a fit method of its own gets it.
 
-A user-defined target is a subtype of `SlabInitialGuess` with one method of
+`target` is a [`SlabTarget`](@ref) and `method` a [`SlabFitMethod`](@ref); a value of another role,
+such as `FitTo(Continuation())`, has no method and is refused at construction.
+
+A user-defined target is a subtype of `SlabTarget` with one method of
 
 ```julia
 evaluate!(sample, target, cache, ansatz, problem, sol)
 ```
 
 filling `sample`, of size `(Qt, Qx, D)`, with the target's value at the quadrature points of the
-slab.
+slab. The fit that follows takes `sample` from the cache, so a target that allocates nothing keeps
+the guess free of allocations.
 """
-struct FitTo{T <: SlabInitialGuess, M <: Union{Nothing, SlabInitialGuess}} <:
-       SlabInitialGuess
+struct FitTo{T <: SlabTarget, M <: Union{Nothing, SlabFitMethod}} <: SlabInitialGuess
     target::T
     method::M
 end
 
-function FitTo(target::SlabInitialGuess; method::Union{Nothing, SlabInitialGuess} = nothing)
+function FitTo(target::SlabTarget; method::Union{Nothing, SlabFitMethod} = nothing)
     FitTo(target, method)
 end
 
@@ -92,7 +95,7 @@ function fit_method(fit::FitTo, ansatz::SpaceTimeAnsatz)
 end
 
 """Whether a target needs the problem's exact solution."""
-needs_exact_solution(::SlabInitialGuess) = false
+needs_exact_solution(::SlabTarget) = false
 needs_exact_solution(::ExactSolution) = true
 
 """
@@ -122,19 +125,15 @@ function apply_guess!(c::SpaceTimeGalerkinCache, guess::Continuation,
     return nothing
 end
 
-function apply_guess!(c::SpaceTimeGalerkinCache{ST}, guess::FitTo,
-        ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
-    qt = nquadrature(c.tabulation.time)
-    qx = nquadrature(c.tabulation.space)
+function apply_guess!(c::SpaceTimeGalerkinCache, guess::FitTo,
+        ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem, sol)
     D = size(c.bottom, 2)
-    sample = Array{ST, 3}(undef, qt, qx, D)
-    evaluate!(sample, guess.target, c, ansatz, problem, sol)
-    coeffs = similar(c.coeffs)
-    fit!(coeffs, fit_method(guess, ansatz), ansatz, sample)
+    evaluate!(c.sample, guess.target, c, ansatz, problem, sol)
+    fit!(c.fit, fit_method(guess, ansatz), ansatz, c.sample, c)
     nt = ntime_functions(ansatz)
     nx = nspace_functions(ansatz)
     for d in 1:D, j in 1:nx, a in 2:nt
-        c.x[free_index(a, j, d, nt, nx)] = coeffs[a, j, d]
+        c.x[free_index(a, j, d, nt, nx)] = c.fit[a, j, d]
     end
     return nothing
 end
@@ -148,16 +147,8 @@ slab, of which `sol` fixes the physical time.
 function evaluate!(sample::AbstractArray{ST, 3}, ::InitialCondition,
         c::SpaceTimeGalerkinCache, ansatz::TensorBSplineAnsatz,
         problem::LagrangianPDEProblem, sol) where {ST}
-    qx = size(sample, 2)
-    D = size(sample, 3)
-    xq = collect(space_quadrature_nodes(ansatz))
-    values = problem.ics_function(xq, parameters(problem))
-    for d in 1:D, r in 1:qx
-
-        value = values.u[(d - 1) * qx + r]
-        for q in axes(sample, 1)
-            sample[q, r, d] = convert(ST, value)
-        end
+    for d in axes(sample, 3), r in axes(sample, 2), q in axes(sample, 1)
+        sample[q, r, d] = c.initial_sample[r, d]
     end
     return nothing
 end
@@ -175,8 +166,14 @@ function evaluate!(sample::AbstractArray{ST, 3}, ::PreviousSlab,
     order = degree(tb)
     T = eltype(ansatz.xspan)
     # the Taylor coefficients of the top time cell at t̂ = 1, one per space function and component
-    deriv = [sum(c.coeffs[a, j, d] * evaluate(tb, a, one(T), k) for a in 1:nt)
-             for j in 1:nx, d in 1:D, k in 0:order]
+    deriv = c.taylor
+    for k in 0:order, d in 1:D, j in 1:nx
+        coefficient = zero(ST)
+        for a in 1:nt
+            coefficient += c.coeffs[a, j, d] * evaluate(tb, a, one(T), k)
+        end
+        deriv[j, d, k + 1] = coefficient
+    end
     t = c.tabulation.time
     x = c.tabulation.space
     for q in 1:nquadrature(t)

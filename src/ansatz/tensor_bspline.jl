@@ -132,8 +132,8 @@ end
     output_grid(ansatz::TensorBSplineAnsatz, xstep)
     output_grid(ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem)
 
-The grid the ansatz reports its solution on: `xspan` in `n` equally spaced points, with
-`n = round(Int, Δx / xstep) + 1`.
+A grid of `xspan` in `n` equally spaced points, with `n = round(Int, Δx / xstep) + 1`. It is a
+public helper that the integrator does not call: the solution is reported on `xgrid(problem)`.
 
 A `xstep` that does not divide `xspan` therefore still ends on the end of the span, and the grid is
 built as a `range` rather than as a stepped `:`, which stops short of the end when the step does not

@@ -21,7 +21,7 @@ struct NonlinearFixtureAnsatz <: SpaceTimeAnsatz end
 The fit method the fixture ansatz gives an unnamed [`FitTo`](@ref): a stand-in for the network fits
 of the later parts, and not a `Projection()`.
 """
-struct FixtureFit <: SlabInitialGuess end
+struct FixtureFit <: SlabFitMethod end
 
 M.default_fit(::NonlinearFixtureAnsatz) = FixtureFit()
 
@@ -108,6 +108,87 @@ end
 
             u = one(T) + c.tabulation.time.node[q]
             @test abs(sample[q, r, 1] - field(u, xq[r])) ≤ scale
+        end
+    end
+
+    @testset "A4d the three roles fail at construction" begin
+        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0), n = 3)
+        galerkin(guess) = SpaceTimeGalerkin(ansatz, CoefficientRestriction();
+            initial_guess = guess)
+        targets = (InitialCondition(), PreviousSlab(), ExactSolution(),
+            TargetFunction((t, x, p) -> 0.0))
+        # the roles are disjoint abstract types
+        for target in targets
+            @test target isa SlabTarget
+            @test !(target isa SlabInitialGuess)
+            @test !(target isa SlabFitMethod)
+        end
+        @test Projection() isa SlabFitMethod
+        @test !(Projection() isa SlabInitialGuess)
+        @test !(Projection() isa SlabTarget)
+        @test Continuation() isa SlabInitialGuess
+        @test FitTo(InitialCondition()) isa SlabInitialGuess
+        # a target or a fit method is no guess
+        for wrong in (targets..., Projection())
+            @test_throws TypeError galerkin(wrong)
+        end
+        # a guess or a fit method is no target
+        @test_throws MethodError FitTo(Continuation())
+        @test_throws MethodError FitTo(FitTo(InitialCondition()))
+        @test_throws MethodError FitTo(Projection())
+        # a guess or a target is no fit method
+        for wrong in (Continuation(), InitialCondition(), FitTo(InitialCondition()))
+            @test_throws TypeError FitTo(InitialCondition(); method = wrong)
+        end
+        # the valid forms still build
+        @test galerkin(Continuation()) isa SpaceTimeGalerkin
+        @test galerkin(FitTo(PreviousSlab(); method = Projection())) isa SpaceTimeGalerkin
+    end
+
+    @testset "A4e the in-place projection is the allocating one" for T in (Float64, Float32)
+        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (3, 20),
+            xspan = (zero(T), one(T)), n = 3)
+        problem = Wave.problem(T = T, timespan = (zero(T), T(0.25)), timestep = T(0.05),
+            xstep = T(0.05))
+        c = cache(GeometricIntegrator(problem,
+            SpaceTimeGalerkin(ansatz, CoefficientRestriction())))
+        q = quadrature(ansatz)
+        field(p) = (one(T) + p[1]^2) * sin(T(π) * p[2]) + p[1] * p[2]
+        sample = SimpleSplines.quadrature_sample(q, field)
+        expected = SimpleSplines.l2_projection(q, sample)
+        coeffs = similar(expected)
+        SimpleSplines.l2_projection!(coeffs, q, sample, c)
+        @test maximum(abs, coeffs .- expected) ≤ T(16) * eps(T) * maximum(abs, expected)
+    end
+
+    @testset "A4f every guess allocates nothing" for T in (Float64, Float32)
+        # `Pkg.test()` runs the floor under `--check-bounds=yes`, which allocates in the loops, so
+        # the count is asserted under `--check-bounds=auto` only
+        allocations(f::F, a::A, b::B, s::S) where {F, A, B, S} = (
+            f(a, b, s); @allocated f(a, b, s))
+        run!(c, int, sol) = M.initial_guess!(sol, nothing, nothing, int)
+        # the helper sees an allocation, so a zero below is the guess's and not the helper's
+        @test allocations((c, int, sol) -> collect(1:10), nothing, nothing, nothing) > 0
+        guesses = [Continuation(), FitTo(InitialCondition()), FitTo(PreviousSlab()),
+            FitTo(ExactSolution()),
+            FitTo(TargetFunction((t, x, p) -> Wave.exact_u(t, x, p)))]
+        for guess in guesses
+            problem = Wave.problem(
+                T = T, timespan = (zero(T), T(0.25)), timestep = T(0.05),
+                xstep = T(0.05))
+            ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 20),
+                xspan = (zero(T), one(T)), n = 3)
+            int = GeometricIntegrator(problem,
+                SpaceTimeGalerkin(ansatz, CoefficientRestriction(); initial_guess = guess))
+            c = cache(int)
+            sol = (; t = problem.timestep)
+            if Base.JLOptions().check_bounds != 1
+                # the first slab of a run, and every later one
+                @test c.steps == 0
+                @test allocations(run!, c, int, sol) == 0
+                c.steps = 2
+                @test allocations(run!, c, int, sol) == 0
+            end
         end
     end
 

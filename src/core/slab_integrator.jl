@@ -1,8 +1,13 @@
 """
-    SpaceTimeGalerkin{A, C, G} <: SpaceTimeAnsatz
+    SpaceTimeGalerkin{A, C, G} <: SpaceTimeMethod
 
 The space-time Galerkin slab integrator: a tensor B-spline ansatz `A`, a coupling `C` of
 consecutive slabs and an initial guess `G`.
+
+The ansatz is a [`SpaceTimeAnsatz`](@ref), the coupling a [`SlabCoupling`](@ref) and the guess a
+[`SlabInitialGuess`](@ref) — [`Continuation`](@ref) or [`FitTo`](@ref). A value of another role,
+a method in the place of the ansatz or a target in the place of the guess, is refused when the
+method is built.
 
 One step of the integrator solves one slab. The unknown is the coefficient array of the ansatz,
 `(Nt, Nx)` per component; the bottom row of the time direction is a datum that the coupling
@@ -28,7 +33,7 @@ result = integrate(problem, method)
 ```
 """
 struct SpaceTimeGalerkin{A <: SpaceTimeAnsatz, C <: SlabCoupling, G <: SlabInitialGuess} <:
-       SpaceTimeAnsatz
+       SpaceTimeMethod
     ansatz::A
     coupling::C
     initial_guess::G
@@ -39,6 +44,11 @@ function SpaceTimeGalerkin(ansatz::SpaceTimeAnsatz,
         initial_guess::SlabInitialGuess = Continuation())
     return SpaceTimeGalerkin{typeof(ansatz), typeof(coupling), typeof(initial_guess)}(
         ansatz, coupling, initial_guess)
+end
+
+function SpaceTimeGalerkin(method::SpaceTimeMethod, args...; kwargs...)
+    throw(ArgumentError("SpaceTimeGalerkin needs a SpaceTimeAnsatz, got the method " *
+                        "$(nameof(typeof(method)))"))
 end
 
 """The ansatz of the method."""
@@ -128,6 +138,14 @@ form, and the trace at the top of the slab. `iterations`, `residuals` and `initi
 record the Newton solve of every step: its iterate count, its final residual `‖F(x)‖₂` and its
 initial residual `r₀ = ‖F(x₀)‖₂`. `steps` counts the steps taken, which is what tells the coupling
 and the guess whether the slab is the run's first.
+
+The buffers of a [`FitTo`](@ref) guess keep a step's guess from allocating: `sample`, of size
+`(Qt, Qx, D)`, holds the target at the quadrature points; `fit`, of size `(Nt, Nx, D)`, holds the
+fitted coefficients; `initial_sample`, of size `(Qx, D)`, holds the problem's initial condition at
+the nodes of the space quadrature, evaluated once; and `taylor` holds the Taylor coefficients of
+the top time cell that [`PreviousSlab`](@ref) expands. `weighted`, `load` and `fibre` are the
+scratch of the [`Projection`](@ref) fit: the quadrature-weighted sample, its load in the time
+basis, and one space fibre of the coefficients.
 """
 mutable struct SpaceTimeGalerkinCache{ST, T} <: IntegratorCache{ST}
     x::Vector{ST}
@@ -151,6 +169,13 @@ mutable struct SpaceTimeGalerkinCache{ST, T} <: IntegratorCache{ST}
     steps::Int
     tabulation::SlabTabulation{T}
     evaluation::SlabEvaluation{T}
+    sample::Array{ST, 3}
+    fit::Array{ST, 3}
+    initial_sample::Matrix{ST}
+    taylor::Array{ST, 3}
+    weighted::Matrix{ST}
+    load::Matrix{ST}
+    fibre::Vector{ST}
 end
 
 function Cache{ST}(problem::LagrangianPDEProblem,
@@ -170,6 +195,7 @@ function Cache{ST}(problem::LagrangianPDEProblem,
     qx = nquadrature(tabulation.space)
     nq = length(space_quadrature_nodes(a))
     coeffs = zeros(ST, nt, nx, D)
+    initial_sample = initial_condition_sample(ST, problem, a, qx)
     return SpaceTimeGalerkinCache{ST, T}(
         zeros(ST, free),
         coeffs,
@@ -191,7 +217,23 @@ function Cache{ST}(problem::LagrangianPDEProblem,
         ST[],
         0,
         tabulation,
-        evaluation)
+        evaluation,
+        zeros(ST, qt, qx, D),
+        similar(coeffs),
+        initial_sample,
+        zeros(ST, nx, D, degree(time_basis(a)) + 1),
+        zeros(ST, qt, qx),
+        zeros(ST, nt, qx),
+        zeros(ST, nx))
+end
+
+# The problem's initial condition at the nodes of the space quadrature, per component.
+function initial_condition_sample(::Type{ST}, problem::LagrangianPDEProblem,
+        ansatz::TensorBSplineAnsatz, qx::Integer) where {ST}
+    xq = collect(space_quadrature_nodes(ansatz))
+    values = problem.ics_function(xq, parameters(problem))
+    D = components(problem)
+    return ST[convert(ST, values.u[(d - 1) * qx + r]) for r in 1:qx, d in 1:D]
 end
 
 @inline CacheType(ST, problem::LagrangianPDEProblem{T},

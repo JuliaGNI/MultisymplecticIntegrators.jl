@@ -4,6 +4,7 @@ using GeometricBase
 using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
+using LinearAlgebra: mul!
 using QuadratureRules
 using SimpleSplines
 using SimpleSolvers
@@ -14,7 +15,7 @@ import QuadratureRules: nodes, weights, nnodes
 import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrature,
                       BSplineBasis, UniformMesh, evaluate, basis, bases,
                       basis_values, degree, nbasis, ncells, quadrature_nodes,
-                      quadrature_weights, l2_projection, nodes as spline_nodes
+                      quadrature_weights, l2_projection!, nodes as spline_nodes
 import SimpleSolvers: initial_residual, method, solve_with_status!, NonlinearSolverException
 import GeometricBase: datatype, timetype, arrtype, equtype, timespan, timestep, parameters,
                       periodicity, ntime, initialstate, timesteps, integrate, update!
@@ -29,7 +30,8 @@ import GeometricIntegratorsBase: Cache, CacheType, IntegratorCache, check_solver
 
 # abstract types
 include("methods.jl")
-export SpaceTimeAnsatz, SlabCoupling, SlabInitialGuess
+export SpaceTimeAnsatz, SpaceTimeMethod, SlabCoupling, SlabInitialGuess, SlabTarget,
+       SlabFitMethod
 
 # problems
 include("problems/lagrangian_density.jl")

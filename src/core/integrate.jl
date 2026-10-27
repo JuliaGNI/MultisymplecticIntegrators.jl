@@ -9,7 +9,7 @@ extends this function, and the trace is stored beside the solution by [`integrat
 top_trace(::Any) = nothing
 
 """
-    integrate(problem::LagrangianPDEProblem, method::SpaceTimeAnsatz; kwargs...)
+    integrate(problem::LagrangianPDEProblem, method::SpaceTimeMethod; kwargs...)
     integrate(integrator::GeometricIntegrator)
 
 Integrate `problem` with `method` and return the named tuple `(; solution, traces)`.
@@ -29,12 +29,17 @@ raises a `NonlinearSolverException` ends the run with a warning too; `traces` th
 before it, and the solution is valid up to that step only. The keyword arguments go to
 the integrator's constructor, and to nothing else.
 """
-function integrate(problem::LagrangianPDEProblem, method::SpaceTimeAnsatz; kwargs...)
+function integrate(problem::LagrangianPDEProblem, method::SpaceTimeMethod; kwargs...)
     return integrate(GeometricIntegrator(problem, method; kwargs...))
 end
 
+function integrate(::LagrangianPDEProblem, ansatz::SpaceTimeAnsatz; kwargs...)
+    throw(ArgumentError("$(nameof(typeof(ansatz))) is an ansatz, not a method; " *
+                        "integrate with SpaceTimeGalerkin(ansatz)"))
+end
+
 function integrate(integrator::GeometricIntegrator{
-        <:SpaceTimeAnsatz, <:LagrangianPDEProblem})
+        <:SpaceTimeMethod, <:LagrangianPDEProblem})
     reset!(cache(integrator))
     solution = GeometricSolution(problem(integrator))
     steps = ntime(solution)

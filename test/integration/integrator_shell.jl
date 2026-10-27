@@ -14,7 +14,7 @@ include("../helpers/testsetup.jl")
 # cache holds the trace at the nodes of a space quadrature, as a method's cache does. Each step adds
 # one to `u`, so the solution at step `n` is the initial data plus `n`, and the step `nan_at` writes
 # a NaN into the state.
-struct FixtureMethod{T} <: SpaceTimeAnsatz
+struct FixtureMethod{T} <: SpaceTimeMethod
     quadrature::SpaceTimeQuadrature{T}
     nan_at::Int
 end
@@ -177,5 +177,23 @@ end
         @test_throws ArgumentError("the ansatz element type Float32 does not match the problem's Float64") MultisymplecticIntegrators.check_method(
             large, SpaceTimeGalerkin(TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
                 xspan = (0.0f0, 2.0f0), n = 3)))
+    end
+
+    @testset "A1j the method and its ansatz have separate supertypes" begin
+        problem = Wave.problem(timespan = (0.0, 0.1), timestep = 0.05, xstep = 0.05)
+        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0), n = 3)
+        method = SpaceTimeGalerkin(ansatz)
+        @test method isa SpaceTimeMethod
+        @test !(method isa SpaceTimeAnsatz)
+        @test ansatz isa SpaceTimeAnsatz
+        @test !(ansatz isa SpaceTimeMethod)
+        @test !(ansatz isa GeometricIntegratorsBase.GeometricMethod)
+        # a method in the place of the ansatz names the method
+        @test_throws ArgumentError("SpaceTimeGalerkin needs a SpaceTimeAnsatz, got the method SpaceTimeGalerkin") SpaceTimeGalerkin(method)
+        # an ansatz in the place of the method names the ansatz and the wrapper
+        @test_throws ArgumentError("TensorBSplineAnsatz is an ansatz, not a method; integrate with SpaceTimeGalerkin(ansatz)") integrate(
+            problem, ansatz)
+        # an ansatz is no `GeometricMethod`, so the integrator refuses it at construction
+        @test_throws MethodError GeometricIntegrator(problem, ansatz)
     end
 end
