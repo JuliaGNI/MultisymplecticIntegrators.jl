@@ -14,7 +14,7 @@ include("../helpers/testsetup.jl")
 # cache holds the trace at the nodes of a space quadrature, as a method's cache does. Each step adds
 # one to `u`, so the solution at step `n` is the initial data plus `n`, and the step `nan_at` writes
 # a NaN into the state.
-struct FixtureMethod{T} <: SpaceTimeAnsatz
+struct FixtureMethod{T} <: SpaceTimeMethod
     quadrature::SpaceTimeQuadrature{T}
     nan_at::Int
 end
@@ -111,6 +111,20 @@ end
         @test stopped.solution.u[1] ≈ problem.ics.u .+ 1
     end
 
+    @testset "a failed nonlinear solve stops the run" begin
+        # The guess is finite on the first slab and NaN on the second, so the second Newton solve
+        # meets a non-finite direction and raises `NonlinearSolverException`.
+        short = Wave.problem(timespan = (0.0, 0.15), timestep = 0.05, xstep = 0.05)
+        guess = FitTo(TargetFunction((t, x, p) -> t > 0.05 ? NaN : Wave.exact_u(t, x, p)))
+        slab = SpaceTimeGalerkin(
+            TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (0.0, 1.0), n = 3);
+            initial_guess = guess)
+        stopped = @test_logs (:warn, r"nonlinear solver failed at timestep n=2") integrate(
+            short, slab)
+        @test length(stopped.traces) == 1
+        @test all(isfinite, stopped.solution.u[1])
+    end
+
     @testset "a run that starts at a time other than zero" begin
         late = Wave.problem(timespan = (1.0, 1.4), timestep = 0.1, xstep = 0.25)
         steps = integrate(late, method)
@@ -137,5 +151,49 @@ end
 
     @testset "a method without a trace stores nothing" begin
         @test top_trace(nothing) === nothing
+    end
+
+    @testset "A1i the two method guards" begin
+        small = Wave.problem(T = Float32, timespan = (Float32(0), Float32(0.1)),
+            timestep = Float32(0.05), xstep = Float32(0.05))
+        large = Wave.problem(timespan = (0.0, 0.1), timestep = 0.05, xstep = 0.05)
+        # the ansatz of each problem is of that problem's element type and space interval
+        small_ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
+            xspan = (0.0f0, 1.0f0), n = 3)
+        large_ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
+            xspan = (0.0, 1.0), n = 3)
+        wide_ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
+            xspan = (0.0, 2.0), n = 3)
+        @test MultisymplecticIntegrators.check_method(large, SpaceTimeGalerkin(large_ansatz)) ===
+              nothing
+        # an element type mismatch, in the problem's and in the ansatz's type
+        @test_throws ArgumentError("the ansatz element type Float64 does not match the problem's Float32") MultisymplecticIntegrators.check_method(
+            small, SpaceTimeGalerkin(large_ansatz))
+        @test_throws ArgumentError("the ansatz element type Float32 does not match the problem's Float64") MultisymplecticIntegrators.check_method(
+            large, SpaceTimeGalerkin(small_ansatz))
+        # a space interval mismatch, and the element type first where both mismatch
+        @test_throws ArgumentError("the ansatz xspan (0.0, 2.0) does not match the problem's (0.0, 1.0)") MultisymplecticIntegrators.check_method(
+            large, SpaceTimeGalerkin(wide_ansatz))
+        @test_throws ArgumentError("the ansatz element type Float32 does not match the problem's Float64") MultisymplecticIntegrators.check_method(
+            large, SpaceTimeGalerkin(TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
+                xspan = (0.0f0, 2.0f0), n = 3)))
+    end
+
+    @testset "A1j the method and its ansatz have separate supertypes" begin
+        problem = Wave.problem(timespan = (0.0, 0.1), timestep = 0.05, xstep = 0.05)
+        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0), n = 3)
+        method = SpaceTimeGalerkin(ansatz)
+        @test method isa SpaceTimeMethod
+        @test !(method isa SpaceTimeAnsatz)
+        @test ansatz isa SpaceTimeAnsatz
+        @test !(ansatz isa SpaceTimeMethod)
+        @test !(ansatz isa GeometricIntegratorsBase.GeometricMethod)
+        # a method in the place of the ansatz names the method
+        @test_throws ArgumentError("SpaceTimeGalerkin needs a SpaceTimeAnsatz, got the method SpaceTimeGalerkin") SpaceTimeGalerkin(method)
+        # an ansatz in the place of the method names the ansatz and the wrapper
+        @test_throws ArgumentError("TensorBSplineAnsatz is an ansatz, not a method; integrate with SpaceTimeGalerkin(ansatz)") integrate(
+            problem, ansatz)
+        # an ansatz is no `GeometricMethod`, so the integrator refuses it at construction
+        @test_throws MethodError GeometricIntegrator(problem, ansatz)
     end
 end

@@ -9,7 +9,7 @@ extends this function, and the trace is stored beside the solution by [`integrat
 top_trace(::Any) = nothing
 
 """
-    integrate(problem::LagrangianPDEProblem, method::SpaceTimeAnsatz; kwargs...)
+    integrate(problem::LagrangianPDEProblem, method::SpaceTimeMethod; kwargs...)
     integrate(integrator::GeometricIntegrator)
 
 Integrate `problem` with `method` and return the named tuple `(; solution, traces)`.
@@ -21,16 +21,26 @@ quadrature nodes rather than the interior ones because the energy diagnostics in
 the accuracy of the Gauss rule.
 
 The steps are driven one at a time, because the trace of a step exists only while its cache does.
+Every call starts a new run: the integrator's cache is reset first, so its first slab takes the
+problem's initial data and the steps it records belong to this run alone.
 As in the ecosystem's `integrate!`, a step whose state holds a NaN ends the run with a warning;
-`traces` then ends at that step, and the solution holds the NaN there. The keyword arguments go to
+`traces` then ends at that step, and the solution holds the NaN there. A step whose nonlinear solve
+raises a `NonlinearSolverException` ends the run with a warning too; `traces` then ends at the step
+before it, and the solution is valid up to that step only. The keyword arguments go to
 the integrator's constructor, and to nothing else.
 """
-function integrate(problem::LagrangianPDEProblem, method::SpaceTimeAnsatz; kwargs...)
+function integrate(problem::LagrangianPDEProblem, method::SpaceTimeMethod; kwargs...)
     return integrate(GeometricIntegrator(problem, method; kwargs...))
 end
 
+function integrate(::LagrangianPDEProblem, ansatz::SpaceTimeAnsatz; kwargs...)
+    throw(ArgumentError("$(nameof(typeof(ansatz))) is an ansatz, not a method; " *
+                        "integrate with SpaceTimeGalerkin(ansatz)"))
+end
+
 function integrate(integrator::GeometricIntegrator{
-        <:SpaceTimeAnsatz, <:LagrangianPDEProblem})
+        <:SpaceTimeMethod, <:LagrangianPDEProblem})
+    reset!(cache(integrator))
     solution = GeometricSolution(problem(integrator))
     steps = ntime(solution)
     sample = top_trace(cache(integrator))
@@ -38,7 +48,14 @@ function integrate(integrator::GeometricIntegrator{
     solstep = solutionstep(integrator, solution[0])
     for n in 1:steps
         reset!(solstep, timesteps(solution)[n])
-        integrate!(solstep, integrator)
+        try
+            integrate!(solstep, integrator)
+        catch e
+            e isa NonlinearSolverException || rethrow()
+            @warn "The nonlinear solver failed at timestep n=$(n): $(e.msg). " *
+                  "The solution is valid up to n=$(n - 1); later entries were never computed."
+            break
+        end
         copy!(solution, current(solstep), n)
         push!(traces, deepcopy(top_trace(cache(integrator))))
         if isnan(current(solstep))

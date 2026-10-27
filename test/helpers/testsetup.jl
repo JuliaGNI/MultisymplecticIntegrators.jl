@@ -24,6 +24,15 @@ test_eltype(x, ::Type{T}) where {T} = @test typeof(x) === T
 tolerance(::Type{T}) where {T} = 16 * eps(T)
 
 """
+    newton_tolerance(::Type{T}, options)
+
+The Newton tolerance of a §A reference entry — the `f_abstol` field of the oracle's
+`SOLVER_OPTIONS` — carried to the working precision as the same number of `eps(T)`. The value is
+read from the `options` the caller passes.
+"""
+newton_tolerance(::Type{T}, options) where {T} = T(options.f_abstol / eps(Float64)) * eps(T)
+
+"""
     assert_no_upcast(x, ::Type{T})
 
 Assert that `x` — an array, a named tuple of arrays or a scalar — holds only values of element type

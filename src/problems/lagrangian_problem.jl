@@ -17,7 +17,13 @@ periodicity(::LagrangianEquation) = NullPeriodicity()
 
 A Lagrangian field theory in one space dimension on a space-time slab, with a generic element type.
 
-`density` is a [`LagrangianDensity`](@ref). `ics_function(x, params)` returns the named tuple
+`density` is a Lagrangian density: a callable `L(u, v, w, params)` with a `derivatives` method
+returning its three partial derivatives `∂L/∂u`, `∂L/∂v` and `∂L/∂w`. A
+[`LagrangianDensity`](@ref) supplies both for one component at a time; a density that couples the
+components of the field, such as the vector density that `VectorWave.vector_density` builds,
+supplies them for the `D` components of one point at once. The problem's parameters are the
+density's own `params` field where it has one, and the `params` keyword otherwise.
+`ics_function(x, params)` returns the named tuple
 `(u = …, v = …, w = …)` of the initial data on the vector `x` of grid points; each entry is a
 vector of length `D * length(x)`, laid out component-major, `θ = [θ¹; θ²; …]`, so that one scalar
 ansatz serves every component. `bcs_function(times, params)` returns the boundary data of the slab
@@ -53,7 +59,7 @@ struct LagrangianPDEProblem{T, PT, LDT, ICT, BCT, EUT, EVT, EWT, ICST} <:
     xstep::T
 end
 
-function LagrangianPDEProblem(density::LagrangianDensity;
+function LagrangianPDEProblem(density;
         D::Integer = 1,
         ics_function,
         bcs_function,
@@ -64,7 +70,7 @@ function LagrangianPDEProblem(density::LagrangianDensity;
         timestep,
         xspan,
         xstep,
-        params = density.params)
+        params = density_params(density))
     T = eltype(timespan)
     T <: AbstractFloat || throw(ArgumentError("the element type must be a float, got $T"))
     T === Float16 && throw(ArgumentError("Float16 problems are not supported"))
@@ -99,6 +105,13 @@ function LagrangianPDEProblem(density::LagrangianDensity;
         density, params, Int(D), ics_function, bcs_function, exact_u, exact_v, exact_w, ics,
         tspan, h, xsp, xh)
 end
+
+"""
+    density_params(density)
+
+The parameters of a density: its own `params` field where it has one, and `nothing` otherwise.
+"""
+density_params(density) = hasproperty(density, :params) ? density.params : nothing
 
 function _interval(::Type{T}, span, name::Symbol) where {T}
     length(span) == 2 || throw(ArgumentError("$name must hold two values, got $span"))

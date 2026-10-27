@@ -73,15 +73,40 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
-### K17 · `integrate` does not catch a failed nonlinear solve.
+### K18 · The §A oracle was absent from the base tree.
 
-- location: `src/core/integrate.jl`
-- evidence: the ecosystem's `integrate!` (GeometricIntegratorsBase 0.6.10, `src/integrate.jl`)
-  catches `NonlinearSolverException`, warns, and returns the solution computed so far; the
-  package's `integrate` stops on a NaN the same way but lets the exception propagate, so a caller
-  loses the steps already taken. The exception is owned by SimpleSolvers, which is not a dependency
-  and which GeometricIntegratorsBase does not export. Deferred until the first integrator family
-  returns, because no method of this package solves a nonlinear system before then; the fix then
-  adds SimpleSolvers to `[deps]` and the `try`/`catch` of the ecosystem's loop.
+- location: `test/helpers/reference_values.jl`
+- evidence: part C's test-tree commit removed `test/helpers/reference_values.jl`, although C's spec
+  does not list it, and the file is absent at `9d706ba`;
+  `git show ed13663:test/helpers/reference_values.jl` returns the 93-line file with its twenty-five
+  `const` entries. The part that returns the slab core restored it byte for byte from `ed13663`. It
+  is the oracle the tests read, not a testset: `test/runtests.jl` lists it under no
+  `@safetestset`.
 - kind: defect
-- found: PR #31
+- found: 2026-10-27
+
+### K19 · The coupled density's derivatives allocate at every quadrature point.
+
+- location: `src/problems/wave.jl`
+- evidence: `derivatives(::VectorWave.VectorDensity, …)` builds three heap vectors and an array of
+  named tuples per point, so the slab core's `residual!` on a `D = 2` problem allocates 184 320 B
+  per call — 360 quadrature points at 512 B each — where the scalar path allocates 0. Measured by
+  the slab core's pre-pull-request verification pass as the minimum of `@allocated` over 20 warm
+  calls in a fresh process under `--check-bounds=auto`; `derivatives(vd, u, v, w, params)` alone
+  allocates 1056 B and is unchanged when given `view` arguments. No clause of the part binds this
+  path, and the fix belongs in `src/problems/wave.jl`.
+- kind: defect
+- found: 2026-10-27
+
+### K20 · `output_grid` is exported and tested, and nothing in `src` calls it.
+
+- location: `src/ansatz/tensor_bspline.jl`
+- evidence: `grep -rn 'output_grid' src/` finds the definition and the export only. The slab
+  integrator reports its solution on `xgrid(problem)`, and `SlabEvaluation` tabulates the space
+  basis there, so `output_grid` is a public helper that the integrator does not call yet. It holds
+  a deferred `InexactError`: `output_grid(ansatz, 1e-30)` passes the positive-finite check and then
+  fails in `round(Int, Δx / step)` with `InexactError: Int64(9.999999999999999e29)`, where the
+  documented refusal is an `ArgumentError`. Kept rather than deleted or wired into
+  `SlabEvaluation`.
+- kind: dead code
+- found: 2026-10-27
