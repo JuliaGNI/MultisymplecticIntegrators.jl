@@ -79,8 +79,10 @@ function LagrangianPDEProblem(density::LagrangianDensity;
     length(xgrid) ≥ 2 ||
         throw(ArgumentError("xspan with xstep holds $(length(xgrid)) points; two are needed"))
     # The grid's last point carries the rounding of the range, which is relative to the span's
-    # magnitude and is not small relative to an end at zero.
-    abs(last(xgrid) - xsp[2]) ≤ sqrt(eps(T)) * max(xh, abs(xsp[1]), abs(xsp[2])) ||
+    # magnitude and is not small relative to an end at zero. The tolerance stays below a quarter
+    # cell, so that a step that does not divide the span is rejected on a long span too.
+    abs(last(xgrid) - xsp[2]) ≤
+    min(sqrt(eps(T)) * max(xh, abs(xsp[1]), abs(xsp[2])), xh / 4) ||
         throw(ArgumentError("xstep $xh does not reach the end of xspan $xsp: the grid stops at " *
                             "$(last(xgrid))"))
     ics = ics_function(xgrid, params)

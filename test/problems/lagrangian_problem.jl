@@ -164,6 +164,13 @@ include("../helpers/testsetup.jl")
             xstep = 0.3f0 / 15)
         @test length(xgrid(ending_at_zero)) == 16
         @test abs(last(xgrid(ending_at_zero))) ≤ eps(Float32)
+
+        # On a long span the rounding tolerance would exceed a cell; a step that stops a third
+        # of a cell short of the end is still rejected.
+        @test_throws ArgumentError LinearTransport.problem(T = Float32,
+            xspan = (-1000.0f0, 0.0f0), xstep = 0.3f0)
+        @test length(xgrid(LinearTransport.problem(T = Float32, xspan = (-1000.0f0, 0.0f0),
+            xstep = 0.25f0))) == 4001
     end
 
     @testset "a run that starts at a non-zero time" begin
