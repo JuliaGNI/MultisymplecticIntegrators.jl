@@ -14,75 +14,23 @@ makes it worth keeping.
 
 ## [Unreleased] — targeting 0.1.0
 
-### Changed
-
-- **CI coverage and cache.** CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of
-  `Julia min`, and a test job saves the Julia cache only when it succeeds.
-- **The 64- and 128-node Gauss–Legendre rules come from QuadratureRules.** `GaussQuadrature64`
-  and `GaussQuadrature128`, two functions that returned hard-coded tables, are deleted.
-  `composite_quadrature` and `construct_quadrature_grid_with_boundary` build a rule of 64 nodes or
-  more as `GaussLegendreQuadrature(k; fast = true)`, since the exact default needs more than five
-  minutes for 128 nodes. Below 64 nodes they keep the exact default: there the fast rule differs
-  from it, by 1 to 2 ulp at 3 to 5 nodes, the sizes the reference values of
-  `test/helpers/reference_values.jl` were recorded with. The fast rules agree with the deleted
-  tables to within `4 eps()`, which `test/utils/common.jl` checks. Without the 1 624-character
-  table lines, JuliaFormatter processes `src/utils/common.jl`, and the file is formatted.
-- **Repository hygiene.** `figures/` (13 files that nothing referenced), the tracked `.DS_Store`
-  files and `rename_error.jl` are deleted.
-- **Julia 1.12 is the floor** (`[compat] julia = "1.12"`, raised from 1.10). A breaking change under
-  this package's pre-1.0 convention: a caller on Julia 1.10 or 1.11 can no longer install this
-  version. The package's code does not change: it holds no version-conditional code and no
-  workaround for the older floor, so none was deleted.
-
-### New Features
-
-- **Continuous integration.** The repository had no `.github` directory at all; it now carries the
-  same `CI.yml`, `CompatHelper.yml`, `Documenter.yml` and `TagBot.yml` as every other repository in
-  the tree. **CI is expected to be red** until the blockers under *Open Issues* are dealt with —
-  that is the pre-existing state of the package, not a regression.
-- **A documentation build.** `docs/` now holds `make.jl`, `Project.toml` and a two-page manual, so
-  `Documenter` has something to build and the doctest job has an environment.
-- **`test/runtests.jl`, so `Pkg.test()` runs something.** It includes the five files in `test/` that
-  actually assert — the three multiplier momentum-carry tests, the bilinear FEM wave integrator and
-  the space-time spline wave integrator. The other sixteen files there are numerical experiments
-  that integrate for thousands of steps and write `.jld2` archives and figures; they stay
-  hand-run. `test/integrator/SpaceTime_Spline_Wave_int.jl` states its assertions at top level, so
-  the entry point supplies the `@testset` it lacks.
-- **The test suite follows the shared convention.** `test/runtests.jl` runs each test file in its
-  own `@safetestset`, in the `core` group. The five test files are renamed after the source file
-  they test, under `test/integrator/`. `test/quality/aqua.jl` is new. The sixteen experiment
-  scripts and the two batch scripts that held no test move from `test/` to `scripts/`. The four
-  broken marks of the full-multiplier test and the final-time error assertion of the FEM
-  test are `@test_broken`, and four Aqua checks are `broken` (issues #2–#7).
-- **Reference values of the current integrators.** `scripts/reference_values.jl` runs every
-  integrator family on short `Wave` and `SineGordon` cases and writes
-  `test/helpers/reference_values.jl`: the solution after each step, the energy error, and the
-  Newton iterations and residuals of each step, each entry with its constructor call. The solver
-  options that every Newton case shares are written once, as `SOLVER_OPTIONS`. `converged` is
-  SimpleSolvers' `isconverged`, which a small change of the iterate can meet at a large residual.
-  A network case runs twice from the same seed, and the script stops if the two runs differ. The
-  file also holds the error of the FEM stencil at `t = 5` and `t = 200` on three grids and at CFL
-  1, and the observed order of the full-restriction spline integrator. Its header names the
-  commit, the Julia version, the `--check-bounds` flag, the thread counts and the versions of the
-  22 direct dependencies and OpenBLAS_jll. The values can depend on the `--check-bounds` flag, so
-  a rewritten integrator must reproduce these values under the same flag. Two cases fail on the
-  current code and record the exception and the step that raised it: `TrialNN_PDE_int` on `Wave`,
-  and `Sindy_PDE_Integrator` on `Wave`, which fails at step 1. Both occur at the default
-  `regularization_factor = 0`, and both stop with a NaN in the Newton direction. No test includes
-  the file yet.
-
-### Bug Fixes
-
-- **Two `show` methods print the x-breaks of the basis once.** `Dirichlet_BSpline2D` stores its
-  knot interval and its knots in physical x, and its `show` and that of
-  `Galerkin_Full_Restriction_Bspline_Integrator` multiplied both by the width of `xspan` again: on
-  `xspan = (0.0, 2.0)` with a knot interval of 0.5 they showed `Break Length x: 1.0`. They print the
-  stored values now, under the label `Breaks_x:` that `BSpline2D` uses, since no
-  factor scales them. The `Scaled Breaks_t:` line keeps its label, because the
-  timestep does multiply the t-knots.
-
 ### Breaking Changes
 
+- **The package is rebuilt on the current GeometricBase stack, and every integrator family leaves
+  `src/`** for a return of its own. `LPDEProblem`, `LPDESystem`, `PDEIntegrator` and every
+  `*_Integrator` type are gone. The names that replace them are `LagrangianPDEProblem`,
+  `LagrangianDensity` and `SpaceTimeQuadrature`, together with the `SpaceTimeAnsatz`,
+  `SlabCoupling` and `SlabInitialGuess` abstract types. A caller of a family that has not returned
+  yet works at `294f023`.
+- **`julia = "1.11"` is the floor**, and every dependency has a `[compat]` entry.
+  The floor goes down from 1.12 to 1.11, and CI's `min` job resolves this bound. The dependency
+  list drops `AbstractNeuralNetworks`, `BSplineKit`, `CompactBasisFunctions`, `ForwardDiff`,
+  `GeometricMachineLearning`, `IterTools`, `Parameters`, `Plots`, `SimpleSolvers`, `StaticArrays`,
+  `SymbolicNeuralNetworks`, `Zygote`, `LinearAlgebra`, `Random` and `Statistics`. The package has
+  no `[weakdeps]` and no `[extensions]`. Every `[compat]` entry is a patch-level floor
+  (`GeometricBase = "0.15.0"`, `GeometricEquations = "0.21.5"`, `GeometricIntegratorsBase = "0.6.9"`,
+  `GeometricSolutions = "0.6.6"`, `QuadratureRules = "0.2.2"`), except `Symbolics = "7"`, which
+  names the major.
 - **The package is renamed `MultiSymplectic` → `MultisymplecticIntegrators`.** The repository moved
   from `ZeyuanLee/MultiSymplectic.jl` to `JuliaGNI/MultisymplecticIntegrators.jl`, and the package
   name, the module and `src/MultisymplecticIntegrators.jl` follow it. The UUID is unchanged, as the
@@ -91,19 +39,17 @@ makes it worth keeping.
 - **`tests/` renamed to `test/`.** Neither `Pkg.test()` nor `julia-actions/julia-runtest` looks at
   `tests/`, so the ten scripts there were unreachable by any standard tool. Anything referring to
   the old path by name needs updating.
-- **`[compat] julia = "1.12"` added.** There was no Julia bound at all. The CI matrix resolves its
-  lower entry from this field.
 - **`test/Manifest.toml` untracked.** The root one was already removed; this one survived the
   `tests/` → `test/` rename while `.gitignore` claimed to ignore it. The test environment now
   resolves from `test/Project.toml`, so anyone relying on the pinned versions it recorded will get
   a fresh resolve instead.
 - **`test/Project.toml` carries no `[compat]` bound for a dependency of the root `Project.toml`.**
   The six entries `BenchmarkTools`, `CairoMakie`, `GeometricIntegratorsBase`, `JLD2`, `Plots` and
-  `Revise` are removed, and with them the whole `[compat]` table, which held nothing else. The test
-  environment contains the package, so the resolver applies the root's bounds to every shared
-  dependency; a test bound could only narrow them, and tests that run on narrower bounds than the
-  package claims do not test what the package admits. This is the tree-wide rule of the test-suite
-  unification.
+  `Revise` are removed, and its `[compat]` table keeps only `Aqua` and `ExplicitImports`, which the
+  root does not depend on. The test environment contains the package, so the resolver applies the
+  root's bounds to every shared dependency; a test bound could only narrow them, and tests that run
+  on narrower bounds than the package claims do not test what the package admits. This is the
+  tree-wide rule of the test-suite unification.
 - **Code that nothing reached is deleted; it stays reachable at `294f023`.** The four files that
   no `include` loaded go: `src/integrator/NN_PDE_LSGD_int.jl`, an older copy of
   `NN_PDE_int.jl`; `src/utils/PINN_for_init.jl`, a prototype script;
@@ -114,15 +60,74 @@ makes it worth keeping.
   `residual!` and `update!` of `FEM_Multisymplectic_Integrator`, which overrides
   `integrate_step!`. `TrialOGA2D` is gone, and so is the export of `GeometricPDESolution`, which no
   file defined (#3); Aqua's undefined-exports check, `broken` until now, passes and is no longer
-  marked. Every integrator family stays. `src/` is 3 712 lines shorter than at `294f023`.
-- **`show_status` is removed.** No integrator takes the keyword or stores the field any more, and
-  a call that passes it throws a `MethodError`. The reports it switched on, errors against the
-  exact solution printed during a step, are deleted, together with every unconditional `@show`,
-  `println` and `@info`, every `@infiltrate` and the commented-out code in `src/`. With them goes
-  the read of an undefined `tn` in `components!` of `NN_PDE_Integrator_Symbolic` and `ELM_PDE_int`
-  under `show_status = true`. The `atom repeated` warning of the OGA2D initial guess in
-  `TrialNN_PDE_int` is the exception: it was printed only under `show_status = true` and now
-  prints whenever OGA selects an atom it already holds, on any run. `Infiltrator` is no longer a
-  dependency of the package or of its tests. The scripts in `scripts/` no longer pass the keyword,
-  except `scripts/reference_values.jl`, which records the integrators at `294f023` and runs only
-  against that commit.
+  marked.
+- **`show_status` is removed.** No integrator in `src/` takes the keyword or stores the field any
+  more. The reports it switched on, errors against the exact solution printed during a step, are
+  deleted, together with every unconditional `@show`, `println` and `@info`, every `@infiltrate` and
+  the commented-out code in `src/`. With them goes the read of an undefined `tn` in `components!` of
+  `NN_PDE_Integrator_Symbolic` and `ELM_PDE_int` under `show_status = true`. The `atom repeated`
+  warning of the OGA2D initial guess in `TrialNN_PDE_int` is the exception: it was printed only
+  under `show_status = true` and now prints whenever OGA selects an atom it already holds, on any
+  run. The only live use of the keyword left in `scripts/` is in `scripts/reference_values.jl`,
+  which records the integrators at `294f023` and runs only against that commit.
+
+### New Features
+
+- **The problem layer.** `LagrangianDensity` builds `∂L/∂u`, `∂L/∂v` and `∂L/∂w` once with
+  `Symbolics.build_function`, so an evaluation is a Julia call and not a re-derivation.
+  `LagrangianPDEProblem{T}` holds its spans at the element type, passes its parameters to the
+  initial, boundary and exact functions, and states its state as a `GeometricBase.State` of
+  algebraic variables, so neither `_state` nor `_vectorfield` is pirated. Its grid must reach the
+  right end of `xspan` to within the tolerance
+  `min(sqrt(eps(T)) * max(xstep, |xspan[1]|, |xspan[2]|), xstep / 4)`, which stays at or below a
+  quarter of `xstep`, so a step that does not divide the span is rejected on a long span too;
+  otherwise the constructor throws an `ArgumentError`. `field_boundary_data`
+  throws an `ArgumentError` unless `times` holds the two times `(t₀, t₁)` of the slab.
+- **`Wave`, `VectorWave`, `SineGordon` and `LinearTransport`.** The scalar and vector wave
+  equations, the sine-Gordon kink and the transport of a Gaussian, each with its closed-form exact
+  solution and its parameters. `Wave.problem` is massless: its density `L = ½v² − ½c²w²` has the
+  standing wave as exact solution, and the mass `m` and the coupling `β` are keywords of
+  `Wave.density` alone. `Wave` takes the keyword `D`. `VectorWave.problem` takes one amplitude per
+  component in each of `A1`, `A2`, `B1` and `B2`, so its parameters are `(c, l, A1, A2, B1, B2)`
+  and `D` is the number of entries; `VectorWave.component_parameters(params, i)` gives component
+  `i` its `Wave` parameters. The default parameters give the two components different phases, so
+  the angular momentum `J` of the exact solution is not zero. The exact solution of the vector
+  problem is that of the uncoupled equations. The vector density couples the components through
+  the quartic term `−¼β|u|⁴`, which keeps it invariant under a rotation of `(u, v, w)` for any
+  `β`, so `J` is conserved by the coupled equations too.
+  `VectorWave` carries the angular momentum `J` as the conserved diagnostic of the vector case.
+  `VectorWave.density` is the scalar density of one component and takes the mass `m` only;
+  `vector_density(; params, D, m, β)` carries the coupling.
+- **`SpaceTimeQuadrature{T}`.** Composite Gauss–Legendre nodes and weights on given breakpoints, in
+  `t̂ ∈ [0, 1]` and in `x`, with the four boundary point sets of a slab and the element type kept.
+- **`integrate` returns `(; solution, traces)`.** The solution on the output grid, and per step the
+  top trace at the nodes of the space quadrature, where the energy diagnostics integrate it. A step
+  whose state holds a NaN ends the run with a warning: `traces` ends at that step, and the solution
+  holds the NaN there. `SpaceTimeAnsatz` defaults to `NoExtrapolation()`, so the history states of
+  the solution step hold the initial data.
+- **The suite is the standard layout**: `core` testsets for the problem layer, the quadrature and
+  the shell, `Aqua.test_all` with no `broken` mark, and `test_explicit_imports`. This closes the
+  known issues K1 (the broken marks), K2 (the stale bounds), K3 (`Plots` and the GUI packages in
+  the test environment), K5 (the two files the formatter could not write), KI-2 (the unused test
+  dependencies), KI-3 (the mark that asserts nothing) and KI-4 (the README and the manual saying
+  the package does not load).
+- **Continuous integration.** `.github/workflows/` holds three workflows, `CI.yml`, `Documenter.yml`
+  and `TagBot.yml`.
+- **A documentation build.** `docs/` holds `make.jl`, `Project.toml` and a two-page manual, so
+  `Documenter` has something to build and the doctest job has an environment.
+- **`test/runtests.jl` runs each test file in its own `@safetestset`.** Empty `ARGS` runs the `core`
+  and `slow` groups. The `core` group holds eight files: the Aqua and explicit-imports quality
+  checks, the Lagrangian density and Lagrangian problem tests, the linear transport and vector wave
+  tests, the space-time quadrature test and the integrator shell test. `runtests.jl` has no `slow`
+  block, so the `slow` group runs no file yet.
+- **Reference values of the integrators at `294f023`.** `scripts/reference_values.jl` runs every
+  integrator family on short `Wave` and `SineGordon` cases and writes
+  `test/helpers/reference_values.jl`. Two cases fail at `294f023`. The script does not run on this
+  tree, the file it writes is absent here, and no test includes it.
+
+### Changed
+
+- **CI coverage and cache.** CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of
+  `Julia min`, and a test job saves the Julia cache only when it succeeds.
+- **Repository hygiene.** `figures/` (13 files that nothing referenced), the tracked `.DS_Store`
+  files and `rename_error.jl` are deleted.

@@ -6,14 +6,14 @@ CurrentModule = MultisymplecticIntegrators
 
 Documentation for [MultisymplecticIntegrators](https://github.com/JuliaGNI/MultisymplecticIntegrators.jl).
 
-Multi-symplectic schemes for partial differential equations: Galerkin discretisations in
-B-spline and neural-network bases, together with the integrators built on them.
+Multi-symplectic schemes for Lagrangian partial differential equations in one space dimension:
+the Lagrangian problems with their exact solutions, a space-time quadrature, and the shell that
+drives an integrator over the slabs of the time span.
 
-!!! warning "This package does not currently load"
-    Its `[compat]` bounds predate several of its dependencies, it has no `test/runtests.jl`
-    entry point and no `[targets]` test section, and it carries GUI and development packages
-    as hard dependencies. Its CI is therefore expected to be red. See
-    `~/Research/Tasks/Revive MultisymplecticIntegrators.md`.
+!!! note "The package is mid-rebuild"
+    The problem layer, the space-time quadrature and the integrator shell are in place, and the
+    integrator families come back one at a time. A family that has not returned yet is unavailable
+    in this version; the old stack stays at `294f023`.
 
 ```@index
 ```

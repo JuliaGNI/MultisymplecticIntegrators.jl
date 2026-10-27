@@ -5,11 +5,11 @@ implementation of multi-symplectic schemes in julia
 
 ## Development
 
-> **This package does not currently load or test.** Its `[compat]` bounds predate several of its
-> dependencies, it has no `test/runtests.jl` entry point and no `[targets]` test section, and it
-> carries GUI and development packages as hard dependencies. CI is therefore expected to be red
-> until that is dealt with; the hooks below will block a commit that stages a `.jl` file for the
-> same reason.
+> **The package is mid-rebuild.** The problem layer, the space-time quadrature and the integrator
+> shell are on the current GeometricBase stack, and the integrator families come back one at a
+> time: a family that has not returned yet is unavailable on `main`, and a caller of it works at
+> `294f023` meanwhile. `julia = "1.11"` is the floor, every dependency has a `[compat]` entry, and
+> the suite runs.
 
 ### Git hooks
 

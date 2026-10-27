@@ -16,14 +16,6 @@ using Plots
 relu2 = x -> max(0, x)^2
 relu3 = x -> max(0, x)^3
 
-function GeometricIntegratorsBase.default_options(::NN_PDE_Integrator)
-    (
-        x_abstol = 8eps(),
-        f_abstol = 8eps(),
-        max_iterations = 10
-    )
-end
-
 S = 150
 nn_pde_basis = NetworkPDEBasis(S, relu3, :Partially) # Partially, Fully
 xspan = (0.0, 1.0)

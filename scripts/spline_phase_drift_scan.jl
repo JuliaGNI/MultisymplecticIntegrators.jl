@@ -7,22 +7,6 @@ const CURRENT_REGULARIZATION = Ref(0.0)
 const CURRENT_MAX_ITERATIONS = Ref(100)
 const CURRENT_VERBOSITY = Ref(0)
 
-function GeometricIntegratorsBase.default_options(::Galerkin_Bspline_Integrator)
-    (
-        regularization_factor = CURRENT_REGULARIZATION[],
-        max_iterations = CURRENT_MAX_ITERATIONS[],
-        verbosity = CURRENT_VERBOSITY[]
-    )
-end
-
-function GeometricIntegratorsBase.default_options(::Galerkin_Full_Restriction_Bspline_Integrator)
-    (
-        regularization_factor = CURRENT_REGULARIZATION[],
-        max_iterations = CURRENT_MAX_ITERATIONS[],
-        verbosity = CURRENT_VERBOSITY[]
-    )
-end
-
 function _parse_float_list(name, default)
     raw = get(ENV, name, "")
     isempty(raw) && return default

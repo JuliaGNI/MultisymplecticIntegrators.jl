@@ -32,17 +32,6 @@ reg_factor = 1e-5
 S = 70
 max_iters = 100
 
-function GeometricIntegratorsBase.default_options(::NN_PDE_Integrator_Symbolic)
-    (
-        max_iterations = max_iters,
-        warn_iterations = max_iters,
-        regularization_factor = reg_factor,
-        # f_abstol = 2eps(),
-        # x_suctol = 2eps(),
-        verbosity = 2
-    )
-end
-
 nn_pde_basis_sym = NetworkPDEBasis_Symbolic(S, tanh, :Fully) # Partially, Fully
 
 xspan = (0.0, 1.0)

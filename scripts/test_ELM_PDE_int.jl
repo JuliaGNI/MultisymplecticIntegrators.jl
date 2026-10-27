@@ -9,14 +9,6 @@ using ForwardDiff
 using GeometricIntegratorsBase
 using JLD2
 
-function GeometricIntegratorsBase.default_options(::ELM_PDE_int)
-    (
-        x_abstol = 8eps(),
-        f_abstol = 8eps(),
-        max_iterations = 100
-    )
-end
-
 Random.seed!(123)
 relu3(x) = max.(0, x) .^ 3
 activation = tanh
