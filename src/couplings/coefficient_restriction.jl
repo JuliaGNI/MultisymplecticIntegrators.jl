@@ -28,7 +28,7 @@ end
 
 function slab_bottom!(c::SpaceTimeGalerkinCache, ::CoefficientRestriction,
         problem::LagrangianPDEProblem, ansatz::TensorBSplineAnsatz, sol)
-    if c.steps[] == 0
+    if c.steps == 0
         initial_trace!(c, problem, ansatz)
     else
         c.bottom .= c.top

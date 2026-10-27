@@ -1,6 +1,5 @@
 using GeometricBase
 using GeometricIntegratorsBase
-using LinearAlgebra
 using MultisymplecticIntegrators
 using SimpleSplines
 using Test
@@ -12,10 +11,6 @@ include("../helpers/fem_stencil.jl")
 include("../helpers/reference_values.jl")
 
 const M = MultisymplecticIntegrators
-
-# `SOLVER_OPTIONS.f_abstol` of the reference entries is `8 eps(Float64)`; the same tolerance in the
-# working precision is that many `eps(T)`.
-newton_tolerance(::Type{T}) where {T} = T(SOLVER_OPTIONS.f_abstol / eps(Float64)) * eps(T)
 
 function wave_run(::Type{T}; degree = 2, ncells = (2, 20), n = 3, timestep = T(0.05),
         xstep = T(0.05), timespan = (zero(T), T(0.25)), guess = Continuation()) where {T}
@@ -37,6 +32,9 @@ end
         @test degree(basis(free)) == (2, 2)
         @test nbasis(basis(dirichlet)) == 20
         @test nbasis(basis(free)) == 30
+        # the condition is part of the ansatz's concrete type, not a field of an abstract type
+        @test isconcretetype(fieldtype(typeof(dirichlet), :x_boundary))
+        @test fieldtype(typeof(free), :x_boundary) === typeof(Free())
         xb = dirichlet |> basis |> bases |> last
         for j in 1:nbasis(xb)
             @test abs(evaluate(xb, j, zero(T))) ≤ tolerance(T)
@@ -67,6 +65,18 @@ end
             @test abs(last(grid) - span[2]) ≤ 16 * eps(T)
             @test first(grid) == span[1]
         end
+    end
+
+    @testset "A2c the refusals of the grid and the degree" for T in (Float64, Float32)
+        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 4), xspan = (zero(T), one(T)))
+        for step in (zero(T), T(NaN), -T(0.05))
+            @test_throws ArgumentError("output_grid needs a positive finite xstep, got $step") output_grid(
+                ansatz, step)
+        end
+        @test_throws ArgumentError("degree must be ≥ 1 in the time direction, got (0, 2)") TensorBSplineAnsatz(
+            degree = (0, 2), ncells = (2, 4), xspan = (zero(T), one(T)))
+        @test_throws ArgumentError("degree must be ≥ 1 in the space direction, got (2, 0)") TensorBSplineAnsatz(
+            degree = (2, 0), ncells = (2, 4), xspan = (zero(T), one(T)))
     end
 
     @testset "A1a the FEM equivalence at degree 1" for T in (Float64, Float32)
@@ -161,8 +171,9 @@ end
         h, c = convert(T, problem.timestep), convert(T, problem.params.c)
         function energy(a, b)
             δ = b .- a
-            return dot(δ, M * δ) / (2 * h^2) +
-                   c^2 / 12 * (dot(b, K * b) + dot(a, K * a) + 4 * dot(b, K * a))
+            return sum(δ .* (M * δ)) / (2 * h^2) +
+                   c^2 / 12 * (sum(b .* (K * b)) + sum(a .* (K * a)) +
+                    4 * sum(b .* (K * a)))
         end
         u = [collect(step) for step in result.solution.u]
         @test length(u) == 201
@@ -189,6 +200,29 @@ end
             @test allocations(residual, x) == 0
         end
         @test @inferred(cache(int, T)) === c
+        # the step counter is a field of the cache, not a box that its readers dereference
+        @test fieldtype(typeof(c), :steps) === Int
+    end
+
+    @testset "A1h SineGordon on the slab core" for T in (Float64, Float32)
+        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 20),
+            xspan = (zero(T), one(T)), n = 3, x_boundary = Free())
+        problem = SineGordon.problem(T = T, timespan = (zero(T), T(0.15)),
+            timestep = T(0.05), xstep = T(0.05))
+        int = GeometricIntegrator(problem, SpaceTimeGalerkin(ansatz, CoefficientRestriction()))
+        result = integrate(int)
+        c = cache(int)
+        @test length(c.iterations) == 3
+        @test all(≥(1), c.iterations)
+        @test all(isfinite, c.residuals)
+        @test datatype(result.solution) === T
+        assert_no_upcast(result.solution.u, T)
+        grid = collect(xgrid(problem))
+        for n in 1:3
+            exact = [SineGordon.exact_u(n * T(0.05), x, problem.params) for x in grid]
+            @test maximum(abs.(result.solution.u[n][3:(end - 2)] .-
+                               exact[3:(end - 2)])) ≤ T(0.01)
+        end
     end
 
     @testset "A6a the two precisions and the element type" for T in (Float64, Float32)

@@ -1,7 +1,6 @@
 using GeometricBase
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra
 using MultisymplecticIntegrators
 using Test
 
@@ -12,10 +11,6 @@ include("../helpers/testsetup.jl")
 include("../helpers/reference_values.jl")
 
 const M = MultisymplecticIntegrators
-
-# `SOLVER_OPTIONS.f_abstol` of the reference entries is `8 eps(Float64)`; the same tolerance in the
-# working precision is that many `eps(T)`.
-newton_tolerance(::Type{T}) where {T} = T(SOLVER_OPTIONS.f_abstol / eps(Float64)) * eps(T)
 
 function slab_run(::Type{T}; degree = 2, ncells = (2, 20), n = 3, guess = Continuation(),
         problem = Wave.problem(T = T, timespan = (zero(T), T(0.25)), timestep = T(0.05),
@@ -110,17 +105,34 @@ end
             problem = Wave.problem(T = T,
                 timespan = (zero(T), T(0.1)), timestep = T(0.05), xstep = T(0.05)))
         @test cache(two_int).bottom == cache(one_int).top
-        # the recorded residual of the last step is `‖F(x)‖₂` at its final iterate, under the datum
-        # and the momentum load that step started from: the load is the top row of a four-step run
-        four = GeometricIntegrator(
-            Wave.problem(T = T, timespan = (zero(T), T(0.2)),
-                timestep = T(0.05), xstep = T(0.05)),
-            method)
-        integrate(four)
-        c.flux .= cache(four).flux
-        b = similar(c.x)
-        M.residual!(b, c.x, nothing, parameters(problem), int)
-        @test abs(norm(b) - c.residuals[end]) ≤ T(100) * eps(T) * norm(b)
+        # every entry of `residuals` is `‖F(x)‖₂` at its own step's final iterate, under the datum
+        # and the momentum load that step started from, which the cache overwrites as the step ends
+        stepped = GeometricIntegrator(problem, method)
+        cs = cache(stepped)
+        solution = GeometricSolution(problem)
+        solstep = solutionstep(stepped, solution[0])
+        p = parameters(problem)
+        b = similar(cs.x)
+        datum = similar(cs.bottom)
+        load = similar(cs.flux)
+        recomputed = Vector{T}(undef, ntime(solution))
+        for n in 1:ntime(solution)
+            # the datum and the momentum load the step will solve under
+            M.slab_bottom!(cs, coupling(method), problem, ansatz(method), solstep)
+            datum .= cs.bottom
+            load .= cs.flux
+            reset!(solstep, timesteps(solution)[n])
+            integrate!(solstep, stepped)
+            top_load = copy(cs.flux)
+            cs.bottom .= datum
+            cs.flux .= load
+            M.residual!(b, cs.x, nothing, p, stepped)
+            recomputed[n] = sqrt(sum(abs2, b))
+            cs.flux .= top_load
+        end
+        for n in 1:5
+            @test abs(recomputed[n] - cs.residuals[n]) ≤ T(100) * eps(T) * recomputed[n]
+        end
     end
 
     @testset "S3a the problem layer takes a vector density" for T in (Float64, Float32)

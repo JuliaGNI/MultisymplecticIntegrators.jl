@@ -138,4 +138,30 @@ end
     @testset "a method without a trace stores nothing" begin
         @test top_trace(nothing) === nothing
     end
+
+    @testset "A1i the two method guards" begin
+        small = Wave.problem(T = Float32, timespan = (Float32(0), Float32(0.1)),
+            timestep = Float32(0.05), xstep = Float32(0.05))
+        large = Wave.problem(timespan = (0.0, 0.1), timestep = 0.05, xstep = 0.05)
+        # the ansatz of each problem is of that problem's element type and space interval
+        small_ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
+            xspan = (0.0f0, 1.0f0), n = 3)
+        large_ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
+            xspan = (0.0, 1.0), n = 3)
+        wide_ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
+            xspan = (0.0, 2.0), n = 3)
+        @test MultisymplecticIntegrators.check_method(large, SpaceTimeGalerkin(large_ansatz)) ===
+              nothing
+        # an element type mismatch, in the problem's and in the ansatz's type
+        @test_throws ArgumentError("the ansatz element type Float64 does not match the problem's Float32") MultisymplecticIntegrators.check_method(
+            small, SpaceTimeGalerkin(large_ansatz))
+        @test_throws ArgumentError("the ansatz element type Float32 does not match the problem's Float64") MultisymplecticIntegrators.check_method(
+            large, SpaceTimeGalerkin(small_ansatz))
+        # a space interval mismatch, and the element type first where both mismatch
+        @test_throws ArgumentError("the ansatz xspan (0.0, 2.0) does not match the problem's (0.0, 1.0)") MultisymplecticIntegrators.check_method(
+            large, SpaceTimeGalerkin(wide_ansatz))
+        @test_throws ArgumentError("the ansatz element type Float32 does not match the problem's Float64") MultisymplecticIntegrators.check_method(
+            large, SpaceTimeGalerkin(TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
+                xspan = (0.0f0, 2.0f0), n = 3)))
+    end
 end

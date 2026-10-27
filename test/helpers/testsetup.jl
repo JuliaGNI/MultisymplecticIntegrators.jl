@@ -24,6 +24,14 @@ test_eltype(x, ::Type{T}) where {T} = @test typeof(x) === T
 tolerance(::Type{T}) where {T} = 16 * eps(T)
 
 """
+    newton_tolerance(::Type{T})
+
+The Newton tolerance of the `§A` reference entries — the `f_abstol` field of their `SOLVER_OPTIONS`,
+which is `8 eps(Float64)` — carried to the working precision as the same number of `eps(T)`.
+"""
+newton_tolerance(::Type{T}) where {T} = 8 * eps(T)
+
+"""
     assert_no_upcast(x, ::Type{T})
 
 Assert that `x` — an array, a named tuple of arrays or a scalar — holds only values of element type

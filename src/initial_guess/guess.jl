@@ -53,13 +53,16 @@ struct TargetFunction{F} <: SlabInitialGuess
 end
 
 """
-    FitTo(target; method = Projection()) <: SlabInitialGuess
+    FitTo(target; method = nothing) <: SlabInitialGuess
 
 Fit the ansatz to `target` on the slab, with the fit method `method`.
 
 A target is evaluated on the slab — see [`InitialCondition`](@ref), [`PreviousSlab`](@ref),
 [`ExactSolution`](@ref) and [`TargetFunction`](@ref) — and the fit brings the ansatz to it. A
-user-defined target is a subtype of `SlabInitialGuess` with one method of
+`method` that is named is used as it is; an unnamed one resolves through
+[`default_fit`](@ref)`(ansatz)`, so that an ansatz with a fit method of its own gets it.
+
+A user-defined target is a subtype of `SlabInitialGuess` with one method of
 
 ```julia
 evaluate!(sample, target, cache, ansatz, problem, sol)
@@ -68,13 +71,24 @@ evaluate!(sample, target, cache, ansatz, problem, sol)
 filling `sample`, of size `(Qt, Qx, D)`, with the target's value at the quadrature points of the
 slab.
 """
-struct FitTo{T <: SlabInitialGuess, M <: SlabInitialGuess} <: SlabInitialGuess
+struct FitTo{T <: SlabInitialGuess, M <: Union{Nothing, SlabInitialGuess}} <:
+       SlabInitialGuess
     target::T
     method::M
 end
 
-function FitTo(target::SlabInitialGuess; method::SlabInitialGuess = Projection())
+function FitTo(target::SlabInitialGuess; method::Union{Nothing, SlabInitialGuess} = nothing)
     FitTo(target, method)
+end
+
+"""
+    fit_method(fit::FitTo, ansatz)
+
+The fit method a [`FitTo`](@ref) uses: the one it names, or the ansatz's own
+[`default_fit`](@ref) where the caller named none.
+"""
+function fit_method(fit::FitTo, ansatz::SpaceTimeAnsatz)
+    fit.method === nothing ? default_fit(ansatz) : fit.method
 end
 
 """Whether a target needs the problem's exact solution."""
@@ -96,7 +110,7 @@ end
 
 function apply_guess!(c::SpaceTimeGalerkinCache, guess::Continuation,
         ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem, sol)
-    if c.steps[] == 0
+    if c.steps == 0
         apply_guess!(c, FitTo(InitialCondition()), ansatz, problem, sol)
     else
         nt = ntime_functions(ansatz)
@@ -116,7 +130,7 @@ function apply_guess!(c::SpaceTimeGalerkinCache{ST}, guess::FitTo,
     sample = Array{ST, 3}(undef, qt, qx, D)
     evaluate!(sample, guess.target, c, ansatz, problem, sol)
     coeffs = similar(c.coeffs)
-    fit!(coeffs, guess.method, ansatz, sample)
+    fit!(coeffs, fit_method(guess, ansatz), ansatz, sample)
     nt = ntime_functions(ansatz)
     nx = nspace_functions(ansatz)
     for d in 1:D, j in 1:nx, a in 2:nt
@@ -151,7 +165,7 @@ end
 function evaluate!(sample::AbstractArray{ST, 3}, ::PreviousSlab,
         c::SpaceTimeGalerkinCache, ansatz::TensorBSplineAnsatz,
         problem::LagrangianPDEProblem, sol) where {ST}
-    if c.steps[] == 0
+    if c.steps == 0
         return evaluate!(sample, InitialCondition(), c, ansatz, problem, sol)
     end
     tb = time_basis(ansatz)

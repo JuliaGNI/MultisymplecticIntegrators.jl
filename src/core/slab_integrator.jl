@@ -55,22 +55,34 @@ default_solver(::SpaceTimeGalerkin) = Newton()
 """
     check_method(problem, method)
 
-Reject an initial guess that the problem or the ansatz cannot support, before any step runs.
+Reject a method that the problem cannot support, before any step runs.
 
-Both refusals are `ArgumentError`s at construction: a target that reads the exact solution of a
-problem that has none, and an `L²` projection onto an ansatz that is not linear in its coefficients.
+The refusals are `ArgumentError`s: a target that reads the exact solution of a problem that has
+none, a fit that needs an ansatz linear in its coefficients on one that is not, an ansatz of another
+element type than the problem's, and an ansatz on another space interval than the problem's. The
+last two name the two values they compared, and the element type is compared first, so a pair that
+mismatches in both hears about the type.
 """
-function check_method(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin)
+function check_method(problem::LagrangianPDEProblem{PT}, method::SpaceTimeGalerkin) where {PT}
     guess = initial_guess(method)
-    guess isa FitTo || return nothing
-    if needs_exact_solution(guess.target) && problem.exact_u === nothing
-        throw(ArgumentError("FitTo(ExactSolution()) needs a problem with an exact solution; " *
-                            "this problem has exact_u = nothing"))
+    if guess isa FitTo
+        if needs_exact_solution(guess.target) && problem.exact_u === nothing
+            throw(ArgumentError("FitTo(ExactSolution()) needs a problem with an exact solution; " *
+                                "this problem has exact_u = nothing"))
+        end
+        if fit_method(guess, ansatz(method)) isa Projection &&
+           !is_linear_in_coefficients(ansatz(method))
+            throw(ArgumentError("Projection() needs an ansatz that is linear in its " *
+                                "coefficients; $(nameof(typeof(ansatz(method)))) is not"))
+        end
     end
-    if guess.method isa Projection && !is_linear_in_coefficients(ansatz(method))
-        throw(ArgumentError("Projection() needs an ansatz that is linear in its " *
-                            "coefficients; $(nameof(typeof(ansatz(method)))) is not"))
-    end
+    a = ansatz(method)
+    a isa TensorBSplineAnsatz || return nothing
+    S = eltype(a.xspan)
+    S === PT || throw(ArgumentError(
+        "the ansatz element type $S does not match the problem's $PT"))
+    xspan(a) == xspan(problem) || throw(ArgumentError(
+        "the ansatz xspan $(xspan(a)) does not match the problem's $(xspan(problem))"))
     return nothing
 end
 
@@ -114,9 +126,10 @@ The data of a step are `bottom` and `flux`, the coupling's datum and its momentu
 results of the last step are `top`, the top row of the coefficient array, `residual`, the last weak
 form, and the trace at the top of the slab. `iterations`, `residuals` and `initial_residuals`
 record the Newton solve of every step: its iterate count, its final residual `‖F(x)‖₂` and its
-initial residual `r₀ = ‖F(x₀)‖₂`.
+initial residual `r₀ = ‖F(x₀)‖₂`. `steps` counts the steps taken, which is what tells the coupling
+and the guess whether the slab is the run's first.
 """
-struct SpaceTimeGalerkinCache{ST, T} <: IntegratorCache{ST}
+mutable struct SpaceTimeGalerkinCache{ST, T} <: IntegratorCache{ST}
     x::Vector{ST}
     coeffs::Array{ST, 3}
     residual::Array{ST, 3}
@@ -135,7 +148,7 @@ struct SpaceTimeGalerkinCache{ST, T} <: IntegratorCache{ST}
     iterations::Vector{Int}
     residuals::Vector{ST}
     initial_residuals::Vector{ST}
-    steps::Ref{Int}
+    steps::Int
     tabulation::SlabTabulation{T}
     evaluation::SlabEvaluation{T}
 end
@@ -152,7 +165,7 @@ function Cache{ST}(problem::LagrangianPDEProblem,
     nt = ntime_functions(a)
     nx = nspace_functions(a)
     D = components(problem)
-    free = (nt - 1) * nx * D
+    free = total_free_coefficients(method, problem)
     qt = nquadrature(tabulation.time)
     qx = nquadrature(tabulation.space)
     nq = length(space_quadrature_nodes(a))
@@ -176,7 +189,7 @@ function Cache{ST}(problem::LagrangianPDEProblem,
         Int[],
         ST[],
         ST[],
-        Ref(0),
+        0,
         tabulation,
         evaluation)
 end
@@ -275,24 +288,35 @@ function update!(sol, params, x::AbstractVector{ST},
     c.top .= view(c.coeffs, nt, :, :)
     h = timestep(p)
     assign!(sol.u, sol.v, sol.w, c, a, nx, D, h)
-    trace!(c, a, nx, D, h)
     slab_weak_form!(c, p, m)
     c.flux .= view(c.residual, nt, :, :)
-    c.steps[] += 1
+    c.steps += 1
     return nothing
 end
 
-"""The solution and its two derivatives at the top of the slab, on the output grid."""
+"""
+    assign!(u, v, w, cache, ansatz, nx, D, h)
+
+The solution and its two derivatives at the top of the slab, on the output grid, and beside them the
+trace `(u, v, w)` at the nodes of the space quadrature, in one pass over the top row.
+
+The two tables are the space basis evaluated at two sets of points, so the row is walked once and
+the value of each function is written to both.
+"""
 function assign!(u::AbstractVector{ST}, v::AbstractVector{ST}, w::AbstractVector{ST},
         c::SpaceTimeGalerkinCache{ST}, a::TensorBSplineAnsatz, nx::Integer, D::Integer,
         h) where {ST}
     e = c.evaluation
     nt = ntime_functions(a)
     n = size(e.output, 1)
+    m = size(e.trace, 1)
     hh = convert(ST, h)
     fill!(u, zero(ST))
     fill!(v, zero(ST))
     fill!(w, zero(ST))
+    fill!(c.trace_u, zero(ST))
+    fill!(c.trace_v, zero(ST))
+    fill!(c.trace_w, zero(ST))
     for d in 1:D
         for j in 1:nx
             # the time derivative at the top of the slab, per space function: `∂ₜu` is `∂_{t̂}u / h`
@@ -306,30 +330,7 @@ function assign!(u::AbstractVector{ST}, v::AbstractVector{ST}, w::AbstractVector
                 w[(d - 1) * n + i] += c.top[j, d] * e.output_slope[i, j]
                 v[(d - 1) * n + i] += tderiv * e.output[i, j]
             end
-        end
-    end
-    return nothing
-end
-
-"""The trace `(u, v, w)` at the top of the slab, at the nodes of the space quadrature."""
-function trace!(
-        c::SpaceTimeGalerkinCache{ST}, a::TensorBSplineAnsatz, nx::Integer, D::Integer,
-        h) where {ST}
-    e = c.evaluation
-    nt = ntime_functions(a)
-    n = size(e.trace, 1)
-    hh = convert(ST, h)
-    fill!(c.trace_u, zero(ST))
-    fill!(c.trace_v, zero(ST))
-    fill!(c.trace_w, zero(ST))
-    for d in 1:D
-        for j in 1:nx
-            tderiv = zero(ST)
-            for k in 1:nt
-                tderiv += c.coeffs[k, j, d] * e.top_slope[k]
-            end
-            tderiv /= hh
-            for i in 1:n
+            for i in 1:m
                 c.trace_u[i, d] += c.top[j, d] * e.trace[i, j]
                 c.trace_w[i, d] += c.top[j, d] * e.trace_slope[i, j]
                 c.trace_v[i, d] += tderiv * e.trace[i, j]
@@ -356,7 +357,7 @@ Fix the datum of the slab's bottom trace and its momentum load, in `cache.bottom
 
 A coupling implements this for the two cases it distinguishes: the first slab of a run, where the
 datum is the problem's initial condition, and every later slab, where it is the trace the previous
-slab carried out. The cache counts its steps, so `cache.steps[]` says which case this is.
+slab carried out. The cache counts its steps, so `cache.steps` says which case this is.
 """
 function slab_bottom!(cache, coupling::SlabCoupling, problem, ansatz, sol)
     throw(ArgumentError("$(nameof(typeof(coupling))) does not implement slab_bottom!"))

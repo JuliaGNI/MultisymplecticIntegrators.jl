@@ -7,7 +7,6 @@ using Test
 import GeometricIntegratorsBase: GeometricIntegrator, cache
 
 include("../helpers/testsetup.jl")
-include("../helpers/reference_values.jl")
 
 const M = MultisymplecticIntegrators
 
@@ -16,6 +15,14 @@ An ansatz that is not linear in its coefficients: it stands in for the network a
 part, whose `Projection()` must be refused.
 """
 struct NonlinearFixtureAnsatz <: SpaceTimeAnsatz end
+
+"""
+The fit method the fixture ansatz gives an unnamed [`FitTo`](@ref): a stand-in for the network fits
+of the later parts, and not a `Projection()`.
+"""
+struct FixtureFit <: SlabInitialGuess end
+
+M.default_fit(::NonlinearFixtureAnsatz) = FixtureFit()
 
 function guess_run(::Type{T}, guess; timestep = T(0.05), xstep = T(0.05),
         problem = Wave.problem(T = T, timespan = (zero(T), T(0.25)), timestep = timestep,
@@ -29,7 +36,6 @@ end
 
 @testset "Initial guess" begin
     @testset "A4a every option converges to the same solution" for T in (Float64, Float32)
-        newton_tolerance = T(SOLVER_OPTIONS.f_abstol / eps(Float64)) * eps(T)
         options = [Continuation(), FitTo(InitialCondition()), FitTo(PreviousSlab()),
             FitTo(ExactSolution()),
             FitTo(TargetFunction((t, x, p) -> Wave.exact_u(t, x, p)))]
@@ -44,7 +50,7 @@ end
             push!(solutions, result.solution.u[end])
         end
         for solution in solutions[2:end]
-            @test maximum(abs.(solution .- solutions[1])) ≤ T(100) * newton_tolerance
+            @test maximum(abs.(solution .- solutions[1])) ≤ T(100) * newton_tolerance(T)
         end
     end
 
@@ -70,7 +76,7 @@ end
         field(t̂, x) = (one(T) + t̂ + t̂^2) * x * (one(T) - x)
         c.coeffs[:, :, 1] .= SimpleSplines.l2_projection(quadrature(ansatz),
             p -> field(p[1], p[2]))
-        c.steps[] = ncells(ansatz)[1]
+        c.steps = ncells(ansatz)[1]
         qt = M.nquadrature(c.tabulation.time)
         qx = M.nquadrature(c.tabulation.space)
         sample = Array{T, 3}(undef, qt, qx, 1)
@@ -95,20 +101,30 @@ end
         @test without_exact.exact_u === nothing
         ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
             xspan = (zero(T), one(T)), n = 3)
-        @test_throws ArgumentError GeometricIntegrator(without_exact,
+        exact_message = "FitTo(ExactSolution()) needs a problem with an exact solution; " *
+                        "this problem has exact_u = nothing"
+        @test_throws ArgumentError(exact_message) GeometricIntegrator(without_exact,
             SpaceTimeGalerkin(ansatz, CoefficientRestriction();
                 initial_guess = FitTo(ExactSolution())))
         # the projection's refusal names the reason: an ansatz that is not linear in its
-        # coefficients. The fixture also makes the cache refuse its ansatz, so an assertion on the
+        # coefficients. The fit is named, because the fixture's own default fit method is not a
+        # `Projection()`; the fixture also makes the cache refuse its ansatz, so an assertion on the
         # type alone would pass on the cache's own `ArgumentError`.
+        @test M.fit_method(FitTo(InitialCondition()), NonlinearFixtureAnsatz()) isa
+              FixtureFit
+        @test M.fit_method(FitTo(InitialCondition()), ansatz) isa Projection
+        @test M.fit_method(FitTo(InitialCondition(); method = Projection()), ansatz) isa
+              Projection
+        projection_message = "Projection() needs an ansatz that is linear in its coefficients; " *
+                             "NonlinearFixtureAnsatz is not"
         nonlinear = SpaceTimeGalerkin(NonlinearFixtureAnsatz(), CoefficientRestriction();
-            initial_guess = FitTo(InitialCondition()))
-        @test_throws "Projection() needs an ansatz that is linear in its coefficients" GeometricIntegrator(
-            plain, nonlinear)
-        # the control: a guess that is no projection passes the same check
+            initial_guess = FitTo(InitialCondition(); method = Projection()))
+        @test_throws ArgumentError(projection_message) GeometricIntegrator(plain, nonlinear)
+        # the control: the fixture's own default fit is no projection, so the same construction
+        # passes its check
         @test M.check_method(plain,
-            SpaceTimeGalerkin(NonlinearFixtureAnsatz(), CoefficientRestriction())) ===
-              nothing
+            SpaceTimeGalerkin(NonlinearFixtureAnsatz(), CoefficientRestriction();
+                initial_guess = FitTo(InitialCondition()))) === nothing
         # a target that returns another element type gives the problem's element type
         small = Float32
         int, result = guess_run(small,

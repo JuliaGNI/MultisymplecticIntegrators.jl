@@ -1,3 +1,5 @@
+using LinearAlgebra: lu
+
 """
     fem_stencil(problem; steps)
 

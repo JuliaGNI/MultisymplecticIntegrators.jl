@@ -56,7 +56,7 @@ export SpaceTimeQuadrature, boundary_points, nodes, weights, nnodes
 include("ansatz/tensor_bspline.jl")
 export TensorBSplineAnsatz, degree, ncells, output_grid, quadrature,
        is_linear_in_coefficients,
-       space_quadrature_nodes, space_quadrature_weights
+       space_quadrature_nodes
 
 # the slab core
 include("core/weak_form.jl")

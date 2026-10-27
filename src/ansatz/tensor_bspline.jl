@@ -25,6 +25,9 @@ a coupling's business.
 derivatives exactly, which is `p + 1` nodes for degree `p`, the count the products of the basis
 functions need.
 
+Both degrees are at least 1. The slab core reads the space gradient `∂ₓu` from the same space basis,
+and a piecewise-constant degree-0 basis carries none, so a lower degree raises `ArgumentError`.
+
 The ansatz counts the **degree**, which is what `SimpleSplines` takes; a basis of order `k` is one of
 degree `k - 1`.
 
@@ -33,12 +36,12 @@ ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0))
 ```
 """
 struct TensorBSplineAnsatz{
-    T, BT <: TensorProductBasis{T, 2}, QB <: TensorProductQuadrature} <:
-       SpaceTimeAnsatz
+    T, BT <: TensorProductBasis{T, 2}, QB <: TensorProductQuadrature,
+    BC <: BoundaryCondition} <: SpaceTimeAnsatz
     degree::Tuple{Int, Int}
     ncells::Tuple{Int, Int}
     xspan::NTuple{2, T}
-    x_boundary::BoundaryCondition
+    x_boundary::BC
     basis::BT
     quadrature::QB
 end
@@ -47,7 +50,7 @@ function TensorBSplineAnsatz(; degree, ncells, xspan,
         x_boundary::BoundaryCondition = Dirichlet(), n = nothing)
     d = _per_axis(degree, :degree)
     c = _per_axis(ncells, :ncells)
-    all(>=(0), d) || throw(ArgumentError("degree must be ≥ 0, got $d"))
+    _check_degree(d)
     all(>=(1), c) || throw(ArgumentError("ncells must be ≥ 1, got $c"))
     T = _coordinate_type(xspan)
     xsp = (convert(T, xspan[1]), convert(T, xspan[2]))
@@ -58,8 +61,17 @@ function TensorBSplineAnsatz(; degree, ncells, xspan,
     order = n === nothing ? map(_default_quadrature_order, d) : _per_axis(n, :n)
     all(>=(1), order) || throw(ArgumentError("n must be ≥ 1, got $order"))
     quadrature = TensorProductQuadrature(basis; nq = order)
-    return TensorBSplineAnsatz{T, typeof(basis), typeof(quadrature)}(
+    return TensorBSplineAnsatz{T, typeof(basis), typeof(quadrature), typeof(x_boundary)}(
         d, c, xsp, x_boundary, basis, quadrature)
+end
+
+# A basis of degree 0 is piecewise constant, and the slab core takes the space gradient `∂ₓu` from
+# the same space basis, which such a basis does not carry.
+function _check_degree(d::Tuple{Int, Int})
+    for (axis, p) in zip((:time, :space), d)
+        p ≥ 1 || throw(ArgumentError("degree must be ≥ 1 in the $axis direction, got $d"))
+    end
+    return nothing
 end
 
 _per_axis(x::Integer, ::Symbol) = (Int(x), Int(x))
@@ -116,11 +128,6 @@ function space_quadrature_nodes(ansatz::TensorBSplineAnsatz{T}) where {T}
     return quadrature_nodes(quadratures(quadrature(ansatz))[2])
 end
 
-"""The weights of the space quadrature."""
-function space_quadrature_weights(ansatz::TensorBSplineAnsatz{T}) where {T}
-    return quadrature_weights(quadratures(quadrature(ansatz))[2])
-end
-
 """
     output_grid(ansatz::TensorBSplineAnsatz, xstep)
     output_grid(ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem)
@@ -130,12 +137,16 @@ The grid the ansatz reports its solution on: `xspan` in `n` equally spaced point
 
 A `xstep` that does not divide `xspan` therefore still ends on the end of the span, and the grid is
 built as a `range` rather than as a stepped `:`, which stops short of the end when the step does not
-divide the span. A `xstep` that leaves fewer than two points raises `ArgumentError`.
+divide the span. A `xstep` that is not a positive finite number raises `ArgumentError` before the
+division, and one that leaves fewer than two points raises `ArgumentError` as well.
 """
 function output_grid(ansatz::TensorBSplineAnsatz, xstep)
     T = eltype(ansatz.xspan)
     Δx = ansatz.xspan[2] - ansatz.xspan[1]
-    n = round(Int, Δx / convert(T, xstep)) + 1
+    step = convert(T, xstep)
+    (isfinite(step) && step > zero(T)) ||
+        throw(ArgumentError("output_grid needs a positive finite xstep, got $step"))
+    n = round(Int, Δx / step) + 1
     n ≥ 2 || throw(ArgumentError("xstep $xstep is too large for xspan $(ansatz.xspan)"))
     return range(ansatz.xspan[1], ansatz.xspan[2]; length = n)
 end

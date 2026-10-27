@@ -110,7 +110,7 @@ makes it worth keeping.
   `(time, space)` tuple — and the space basis is recombined to a homogeneous `Dirichlet` value or
   left `Free()`, the natural condition. A Gauss rule per cell integrates the products of the basis
   functions and of their first derivatives exactly. It counts the degree, as `SimpleSplines` does,
-  not the order: a basis of order `k` is one of degree `k - 1`.
+  not the order: a basis of order `k` is one of degree `k - 1`, and both degrees are at least 1.
   `CoefficientRestriction` makes the previous slab's top coefficient row the bottom datum of the
   next slab, and reads the momentum flux off the row that slab already computed, so no flux is
   re-integrated from a trace and the top of a slab is measured rather than imposed. The unknown of
@@ -122,14 +122,17 @@ makes it worth keeping.
   count, its final residual `‖F(x)‖₂` and its initial residual `r₀ = ‖F(x₀)‖₂`, beside the top
   trace at the nodes of the space quadrature. The initial-guess interface of `src/initial_guess/`
   fills the solver's vector before a step: `Continuation()`, the default, carries the previous
-  slab's top row into every row of the new slab; `FitTo(target; method = Projection())` fits the
+  slab's top row into every row of the new slab; `FitTo(target; method = nothing)` fits the
   ansatz to `InitialCondition()`, to `PreviousSlab()` — the polynomial piece of the top time cell
   expanded about its top, so a quadratic field continues as the same quadratic — to
-  `ExactSolution()` or to a `TargetFunction(f)`, and a user-defined target or fit method is one
-  method of `evaluate!` or `fit!`. Two refusals are `ArgumentError`s at construction:
-  `FitTo(ExactSolution())` on a problem with no exact solution, and `Projection()` on an ansatz
-  that is not linear in its coefficients. `LagrangianPDEProblem` takes any density with the density
-  protocol — a callable `L(u, v, w, params)` and a `derivatives` method — not a
+  `ExactSolution()` or to a `TargetFunction(f)`, with `Projection()` where the ansatz names no fit
+  of its own, and a user-defined target or fit method is one method of `evaluate!` or `fit!`. Four
+  refusals are `ArgumentError`s at construction: `FitTo(ExactSolution())` on a problem with no
+  exact solution, `Projection()` on an ansatz that is not linear in its coefficients, an ansatz of
+  another element type than the problem's, and an ansatz on another space interval than the
+  problem's. `output_grid` refuses a `xstep` that is not a positive finite number before it divides
+  by it. `LagrangianPDEProblem` takes any density with the density protocol — a callable
+  `L(u, v, w, params)` and a `derivatives` method — not a
   `LagrangianDensity` alone, so the density built by `VectorWave.vector_density`, which couples the
   components, reaches a problem; the problem's parameters default to the density's own `params`
   field where it has one. `Project.toml` gains `SimpleSplines` (compat `0.3.1`), `SimpleSolvers`
