@@ -99,14 +99,16 @@ end
 
 """
     problem(; T = Float64, D = 1, params = default_parameters(), timespan = (0.0, 3.0),
-            timestep = 0.3, xspan = (0.0, 1.0), xstep = 0.01, m = 0.0, β = 0.0)
+            timestep = 0.3, xspan = (0.0, 1.0), xstep = 0.01)
 
-A [`LagrangianPDEProblem`](@ref) of the wave equation.
+A [`LagrangianPDEProblem`](@ref) of the wave equation, with the massless density
+`L = ½v² − ½c²w²` of which the standing wave is the exact solution. A mass or a quartic coupling is
+a keyword of `density` only, because the exact solution holds for neither.
 """
 function problem(; T::Type = Float64, D::Integer = 1, params = default_parameters(),
         timespan = (zero(T), T(3)), timestep = T(0.3), xspan = (zero(T), one(T)),
-        xstep = T(0.01), m = 0.0, β = 0.0)
-    d = density(; params = params, m = m, β = β)
+        xstep = T(0.01))
+    d = density(; params = params)
     tspan = (T(timespan[1]), T(timespan[2]))
     xsp = (T(xspan[1]), T(xspan[2]))
     h = T(xstep)
@@ -137,11 +139,13 @@ The wave equation for a field `u ∈ ℝᴰ` on `x ∈ [0, l]` with zero Dirichl
 L = \\tfrac{1}{2}|u_t|^2 - \\tfrac{c^2}{2}|u_x|^2 - \\tfrac{m^2}{2}|u|^2 - \\tfrac{\\beta}{4}|u|^4,
 ```
 
-the exact solution of the uncoupled case `m = β = 0`, each component a standing wave of `Wave`, and
-the angular momentum `J = ∫ (u₁ ∂ₜu₂ − u₂ ∂ₜu₁) dx` of the `D = 2` field.
+the exact solution of the uncoupled case `m = β = 0`, each component a standing wave of `Wave` with
+amplitudes of its own, and the angular momentum `J = ∫ (u₁ ∂ₜu₂ − u₂ ∂ₜu₁) dx` of the `D = 2`
+field.
 
-`L` is invariant under a rotation of `u`, so `J` is conserved; a numerical integration that loses
-it has lost the symmetry, which is the oracle of the vector case.
+`L` is invariant under a rotation of `(u, v, w)`, so `J` is conserved; a numerical integration that
+loses it has lost the symmetry, which is the oracle of the vector case. The default parameters give
+the two components different phases, so that `J` is not zero.
 
 ```julia
 problem = VectorWave.problem(timespan = (0.0, 1.0), timestep = 0.1, xstep = 0.05)
@@ -149,51 +153,85 @@ problem = VectorWave.problem(timespan = (0.0, 1.0), timestep = 0.1, xstep = 0.05
 """
 module VectorWave
 
-export default_parameters, density, vector_density, problem, angular_momentum
+export default_parameters, component_parameters, density, vector_density, problem,
+       angular_momentum
 
 using MultisymplecticIntegrators
 import MultisymplecticIntegrators: derivatives
 import ..Wave
 
-const DEFAULT_PARAMETERS = (c = 0.5, A1 = 0.8, A2 = 0.0, B1 = 0.8, B2 = 0.0, l = 1.0)
+const DEFAULT_PARAMETERS = (
+    c = 0.5, l = 1.0, A1 = (0.8, 0.8), A2 = (0.0, 0.0), B1 = (0.8, 0.0),
+    B2 = (0.0, 0.0))
 
 default_parameters() = DEFAULT_PARAMETERS
 
 """
-    VectorDensity(density, D = 2)
+    component_parameters(params, i)
 
-The density of a component-major vector field: the sum of the scalar `density` over the `D`
-components. `u`, `v` and `w` are vectors of the `D` components' values at one point.
+The parameters of `Wave` for component `i`: the shared speed `c` and length `l`, and the `i`-th
+entry of each of the amplitudes `A1`, `A2`, `B1` and `B2`.
 """
-struct VectorDensity{DT}
-    density::DT
-    D::Int
+function component_parameters(params, i::Integer)
+    return (c = params.c, A1 = params.A1[i], A2 = params.A2[i], B1 = params.B1[i],
+        B2 = params.B2[i], l = params.l)
 end
 
-VectorDensity(density; D::Integer = 2) = VectorDensity(density, Int(D))
+"""
+    VectorDensity(density, D = 2, β = 0)
+
+The density of a component-major vector field `u ∈ ℝᴰ`: the scalar `density` summed over the `D`
+components, minus the quartic coupling `¼β|u|⁴`. The scalar `density` carries no quartic term, so
+that the whole is invariant under a rotation of `(u, v, w)`. `u`, `v` and `w` are vectors of the
+`D` components' values at one point.
+"""
+struct VectorDensity{DT, BT}
+    density::DT
+    D::Int
+    β::BT
+end
+
+VectorDensity(density; D::Integer = 2, β = 0.0) = VectorDensity(density, Int(D), β)
 
 function (density::VectorDensity)(u, v, w, params)
     length(u) == density.D ||
         throw(ArgumentError("expected $(density.D) components, got $(length(u))"))
-    return sum(density.density(u[i], v[i], w[i], params) for i in eachindex(u))
+    r² = sum(abs2, u)
+    return sum(density.density(u[i], v[i], w[i], params) for i in eachindex(u)) -
+           oftype(r², density.β) * r²^2 / 4
 end
 
-"""The derivatives of a vector density, component by component."""
+"""
+The derivatives of a vector density, component by component: those of the scalar density, and
+`−β|u|²uᵢ` from the quartic coupling in `∂L/∂uᵢ`.
+"""
 function derivatives(density::VectorDensity, u, v, w, params)
     length(u) == density.D ||
         throw(ArgumentError("expected $(density.D) components, got $(length(u))"))
+    r² = sum(abs2, u)
+    β = oftype(r², density.β)
     each = [derivatives(density.density, u[i], v[i], w[i], params) for i in eachindex(u)]
-    return (u = [d.u for d in each], v = [d.v for d in each], w = [d.w for d in each])
+    return (u = [d.u - β * r² * uᵢ for (d, uᵢ) in zip(each, u)], v = [d.v for d in each],
+        w = [d.w for d in each])
 end
 
-"""The scalar density of one component of the vector wave equation."""
-function density(; params = default_parameters(), m = 0.0, β = 0.0)
-    Wave.density(; params = params, m = m, β = β)
+"""
+    density(; params = default_parameters(), m = 0.0)
+
+The scalar density of one component, `½v² − ½c²w² − ½m²u²`. The quartic coupling of the
+components is in `vector_density`, because `¼β|u|⁴` is not a sum over the components.
+"""
+function density(; params = default_parameters(), m = 0.0)
+    Wave.density(; params = params, m = m)
 end
 
-"""The vector density of `D` components."""
+"""
+    vector_density(; params = default_parameters(), D = 2, m = 0.0, β = 0.0)
+
+The vector density of `D` components with the mass `m` and the quartic coupling `β`.
+"""
 function vector_density(; params = default_parameters(), D::Integer = 2, m = 0.0, β = 0.0)
-    VectorDensity(density(; params = params, m = m, β = β), D)
+    VectorDensity(density(; params = params, m = m), Int(D), β)
 end
 
 """
@@ -215,15 +253,39 @@ end
     problem(; T = Float64, params = default_parameters(), timespan = (0.0, 3.0),
             timestep = 0.3, xspan = (0.0, 1.0), xstep = 0.01)
 
-A [`LagrangianPDEProblem`](@ref) with `D = 2`, zero Dirichlet data in space and the exact solution
-of the uncoupled case.
+A [`LagrangianPDEProblem`](@ref) of `D = length(params.A1)` components, with zero Dirichlet data in
+space and the exact solution of the uncoupled case: component `i` is the standing wave of `Wave`
+with the parameters `component_parameters(params, i)`. The initial, boundary and exact data are
+stacked component-major.
 """
 function problem(; T::Type = Float64, params = default_parameters(),
         timespan = (zero(T), T(3)), timestep = T(0.3), xspan = (zero(T), one(T)),
         xstep = T(0.01))
-    return Wave.problem(;
-        T = T, D = 2, params = params, timespan = timespan, timestep = timestep,
-        xspan = xspan, xstep = xstep)
+    D = length(params.A1)
+    all(name -> length(getfield(params, name)) == D, (:A2, :B1, :B2)) ||
+        throw(ArgumentError("A1, A2, B1 and B2 must hold one amplitude per component"))
+    tspan = (T(timespan[1]), T(timespan[2]))
+    xsp = (T(xspan[1]), T(xspan[2]))
+    h = T(xstep)
+    grid = collect(xsp[1]:h:xsp[2])
+    # `map(vcat, …)` over the components' named tuples stacks each entry component-major.
+    ics = (x, p) -> map(vcat,
+        (Wave.initial_data(x, component_parameters(p, i), 1, tspan[1]) for i in 1:D)...)
+    bcs = (times, p) -> map((sides...) -> map(vcat, sides...),
+        (Wave.boundary_data(times, grid, component_parameters(p, i)) for i in 1:D)...)
+    exact(f) = (t, x, p) -> mapreduce(i -> f(t, x, component_parameters(p, i)), vcat, 1:D)
+    return LagrangianPDEProblem(density(; params = params);
+        D = D,
+        ics_function = ics,
+        bcs_function = bcs,
+        exact_u = exact(field_exact(Wave.exact_u, 1)),
+        exact_v = exact(field_exact(Wave.exact_v, 1)),
+        exact_w = exact(field_exact(Wave.exact_w, 1)),
+        timespan = tspan,
+        timestep = T(timestep),
+        xspan = xsp,
+        xstep = h,
+        params = params)
 end
 
 end

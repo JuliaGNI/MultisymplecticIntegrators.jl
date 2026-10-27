@@ -17,15 +17,15 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
-### K7 · The three problem constructors repeat themselves.
+### K7 · The four problem constructors repeat themselves.
 
 - location: `src/problems/wave.jl`, `src/problems/sine_gordon.jl`,
   `src/problems/linear_transport.jl`
-- evidence: each `problem` function converts its spans, builds the two closures and calls
-  `LagrangianPDEProblem` in the same way, about twenty lines three times. One shared constructor
-  taking the three exact functions would remove about forty lines. Recorded rather than done,
-  because the shared form has to be chosen against the boundary interface that the slab core
-  defines.
+- evidence: each `problem` function of `Wave`, `VectorWave`, `SineGordon` and `LinearTransport`
+  converts its spans, builds the two closures and calls `LagrangianPDEProblem` in the same way,
+  about twenty lines four times. One shared constructor taking the three exact functions would
+  remove about sixty lines. Recorded rather than done, because the shared form has to be chosen
+  against the boundary interface that the slab core defines.
 - kind: defect
 - found: 2026-10-26
 
@@ -55,8 +55,9 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - location: `src/problems/lagrangian_density.jl`
 - evidence: the wave density has no `u` term, so `build_function` returns the literal `0`:
   `derivatives(Wave.density(), 0.3, 0.7, -0.2).u` is `0 :: Int64` where the other two derivatives
-  have the element type of the arguments, and the kept test asserts the type of `.v` only. A density with a mass
-  term returns `Float64`, so the clause holds wherever `∂L/∂u` is not identically zero.
+  have the element type of the arguments, and the kept test asserts the type of `.v` only. A
+  density with a mass term returns `Float64`, so the clause holds wherever `∂L/∂u` is not
+  identically zero.
 - kind: defect
 - found: 2026-10-26
 
@@ -71,3 +72,16 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   design question for the part that integrates the symbolic and network families.
 - kind: defect
 - found: 2026-10-26
+
+### K17 · `integrate` does not catch a failed nonlinear solve.
+
+- location: `src/core/integrate.jl`
+- evidence: the ecosystem's `integrate!` (GeometricIntegratorsBase 0.6.10, `src/integrate.jl`)
+  catches `NonlinearSolverException`, warns, and returns the solution computed so far; the
+  package's `integrate` stops on a NaN the same way but lets the exception propagate, so a caller
+  loses the steps already taken. The exception is owned by SimpleSolvers, which is not a dependency
+  and which GeometricIntegratorsBase does not export. Deferred until the first integrator family
+  returns, because no method of this package solves a nonlinear system before then; the fix then
+  adds SimpleSolvers to `[deps]` and the `try`/`catch` of the ecosystem's loop.
+- kind: defect
+- found: PR #31
