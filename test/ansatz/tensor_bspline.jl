@@ -80,7 +80,7 @@ end
     end
 
     @testset "A1a the FEM equivalence at degree 1" for T in (Float64, Float32)
-        problem, method, result = wave_run(T; degree = 1, ncells = (1, 20), n = 2)
+        problem, _, result = wave_run(T; degree = 1, ncells = (1, 20), n = 2)
         grid, stencil = fem_stencil(problem; steps = 5)
         @test collect(grid) == collect(xgrid(problem))
         for n in 1:5
@@ -90,7 +90,7 @@ end
     end
 
     @testset "A1b the space-time spline equivalence" for T in (Float64, Float32)
-        problem, method, result = wave_run(T; n = 5)
+        _, _, result = wave_run(T; n = 5)
         reference = WAVE_SPACETIME_SPLINE_WAVE.u
         @test datatype(result.solution) === T
         for n in 1:5
@@ -100,7 +100,7 @@ end
     end
 
     @testset "A1c the full-restriction reference" for T in (Float64, Float32)
-        problem, method, result = wave_run(T; n = 3)
+        _, _, result = wave_run(T; n = 3)
         reference = WAVE_GALERKIN_FULL_RESTRICTION_BSPLINE.u
         for n in 1:5
             @test maximum(abs.(result.solution.u[n] .- reference[n, :])) ≤
@@ -143,7 +143,7 @@ end
         function errors(; degree)
             e = T[]
             for h in (T(0.1), T(0.05), T(0.025))
-                problem, method, result = wave_run(T; degree = degree,
+                problem, _, result = wave_run(T; degree = degree,
                     ncells = (2, round(Int, 1 / h)), n = degree + 1, timestep = h,
                     xstep = T(0.025), timespan = (zero(T), one(T)))
                 grid = collect(xgrid(problem))

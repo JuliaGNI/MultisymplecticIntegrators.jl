@@ -76,7 +76,7 @@ end
 
 @testset "Coefficient restriction" begin
     @testset "A1c the full-restriction reference" for T in (Float64, Float32)
-        problem, method, int, result = slab_run(T)
+        _, _, _, result = slab_run(T)
         reference = WAVE_GALERKIN_FULL_RESTRICTION_BSPLINE.u
         for n in 1:5
             @test maximum(abs.(result.solution.u[n] .- reference[n, :])) ≤

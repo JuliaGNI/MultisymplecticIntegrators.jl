@@ -142,10 +142,12 @@ makes it worth keeping.
   oracle, `test/helpers/reference_values.jl`, which part C's test-tree commit had removed, is back
   in the tree byte for byte from `ed13663` (K18), and the three new tests read it.
 - **`integrate` returns `(; solution, traces)`.** The solution on the output grid, and per step the
-  top trace at the nodes of the space quadrature, where the energy diagnostics integrate it. A step
-  whose state holds a NaN ends the run with a warning: `traces` ends at that step, and the solution
-  holds the NaN there. `SpaceTimeAnsatz` defaults to `NoExtrapolation()`, so the history states of
-  the solution step hold the initial data.
+  top trace at the nodes of the space quadrature, where the energy diagnostics integrate it. Every
+  call starts a new run: the method's cache is reset first, so the first slab takes the problem's
+  initial data and the steps a method records belong to that run alone. A step whose state holds a
+  NaN ends the run with a warning: `traces` ends at that step, and the solution holds the NaN
+  there. `SpaceTimeAnsatz` defaults to `NoExtrapolation()`, so the history states of the solution
+  step hold the initial data.
 - **The suite is the standard layout**: `core` testsets for the problem layer, the quadrature and
   the shell, `Aqua.test_all` with no `broken` mark, and `test_explicit_imports`. This closes the
   known issues K1 (the broken marks), K2 (the stale bounds), K3 (`Plots` and the GUI packages in

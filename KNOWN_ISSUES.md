@@ -97,3 +97,16 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `@safetestset`.
 - kind: defect
 - found: 2026-10-27
+
+### K19 · The coupled density's derivatives allocate at every quadrature point.
+
+- location: `src/problems/wave.jl`
+- evidence: `derivatives(::VectorWave.VectorDensity, …)` builds three heap vectors and an array of
+  named tuples per point, so the slab core's `residual!` on a `D = 2` problem allocates 184 320 B
+  per call — 360 quadrature points at 512 B each — where the scalar path allocates 0. Measured by
+  the slab core's pre-pull-request verification pass as the minimum of `@allocated` over 20 warm
+  calls in a fresh process under `--check-bounds=auto`; `derivatives(vd, u, v, w, params)` alone
+  allocates 1056 B and is unchanged when given `view` arguments. No clause of the part binds this
+  path, and the fix belongs in `src/problems/wave.jl`.
+- kind: defect
+- found: 2026-10-27

@@ -6,8 +6,10 @@ using Test
 # other than the owner of the name, and on a qualified access to a name its owner does not declare
 # public. `no_implicit_imports` is off so that the guard has one form in every package of the
 # stack; the check of the explicit imports' public-ness is off because the package builds its
-# solution step with `solutionstep`, which `GeometricIntegratorsBase` does not mark `public` and has
-# no public equivalent for.
+# solution step and its slab core on names that `GeometricIntegratorsBase` and `SimpleSolvers` do not
+# mark `public` and give no public equivalent of: `solutionstep`, `CacheType`, `IntegratorCache`,
+# `initial_guess!`, `residual!`, `solver` and `solverstate` from the first, and `initial_residual`
+# and `method` from the second.
 test_explicit_imports(
     MultisymplecticIntegrators;
     no_implicit_imports = false,
