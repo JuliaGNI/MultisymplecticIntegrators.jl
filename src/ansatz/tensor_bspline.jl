@@ -89,8 +89,8 @@ function _coordinate_type(xspan)
     return T
 end
 
-# The smallest Gauss rule that integrates the product of two basis functions of degree ``p`` and
-# of their first derivatives exactly, which is degree ``2p`` and ``2p - 2`` respectively.
+# The smallest Gauss rule that integrates the product of two basis functions of degree `p` and
+# of their first derivatives exactly, which is degree `2p` and `2p - 2` respectively.
 _default_quadrature_order(p::Integer) = max(cld(2p + 1, 2), 1)
 
 """The tensor B-spline basis of the ansatz, on `[0, 1] × xspan`."""

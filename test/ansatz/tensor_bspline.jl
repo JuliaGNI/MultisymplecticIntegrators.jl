@@ -241,7 +241,8 @@ end
         c = cache(GeometricIntegrator(problem, method))
         assert_no_upcast(c.coeffs, T)
         assert_no_upcast(c.bottom, T)
-        # the run agrees with the exact solution to the tolerance of its own precision
+        # the run meets the exact solution on the output grid to a discretisation bound, which is
+        # the same number in both precisions and not an `eps` multiple
         grid = collect(xgrid(problem))
         exact = [Wave.exact_u(T(0.25), x) for x in grid]
         @test maximum(abs.(result.solution.u[end] .- exact)) ≤ T(2.0e-3)

@@ -26,9 +26,9 @@ tolerance(::Type{T}) where {T} = 16 * eps(T)
 """
     newton_tolerance(::Type{T}, options)
 
-The Newton tolerance of a `§A` reference entry — the `f_abstol` field of the oracle's
+The Newton tolerance of a §A reference entry — the `f_abstol` field of the oracle's
 `SOLVER_OPTIONS` — carried to the working precision as the same number of `eps(T)`. The value is
-read from the `options` the caller passes, so no copy of it stands here.
+read from the `options` the caller passes.
 """
 newton_tolerance(::Type{T}, options) where {T} = T(options.f_abstol / eps(Float64)) * eps(T)
 

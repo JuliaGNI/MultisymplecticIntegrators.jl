@@ -140,8 +140,7 @@ makes it worth keeping.
   ansatz, the coefficient restriction and the initial guess — join the `core` group, with
   `test/helpers/fem_stencil.jl`, an independent FEM stencil oracle for the assembly. The §A
   oracle, `test/helpers/reference_values.jl`, which part C's test-tree commit had removed, is back
-  in the tree byte for byte from `ed13663` (K18), and the ansatz and coupling tests compare
-  against it.
+  in the tree byte for byte from `ed13663` (K18), and the three new tests read it.
 - **`integrate` returns `(; solution, traces)`.** The solution on the output grid, and per step the
   top trace at the nodes of the space quadrature, where the energy diagnostics integrate it. A step
   whose state holds a NaN ends the run with a warning: `traces` ends at that step, and the solution
