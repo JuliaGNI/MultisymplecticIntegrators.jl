@@ -222,6 +222,11 @@ end
             exact = [SineGordon.exact_u(n * T(0.05), x, problem.params) for x in grid]
             @test maximum(abs.(result.solution.u[n][3:(end - 2)] .-
                                exact[3:(end - 2)])) ≤ T(0.01)
+            # the free boundary's error travels inward from both ends at 1/√c, so by the last
+            # step it has not reached x ∈ [0.3, 0.7]: over the indices 7:end-6 the solution
+            # must meet the tighter bound
+            @test maximum(abs.(result.solution.u[n][7:(end - 6)] .-
+                               exact[7:(end - 6)])) ≤ T(1e-3)
         end
     end
 
