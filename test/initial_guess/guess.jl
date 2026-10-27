@@ -28,13 +28,12 @@ function guess_run(::Type{T}, guess; timestep = T(0.05), xstep = T(0.05),
 end
 
 @testset "Initial guess" begin
-    @testset "A4a every option converges to the same solution" begin
-        T = Float64
-        newton_tolerance = T(8) * eps(T)
+    @testset "A4a every option converges to the same solution" for T in (Float64, Float32)
+        newton_tolerance = T(SOLVER_OPTIONS.f_abstol / eps(Float64)) * eps(T)
         options = [Continuation(), FitTo(InitialCondition()), FitTo(PreviousSlab()),
             FitTo(ExactSolution()),
             FitTo(TargetFunction((t, x, p) -> Wave.exact_u(t, x, p)))]
-        solutions = Vector{Vector{Float64}}()
+        solutions = Vector{Vector{T}}()
         for option in options
             int, result = guess_run(T, option)
             c = cache(int)
@@ -99,16 +98,36 @@ end
         @test_throws ArgumentError GeometricIntegrator(without_exact,
             SpaceTimeGalerkin(ansatz, CoefficientRestriction();
                 initial_guess = FitTo(ExactSolution())))
-        @test_throws ArgumentError GeometricIntegrator(plain,
-            SpaceTimeGalerkin(NonlinearFixtureAnsatz(), CoefficientRestriction();
-                initial_guess = FitTo(InitialCondition())))
+        # the projection's refusal names the reason: an ansatz that is not linear in its
+        # coefficients. The fixture also makes the cache refuse its ansatz, so an assertion on the
+        # type alone would pass on the cache's own `ArgumentError`.
+        nonlinear = SpaceTimeGalerkin(NonlinearFixtureAnsatz(), CoefficientRestriction();
+            initial_guess = FitTo(InitialCondition()))
+        @test_throws "Projection() needs an ansatz that is linear in its coefficients" GeometricIntegrator(
+            plain, nonlinear)
+        # the control: a guess that is no projection passes the same check
+        @test M.check_method(plain,
+            SpaceTimeGalerkin(NonlinearFixtureAnsatz(), CoefficientRestriction())) ===
+              nothing
         # a target that returns another element type gives the problem's element type
         small = Float32
         int, result = guess_run(small,
-            FitTo(TargetFunction((t, x, p) -> Wave.exact_u(t, x, p)));
+            FitTo(TargetFunction((t, x, p) -> Float64(Wave.exact_u(Float64(t), Float64(x), p))));
             timestep = small(0.05), xstep = small(0.05))
         @test eltype(cache(int).x) === small
         assert_no_upcast(cache(int).coeffs, small)
         assert_no_upcast(result.solution.u, small)
+        # a target is evaluated in physical time: the step that ends at `t = 0.1` starts at
+        # `t = 0.05`, so the sample of `f(t, x) = t` is `0.05 + 0.05 t̂`
+        c = cache(GeometricIntegrator(plain,
+            SpaceTimeGalerkin(ansatz, CoefficientRestriction())))
+        qt, qx = M.nquadrature(c.tabulation.time), M.nquadrature(c.tabulation.space)
+        sample = Array{T, 3}(undef, qt, qx, 1)
+        M.target_values!(sample, (t, x, p) -> t, c.tabulation, ansatz, plain, (t = T(0.1),))
+        for q in 1:qt, r in 1:qx
+
+            @test abs(sample[q, r, 1] - (T(0.05) + T(0.05) * c.tabulation.time.node[q])) ≤
+                  tolerance(T)
+        end
     end
 end

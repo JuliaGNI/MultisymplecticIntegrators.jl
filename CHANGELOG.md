@@ -29,9 +29,10 @@ makes it worth keeping.
   `SymbolicNeuralNetworks`, `Zygote`, `LinearAlgebra`, `Random` and `Statistics`. The package has
   no `[weakdeps]` and no `[extensions]`. Every `[compat]` entry is a patch-level floor
   (`GeometricBase = "0.15.0"`, `GeometricEquations = "0.21.5"`, `GeometricIntegratorsBase = "0.6.9"`,
-  `GeometricSolutions = "0.6.6"`, `QuadratureRules = "0.2.2"`, `SimpleSolvers = "0.14.1"`,
-  `SimpleSplines = "0.3.1"`), except `Symbolics = "7"` and `SparseArrays = "1"`, which name the
-  majors.
+  `GeometricSolutions = "0.6.6"`, `QuadratureRules = "0.2.2"`, `SimpleSplines = "0.3.1"`,
+  `SimpleSolvers = "0.14.1"`, `Symbolics = "7.18.1"`), except `SparseArrays = "1"`, which names the
+  major. `SimpleSplines` requires `DomainSets = "0.8"`, which `Symbolics` accepts only from `7.18.1`,
+  so the `Symbolics` floor is that patch rather than the major.
 - **The package is renamed `MultiSymplectic` → `MultisymplecticIntegrators`.** The repository moved
   from `ZeyuanLee/MultiSymplectic.jl` to `JuliaGNI/MultisymplecticIntegrators.jl`, and the package
   name, the module and `src/MultisymplecticIntegrators.jl` follow it. The UUID is unchanged, as the

@@ -13,6 +13,10 @@ include("../helpers/reference_values.jl")
 
 const M = MultisymplecticIntegrators
 
+# `SOLVER_OPTIONS.f_abstol` of the reference entries is `8 eps(Float64)`; the same tolerance in the
+# working precision is that many `eps(T)`.
+newton_tolerance(::Type{T}) where {T} = T(SOLVER_OPTIONS.f_abstol / eps(Float64)) * eps(T)
+
 function wave_run(::Type{T}; degree = 2, ncells = (2, 20), n = 3, timestep = T(0.05),
         xstep = T(0.05), timespan = (zero(T), T(0.25)), guess = Continuation()) where {T}
     problem = Wave.problem(T = T, timespan = timespan, timestep = timestep, xstep = xstep)
@@ -75,29 +79,26 @@ end
         end
     end
 
-    @testset "A1b the space-time spline equivalence" begin
-        T = Float64
+    @testset "A1b the space-time spline equivalence" for T in (Float64, Float32)
         problem, method, result = wave_run(T; n = 5)
         reference = WAVE_SPACETIME_SPLINE_WAVE.u
+        @test datatype(result.solution) === T
         for n in 1:5
             @test maximum(abs.(result.solution.u[n] .- reference[n, :])) ≤
-                  T(1.0e-12) * maximum(abs, reference[n, :])
+                  T(4500) * eps(T) * maximum(abs, reference[n, :])
         end
     end
 
-    @testset "A1c the full-restriction reference" begin
-        T = Float64
+    @testset "A1c the full-restriction reference" for T in (Float64, Float32)
         problem, method, result = wave_run(T; n = 3)
         reference = WAVE_GALERKIN_FULL_RESTRICTION_BSPLINE.u
-        newton_tolerance = T(8) * eps(T)   # the f_abstol of the entry's SOLVER_OPTIONS
         for n in 1:5
             @test maximum(abs.(result.solution.u[n] .- reference[n, :])) ≤
-                  T(100) * newton_tolerance
+                  T(100) * newton_tolerance(T)
         end
     end
 
-    @testset "A1d the CFL-1 exactness" begin
-        T = Float64
+    @testset "A1d the CFL-1 exactness" for T in (Float64, Float32)
         # A zero initial velocity removes the load startup, whose O(h²) velocity defect is the
         # whole error at CFL 1: the bilinear element is d'Alembert's shift there, so this run is
         # exact to roundoff.
@@ -112,7 +113,7 @@ end
             result = integrate(problem, SpaceTimeGalerkin(ansatz, CoefficientRestriction()))
             grid = collect(xgrid(problem))
             exact = [Wave.exact_u(t, x, rest) for x in grid]
-            @test maximum(abs.(result.solution.u[end] .- exact)) ≤ T(1.0e-11)
+            @test maximum(abs.(result.solution.u[end] .- exact)) ≤ T(45_000) * eps(T)
         end
         # at the default parameters the same setting is the FEM stencil of the same settings
         problem, _, result = wave_run(T; degree = 1, ncells = (1, 40), n = 2,
@@ -127,29 +128,37 @@ end
 
     @testset "A1e the observed order" begin
         T = Float64
-        errors = Float64[]
-        for h in (T(0.1), T(0.05), T(0.025))
-            cells = (round(Int, 1 / h), round(Int, 1 / h))
-            problem, method, result = wave_run(T; degree = 2, ncells = cells, n = 3,
-                timestep = h, xstep = T(0.025), timespan = (zero(T), one(T)))
-            grid = collect(xgrid(problem))
-            push!(errors, maximum(abs.(result.solution.u[end] .-
-                                       [Wave.exact_u(one(T), x) for x in grid])))
+        # The entry's own cells: `t_knot_interval = 0.5` on `timespan = (0, 1)` is two time cells,
+        # and its `x_knot_interval = h` refines the space direction alone.
+        function errors(; degree)
+            e = T[]
+            for h in (T(0.1), T(0.05), T(0.025))
+                problem, method, result = wave_run(T; degree = degree,
+                    ncells = (2, round(Int, 1 / h)), n = degree + 1, timestep = h,
+                    xstep = T(0.025), timespan = (zero(T), one(T)))
+                grid = collect(xgrid(problem))
+                push!(e, maximum(abs.(result.solution.u[end] .-
+                                      [Wave.exact_u(one(T), x) for x in grid])))
+            end
+            return e
         end
-        orders = [log(errors[i] / errors[i + 1]) / log(2) for i in 1:2]
+        orders(e) = [log(e[i] / e[i + 1]) / log(2) for i in 1:2]
         reference = WAVE_FULL_RESTRICTION_ORDER.observed_order
+        observed = orders(errors(degree = 2))
         for i in 1:2
-            @test abs(orders[i] - reference[i]) ≤ 0.1
+            @test abs(observed[i] - reference[i]) ≤ 0.1
         end
-        @test orders[end] ≥ 1.9
+        # degree 1 on the same three space resolutions, where the clause asks for at least 1.9
+        for order in orders(errors(degree = 1))
+            @test order ≥ T(1.9)
+        end
     end
 
-    @testset "A1f the discrete energy of 200 steps" begin
-        T = Float64
+    @testset "A1f the discrete energy of 200 steps" for T in (Float64, Float32)
         problem, _, result = wave_run(T; degree = 1, ncells = (1, 20), n = 2,
             timestep = T(0.05), xstep = T(0.05), timespan = (zero(T), T(10)))
         M, K = fem_matrices(problem)
-        h, c = problem.timestep, problem.params.c
+        h, c = convert(T, problem.timestep), convert(T, problem.params.c)
         function energy(a, b)
             δ = b .- a
             return dot(δ, M * δ) / (2 * h^2) +
@@ -158,21 +167,28 @@ end
         u = [collect(step) for step in result.solution.u]
         @test length(u) == 201
         energies = [energy(u[n], u[n + 1]) for n in 0:199]
-        @test maximum(abs.(energies .- energies[1])) / abs(energies[1]) < T(1.0e-10)
+        @test eltype(energies) === T
+        @test maximum(abs.(energies .- energies[1])) / abs(energies[1]) <
+              T(450_000) * eps(T)
     end
 
-    @testset "A1g the residual allocates nothing and infers" begin
-        T = Float64
+    @testset "A1g the residual allocates nothing and infers" for T in (Float64, Float32)
         problem, method, _ = wave_run(T; ncells = (1, 20), n = 3)
         int = GeometricIntegrator(problem, method)
         c = cache(int)
         b = similar(c.x)
         x = copy(c.x)
-        M.residual!(b, x, nothing, parameters(problem), int)
-        allocation(b, x, p, int) = @allocated M.residual!(b, x, nothing, p, int)
         p = parameters(problem)
-        @test allocation(b, x, p, int) == 0
-        @test @inferred(cache(int, Float64)) === c
+        residual(y) = M.residual!(b, y, nothing, p, int)
+        allocations(f::F, a::A) where {F, A} = (f(a); @allocated f(a))
+        # the helper sees an allocation, so a zero below is the residual's and not the helper's
+        @test allocations(collect, x) > 0
+        # the clause's domain is `--check-bounds=auto`; `Pkg.test()` runs the floor under
+        # `--check-bounds=yes`, so the count is asserted under the clause's flag only
+        if Base.JLOptions().check_bounds != 1
+            @test allocations(residual, x) == 0
+        end
+        @test @inferred(cache(int, T)) === c
     end
 
     @testset "A6a the two precisions and the element type" for T in (Float64, Float32)

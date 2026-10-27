@@ -119,7 +119,6 @@ initial residual `r₀ = ‖F(x₀)‖₂`.
 struct SpaceTimeGalerkinCache{ST, T} <: IntegratorCache{ST}
     x::Vector{ST}
     coeffs::Array{ST, 3}
-    previous::Array{ST, 3}
     residual::Array{ST, 3}
     u::Array{ST, 3}
     v::Array{ST, 3}
@@ -161,7 +160,6 @@ function Cache{ST}(problem::LagrangianPDEProblem,
     return SpaceTimeGalerkinCache{ST, T}(
         zeros(ST, free),
         coeffs,
-        similar(coeffs),
         similar(coeffs),
         zeros(ST, qt, qx, D),
         zeros(ST, qt, qx, D),
@@ -280,7 +278,6 @@ function update!(sol, params, x::AbstractVector{ST},
     trace!(c, a, nx, D, h)
     slab_weak_form!(c, p, m)
     c.flux .= view(c.residual, nt, :, :)
-    c.previous .= c.coeffs
     c.steps[] += 1
     return nothing
 end

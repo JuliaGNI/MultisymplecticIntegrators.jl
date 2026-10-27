@@ -97,3 +97,103 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `@safetestset`.
 - kind: defect
 - found: 2026-10-27
+
+### K19 · `output_grid` raises `InexactError` for a zero or non-finite `xstep`.
+
+- location: `src/ansatz/tensor_bspline.jl:138`
+- evidence: `output_grid` scales `round(Int, Δx / xstep)` before its `n ≥ 2` guard, so
+  `output_grid(ansatz, 0.0)` raises `InexactError: Int64(Inf)` and `output_grid(ansatz, NaN)`
+  raises `InexactError: Int64(NaN)`; a step of `2.0` on `xspan = (0, 1)` does reach the guard and
+  raises `ArgumentError`. A finiteness and sign check before the division would name the fault.
+- kind: defect
+- found: 2026-10-27
+
+### K20 · The slab core does not compare the ansatz's `xspan` with the problem's.
+
+- location: `src/core/slab_integrator.jl:143`
+- evidence: `Cache{ST}(problem, method)` reads the space interval from the ansatz and the output
+  grid from the problem, `SlabEvaluation(a, xgrid(problem), …)`, and checks neither against the
+  other, so an ansatz on another interval than the problem's integrates without a word. §Audit 2.4
+  records the same mixture of two `xspan` sources on the old stack.
+- kind: defect
+- found: 2026-10-27
+
+### K21 · A `Float32` problem with a `Float64` ansatz is not refused.
+
+- location: `src/core/slab_integrator.jl:184`
+- evidence: `CacheType` dispatches on a problem and an ansatz of the same element type, but
+  `Cache{ST}` itself takes any pair, so a `Float32` problem with a `Float64` ansatz builds a cache
+  whose tabulation is `Float64` and whose coefficients are `Float32`. No clause names the mixed
+  case and no test reaches it.
+- kind: defect
+- found: 2026-10-27
+
+### K22 · The ansatz accepts a degree-0 basis.
+
+- location: `src/ansatz/tensor_bspline.jl:46`
+- evidence: `TensorBSplineAnsatz(degree = 0, ncells = (2, 20), xspan = (0, 1))` builds an ansatz
+  with two time functions, eighteen space functions and eighteen free coefficients, so the
+  piecewise-constant basis runs without a refusal. The slab core takes the gradient `∂ₓu` from the
+  same space basis, which a degree-0 basis does not carry, and no check or test names the lowest
+  degree the core is written for.
+- kind: defect
+- found: 2026-10-27
+
+### K23 · Three exported names are called nowhere.
+
+- location: `src/initial_guess/fit_methods.jl:26`, `src/ansatz/tensor_bspline.jl:120`,
+  `src/core/slab_integrator.jl:394`
+- evidence: `default_fit`, `space_quadrature_weights` and `total_free_coefficients` are exported
+  and no test or source file calls them; `grep -rn 'default_fit\|space_quadrature_weights\|
+  total_free_coefficients' src test` finds their definitions, their docstrings and the module's
+  `export` and `import` lines, and no call.
+  `default_fit(ansatz)` is the extension point §Guess names for the later families, and the other
+  two are the accessors those families need, so they stay until their callers land.
+- kind: dead code
+- found: 2026-10-27
+
+### K24 · The ansatz holds its boundary condition in an abstract field, and the cache boxes its step.
+
+- location: `src/ansatz/tensor_bspline.jl:41`, `src/core/slab_integrator.jl:138`
+- evidence: `TensorBSplineAnsatz.x_boundary::BoundaryCondition` is an abstract field, so the
+  ansatz is not concrete over the condition it was built with and the reads of the field — at
+  construction and in `show` — dispatch on its runtime type; its accessor `x_boundary(ansatz)` has
+  no caller. The cache's `steps::Ref{Int}` is a box that `slab_bottom!` reads and `update!` writes
+  on every step, through a pointer rather than a field.
+  A type parameter for the condition and a plain `Int` for the counter would remove both; the
+  counter reaches into the `CacheType` signature that the part adding the multiplier blocks
+  extends.
+- kind: defect
+- found: 2026-10-27
+
+### K25 · No test integrates a `SineGordon` problem with the slab core.
+
+- location: `test/ansatz/tensor_bspline.jl`
+- evidence: the requirement of the slab core names `Wave` and a `SineGordon` problem, and the
+  three new test files integrate `Wave`, `VectorWave` and the coupled vector density only;
+  `grep -rn SineGordon test/ansatz test/couplings test/initial_guess` finds nothing, and the §A
+  entry `SINE_GORDON_GALERKIN_BSPLINE` is read by no test.
+- kind: missing test
+- found: 2026-10-27
+
+### K26 · `assign!` and `trace!` repeat their loop, and so do the two `momentum_load!` methods.
+
+- location: `src/core/slab_integrator.jl:286`, `src/core/slab_integrator.jl:315`,
+  `src/couplings/coefficient_restriction.jl:69`
+- evidence: `assign!` and `trace!` differ only in the evaluation table they multiply the top row
+  with, and each repeats the same loop over the components, the space functions and the nodes; the
+  two `momentum_load!` methods iterate the same quadrature grid for a scalar density and for a
+  coupled one. The first pair is one function taking the table; the second is the two-density
+  protocol of `density_derivatives!`, which is already written that way.
+- kind: defect
+- found: 2026-10-27
+
+### K27 · `test/Project.toml` lists `LinearAlgebra` beyond the part's collision row.
+
+- location: `test/Project.toml:8`
+- evidence: the collision row of this part allows the line for `SimpleSplines` alone, and the
+  branch adds `LinearAlgebra` as well, which the ansatz test's energy diagnostic needs for `dot`;
+  the file holds no `[compat]` entry for `SimpleSplines`, where the package's own project bounds it
+  at `0.3.1`.
+- kind: defect
+- found: 2026-10-27

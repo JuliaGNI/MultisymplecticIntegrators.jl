@@ -1,6 +1,7 @@
 using GeometricBase
 using GeometricIntegratorsBase
 using GeometricSolutions
+using LinearAlgebra
 using MultisymplecticIntegrators
 using Test
 
@@ -11,6 +12,10 @@ include("../helpers/testsetup.jl")
 include("../helpers/reference_values.jl")
 
 const M = MultisymplecticIntegrators
+
+# `SOLVER_OPTIONS.f_abstol` of the reference entries is `8 eps(Float64)`; the same tolerance in the
+# working precision is that many `eps(T)`.
+newton_tolerance(::Type{T}) where {T} = T(SOLVER_OPTIONS.f_abstol / eps(Float64)) * eps(T)
 
 function slab_run(::Type{T}; degree = 2, ncells = (2, 20), n = 3, guess = Continuation(),
         problem = Wave.problem(T = T, timespan = (zero(T), T(0.25)), timestep = T(0.05),
@@ -75,18 +80,16 @@ function slab_momentum(problem, method)
 end
 
 @testset "Coefficient restriction" begin
-    @testset "A1c the full-restriction reference" begin
-        T = Float64
+    @testset "A1c the full-restriction reference" for T in (Float64, Float32)
         problem, method, int, result = slab_run(T)
         reference = WAVE_GALERKIN_FULL_RESTRICTION_BSPLINE.u
         for n in 1:5
             @test maximum(abs.(result.solution.u[n] .- reference[n, :])) ≤
-                  T(100) * T(8) * eps(T)
+                  T(100) * newton_tolerance(T)
         end
     end
 
-    @testset "A3a the coupling carries the top trace across a step" begin
-        T = Float64
+    @testset "A3a the coupling carries the top trace across a step" for T in (Float64, Float32)
         problem, method, int, result = slab_run(T)
         c = cache(int)
         @test length(c.iterations) == 5
@@ -95,12 +98,29 @@ end
         reference = WAVE_GALERKIN_FULL_RESTRICTION_BSPLINE.u
         for n in 1:5
             @test maximum(abs.(result.solution.u[n] .- reference[n, :])) ≤
-                  T(100) * T(8) * eps(T)
+                  T(100) * newton_tolerance(T)
         end
-        # the top trace of a slab is the bottom datum of the next one
-        @test c.flux == c.residual[size(c.residual, 1), :, :]
         @test result.traces[end].u == vec(c.trace_u)
         @test length(result.traces) == 5
+        # the top row of a one-step run is the bottom datum of the second step
+        _, _, one_int, _ = slab_run(T;
+            problem = Wave.problem(T = T,
+                timespan = (zero(T), T(0.05)), timestep = T(0.05), xstep = T(0.05)))
+        _, _, two_int, _ = slab_run(T;
+            problem = Wave.problem(T = T,
+                timespan = (zero(T), T(0.1)), timestep = T(0.05), xstep = T(0.05)))
+        @test cache(two_int).bottom == cache(one_int).top
+        # the recorded residual of the last step is `‖F(x)‖₂` at its final iterate, under the datum
+        # and the momentum load that step started from: the load is the top row of a four-step run
+        four = GeometricIntegrator(
+            Wave.problem(T = T, timespan = (zero(T), T(0.2)),
+                timestep = T(0.05), xstep = T(0.05)),
+            method)
+        integrate(four)
+        c.flux .= cache(four).flux
+        b = similar(c.x)
+        M.residual!(b, c.x, nothing, parameters(problem), int)
+        @test abs(norm(b) - c.residuals[end]) ≤ T(100) * eps(T) * norm(b)
     end
 
     @testset "S3a the problem layer takes a vector density" for T in (Float64, Float32)
@@ -108,6 +128,18 @@ end
         @test problem isa LagrangianPDEProblem
         @test components(problem) == 2
         @test problem.density isa VectorWave.VectorDensity
+        # a density with a `params` field of its own gives the problem its parameters when the
+        # keyword is absent; the `VectorDensity` above has none and takes them from the keyword
+        template = VectorWave.problem(T = T, timespan = (zero(T), T(0.25)),
+            timestep = T(0.05), xstep = T(0.05))
+        density = Wave.density()
+        inherited = LagrangianPDEProblem(density; D = 2,
+            ics_function = (x, p) -> (u = zeros(T, 2 * length(x)),
+                v = zeros(T, 2 * length(x)), w = zeros(T, 2 * length(x))),
+            bcs_function = template.bcs_function,
+            timespan = template.timespan, timestep = template.timestep,
+            xspan = template.xspan, xstep = template.xstep)
+        @test parameters(inherited) === density.params
     end
 
     @testset "S3b the vector density's derivatives carry the quartic term" for T in (Float64, Float32)

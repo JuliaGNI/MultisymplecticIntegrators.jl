@@ -22,7 +22,8 @@ a coupling's business.
 
 `n` is the number of Gauss–Legendre nodes per cell in each direction, again a number or a
 `(time, space)` tuple; the default integrates the products of the basis functions and of their first
-derivatives exactly, which is `cld(3p, 2)` nodes for degree `p`.
+derivatives exactly, which is `p + 1` nodes for degree `p`, the count the products of the basis
+functions need.
 
 The ansatz counts the **degree**, which is what `SimpleSplines` takes; a basis of order `k` is one of
 degree `k - 1`.
@@ -128,9 +129,8 @@ The grid the ansatz reports its solution on: `xspan` in `n` equally spaced point
 `n = round(Int, Δx / xstep) + 1`.
 
 A `xstep` that does not divide `xspan` therefore still ends on the end of the span, and the grid is
-built as a `range` rather than as a stepped `:` — a stepped range would stop short of the end, and
-the integer division that used to size it raises `InexactError` for a quotient that is not an
-integer.
+built as a `range` rather than as a stepped `:`, which stops short of the end when the step does not
+divide the span. A `xstep` that leaves fewer than two points raises `ArgumentError`.
 """
 function output_grid(ansatz::TensorBSplineAnsatz, xstep)
     T = eltype(ansatz.xspan)

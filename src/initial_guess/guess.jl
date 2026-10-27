@@ -53,7 +53,7 @@ struct TargetFunction{F} <: SlabInitialGuess
 end
 
 """
-    FitTo(target; method = default_fit(ansatz)) <: SlabInitialGuess
+    FitTo(target; method = Projection()) <: SlabInitialGuess
 
 Fit the ansatz to `target` on the slab, with the fit method `method`.
 
