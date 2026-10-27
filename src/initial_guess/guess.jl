@@ -23,9 +23,9 @@ struct InitialCondition <: SlabInitialGuess end
 The previous slab's solution, extrapolated in time beyond the top of that slab.
 
 For the B-spline ansatz the extrapolation is the polynomial piece of the slab's top time cell,
-evaluated at `1 + t̂`: a spline is a polynomial on each cell, so that piece extends the solution
-without inventing anything. At the first slab, where there is no previous solution, the target
-falls back to `InitialCondition()`.
+expanded about its top and evaluated at the displacement `t̂` beyond it: a spline is a polynomial on
+each cell, so that piece extends the solution without inventing anything. At the first slab, where
+there is no previous solution, the target falls back to `InitialCondition()`.
 """
 struct PreviousSlab <: SlabInitialGuess end
 
@@ -166,7 +166,8 @@ function evaluate!(sample::AbstractArray{ST, 3}, ::PreviousSlab,
     t = c.tabulation.time
     x = c.tabulation.space
     for q in 1:nquadrature(t)
-        τ = t.node[q] + one(T)
+        # the displacement beyond the top of the previous slab, about which `deriv` expands
+        δ = t.node[q]
         for r in 1:nquadrature(x)
             for d in 1:D
                 value = zero(ST)
@@ -177,7 +178,7 @@ function evaluate!(sample::AbstractArray{ST, 3}, ::PreviousSlab,
                     factor = one(ST)
                     for k in 0:order
                         poly += deriv[j, d, k + 1] * factor
-                        factor *= τ / (k + 1)
+                        factor *= δ / (k + 1)
                     end
                     value += poly * x.value[r, l]
                 end

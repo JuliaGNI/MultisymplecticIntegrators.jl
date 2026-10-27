@@ -25,12 +25,13 @@ makes it worth keeping.
 - **`julia = "1.11"` is the floor**, and every dependency has a `[compat]` entry.
   The floor goes down from 1.12 to 1.11, and CI's `min` job resolves this bound. The dependency
   list drops `AbstractNeuralNetworks`, `BSplineKit`, `CompactBasisFunctions`, `ForwardDiff`,
-  `GeometricMachineLearning`, `IterTools`, `Parameters`, `Plots`, `SimpleSolvers`, `StaticArrays`,
+  `GeometricMachineLearning`, `IterTools`, `Parameters`, `Plots`, `StaticArrays`,
   `SymbolicNeuralNetworks`, `Zygote`, `LinearAlgebra`, `Random` and `Statistics`. The package has
   no `[weakdeps]` and no `[extensions]`. Every `[compat]` entry is a patch-level floor
   (`GeometricBase = "0.15.0"`, `GeometricEquations = "0.21.5"`, `GeometricIntegratorsBase = "0.6.9"`,
-  `GeometricSolutions = "0.6.6"`, `QuadratureRules = "0.2.2"`), except `Symbolics = "7"`, which
-  names the major.
+  `GeometricSolutions = "0.6.6"`, `QuadratureRules = "0.2.2"`, `SimpleSolvers = "0.14.1"`,
+  `SimpleSplines = "0.3.1"`), except `Symbolics = "7"` and `SparseArrays = "1"`, which name the
+  majors.
 - **The package is renamed `MultiSymplectic` → `MultisymplecticIntegrators`.** The repository moved
   from `ZeyuanLee/MultiSymplectic.jl` to `JuliaGNI/MultisymplecticIntegrators.jl`, and the package
   name, the module and `src/MultisymplecticIntegrators.jl` follow it. The UUID is unchanged, as the
@@ -100,6 +101,43 @@ makes it worth keeping.
   `vector_density(; params, D, m, β)` carries the coupling.
 - **`SpaceTimeQuadrature{T}`.** Composite Gauss–Legendre nodes and weights on given breakpoints, in
   `t̂ ∈ [0, 1]` and in `x`, with the four boundary point sets of a slab and the element type kept.
+- **The first integrator family returns: the space-time Galerkin slab core.**
+  `SpaceTimeGalerkin{A, C, G} <: SpaceTimeAnsatz` holds a tensor B-spline ansatz, a coupling of
+  consecutive slabs and an initial guess, and one step of it solves one slab.
+  `TensorBSplineAnsatz`, on `SimpleSplines`, is a clamped B-spline basis in `t̂ ∈ [0, 1]` and a
+  B-spline basis in `x`, each of given degree and cell count — a number for both directions or a
+  `(time, space)` tuple — and the space basis is recombined to a homogeneous `Dirichlet` value or
+  left `Free()`, the natural condition. A Gauss rule per cell integrates the products of the basis
+  functions and of their first derivatives exactly. It counts the degree, as `SimpleSplines` does,
+  not the order: a basis of order `k` is one of degree `k - 1`.
+  `CoefficientRestriction` makes the previous slab's top coefficient row the bottom datum of the
+  next slab, and reads the momentum flux off the row that slab already computed, so no flux is
+  re-integrated from a trace and the top of a slab is measured rather than imposed. The unknown of
+  a step is the coefficient array of the slab: the bottom row of the time direction is the
+  coupling's datum, and the other `Nt - 1` rows of each space function and component are
+  determined by the interior weak Euler–Lagrange form of `src/core/weak_form.jl`, tested against
+  the basis functions that vanish at the top. That is a nonlinear system of `(Nt - 1) * Nx * D`
+  equations, which the `SimpleSolvers` Newton solver solves; the cache keeps each step's iterate
+  count, its final residual `‖F(x)‖₂` and its initial residual `r₀ = ‖F(x₀)‖₂`, beside the top
+  trace at the nodes of the space quadrature. The initial-guess interface of `src/initial_guess/`
+  fills the solver's vector before a step: `Continuation()`, the default, carries the previous
+  slab's top row into every row of the new slab; `FitTo(target; method = Projection())` fits the
+  ansatz to `InitialCondition()`, to `PreviousSlab()` — the polynomial piece of the top time cell
+  expanded about its top, so a quadratic field continues as the same quadratic — to
+  `ExactSolution()` or to a `TargetFunction(f)`, and a user-defined target or fit method is one
+  method of `evaluate!` or `fit!`. Two refusals are `ArgumentError`s at construction:
+  `FitTo(ExactSolution())` on a problem with no exact solution, and `Projection()` on an ansatz
+  that is not linear in its coefficients. `LagrangianPDEProblem` takes any density with the density
+  protocol — a callable `L(u, v, w, params)` and a `derivatives` method — not a
+  `LagrangianDensity` alone, so the density built by `VectorWave.vector_density`, which couples the
+  components, reaches a problem; the problem's parameters default to the density's own `params`
+  field where it has one. `Project.toml` gains `SimpleSplines` (compat `0.3.1`), `SimpleSolvers`
+  (compat `0.14.1`) and `SparseArrays` (compat `1`). Three new test files — the tensor B-spline
+  ansatz, the coefficient restriction and the initial guess — join the `core` group, with
+  `test/helpers/fem_stencil.jl`, an independent FEM stencil oracle for the assembly. The §A
+  oracle, `test/helpers/reference_values.jl`, which part C's test-tree commit had removed, is back
+  in the tree byte for byte from `ed13663` (K18), and the ansatz and coupling tests compare
+  against it.
 - **`integrate` returns `(; solution, traces)`.** The solution on the output grid, and per step the
   top trace at the nodes of the space quadrature, where the energy diagnostics integrate it. A step
   whose state holds a NaN ends the run with a warning: `traces` ends at that step, and the solution
@@ -116,14 +154,16 @@ makes it worth keeping.
 - **A documentation build.** `docs/` holds `make.jl`, `Project.toml` and a two-page manual, so
   `Documenter` has something to build and the doctest job has an environment.
 - **`test/runtests.jl` runs each test file in its own `@safetestset`.** Empty `ARGS` runs the `core`
-  and `slow` groups. The `core` group holds eight files: the Aqua and explicit-imports quality
+  and `slow` groups. The `core` group holds eleven files: the Aqua and explicit-imports quality
   checks, the Lagrangian density and Lagrangian problem tests, the linear transport and vector wave
-  tests, the space-time quadrature test and the integrator shell test. `runtests.jl` has no `slow`
-  block, so the `slow` group runs no file yet.
+  tests, the space-time quadrature test, the integrator shell test, the tensor B-spline ansatz,
+  coefficient restriction and initial-guess tests. `runtests.jl` has no `slow` block, so the
+  `slow` group runs no file yet.
 - **Reference values of the integrators at `294f023`.** `scripts/reference_values.jl` runs every
   integrator family on short `Wave` and `SineGordon` cases and writes
   `test/helpers/reference_values.jl`. Two cases fail at `294f023`. The script does not run on this
-  tree, the file it writes is absent here, and no test includes it.
+  tree, the file it writes is back, restored byte for byte from `ed13663`, and the slab core's
+  three new tests include it.
 
 ### Changed
 

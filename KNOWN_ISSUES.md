@@ -79,10 +79,10 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - evidence: the ecosystem's `integrate!` (GeometricIntegratorsBase 0.6.10, `src/integrate.jl`)
   catches `NonlinearSolverException`, warns, and returns the solution computed so far; the
   package's `integrate` stops on a NaN the same way but lets the exception propagate, so a caller
-  loses the steps already taken. The exception is owned by SimpleSolvers, which is not a dependency
-  and which GeometricIntegratorsBase does not export. Deferred until the first integrator family
-  returns, because no method of this package solves a nonlinear system before then; the fix then
-  adds SimpleSolvers to `[deps]` and the `try`/`catch` of the ecosystem's loop.
+  loses the steps already taken. The exception is owned by SimpleSolvers, which
+  GeometricIntegratorsBase does not export. The slab core of `SpaceTimeGalerkin` is the first method
+  of this package that solves a nonlinear system, and it depends on SimpleSolvers, so the fix is the
+  `try`/`catch` of the ecosystem's loop and no dependency change.
 - kind: defect
 - found: PR #31
 
@@ -92,85 +92,8 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - evidence: part C's test-tree commit removed `test/helpers/reference_values.jl`, although C's spec
   does not list it, and the file is absent at `9d706ba`;
   `git show ed13663:test/helpers/reference_values.jl` returns the 93-line file with its twenty-five
-  `const` entries. The part that returns the slab core restored it byte for byte from `ed13663`, and
-  no test file includes it: it is the oracle the later parts read, not a testset.
-- kind: defect
-- found: 2026-10-27
-
-### K19 · The bilinear space-time element is not exact at CFL 1.
-
-- location: `src/ansatz/tensor_bspline.jl`, `test/ansatz/tensor_bspline.jl`
-- evidence: the §A entries `FEM_STENCIL_CFL1_T5` and `FEM_STENCIL_CFL1_T200` record an error of
-  4.2e-14 and 7.6e-13 against the exact solution at `h = 0.05`, `xstep = 0.025` and `c = 0.5`, and
-  the plan's clause 5 asks the degree-1 integrator to be exact there to `1e-11`. The element
-  `FEM_Multisymplectic_Integrator` closes over,
-  `M (u^{n+1} - 2u^n + u^{n-1}) = -(h^2 c^2/6) K (u^{n-1} + 4u^n + u^{n+1})`
-  (`src/integrator/FEM_Multisymplectic_int.jl` at `294f023`,
-  `lhs_full = mass_matrix / h^2 - c^2 * laplace_matrix / (6 * dx^2)`), is the degree-1 space-time
-  Galerkin of this package: its five steps of `Wave` at `h = 0.05` and `xstep = 0.025` differ from
-  the exact solution by 2.8e-5 at the first step and 1.4e-4 at the fifth, a phase error that grows
-  linearly. The test `A1d the CFL-1 exactness` holds the clause as a `@test_broken`.
-- kind: defect
-- found: 2026-10-27
-
-### K20 · A Newton solve of a linear problem takes one iteration from any guess.
-
-- location: `test/initial_guess/guess.jl`
-- evidence: the plan's clause 10 asks `Continuation()` to need fewer Newton iterations than
-  `FitTo(InitialCondition())` from the second step on, and the spec's scenario A4a repeats it. The
-  wave problem is linear in the coefficients, so one Newton step from any guess lands on the
-  solution: with `min_iterations = 1` every guess records the same count, and the strict inequality
-  cannot hold. The test records the counts of all five options, asserts that they agree, and holds
-  the strict comparison as a `@test_broken`.
-- kind: defect
-- found: 2026-10-27
-
-### K21 · `PreviousSlab()` is not distinguishable by an iteration count.
-
-- location: `src/initial_guess/guess.jl`
-- evidence: the plan's mutant MU6 expects a `PreviousSlab()` that copies the top row to converge
-  more slowly than `FitTo(InitialCondition())`, so that the iteration count of the third step
-  catches it. The wave problem is linear, so no guess changes the count (see K20) and the mutant
-  survives that assertion. The extrapolation is checked by its value instead: the test of the
-  initial-guess interface compares the coefficients the two targets fit, which differ.
-- kind: defect
-- found: 2026-10-27
-
-### K22 · The §A CFL-1 entries name a scheme that does not have their property.
-
-- location: `test/helpers/reference_values.jl`
-- evidence: `FEM_STENCIL_CFL1_T5` and `FEM_STENCIL_CFL1_T200` hold `stencil_error` and
-  `package_error` of the bilinear element, both at `1e-13`, whereas the bilinear element's own error
-  at those settings is `1e-4` (see K19). A `@test` against those numbers fails on a correct
-  implementation of the element that the same file's `FEM_STENCIL_H005_*` entries agree with. The
-  file is the restored oracle and is not edited to fit a new integrator.
-- kind: defect
-- found: 2026-10-27
-
-### K23 · The problem constructor takes a scalar density, so `β ≠ 0` cannot be carried.
-
-- location: `src/problems/lagrangian_problem.jl`
-- evidence: `LagrangianPDEProblem(density::LagrangianDensity; kwargs...)` is the only keyword
-  constructor, and `VectorWave.problem` passes its scalar per-component density, so the vector
-  density of `VectorWave.vector_density(; β = 0.5)` has no way in:
-  `LagrangianPDEProblem(VectorWave.vector_density(; β = 0.5); D = 2, …)` raises
-  `MethodError: no method matching LagrangianPDEProblem(::VectorDensity; …)`, with the
-  `LagrangianDensity` keyword method as the closest candidate. The slab core evaluates a vector
-  density already (`density_derivatives!` has a method for it), but the scenario A5a's `β ≠ 0` half
-  cannot be constructed until the problem layer accepts one, which is the problem layer's part.
-- kind: defect
-- found: 2026-10-27
-
-### K24 · The slab energy deviates by 8e-4 over 200 steps, not 1e-10.
-
-- location: `src/core/slab_integrator.jl`, `test/ansatz/tensor_bspline.jl`
-- evidence: the plan's clause 7 asks the relative error of the slab energy to stay below `1e-10`
-  over 200 steps of `Wave` at CFL 0.5. The energy taken from the trace at the Gauss nodes with the
-  Gauss weights deviates by 8.2e-4 relative over 200 steps at degree 2 with one time cell per slab
-  (`A1f the energy error of 200 steps` records the number). The scheme carries the top flux of the
-  weak form into the next slab, which preserves a discrete momentum in space, not the quadrature
-  energy in time; §A's own `energy_error` column is a relative error against the exact solution at
-  `2.7e-6`, so no run of this element reaches `1e-10` against the exact value either. The clause is
-  held as a `@test_broken`.
+  `const` entries. The part that returns the slab core restored it byte for byte from `ed13663`. It
+  is the oracle the tests read, not a testset: `test/runtests.jl` lists it under no
+  `@safetestset`.
 - kind: defect
 - found: 2026-10-27

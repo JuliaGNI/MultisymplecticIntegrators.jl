@@ -25,12 +25,7 @@ function fem_stencil(problem; steps::Integer)
     grid = collect(xgrid(problem))
     N = length(grid)
     interior = 2:(N - 1)
-    M = zeros(T, N, N)
-    K = zeros(T, N, N)
-    for j in interior
-        M[j, j - 1], M[j, j], M[j, j + 1] = Δx / 6, 4Δx / 6, Δx / 6
-        K[j, j - 1], K[j, j], K[j, j + 1] = -1 / Δx, 2 / Δx, -1 / Δx
-    end
+    M, K = fem_matrices(problem)
     # the load ∫ v⁰ φ_j dx, by the two-point Gauss rule of each cell
     ξ = sqrt(one(T) / 3)
     nodes = T[]
@@ -67,4 +62,24 @@ function fem_stencil(problem; steps::Integer)
         result[n, :] .= current
     end
     return grid, result
+end
+
+"""
+    fem_matrices(problem)
+
+The linear-element matrices of the stencil, `M_x = (Δx / 6) (1, 4, 1)` and `K_x = (-1, 2, -1) / Δx`,
+on the whole grid. The rows of the interior grid points carry the three-point stencil and the two
+boundary rows are zero, so a product is the interior part of the discrete operator.
+"""
+function fem_matrices(problem)
+    T = datatype(problem)
+    Δx = problem.xstep
+    N = length(xgrid(problem))
+    M = zeros(T, N, N)
+    K = zeros(T, N, N)
+    for j in 2:(N - 1)
+        M[j, j - 1], M[j, j], M[j, j + 1] = Δx / 6, 4Δx / 6, Δx / 6
+        K[j, j - 1], K[j, j], K[j, j + 1] = -1 / Δx, 2 / Δx, -1 / Δx
+    end
+    return M, K
 end

@@ -14,19 +14,18 @@ import QuadratureRules: nodes, weights, nnodes
 import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrature,
                       BSplineBasis, UniformMesh, evaluate, basis, bases,
                       basis_values, degree, nbasis, ncells, quadrature_nodes,
-                      quadrature_order, quadrature_weights, mass_matrix, stiffness_matrix,
-                      l2_projection, nodes as spline_nodes
-import SimpleSolvers: solve_with_status!
+                      quadrature_weights, l2_projection, nodes as spline_nodes
+import SimpleSolvers: initial_residual, method, solve_with_status!
 import GeometricBase: datatype, timetype, arrtype, equtype, timespan, timestep, parameters,
                       periodicity, ntime, initialstate, timesteps, integrate, update!
 import GeometricEquations: initial_conditions, GeometricProblem, GeometricEquation,
                            compute_vectorfields!, problem, equation
 import GeometricIntegratorsBase: GeometricIntegrator, solutionstep, reset!, integrate!,
-                                 cache, current, default_extrapolation, NoExtrapolation,
-                                 Cache, CacheType, IntegratorCache, check_solver_status,
-                                 default_options, default_solver, initial_guess!,
-                                 integrate_step!, method, nlsolution, residual!, solver,
-                                 solverstate
+                                 cache, current, default_extrapolation, NoExtrapolation
+import GeometricIntegratorsBase: Cache, CacheType, IntegratorCache, check_solver_status,
+                                 nlsolution, default_solver, initial_guess!,
+                                 integrate_step!,
+                                 residual!, solver, solverstate
 
 # abstract types
 include("methods.jl")
@@ -71,8 +70,8 @@ export CoefficientRestriction
 # the initial guess
 include("initial_guess/fit_methods.jl")
 include("initial_guess/guess.jl")
-export Continuation, FitTo, Projection, InitialCondition, PreviousSlab, ExactSolution,
-       TargetFunction
+export Continuation, FitTo, Projection, InitialCondition, PreviousSlab
+export ExactSolution, TargetFunction
 export default_fit
 
 # the integrator shell

@@ -112,8 +112,9 @@ with the time index fastest: the entry of row `a ∈ 2:Nt`, space function `j` a
 
 The data of a step are `bottom` and `flux`, the coupling's datum and its momentum load, and the
 results of the last step are `top`, the top row of the coefficient array, `residual`, the last weak
-form, and the trace at the top of the slab. `iterations` and `residuals` record the Newton solve of
-every step.
+form, and the trace at the top of the slab. `iterations`, `residuals` and `initial_residuals`
+record the Newton solve of every step: its iterate count, its final residual `‖F(x)‖₂` and its
+initial residual `r₀ = ‖F(x₀)‖₂`.
 """
 struct SpaceTimeGalerkinCache{ST, T} <: IntegratorCache{ST}
     x::Vector{ST}
@@ -134,7 +135,8 @@ struct SpaceTimeGalerkinCache{ST, T} <: IntegratorCache{ST}
     trace_w::Matrix{ST}
     iterations::Vector{Int}
     residuals::Vector{ST}
-    steps::Base.RefValue{Int}
+    initial_residuals::Vector{ST}
+    steps::Ref{Int}
     tabulation::SlabTabulation{T}
     evaluation::SlabEvaluation{T}
 end
@@ -174,6 +176,7 @@ function Cache{ST}(problem::LagrangianPDEProblem,
         zeros(ST, nq, D),
         zeros(ST, nq, D),
         Int[],
+        ST[],
         ST[],
         Ref(0),
         tabulation,
@@ -380,6 +383,8 @@ function integrate_step!(sol, history, params,
     check_solver_status(status, int)
     push!(c.iterations, status.iterations)
     push!(c.residuals, convert(eltype(c.residuals), status.rfₐ))
+    push!(c.initial_residuals,
+        convert(eltype(c.initial_residuals), initial_residual(solverstate(int))))
     update!(sol, params, nlsolution(int), int)
     return nothing
 end

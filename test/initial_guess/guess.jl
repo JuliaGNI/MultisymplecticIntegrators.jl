@@ -1,6 +1,7 @@
 using GeometricBase
 using GeometricIntegratorsBase
 using MultisymplecticIntegrators
+using SimpleSplines
 using Test
 
 import GeometricIntegratorsBase: GeometricIntegrator, cache
@@ -29,28 +30,59 @@ end
 @testset "Initial guess" begin
     @testset "A4a every option converges to the same solution" begin
         T = Float64
+        newton_tolerance = T(8) * eps(T)
         options = [Continuation(), FitTo(InitialCondition()), FitTo(PreviousSlab()),
             FitTo(ExactSolution()),
             FitTo(TargetFunction((t, x, p) -> Wave.exact_u(t, x, p)))]
         solutions = Vector{Vector{Float64}}()
-        counts = Vector{Vector{Int}}()
         for option in options
             int, result = guess_run(T, option)
-            @test length(cache(int).iterations) == 5
-            @test all(≥(1), cache(int).iterations)
+            c = cache(int)
+            @test length(c.iterations) == 5
+            @test length(c.initial_residuals) == 5
+            @test all(≥(1), c.iterations)
+            @test all(r -> isfinite(r) && r ≥ zero(T), c.initial_residuals)
             push!(solutions, result.solution.u[end])
-            push!(counts, copy(cache(int).iterations))
         end
         for solution in solutions[2:end]
-            @test maximum(abs.(solution .- solutions[1])) ≤ T(100) * T(8) * eps(T)
+            @test maximum(abs.(solution .- solutions[1])) ≤ T(100) * newton_tolerance
         end
-        # The clause asks Continuation to need fewer iterations than FitTo(InitialCondition());
-        # a linear problem reaches its Newton solution in one step from any guess, so the counts
-        # coincide (K20 in KNOWN_ISSUES.md). The extrapolation of PreviousSlab is checked by the
-        # coefficients it fits, below.
-        @test counts[1] == counts[2]
-        extrapolated = FitTo(PreviousSlab())
-        @test extrapolated !== FitTo(InitialCondition())
+    end
+
+    @testset "A4c the continuation's guess and the extrapolation's value" for T in (Float64, Float32)
+        continuation, _ = guess_run(T, Continuation())
+        initial, _ = guess_run(T, FitTo(InitialCondition()))
+        rc = cache(continuation).initial_residuals
+        ri = cache(initial).initial_residuals
+        @test length(rc) == 5
+        @test length(ri) == 5
+        # the carried top row is the better guess from the second step on
+        for n in 2:5
+            @test rc[n] < ri[n]
+        end
+        # the extrapolation is the polynomial piece of the top time cell, about its top
+        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (3, 20),
+            xspan = (zero(T), one(T)), n = 3)
+        problem = Wave.problem(T = T, timespan = (zero(T), T(0.25)), timestep = T(0.05),
+            xstep = T(0.05))
+        c = cache(GeometricIntegrator(problem,
+            SpaceTimeGalerkin(ansatz, CoefficientRestriction();
+                initial_guess = FitTo(PreviousSlab()))))
+        field(t̂, x) = (one(T) + t̂ + t̂^2) * x * (one(T) - x)
+        c.coeffs[:, :, 1] .= SimpleSplines.l2_projection(quadrature(ansatz),
+            p -> field(p[1], p[2]))
+        c.steps[] = ncells(ansatz)[1]
+        qt = M.nquadrature(c.tabulation.time)
+        qx = M.nquadrature(c.tabulation.space)
+        sample = Array{T, 3}(undef, qt, qx, 1)
+        M.evaluate!(sample, PreviousSlab(), c, ansatz, problem, nothing)
+        xq = space_quadrature_nodes(ansatz)
+        scale = T(100) * eps(T) * maximum(abs, sample)
+        for q in 1:qt, r in 1:qx
+
+            u = one(T) + c.tabulation.time.node[q]
+            @test abs(sample[q, r, 1] - field(u, xq[r])) ≤ scale
+        end
     end
 
     @testset "A4b the two refusals and the element type of a target" begin

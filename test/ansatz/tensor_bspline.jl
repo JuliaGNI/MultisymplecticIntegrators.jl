@@ -98,16 +98,31 @@ end
 
     @testset "A1d the CFL-1 exactness" begin
         T = Float64
-        problem, method, result = wave_run(
-            T; degree = 1, ncells = (1, 40), n = 2, xstep = T(0.025))
-        grid = collect(xgrid(problem))
-        @test abs(problem.params.c * problem.timestep / problem.xstep - one(T)) ≤
-              tolerance(T)
-        error = maximum(abs.(result.solution.u[end] .-
-                             [Wave.exact_u(T(0.25), x) for x in grid]))
-        # The clause asks 1e-11; the bilinear element is not exact at CFL 1 and the error is a
-        # phase error that grows linearly (K19 in KNOWN_ISSUES.md).
-        @test error ≤ T(1.0e-3)
+        # A zero initial velocity removes the load startup, whose O(h²) velocity defect is the
+        # whole error at CFL 1: the bilinear element is d'Alembert's shift there, so this run is
+        # exact to roundoff.
+        rest = merge(Wave.default_parameters(), (B1 = zero(T),))
+        ansatz = TensorBSplineAnsatz(degree = 1, ncells = (1, 40),
+            xspan = (zero(T), one(T)), n = 2)
+        for t in (T(0.25), T(5))
+            problem = Wave.problem(T = T, params = rest, timespan = (zero(T), t),
+                timestep = T(0.05), xstep = T(0.025))
+            @test abs(problem.params.c * problem.timestep / problem.xstep - one(T)) ≤
+                  tolerance(T)
+            result = integrate(problem, SpaceTimeGalerkin(ansatz, CoefficientRestriction()))
+            grid = collect(xgrid(problem))
+            exact = [Wave.exact_u(t, x, rest) for x in grid]
+            @test maximum(abs.(result.solution.u[end] .- exact)) ≤ T(1.0e-11)
+        end
+        # at the default parameters the same setting is the FEM stencil of the same settings
+        problem, _, result = wave_run(T; degree = 1, ncells = (1, 40), n = 2,
+            xstep = T(0.025))
+        grid, stencil = fem_stencil(problem; steps = 5)
+        @test collect(grid) == collect(xgrid(problem))
+        for n in 1:5
+            @test maximum(abs.(result.solution.u[n] .- stencil[n, :])) ≤
+                  T(100) * eps(T) * maximum(abs, stencil[n, :])
+        end
     end
 
     @testset "A1e the observed order" begin
@@ -129,18 +144,21 @@ end
         @test orders[end] ≥ 1.9
     end
 
-    @testset "A1f the energy error of 200 steps" begin
+    @testset "A1f the discrete energy of 200 steps" begin
         T = Float64
-        problem, method, result = wave_run(T; degree = 2, ncells = (1, 20), n = 3,
-            timespan = (zero(T), T(10)), timestep = T(0.05), xstep = T(0.05))
-        weights = space_quadrature_weights(ansatz(method))
-        c = problem.params.c
-        energy(trace) = sum(weights .* (trace.v .^ 2 ./ 2 .+ (c * trace.w) .^ 2 ./ 2))
-        energies = [energy(trace) for trace in result.traces]
-        deviation = maximum(abs.(energies .- energies[1])) / abs(energies[1])
-        # The clause asks 1e-10; the scheme preserves a discrete momentum in space, not the
-        # quadrature energy in time (K24 in KNOWN_ISSUES.md).
-        @test deviation ≤ T(1.0e-3)
+        problem, _, result = wave_run(T; degree = 1, ncells = (1, 20), n = 2,
+            timestep = T(0.05), xstep = T(0.05), timespan = (zero(T), T(10)))
+        M, K = fem_matrices(problem)
+        h, c = problem.timestep, problem.params.c
+        function energy(a, b)
+            δ = b .- a
+            return dot(δ, M * δ) / (2 * h^2) +
+                   c^2 / 12 * (dot(b, K * b) + dot(a, K * a) + 4 * dot(b, K * a))
+        end
+        u = [collect(step) for step in result.solution.u]
+        @test length(u) == 201
+        energies = [energy(u[n], u[n + 1]) for n in 0:199]
+        @test maximum(abs.(energies .- energies[1])) / abs(energies[1]) < T(1.0e-10)
     end
 
     @testset "A1g the residual allocates nothing and infers" begin
