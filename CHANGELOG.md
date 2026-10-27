@@ -78,8 +78,10 @@ makes it worth keeping.
   `LagrangianPDEProblem{T}` holds its spans at the element type, passes its parameters to the
   initial, boundary and exact functions, and states its state as a `GeometricBase.State` of
   algebraic variables, so neither `_state` nor `_vectorfield` is pirated. Its grid must reach the
-  right end of `xspan` to within `sqrt(eps(T))` times the largest of `xstep` and the magnitudes of
-  the two ends of `xspan`, or the constructor throws an `ArgumentError`. `field_boundary_data`
+  right end of `xspan` to within the tolerance
+  `min(sqrt(eps(T)) * max(xstep, |xspan[1]|, |xspan[2]|), xstep / 4)`, which stays at or below a
+  quarter of `xstep`, so a step that does not divide the span is rejected on a long span too;
+  otherwise the constructor throws an `ArgumentError`. `field_boundary_data`
   throws an `ArgumentError` unless `times` holds the two times `(t₀, t₁)` of the slab.
 - **`Wave`, `VectorWave`, `SineGordon` and `LinearTransport`.** The scalar and vector wave
   equations, the sine-Gordon kink and the transport of a Gaussian, each with its closed-form exact
@@ -101,8 +103,8 @@ makes it worth keeping.
 - **`integrate` returns `(; solution, traces)`.** The solution on the output grid, and per step the
   top trace at the nodes of the space quadrature, where the energy diagnostics integrate it. A step
   whose state holds a NaN ends the run with a warning: `traces` ends at that step, and the solution
-  holds the NaN there. `SpaceTimeAnsatz` defaults to `NoExtrapolation()`, which copies the initial
-  data into the states of the solution.
+  holds the NaN there. `SpaceTimeAnsatz` defaults to `NoExtrapolation()`, so the history states of
+  the solution step hold the initial data.
 - **The suite is the standard layout**: `core` testsets for the problem layer, the quadrature and
   the shell, `Aqua.test_all` with no `broken` mark, and `test_explicit_imports`. This closes the
   known issues K1 (the broken marks), K2 (the stale bounds), K3 (`Plots` and the GUI packages in
