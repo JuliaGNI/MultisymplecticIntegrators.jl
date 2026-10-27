@@ -83,8 +83,19 @@ makes it worth keeping.
   throws an `ArgumentError` unless `times` holds the two times `(t₀, t₁)` of the slab.
 - **`Wave`, `VectorWave`, `SineGordon` and `LinearTransport`.** The scalar and vector wave
   equations, the sine-Gordon kink and the transport of a Gaussian, each with its closed-form exact
-  solution and its parameters. `Wave` takes the keyword `D`, and `VectorWave` carries the angular
-  momentum `J` as the conserved diagnostic of the vector case.
+  solution and its parameters. `Wave.problem` is massless: its density `L = ½v² − ½c²w²` has the
+  standing wave as exact solution, and the mass `m` and the coupling `β` are keywords of
+  `Wave.density` alone. `Wave` takes the keyword `D`. `VectorWave.problem` takes one amplitude per
+  component in each of `A1`, `A2`, `B1` and `B2`, so its parameters are `(c, l, A1, A2, B1, B2)`
+  and `D` is the number of entries; `VectorWave.component_parameters(params, i)` gives component
+  `i` its `Wave` parameters. The default parameters give the two components different phases, so
+  the angular momentum `J` of the exact solution is not zero. The exact solution of the vector
+  problem is that of the uncoupled equations. The vector density couples the components through
+  the quartic term `−¼β|u|⁴`, which keeps it invariant under a rotation of `(u, v, w)` for any
+  `β`, so `J` is conserved by the coupled equations too.
+  `VectorWave` carries the angular momentum `J` as the conserved diagnostic of the vector case.
+  `VectorWave.density` is the scalar density of one component and takes the mass `m` only;
+  `vector_density(; params, D, m, β)` carries the coupling.
 - **`SpaceTimeQuadrature{T}`.** Composite Gauss–Legendre nodes and weights on given breakpoints, in
   `t̂ ∈ [0, 1]` and in `x`, with the four boundary point sets of a slab and the element type kept.
 - **`integrate` returns `(; solution, traces)`.** The solution on the output grid, and per step the
