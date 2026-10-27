@@ -69,6 +69,9 @@ export SpaceTimeGalerkin, SpaceTimeGalerkinCache, ansatz, coupling, total_free_c
 include("couplings/coefficient_restriction.jl")
 export CoefficientRestriction
 
+include("couplings/weak_multipliers.jl")
+export WeakInitialCondition, WeakInitialAndBoundaryConditions
+
 # the initial guess
 include("initial_guess/fit_methods.jl")
 include("initial_guess/guess.jl")

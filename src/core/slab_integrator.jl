@@ -93,7 +93,19 @@ function check_method(problem::LagrangianPDEProblem{PT}, method::SpaceTimeGalerk
         "the ansatz element type $S does not match the problem's $PT"))
     xspan(a) == xspan(problem) || throw(ArgumentError(
         "the ansatz xspan $(xspan(a)) does not match the problem's $(xspan(problem))"))
+    check_coupling(problem, coupling(method), a)
     return nothing
+end
+
+"""
+    internal_variables(method::SpaceTimeGalerkin, problem)
+
+The coupling's own state of a step, which the ecosystem's `copy_internal_variables!` fills after
+every step and the next step reads.
+"""
+function GeometricIntegratorsBase.internal_variables(method::SpaceTimeGalerkin,
+        problem::LagrangianPDEProblem)
+    return coupling_internal(coupling(method), ansatz(method), problem)
 end
 
 """
@@ -124,13 +136,121 @@ function SlabEvaluation(ansatz::TensorBSplineAnsatz{T}, grid, nodes) where {T}
 end
 
 """
+    CouplingData
+
+The coupling's block of the slab cache.
+
+A coupling fixes how the free coefficients of a slab are laid out, adds terms to the residual, and
+may carry unknowns of its own between the coefficients and behind them. The block holds what it
+keeps between slabs — its datum, its unknowns, the tables its residual term evaluates and the
+scratch of that evaluation. It is built once, when the cache is built, and its type is a parameter
+of the cache, so that the coupling's terms are a dispatch and not a branch.
+"""
+abstract type CouplingData end
+
+"""The block of a coupling that keeps no data of its own."""
+struct NoCouplingData <: CouplingData end
+
+"""
+    coupling_data(coupling, ansatz, problem, ST)
+
+The coupling's block of the slab cache, built once per integrator.
+"""
+function coupling_data(::SlabCoupling, ::SpaceTimeAnsatz, ::LagrangianPDEProblem, ::Type{ST}) where {ST}
+    return NoCouplingData()
+end
+
+"""
+    coupling_data_type(coupling, ansatz, problem, ST)
+
+The type of [`coupling_data`](@ref)`(coupling, ansatz, problem, ST)`, computed without building the
+block, because the ecosystem asserts the cache's type on every lookup.
+"""
+function coupling_data_type(::SlabCoupling, ::SpaceTimeAnsatz, ::LagrangianPDEProblem,
+        ::Type{ST}) where {ST}
+    return NoCouplingData
+end
+
+"""
+    free_rows(coupling, ansatz)
+
+The number of free time rows of the slab: the rows of the coefficient array that the solver
+determines, the time index running fastest over the coefficient part of the solver's vector.
+
+A coupling that fixes the bottom row of the coefficient array leaves `Nt - 1` free rows; one that
+imposes the initial condition weakly leaves all `Nt`.
+"""
+free_rows(coupling::SlabCoupling, ansatz::SpaceTimeAnsatz) = ntime_functions(ansatz) - 1
+
+"""The number of free time rows, from the block the cache holds."""
+free_rows(::NoCouplingData, ansatz::SpaceTimeAnsatz) = ntime_functions(ansatz) - 1
+
+"""
+    coupling_unknowns(coupling, ansatz, problem)
+    coupling_unknowns(data)
+
+The number of the coupling's extra unknowns: the entries of the solver's vector that follow the
+coefficients.
+"""
+coupling_unknowns(::SlabCoupling, ::SpaceTimeAnsatz, ::LagrangianPDEProblem) = 0
+
+coupling_unknowns(::NoCouplingData) = 0
+
+"""
+    coupling_term!(b, x, data, cache, ansatz, problem)
+
+The coupling's own part of the residual: its terms on the free rows the interior weak form already
+carries, and its own equations after them.
+"""
+coupling_term!(b, x, ::NoCouplingData, cache, ansatz, problem) = nothing
+
+"""
+    coupling_guess!(data, cache, ansatz, problem, sol)
+
+The coupling's initial guess of its unknowns, once per slab.
+"""
+coupling_guess!(::NoCouplingData, cache, ansatz, problem, sol) = nothing
+
+"""
+    coupling_update!(data, x, cache, ansatz, problem)
+
+Read the coupling's unknowns out of the solver's vector once a step has been solved.
+"""
+coupling_update!(::NoCouplingData, x, cache, ansatz, problem) = nothing
+
+"""
+    copy_coupling_data!(cache_data, data)
+
+Copy the coupling's datums from the cache of the problem's element type into the cache the solver
+works in.
+"""
+copy_coupling_data!(::CouplingData, ::CouplingData) = nothing
+
+"""
+    coupling_internal(coupling, ansatz, problem)
+
+The coupling's own state of a step: the entries of the solution step's `internal` named tuple that
+[`coupling_carry!`](@ref) fills after every step. A coupling that carries nothing between steps
+declares no entry.
+"""
+coupling_internal(::SlabCoupling, ::SpaceTimeAnsatz, ::LagrangianPDEProblem) = NamedTuple()
+
+"""
+    check_coupling(problem, coupling, ansatz)
+
+Reject a coupling that the ansatz cannot support, when the integrator is built.
+"""
+check_coupling(::LagrangianPDEProblem, ::SlabCoupling, ::SpaceTimeAnsatz) = nothing
+
+"""
     SpaceTimeGalerkinCache{ST, T}
 
 The cache of the slab integrator.
 
-`x` is the nonlinear solver's vector, the free coefficients of the slab, laid out component-major
-with the time index fastest: the entry of row `a ∈ 2:Nt`, space function `j` and component `d` is
-`a - 1 + (j - 1) * (Nt - 1) + (d - 1) * (Nt - 1) * Nx`.
+`x` is the nonlinear solver's vector: the free coefficients of the slab, laid out component-major
+with the time index fastest — the entry of free row `a`, space function `j` and component `d` is
+`a - 1 + (j - 1) * Nf + (d - 1) * Nf * Nx`, with `Nf` the coupling's free-row count — and then the
+coupling's own unknowns, in the layout of the coupling's block `coupling`.
 
 The data of a step are `bottom` and `flux`, the coupling's datum and its momentum load, and the
 results of the last step are `top`, the top row of the coefficient array, `residual`, the last weak
@@ -147,7 +267,7 @@ the top time cell that [`PreviousSlab`](@ref) expands. `weighted`, `load` and `f
 scratch of the [`Projection`](@ref) fit: the quadrature-weighted sample, its load in the time
 basis, and one space fibre of the coefficients.
 """
-mutable struct SpaceTimeGalerkinCache{ST, T} <: IntegratorCache{ST}
+mutable struct SpaceTimeGalerkinCache{ST, T, CD <: CouplingData} <: IntegratorCache{ST}
     x::Vector{ST}
     coeffs::Array{ST, 3}
     residual::Array{ST, 3}
@@ -176,6 +296,7 @@ mutable struct SpaceTimeGalerkinCache{ST, T} <: IntegratorCache{ST}
     weighted::Matrix{ST}
     load::Matrix{ST}
     fibre::Vector{ST}
+    coupling::CD
 end
 
 function Cache{ST}(problem::LagrangianPDEProblem,
@@ -196,7 +317,8 @@ function Cache{ST}(problem::LagrangianPDEProblem,
     nq = length(space_quadrature_nodes(a))
     coeffs = zeros(ST, nt, nx, D)
     initial_sample = initial_condition_sample(ST, problem, a, qx)
-    return SpaceTimeGalerkinCache{ST, T}(
+    return SpaceTimeGalerkinCache{
+        ST, T, coupling_data_type(coupling(method), a, problem, ST)}(
         zeros(ST, free),
         coeffs,
         similar(coeffs),
@@ -224,7 +346,8 @@ function Cache{ST}(problem::LagrangianPDEProblem,
         zeros(ST, nx, D, degree(time_basis(a)) + 1),
         zeros(ST, qt, qx),
         zeros(ST, nt, qx),
-        zeros(ST, nx))
+        zeros(ST, nx),
+        coupling_data(coupling(method), a, problem, ST))
 end
 
 # The problem's initial condition at the nodes of the space quadrature, per component.
@@ -238,7 +361,7 @@ end
 
 @inline CacheType(ST, problem::LagrangianPDEProblem{T},
     method::SpaceTimeGalerkin{<:TensorBSplineAnsatz{T}}) where {T} = SpaceTimeGalerkinCache{
-    ST, T}
+    ST, T, coupling_data_type(coupling(method), ansatz(method), problem, ST)}
 
 nlsolution(cache::SpaceTimeGalerkinCache) = cache.x
 
@@ -265,23 +388,23 @@ end
 
 """Scatter the solver's vector into the coefficient array, with the coupling's bottom row."""
 function scatter!(coeffs::Array{ST, 3}, x::AbstractVector{ST}, bottom::AbstractMatrix{ST},
-        nt::Integer) where {ST}
+        nt::Integer, nf::Integer) where {ST}
     nx, D = size(bottom)
-    a_free = nt - 1
+    m = nt - nf
     for d in 1:D
         for j in 1:nx
-            coeffs[1, j, d] = bottom[j, d]
-            for a in 2:nt
-                coeffs[a, j, d] = x[(a - 1) + (j - 1) * a_free + (d - 1) * a_free * nx]
+            m == 0 || (coeffs[1, j, d] = bottom[j, d])
+            for a in (m + 1):nt
+                coeffs[a, j, d] = x[free_index(a - m, j, d, nf, nx)]
             end
         end
     end
     return nothing
 end
 
-"""The coefficient index of the free row `a ∈ 2:Nt`, space function `j`, component `d`."""
-@inline function free_index(a::Integer, j::Integer, d::Integer, nt::Integer, nx::Integer)
-    return (a - 1) + (j - 1) * (nt - 1) + (d - 1) * (nt - 1) * nx
+"""The solver index of the free coefficient of free row `a`, space function `j`, component `d`."""
+@inline function free_index(a::Integer, j::Integer, d::Integer, nf::Integer, nx::Integer)
+    return a + (j - 1) * nf + (d - 1) * nf * nx
 end
 
 """
@@ -301,24 +424,27 @@ end
 """
     residual!(b, x, sol, params, int)
 
-The nonlinear residual of one slab step, in the solver's own layout: `(Nt - 1) * Nx * D` entries,
-the free rows of the coefficient array ordered as the solver's vector is.
+The nonlinear residual of one slab step, in the solver's own layout: one equation per free
+coefficient, ordered as the solver's vector is, and after them the coupling's own equations.
+
+The equations of the free coefficients are the interior weak form tested against the basis
+functions that the slab's free rows carry, and the coupling adds its own terms to them.
 """
 function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol, params,
         int::GeometricIntegrator{<:SpaceTimeGalerkin, <:LagrangianPDEProblem}) where {ST}
     data = cache(int)
     c = cache(int, ST)
     copy_datum!(c, data)
-    nt = ntime_functions(ansatz(method(int)))
+    a = ansatz(method(int))
+    nt = ntime_functions(a)
     nx, D = size(c.bottom)
-    scatter!(c.coeffs, x, c.bottom, nt)
+    nf = free_rows(c.coupling, a)
+    scatter!(c.coeffs, x, c.bottom, nt, nf)
     slab_weak_form!(c, problem(int), method(int))
-    for d in 1:D, j in 1:nx, a in 1:(nt - 1)
-        b[a + (j - 1) * (nt - 1) + (d - 1) * (nt - 1) * nx] = c.residual[a, j, d] +
-                                                              (a == 1 ?
-                                                               flux_load(coupling(method(int)), c, j, d) :
-                                                               zero(ST))
+    for d in 1:D, j in 1:nx, k in 1:nf
+        b[free_index(k, j, d, nf, nx)] = c.residual[k, j, d]
     end
+    coupling_term!(b, x, c.coupling, c, a, problem(int))
     return nothing
 end
 
@@ -326,6 +452,7 @@ end
 function copy_datum!(c::SpaceTimeGalerkinCache, data::SpaceTimeGalerkinCache)
     c.bottom .= data.bottom
     c.flux .= data.flux
+    copy_coupling_data!(c.coupling, data.coupling)
     return nothing
 end
 
@@ -343,12 +470,14 @@ function update!(sol, params, x::AbstractVector{ST},
     p = problem(int)
     nt = ntime_functions(a)
     nx, D = size(c.bottom)
-    scatter!(c.coeffs, x, c.bottom, nt)
+    nf = free_rows(c.coupling, a)
+    scatter!(c.coeffs, x, c.bottom, nt, nf)
     c.top .= view(c.coeffs, nt, :, :)
     h = timestep(p)
     assign!(sol.u, sol.v, sol.w, c, a, nx, D, h)
     slab_weak_form!(c, p, m)
     c.flux .= view(c.residual, nt, :, :)
+    coupling_update!(c.coupling, x, c, a, p)
     c.steps += 1
     return nothing
 end
@@ -449,9 +578,12 @@ end
 """
     total_free_coefficients(method, problem)
 
-The size of one slab's nonlinear system: one equation per free coefficient.
+The size of one slab's nonlinear system: one equation per free coefficient, and one per unknown the
+coupling adds after them.
 """
 function total_free_coefficients(method::SpaceTimeGalerkin, problem::LagrangianPDEProblem)
     a = ansatz(method)
-    return (ntime_functions(a) - 1) * nspace_functions(a) * components(problem)
+    c = coupling(method)
+    return free_rows(c, a) * nspace_functions(a) * components(problem) +
+           coupling_unknowns(c, a, problem)
 end
