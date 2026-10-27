@@ -1,0 +1,225 @@
+"""
+    Continuation() <: SlabInitialGuess
+
+The default initial guess: the previous slab's solution, carried into the new slab.
+
+For the tensor B-spline ansatz under a [`CoefficientRestriction`](@ref) that is the previous slab's
+top coefficient row, repeated in every row: each row of the new slab starts where the previous slab
+ended. At the first slab there is nothing to carry, and the guess falls back to
+`FitTo(InitialCondition())` with the ansatz's default fit method.
+"""
+struct Continuation <: SlabInitialGuess end
+
+"""
+    InitialCondition() <: SlabInitialGuess
+
+The problem's initial condition `u₀(x)`, constant in time over the slab.
+"""
+struct InitialCondition <: SlabInitialGuess end
+
+"""
+    PreviousSlab() <: SlabInitialGuess
+
+The previous slab's solution, extrapolated in time beyond the top of that slab.
+
+For the B-spline ansatz the extrapolation is the polynomial piece of the slab's top time cell,
+evaluated at `1 + t̂`: a spline is a polynomial on each cell, so that piece extends the solution
+without inventing anything. At the first slab, where there is no previous solution, the target
+falls back to `InitialCondition()`.
+"""
+struct PreviousSlab <: SlabInitialGuess end
+
+"""
+    ExactSolution() <: SlabInitialGuess
+
+The problem's exact solution `u(t, x)` at the physical time of the slab.
+
+A problem without an exact solution cannot supply it, and `FitTo(ExactSolution())` on one throws an
+`ArgumentError` at construction.
+"""
+struct ExactSolution <: SlabInitialGuess end
+
+"""
+    TargetFunction(f) <: SlabInitialGuess
+
+A user-defined target: `f(t, x, params)` in physical time.
+
+The result is converted to the problem's element type, so a `Float32` problem started from a function
+that returns `Float64` keeps `Float32` coefficients. A `D`-component problem may return a number,
+which every component takes, or a vector of the `D` values.
+"""
+struct TargetFunction{F} <: SlabInitialGuess
+    f::F
+end
+
+"""
+    FitTo(target; method = default_fit(ansatz)) <: SlabInitialGuess
+
+Fit the ansatz to `target` on the slab, with the fit method `method`.
+
+A target is evaluated on the slab — see [`InitialCondition`](@ref), [`PreviousSlab`](@ref),
+[`ExactSolution`](@ref) and [`TargetFunction`](@ref) — and the fit brings the ansatz to it. A
+user-defined target is a subtype of `SlabInitialGuess` with one method of
+
+```julia
+evaluate!(sample, target, cache, ansatz, problem, sol)
+```
+
+filling `sample`, of size `(Qt, Qx, D)`, with the target's value at the quadrature points of the
+slab.
+"""
+struct FitTo{T <: SlabInitialGuess, M <: SlabInitialGuess} <: SlabInitialGuess
+    target::T
+    method::M
+end
+
+function FitTo(target::SlabInitialGuess; method::SlabInitialGuess = Projection())
+    FitTo(target, method)
+end
+
+"""Whether a target needs the problem's exact solution."""
+needs_exact_solution(::SlabInitialGuess) = false
+needs_exact_solution(::ExactSolution) = true
+
+"""
+    initial_guess!(sol, history, params, int)
+
+Fill the nonlinear solver's vector of the slab from the method's initial guess.
+"""
+function initial_guess!(sol, history, params,
+        int::GeometricIntegrator{<:SpaceTimeGalerkin, <:LagrangianPDEProblem})
+    c = cache(int)
+    m = method(int)
+    apply_guess!(c, initial_guess(m), ansatz(m), problem(int), sol)
+    return nothing
+end
+
+function apply_guess!(c::SpaceTimeGalerkinCache, guess::Continuation,
+        ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem, sol)
+    if c.steps[] == 0
+        apply_guess!(c, FitTo(InitialCondition()), ansatz, problem, sol)
+    else
+        nt = ntime_functions(ansatz)
+        nx = nspace_functions(ansatz)
+        for d in axes(c.top, 2), j in 1:nx, a in 2:nt
+            c.x[free_index(a, j, d, nt, nx)] = c.top[j, d]
+        end
+    end
+    return nothing
+end
+
+function apply_guess!(c::SpaceTimeGalerkinCache{ST}, guess::FitTo,
+        ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
+    qt = nquadrature(c.tabulation.time)
+    qx = nquadrature(c.tabulation.space)
+    D = size(c.bottom, 2)
+    sample = Array{ST, 3}(undef, qt, qx, D)
+    evaluate!(sample, guess.target, c, ansatz, problem, sol)
+    coeffs = similar(c.coeffs)
+    fit!(coeffs, guess.method, ansatz, sample)
+    nt = ntime_functions(ansatz)
+    nx = nspace_functions(ansatz)
+    for d in 1:D, j in 1:nx, a in 2:nt
+        c.x[free_index(a, j, d, nt, nx)] = coeffs[a, j, d]
+    end
+    return nothing
+end
+
+"""
+    evaluate!(sample, target, cache, ansatz, problem, sol)
+
+Fill `sample`, of size `(Qt, Qx, D)`, with the value of `target` at the quadrature points of the
+slab, of which `sol` fixes the physical time.
+"""
+function evaluate!(sample::AbstractArray{ST, 3}, ::InitialCondition,
+        c::SpaceTimeGalerkinCache, ansatz::TensorBSplineAnsatz,
+        problem::LagrangianPDEProblem, sol) where {ST}
+    qx = size(sample, 2)
+    D = size(sample, 3)
+    xq = collect(space_quadrature_nodes(ansatz))
+    values = problem.ics_function(xq, parameters(problem))
+    for d in 1:D, r in 1:qx
+
+        value = values.u[(d - 1) * qx + r]
+        for q in axes(sample, 1)
+            sample[q, r, d] = convert(ST, value)
+        end
+    end
+    return nothing
+end
+
+function evaluate!(sample::AbstractArray{ST, 3}, ::PreviousSlab,
+        c::SpaceTimeGalerkinCache, ansatz::TensorBSplineAnsatz,
+        problem::LagrangianPDEProblem, sol) where {ST}
+    if c.steps[] == 0
+        return evaluate!(sample, InitialCondition(), c, ansatz, problem, sol)
+    end
+    tb = time_basis(ansatz)
+    nt = ntime_functions(ansatz)
+    nx = nspace_functions(ansatz)
+    D = size(c.bottom, 2)
+    order = degree(tb)
+    T = eltype(ansatz.xspan)
+    # the Taylor coefficients of the top time cell at t̂ = 1, one per space function and component
+    deriv = [sum(c.coeffs[a, j, d] * evaluate(tb, a, one(T), k) for a in 1:nt)
+             for j in 1:nx, d in 1:D, k in 0:order]
+    t = c.tabulation.time
+    x = c.tabulation.space
+    for q in 1:nquadrature(t)
+        τ = t.node[q] + one(T)
+        for r in 1:nquadrature(x)
+            for d in 1:D
+                value = zero(ST)
+                for l in axes(x.index, 2)
+                    j = x.index[r, l]
+                    j == 0 && continue
+                    poly = zero(ST)
+                    factor = one(ST)
+                    for k in 0:order
+                        poly += deriv[j, d, k + 1] * factor
+                        factor *= τ / (k + 1)
+                    end
+                    value += poly * x.value[r, l]
+                end
+                sample[q, r, d] = value
+            end
+        end
+    end
+    return nothing
+end
+
+"""
+    target_values!(sample, f, tabulation, ansatz, problem, sol)
+
+The value of a pointwise target `f(t, x, params)` on the slab, per component, converted to the
+problem's element type. A `f` that returns a number gives every component that number; one that
+returns a vector gives component `d` its `d`-th entry.
+"""
+function target_values!(sample::AbstractArray{ST, 3}, f, tabulation::SlabTabulation,
+        ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
+    t = tabulation.time
+    x = tabulation.space
+    t0 = sol.t - timestep(problem)
+    h = timestep(problem)
+    for q in 1:nquadrature(t), r in 1:nquadrature(x)
+
+        time = t0 + h * t.node[q]
+        value = f(time, x.node[r], parameters(problem))
+        for d in axes(sample, 3)
+            sample[q, r, d] = convert(ST, value isa Number ? value : value[d])
+        end
+    end
+    return nothing
+end
+
+function evaluate!(sample::AbstractArray{ST, 3}, target::TargetFunction,
+        c::SpaceTimeGalerkinCache, ansatz::TensorBSplineAnsatz,
+        problem::LagrangianPDEProblem, sol) where {ST}
+    return target_values!(sample, target.f, c.tabulation, ansatz, problem, sol)
+end
+
+function evaluate!(sample::AbstractArray{ST, 3}, ::ExactSolution,
+        c::SpaceTimeGalerkinCache, ansatz::TensorBSplineAnsatz,
+        problem::LagrangianPDEProblem, sol) where {ST}
+    return target_values!(sample, problem.exact_u, c.tabulation, ansatz, problem, sol)
+end
