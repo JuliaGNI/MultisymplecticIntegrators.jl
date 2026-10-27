@@ -15,7 +15,7 @@ import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrat
                       BSplineBasis, UniformMesh, evaluate, basis, bases,
                       basis_values, degree, nbasis, ncells, quadrature_nodes,
                       quadrature_weights, l2_projection, nodes as spline_nodes
-import SimpleSolvers: initial_residual, method, solve_with_status!
+import SimpleSolvers: initial_residual, method, solve_with_status!, NonlinearSolverException
 import GeometricBase: datatype, timetype, arrtype, equtype, timespan, timestep, parameters,
                       periodicity, ntime, initialstate, timesteps, integrate, update!
 import GeometricEquations: initial_conditions, GeometricProblem, GeometricEquation,

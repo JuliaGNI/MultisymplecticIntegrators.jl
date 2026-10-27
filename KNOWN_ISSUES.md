@@ -73,19 +73,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
-### K17 · `integrate` does not catch a failed nonlinear solve.
-
-- location: `src/core/integrate.jl`
-- evidence: the ecosystem's `integrate!` (GeometricIntegratorsBase 0.6.10, `src/integrate.jl`)
-  catches `NonlinearSolverException`, warns, and returns the solution computed so far; the
-  package's `integrate` stops on a NaN the same way but lets the exception propagate, so a caller
-  loses the steps already taken. The exception is owned by SimpleSolvers, which
-  GeometricIntegratorsBase does not export. The slab core of `SpaceTimeGalerkin` is the first method
-  of this package that solves a nonlinear system, and it depends on SimpleSolvers, so the fix is the
-  `try`/`catch` of the ecosystem's loop and no dependency change.
-- kind: defect
-- found: PR #31
-
 ### K18 · The §A oracle was absent from the base tree.
 
 - location: `test/helpers/reference_values.jl`

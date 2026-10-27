@@ -210,7 +210,8 @@ end
         momenta, iterations = slab_momentum(coupled,
             SpaceTimeGalerkin(ansatz, CoefficientRestriction()))
         @test length(momenta) == 50
-        @test maximum(abs.(momenta .- momenta[1])) ≤ T(100) * T(8) * eps(T)
+        @test maximum(abs.(momenta .- momenta[1])) ≤
+              T(100) * newton_tolerance(T, SOLVER_OPTIONS)
         @test maximum(iterations) > 1
     end
 end

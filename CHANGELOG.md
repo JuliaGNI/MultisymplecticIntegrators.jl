@@ -148,6 +148,11 @@ makes it worth keeping.
   NaN ends the run with a warning: `traces` ends at that step, and the solution holds the NaN
   there. `SpaceTimeAnsatz` defaults to `NoExtrapolation()`, so the history states of the solution
   step hold the initial data.
+- **A failed nonlinear solve ends the run with a warning, as a NaN does.** When a slab's Newton
+  solve raises SimpleSolvers' `NonlinearSolverException`, `integrate` warns with the timestep and
+  returns the steps already taken: `traces` ends at the step before, and the solution is valid up
+  to that step, its later entries not computed. Any other exception still propagates. This closes
+  the known issue K17.
 - **The suite is the standard layout**: `core` testsets for the problem layer, the quadrature and
   the shell, `Aqua.test_all` with no `broken` mark, and `test_explicit_imports`. This closes the
   known issues K1 (the broken marks), K2 (the stale bounds), K3 (`Plots` and the GUI packages in

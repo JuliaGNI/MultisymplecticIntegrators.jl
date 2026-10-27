@@ -111,6 +111,20 @@ end
         @test stopped.solution.u[1] ≈ problem.ics.u .+ 1
     end
 
+    @testset "a failed nonlinear solve stops the run" begin
+        # The guess is finite on the first slab and NaN on the second, so the second Newton solve
+        # meets a non-finite direction and raises `NonlinearSolverException`.
+        short = Wave.problem(timespan = (0.0, 0.15), timestep = 0.05, xstep = 0.05)
+        guess = FitTo(TargetFunction((t, x, p) -> t > 0.05 ? NaN : Wave.exact_u(t, x, p)))
+        slab = SpaceTimeGalerkin(
+            TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (0.0, 1.0), n = 3);
+            initial_guess = guess)
+        stopped = @test_logs (:warn, r"nonlinear solver failed at timestep n=2") integrate(
+            short, slab)
+        @test length(stopped.traces) == 1
+        @test all(isfinite, stopped.solution.u[1])
+    end
+
     @testset "a run that starts at a time other than zero" begin
         late = Wave.problem(timespan = (1.0, 1.4), timestep = 0.1, xstep = 0.25)
         steps = integrate(late, method)

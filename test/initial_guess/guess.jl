@@ -41,6 +41,7 @@ end
             FitTo(ExactSolution()),
             FitTo(TargetFunction((t, x, p) -> Wave.exact_u(t, x, p)))]
         solutions = Vector{Vector{T}}()
+        initial_residuals = Vector{Vector{T}}()
         for option in options
             int, result = guess_run(T, option)
             c = cache(int)
@@ -49,10 +50,17 @@ end
             @test all(≥(1), c.iterations)
             @test all(r -> isfinite(r) && r ≥ zero(T), c.initial_residuals)
             push!(solutions, result.solution.u[end])
+            push!(initial_residuals, copy(c.initial_residuals))
         end
         for solution in solutions[2:end]
             @test maximum(abs.(solution .- solutions[1])) ≤
                   T(100) * newton_tolerance(T, SOLVER_OPTIONS)
+        end
+        # The residual is linear, so every guess converges in one iteration and only `r₀` tells a
+        # target at the right time from a wrong one: the two exact targets start below
+        # `Continuation()` at every step, and a target shifted by one step starts above it.
+        for exact in initial_residuals[4:5]
+            @test all(exact .< initial_residuals[1])
         end
     end
 
