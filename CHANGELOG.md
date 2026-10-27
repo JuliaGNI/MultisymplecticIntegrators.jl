@@ -188,6 +188,24 @@ makes it worth keeping.
   `test/helpers/reference_values.jl`. Two cases fail at `294f023`. The script does not run on this
   tree, the file it writes is back, restored byte for byte from `ed13663`, and the slab core's
   three new tests include it.
+- **The two weak-multiplier couplings.** `WeakInitialCondition()` imposes a slab's initial
+  condition weakly, with the multiplier as an unknown of the step, and
+  `WeakInitialAndBoundaryConditions(; stride = 1, multiplier_basis = :bspline)` imposes the space
+  boundary conditions at `x = a` and `x = b` weakly as well, from the problem's `bcs_function` at
+  every node of the time rule. The multiplier of a slab's top surface is the momentum it hands on,
+  and `copy_internal_variables!` carries it to the next slab, which closes issue #7. Both couplings
+  take `multiplier_basis = :bspline`, the ansatz's own trace basis, or `:lagrange`, the nodal basis
+  of the same space, thinned by `stride`; at `stride = 1` the two corner functions of the trace
+  basis leave the bottom surface's multiplier set, where they would constrain the corners twice and
+  leave the first slab rank deficient by two (§Audit 2.8). The first slab's bottom multiplier is
+  the quadrature-weighted `L²` projection of the initial momentum, factorised once per integrator
+  (§Audit 5.4), and the multipliers of a step are guessed in `initial_guess!` rather than inside a
+  residual evaluation (§Audit 2.2). The multiplier blocks of the `D > 1` case keep their components
+  apart (§Audit 1.3). `WeakInitialCondition` refuses a `Free()` space basis and
+  `WeakInitialAndBoundaryConditions` a `Dirichlet()` one. The two `Galerkin_Bspline_Integrator`
+  entries of the reference values are unconverged solves of a singular layout, and the two couplings
+  are compared with closed forms instead; K21 and K22 record why the entries cannot serve as
+  references.
 
 ### Changed
 

@@ -3,14 +3,19 @@
 
 Abstract type of the basis that a weak boundary condition's multiplier is expanded in:
 [`BSplineMultiplier`](@ref), the ansatz's own trace basis, or [`LagrangeMultiplier`](@ref), the
-nodal basis of the trace's quadrature rule.
+nodal basis of the same space. Either way there is one function per spline node of the trace,
+thinned by the coupling's `stride`, so the two bases span the same space and differ in their
+functions alone.
 """
 abstract type MultiplierBasis end
 
 """The multiplier basis of the ansatz's own trace basis, every `stride`-th function of it."""
 struct BSplineMultiplier <: MultiplierBasis end
 
-"""The nodal multiplier basis of the trace's quadrature rule, one function per node."""
+"""
+The multiplier basis of the same space in its nodal functions: the function that is one at a spline
+node of the trace basis and zero at the other nodes the thinning keeps, for every `stride`-th node.
+"""
 struct LagrangeMultiplier <: MultiplierBasis end
 
 function _multiplier_basis(basis::Symbol)
@@ -50,14 +55,14 @@ that enters the slab: the least-squares fit of `∂L/∂v(u₀, v₀, w₀)` on 
 previous slab's top multiplier afterwards.
 
 `multiplier_basis` names the basis of `ψ_p`: `:bspline`, the ansatz's own trace basis, every
-`stride`-th function of it, or `:lagrange`, the nodal basis of the space quadrature's nodes.
+`stride`-th function of it, or `:lagrange`, the nodal basis of that same set of functions.
 
 The coupling leaves the space boundary unconstrained, so an ansatz whose `x_boundary` is `Free()`
 has no boundary condition to impose and building the integrator throws `ArgumentError`.
 
 ```julia
 method = SpaceTimeGalerkin(
-    TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (0.0, 1.0)),
+    TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (0, 1)),
     WeakInitialCondition())
 ```
 """
@@ -85,9 +90,10 @@ The initial condition is imposed as [`WeakInitialCondition`](@ref) imposes it. T
 
 where `g_a` and `g_b` are the problem's side traces, evaluated at each node of the time trace, so
 that inhomogeneous data is imposed as it stands. The multiplier basis is the ansatz's own trace
-basis, every `stride`-th function of it, or the nodal basis of the trace's quadrature rule, so that
-a slab with `Nt` time functions and `Nx` space functions has `length(1:stride:Nx)` multipliers at
-the bottom surface and `length(1:stride:Nt)` at each end of `xspan`.
+basis, every `stride`-th function of it, or the nodal basis of that same set of functions, so that a
+slab with `Nt` time functions and `Nx` space functions has `length(1:stride:Nx)` multipliers at the
+bottom surface, without its two corner functions at `stride = 1`, and `length(1:stride:Nt)` at each
+end of `xspan`.
 
 A `stride` below 1 throws `ArgumentError`. The boundary rows carry an unknown, so an ansatz whose
 `x_boundary` is `Dirichlet()` — its trace vanishes at each end of `xspan` — would leave them empty;
@@ -95,7 +101,7 @@ building the integrator with one throws `ArgumentError`.
 
 ```julia
 method = SpaceTimeGalerkin(
-    TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (0.0, 1.0),
+    TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (0, 1),
         x_boundary = Free()),
     WeakInitialAndBoundaryConditions())
 ```
@@ -138,37 +144,29 @@ end
 
 The functions of the space trace basis that the multiplier of the bottom surface is expanded in.
 
-They are every `stride`-th function of the basis, or one nodal function per node of the space rule.
-A coupling that imposes the space boundary conditions leaves the two corner functions out: the space
-boundary rows already carry an unknown at each end, so a constraint on the same corner twice would
-leave the slab rank deficient by two.
+They are every `stride`-th function of the basis, in either multiplier basis. A coupling that
+imposes the space boundary conditions leaves the two corner functions out at `stride = 1`, where
+the thinned set is the whole basis and the bottom corners carry an initial row already: a
+constraint on the same corner twice would leave the slab rank deficient by two. At `stride ≥ 2`
+nothing leaves, because the thinned set is of full rank as it stands.
 """
 function space_multiplier_indices(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz)
-    indices = _multiplier_indices(coupling, ansatz, nspace_functions(ansatz), 2)
-    imposes_boundary_conditions(coupling) || return indices
-    return filter(index -> 1 < index < nspace_functions(ansatz), indices)
+    indices = _multiplier_indices(coupling, nspace_functions(ansatz))
+    if imposes_boundary_conditions(coupling) && stride(coupling) == 1
+        return filter(index -> 1 < index < nspace_functions(ansatz), indices)
+    end
+    return indices
 end
 
 """The functions of the time trace basis that the multipliers of the two ends of `xspan` take."""
 function boundary_multiplier_indices(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz)
     imposes_boundary_conditions(coupling) || return Int[]
-    return _multiplier_indices(coupling, ansatz, ntime_functions(ansatz), 1)
+    return _multiplier_indices(coupling, ntime_functions(ansatz))
 end
 
 # The indices of the trace basis that the multipliers of one surface take, before the corners go.
-function _multiplier_indices(
-        coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz, nbasis::Integer,
-        axis::Integer)
-    _multiplier_indices(coupling.multiplier_basis, stride(coupling), nbasis,
-        length(quadrature_nodes(quadratures(quadrature(ansatz))[axis])))
-end
-
-function _multiplier_indices(::BSplineMultiplier, s::Integer, nbasis::Integer, nnodes::Integer)
-    collect(1:s:nbasis)
-end
-
-function _multiplier_indices(::LagrangeMultiplier, s::Integer, nbasis::Integer, nnodes::Integer)
-    collect(1:nnodes)
+function _multiplier_indices(coupling::MultiplierCoupling, nbasis::Integer)
+    return collect(1:stride(coupling):nbasis)
 end
 
 free_rows(coupling::MultiplierCoupling, ansatz::SpaceTimeAnsatz) = ntime_functions(ansatz)
@@ -185,10 +183,11 @@ holds the `2 Nμ` multipliers of the two ends of `xspan` — the first `Nμ` at 
 `x = b`.
 
 `multiplier_basis` and `boundary_basis` are the tables those multipliers are expanded in, at the
-nodes of the space and of the time quadrature, and `projection` and `boundary_projection` are the
-least-squares operators that read a trace at those nodes back into their coefficients, computed once
-when the cache is built. `target` and `boundary_target` are the data of the step: the trace the
-initial condition is compared with, and the problem's side traces at each node of the time rule.
+nodes of the space and of the time quadrature. `projection` reads the bottom multiplier's datum back
+into its coefficients, and `boundary_projection` the flux at the two ends of `xspan`; both are
+factorised once when the cache is built. `target` and `boundary_target` are the data of the step: the
+trace the initial condition is compared with, and the problem's side traces at each node of the time
+rule.
 
 `bottom_test` and `top_test` are the test functions' values at the two ends of the time direction,
 and `left_space`, `right_space`, `left_slope` and `right_slope` those of the space functions and of
@@ -238,7 +237,8 @@ function coupling_data(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz
     rules = quadratures(quadrature(ansatz))
     tnodes = quadrature_nodes(rules[1])
     xnodes = quadrature_nodes(rules[2])
-    s = stride(coupling)
+    tweights = quadrature_weights(rules[1])
+    xweights = quadrature_weights(rules[2])
     basis = coupling.multiplier_basis
     nλ, nμ = multiplier_counts(coupling, ansatz)
     qt = length(tnodes)
@@ -248,6 +248,11 @@ function coupling_data(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz
     μbasis = multiplier_table(
         basis, tb, tnodes, boundary_multiplier_indices(coupling, ansatz),
         ST)
+    # The datum of the bottom multiplier is the quadrature-weighted L² projection wherever the λ
+    # basis has lost its corner functions, whose thinned set can no longer read the momentum; the
+    # coupling that keeps the whole trace basis keeps the nodal fit its family's entry carries.
+    λprojection = imposes_boundary_conditions(coupling) ? least_squares(λbasis, xweights) :
+                  nodal_fit(λbasis)
     xs = xspan(ansatz)
     return MultiplierData{ST}(
         zeros(ST, nλ, D),
@@ -259,8 +264,8 @@ function coupling_data(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz
         μbasis,
         zeros(ST, qx, D),
         zeros(ST, 2 * qt, D),
-        least_squares(λbasis),
-        least_squares(μbasis),
+        λprojection,
+        least_squares(μbasis, tweights),
         ST[evaluate(tb, a, zero(T)) for a in 1:nt],
         ST[evaluate(tb, a, one(T)) for a in 1:nt],
         ST[evaluate(xb, j, xs[1]) for j in 1:nx],
@@ -302,34 +307,81 @@ function coupling_unknowns(data::MultiplierData)
 end
 
 """
-    multiplier_table(basis, trace, nodes, indices, ST)
+    multiplier_table(basis, trace, points, indices, ST)
 
-The multiplier functions of `indices` evaluated at `nodes`, one row per function.
+The multiplier functions of `indices` evaluated at the quadrature `points`, one row per function.
 
-A `BSplineMultiplier` takes the trace basis functions themselves; a `LagrangeMultiplier` takes the
-nodal function of each node of `indices`, whose table is the identity on those nodes.
+A `BSplineMultiplier` takes the trace basis functions themselves. A `LagrangeMultiplier` takes the
+function of that same space that is one at the spline node `nodes(trace)[index]` and zero at the
+other nodes `indices` keeps, written over the B-spline functions of `indices`: the two tables span
+one space and differ in their functions.
 """
-function multiplier_table(::BSplineMultiplier, trace, nodes::AbstractVector,
+function multiplier_table(::BSplineMultiplier, trace, points::AbstractVector,
         indices::AbstractVector{<:Integer}, ::Type{ST}) where {ST}
-    return ST[evaluate(trace, indices[p], nodes[r])
+    return ST[evaluate(trace, indices[p], points[r])
               for p in eachindex(indices),
-    r in eachindex(nodes)]
+    r in eachindex(points)]
 end
 
-function multiplier_table(::LagrangeMultiplier, trace, nodes::AbstractVector,
+function multiplier_table(::LagrangeMultiplier, trace, points::AbstractVector,
         indices::AbstractVector{<:Integer}, ::Type{ST}) where {ST}
-    return ST[(indices[p] == r ? one(ST) : zero(ST))
-              for p in eachindex(indices),
-    r in eachindex(nodes)]
+    ξ = nodes(trace)
+    n = length(indices)
+    values = ST[evaluate(trace, indices[j], ξ[indices[i]]) for i in 1:n, j in 1:n]
+    identity = zeros(ST, n, n)
+    for i in 1:n
+        identity[i, i] = one(ST)
+    end
+    # the nodal functions over the multiplier space's own functions: `coefficients * valuesᵀ = I`
+    return Matrix(transpose(values \ identity)) *
+           multiplier_table(BSplineMultiplier(), trace, points, indices, ST)
 end
 
 """
-    least_squares(basis)
+    least_squares(basis, weights)
 
 The operator that reads a trace given at the nodes back into the coefficients of `basis`, by the
-least-squares solve it factors once; `coefficients = atable * values`.
+quadrature-weighted `L²` projection `(B W Bᵀ)⁻¹ (B W)` of `m`: the coefficients `c` that minimise
+`Σᵣ ωᵣ (Σₚ cₚ Bₚᵣ - mᵣ)²`, with `W` the rule's weights, so that `∫ c(x) ψ_p(x) dx = ∫ m(x) ψ_p(x) dx`
+for every function of `basis`.
+
+The mass matrix is factored once, here, and the operator is reused by every step. An unweighted
+nodal fit of the same values is not this projection: a basis that no longer reproduces the trace —
+a thinned one, or one whose corner functions have left — reads the momentum of the datum wrongly,
+because the fit minimises the residual at the nodes alone.
 """
-function least_squares(basis::AbstractMatrix{ST}) where {ST}
+function least_squares(basis::AbstractMatrix{ST}, weights) where {ST}
+    m = size(basis, 1)
+    n = size(basis, 2)
+    m == 0 && return zeros(ST, 0, n)
+    mass = zeros(ST, m, m)
+    for q in 1:m, p in 1:m
+
+        s = zero(ST)
+        for r in 1:n
+            s += basis[p, r] * convert(ST, weights[r]) * basis[q, r]
+        end
+        mass[p, q] = s
+    end
+    load = zeros(ST, m, n)
+    for p in 1:m, r in 1:n
+
+        load[p, r] = basis[p, r] * convert(ST, weights[r])
+    end
+    return mass \ load
+end
+
+"""
+    nodal_fit(basis)
+
+The operator that reads a trace given at the nodes back into the coefficients of `basis` by the
+unweighted least-squares fit `(B Bᵀ)⁻¹ B`.
+
+It is the datum of the family that keeps the whole trace basis: that basis reproduces the momentum
+at the nodes, which is what the §A entry of the Dirichlet coupling was generated with. A basis whose
+corner functions have left does not, and takes [`least_squares`](@ref) instead.
+"""
+function nodal_fit(basis::AbstractMatrix{ST}) where {ST}
     n = size(basis, 2)
     m = size(basis, 1)
     m == 0 && return zeros(ST, 0, n)
@@ -424,7 +476,6 @@ function coupling_term!(
         b::AbstractVector{ST}, x::AbstractVector{ST}, data::MultiplierData{ST},
         c::SpaceTimeGalerkinCache{ST}, ansatz::TensorBSplineAnsatz,
         problem::LagrangianPDEProblem) where {ST}
-    nt = ntime_functions(ansatz)
     nx, D = size(c.bottom)
     nf = ntime_functions(ansatz)
     nλ = size(data.initial_multiplier, 1)
@@ -564,7 +615,7 @@ function coupling_update!(data::MultiplierData{ST}, x::AbstractVector{ST},
     return nothing
 end
 
-# The least-squares coefficients of a trace at the nodes, written into one column of a block.
+# The projected coefficients of a trace at the nodes, written into one column of a block.
 function project!(coefficients::AbstractMatrix{ST}, first_row::Integer, column::Integer,
         projection::AbstractMatrix{ST}, values::AbstractVector{ST}) where {ST}
     for p in axes(projection, 1)
@@ -828,9 +879,9 @@ the step's top surface, which is the next step's datum.
 """
 function coupling_internal(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz,
         problem::LagrangianPDEProblem)
-    T = datatype(problem)
+    ST = datatype(problem)
     nλ, _ = multiplier_counts(coupling, ansatz)
-    return (top_multiplier = zeros(T, nλ, components(problem)),)
+    return (top_multiplier = zeros(ST, nλ, components(problem)),)
 end
 
 """
