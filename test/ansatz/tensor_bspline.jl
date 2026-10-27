@@ -104,7 +104,7 @@ end
         reference = WAVE_GALERKIN_FULL_RESTRICTION_BSPLINE.u
         for n in 1:5
             @test maximum(abs.(result.solution.u[n] .- reference[n, :])) ≤
-                  T(100) * newton_tolerance(T)
+                  T(100) * newton_tolerance(T, SOLVER_OPTIONS)
         end
     end
 

@@ -7,6 +7,7 @@ using Test
 import GeometricIntegratorsBase: GeometricIntegrator, cache
 
 include("../helpers/testsetup.jl")
+include("../helpers/reference_values.jl")
 
 const M = MultisymplecticIntegrators
 
@@ -50,9 +51,21 @@ end
             push!(solutions, result.solution.u[end])
         end
         for solution in solutions[2:end]
-            @test maximum(abs.(solution .- solutions[1])) ≤ T(100) * newton_tolerance(T)
+            @test maximum(abs.(solution .- solutions[1])) ≤
+                  T(100) * newton_tolerance(T, SOLVER_OPTIONS)
         end
     end
+
+    @testset "A6b the tolerance helper reads the oracle" for T in (Float64, Float32)
+        # the oracle's own field, carried to `T` as the same number of `eps(T)`
+        @test newton_tolerance(T, SOLVER_OPTIONS) / eps(T) ==
+              T(SOLVER_OPTIONS.f_abstol / eps(Float64))
+        @test typeof(newton_tolerance(T, SOLVER_OPTIONS)) === T
+        # the one-field options the clause names are read as they stand, not as the oracle's value
+        @test newton_tolerance(T, (; f_abstol = 16 * eps(Float64))) == T(16) * eps(T)
+    end
+    # in `Float64`, where the oracle's entry is a whole number of `eps`, the helper returns it
+    @test newton_tolerance(Float64, SOLVER_OPTIONS) === SOLVER_OPTIONS.f_abstol
 
     @testset "A4c the continuation's guess and the extrapolation's value" for T in (Float64, Float32)
         continuation, _ = guess_run(T, Continuation())
