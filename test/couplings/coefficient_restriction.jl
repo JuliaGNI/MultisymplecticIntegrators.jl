@@ -133,6 +133,15 @@ end
         for n in 1:5
             @test abs(recomputed[n] - cs.residuals[n]) ≤ T(100) * eps(T) * recomputed[n]
         end
+        # a second run of one integrator starts again from the problem's initial data, and its
+        # records belong to that run alone
+        reused = GeometricIntegrator(problem, method)
+        first_run = integrate(reused)
+        second_run = integrate(reused)
+        @test second_run.solution.u == first_run.solution.u
+        @test length(cache(reused).iterations) == 5
+        @test length(cache(reused).residuals) == 5
+        @test length(cache(reused).initial_residuals) == 5
     end
 
     @testset "S3a the problem layer takes a vector density" for T in (Float64, Float32)

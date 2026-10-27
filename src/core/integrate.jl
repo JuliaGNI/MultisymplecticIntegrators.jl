@@ -21,6 +21,8 @@ quadrature nodes rather than the interior ones because the energy diagnostics in
 the accuracy of the Gauss rule.
 
 The steps are driven one at a time, because the trace of a step exists only while its cache does.
+Every call starts a new run: the integrator's cache is reset first, so its first slab takes the
+problem's initial data and the steps it records belong to this run alone.
 As in the ecosystem's `integrate!`, a step whose state holds a NaN ends the run with a warning;
 `traces` then ends at that step, and the solution holds the NaN there. The keyword arguments go to
 the integrator's constructor, and to nothing else.
@@ -31,6 +33,7 @@ end
 
 function integrate(integrator::GeometricIntegrator{
         <:SpaceTimeAnsatz, <:LagrangianPDEProblem})
+    reset!(cache(integrator))
     solution = GeometricSolution(problem(integrator))
     steps = ntime(solution)
     sample = top_trace(cache(integrator))

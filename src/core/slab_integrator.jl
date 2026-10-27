@@ -204,6 +204,23 @@ function Base.show(io::IO, cache::SpaceTimeGalerkinCache{ST, T}) where {ST, T}
     print(io, "SpaceTimeGalerkinCache{$ST, $T} with $(length(cache.x)) free coefficients")
 end
 
+"""
+    reset!(cache::SpaceTimeGalerkinCache)
+
+Clear the state a run leaves in the cache: the step counter, which is what tells the coupling and
+the guess whether the slab is the run's first, and the per-step records of the Newton solve.
+
+A run starts at the problem's initial data, so a cache that still counted the previous run's steps
+would hand that run's last top row to the new first slab as its bottom datum.
+"""
+function reset!(c::SpaceTimeGalerkinCache)
+    c.steps = 0
+    empty!(c.iterations)
+    empty!(c.residuals)
+    empty!(c.initial_residuals)
+    return nothing
+end
+
 """Scatter the solver's vector into the coefficient array, with the coupling's bottom row."""
 function scatter!(coeffs::Array{ST, 3}, x::AbstractVector{ST}, bottom::AbstractMatrix{ST},
         nt::Integer) where {ST}
