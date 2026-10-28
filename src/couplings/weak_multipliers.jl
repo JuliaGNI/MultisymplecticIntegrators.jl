@@ -54,11 +54,14 @@ every later one. The multiplier at the bottom surface enters the momentum balanc
 that enters the slab: the least-squares fit of `∂L/∂v(u₀, v₀, w₀)` on the first slab, and the
 previous slab's top multiplier afterwards.
 
-`multiplier_basis` names the basis of `ψ_p`: `:bspline`, the ansatz's own trace basis, every
-`stride`-th function of it, or `:lagrange`, the nodal basis of that same set of functions.
+`multiplier_basis` names the basis of `ψ_p`: `:bspline`, the ansatz's own trace basis, or
+`:lagrange`, the nodal basis of that same set of functions.
 
-The coupling leaves the space boundary unconstrained, so an ansatz whose `x_boundary` is `Free()`
-has no boundary condition to impose and building the integrator throws `ArgumentError`.
+The coupling imposes no space boundary condition, so the ends of `xspan` are left to the space
+basis: the ansatz must take `x_boundary = Dirichlet()`, and every other value throws an
+`ArgumentError` that names the condition the coupling needs and the one it got. A `Free()` basis
+leaves the ends unconstrained, and the remaining conditions constrain them in a way the interior
+weak form does not carry.
 
 ```julia
 method = SpaceTimeGalerkin(
@@ -95,9 +98,13 @@ slab with `Nt` time functions and `Nx` space functions has `length(1:stride:Nx)`
 bottom surface, without its two corner functions at `stride = 1`, and `length(1:stride:Nt)` at each
 end of `xspan`.
 
-A `stride` below 1 throws `ArgumentError`. The boundary rows carry an unknown, so an ansatz whose
-`x_boundary` is `Dirichlet()` — its trace vanishes at each end of `xspan` — would leave them empty;
-building the integrator with one throws `ArgumentError`.
+A `stride` below 1 throws `ArgumentError`. Only `stride = 1` converges: at `stride > 1` the thinned
+set of multiplier functions no longer reproduces a constant, and the observed order of the slab
+falls with each step of the thinning.
+
+The boundary rows carry an unknown, so the ansatz must take `x_boundary = Free()`; every other value
+throws an `ArgumentError` naming the condition the coupling needs and the one it got. A `Dirichlet()`
+basis in particular makes the trace vanish at each end of `xspan`, which would leave the rows empty.
 
 ```julia
 method = SpaceTimeGalerkin(
@@ -118,10 +125,10 @@ function WeakInitialAndBoundaryConditions(;
 end
 
 """The spacing of the multiplier functions of a coupling that imposes the initial condition alone."""
-stride(::WeakInitialCondition) = 1
+multiplier_stride(::WeakInitialCondition) = 1
 
 """The spacing of the multiplier functions of a coupling that imposes the boundary conditions too."""
-stride(coupling::WeakInitialAndBoundaryConditions) = coupling.stride
+multiplier_stride(coupling::WeakInitialAndBoundaryConditions) = coupling.stride
 
 """Whether the coupling imposes the space boundary conditions, which are the `2 Nμ` multipliers."""
 imposes_boundary_conditions(::WeakInitialCondition) = false
@@ -152,7 +159,7 @@ nothing leaves, because the thinned set is of full rank as it stands.
 """
 function space_multiplier_indices(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz)
     indices = _multiplier_indices(coupling, nspace_functions(ansatz))
-    if imposes_boundary_conditions(coupling) && stride(coupling) == 1
+    if imposes_boundary_conditions(coupling) && multiplier_stride(coupling) == 1
         return filter(index -> 1 < index < nspace_functions(ansatz), indices)
     end
     return indices
@@ -166,7 +173,7 @@ end
 
 # The indices of the trace basis that the multipliers of one surface take, before the corners go.
 function _multiplier_indices(coupling::MultiplierCoupling, nbasis::Integer)
-    return collect(1:stride(coupling):nbasis)
+    return collect(1:multiplier_stride(coupling):nbasis)
 end
 
 free_rows(coupling::MultiplierCoupling, ansatz::SpaceTimeAnsatz) = ntime_functions(ansatz)
@@ -216,7 +223,6 @@ struct MultiplierData{ST} <: CouplingData
     top_v::Matrix{ST}
     top_w::Matrix{ST}
     momentum::Matrix{ST}
-    boundary_momentum::Matrix{ST}
     left_coefficients::Matrix{ST}
     right_coefficients::Matrix{ST}
     left_slopes::Matrix{ST}
@@ -243,6 +249,9 @@ function coupling_data(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz
     nλ, nμ = multiplier_counts(coupling, ansatz)
     qt = length(tnodes)
     qx = length(xnodes)
+    # `top_u`, `top_v` and `top_w` hold a trace at the nodes of the space rule in one call and at the
+    # nodes of the time rule in another, so they take the longer of the two rules.
+    nq = max(qx, qt)
     λbasis = multiplier_table(
         basis, xb, xnodes, space_multiplier_indices(coupling, ansatz), ST)
     μbasis = multiplier_table(
@@ -272,11 +281,10 @@ function coupling_data(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz
         ST[evaluate(xb, j, xs[2]) for j in 1:nx],
         ST[evaluate(xb, j, xs[1], 1) for j in 1:nx],
         ST[evaluate(xb, j, xs[2], 1) for j in 1:nx],
-        zeros(ST, qx, D),
-        zeros(ST, qx, D),
-        zeros(ST, qx, D),
-        zeros(ST, qx, D),
-        zeros(ST, qt, D),
+        zeros(ST, nq, D),
+        zeros(ST, nq, D),
+        zeros(ST, nq, D),
+        zeros(ST, nq, D),
         zeros(ST, nt, D),
         zeros(ST, nt, D),
         zeros(ST, nt, D),
@@ -328,12 +336,8 @@ function multiplier_table(::LagrangeMultiplier, trace, points::AbstractVector,
     ξ = nodes(trace)
     n = length(indices)
     values = ST[evaluate(trace, indices[j], ξ[indices[i]]) for i in 1:n, j in 1:n]
-    identity = zeros(ST, n, n)
-    for i in 1:n
-        identity[i, i] = one(ST)
-    end
     # the nodal functions over the multiplier space's own functions: `coefficients * valuesᵀ = I`
-    return Matrix(transpose(values \ identity)) *
+    return Matrix(transpose(values \ Matrix{ST}(I, n, n))) *
            multiplier_table(BSplineMultiplier(), trace, points, indices, ST)
 end
 
@@ -385,11 +389,7 @@ function nodal_fit(basis::AbstractMatrix{ST}) where {ST}
     n = size(basis, 2)
     m = size(basis, 1)
     m == 0 && return zeros(ST, 0, n)
-    identity = zeros(ST, n, n)
-    for i in 1:n
-        identity[i, i] = one(ST)
-    end
-    return Matrix(adjoint(basis) \ identity)
+    return Matrix(adjoint(basis) \ Matrix{ST}(I, n, n))
 end
 
 # The load of a trace on a basis: `∫ g(x) ψ_j(x) dx` for every function `j` of the axis.
@@ -462,7 +462,7 @@ function add_edge_load!(b::AbstractVector{ST}, load::AbstractVector{ST},
 end
 
 """
-    coupling_term!(b, x, data, cache, ansatz, problem)
+    coupling_term!(b, x, coupling, data::MultiplierData, cache, ansatz, problem)
 
 The coupling's part of one slab's residual.
 
@@ -473,8 +473,8 @@ enter the same way, weighted by the space functions there. After the rows of the
 comes one row per multiplier function, the boundary data of that function.
 """
 function coupling_term!(
-        b::AbstractVector{ST}, x::AbstractVector{ST}, data::MultiplierData{ST},
-        c::SpaceTimeGalerkinCache{ST}, ansatz::TensorBSplineAnsatz,
+        b::AbstractVector{ST}, x::AbstractVector{ST}, coupling::MultiplierCoupling,
+        data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST}, ansatz::TensorBSplineAnsatz,
         problem::LagrangianPDEProblem) where {ST}
     nx, D = size(c.bottom)
     nf = ntime_functions(ansatz)
@@ -539,17 +539,7 @@ function multiplier_constraints!(b::AbstractVector{ST}, data::MultiplierData{ST}
         end
     end
     nμ == 0 && return nothing
-    for d in 1:D, a in 1:nt
-
-        l = zero(ST)
-        r = zero(ST)
-        for j in 1:nx
-            l += c.coeffs[a, j, d] * data.left_space[j]
-            r += c.coeffs[a, j, d] * data.right_space[j]
-        end
-        data.left_coefficients[a, d] = l
-        data.right_coefficients[a, d] = r
-    end
+    end_coefficients!(data, c.coeffs, nx, nt, D)
     for d in 1:D
         for edge in 1:2
             coefficients = edge == 1 ? data.left_coefficients : data.right_coefficients
@@ -624,34 +614,6 @@ function project!(coefficients::AbstractMatrix{ST}, first_row::Integer, column::
             s += projection[p, r] * values[r]
         end
         coefficients[first_row + p - 1, column] = s
-    end
-    return nothing
-end
-
-# The top trace of the guessed coefficients, at the nodes of the space quadrature.
-function top_trace!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST},
-        ansatz::TensorBSplineAnsatz, h) where {ST}
-    e = c.evaluation
-    nt = ntime_functions(ansatz)
-    nx, D = size(c.bottom)
-    hh = convert(ST, h)
-    fill!(data.top_u, zero(ST))
-    fill!(data.top_v, zero(ST))
-    fill!(data.top_w, zero(ST))
-    for d in 1:D
-        for j in 1:nx
-            # the time derivative at the top of the slab, per space function: `∂ₜu` is `∂_{t̂}u / h`
-            tderiv = zero(ST)
-            for k in 1:nt
-                tderiv += c.coeffs[k, j, d] * e.top_slope[k]
-            end
-            tderiv /= hh
-            for i in axes(data.top_u, 1)
-                data.top_u[i, d] += c.coeffs[nt, j, d] * e.trace[i, j]
-                data.top_w[i, d] += c.coeffs[nt, j, d] * e.trace_slope[i, j]
-                data.top_v[i, d] += tderiv * e.trace[i, j]
-            end
-        end
     end
     return nothing
 end
@@ -741,11 +703,11 @@ function coupling_guess!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST}
     h = timestep(problem)
     base = nf * nx * D
     scatter!(c.coeffs, c.x, c.bottom, nt, nf)
-    top_trace!(data, c, ansatz, h)
+    trace!(data.top_u, data.top_v, data.top_w, c, ansatz, h)
     momentum_load!(data.momentum, problem.density, data.top_u, data.top_v, data.top_w,
         parameters(problem))
     for d in 1:D
-        for r in axes(data.top_u, 1)
+        for r in axes(data.space_work, 1)
             data.space_work[r] = data.momentum[r, d]
         end
         project!(data.guess_multiplier, 1, d, data.projection, data.space_work)
@@ -779,6 +741,9 @@ function initial_multiplier!(data::MultiplierData{ST}, problem::LagrangianPDEPro
     values = problem.ics_function(collect(nodes), parameters(problem))
     qx = length(nodes)
     D = size(data.top_u, 2)
+    fill!(data.top_u, zero(ST))
+    fill!(data.top_v, zero(ST))
+    fill!(data.top_w, zero(ST))
     for d in 1:D, r in 1:qx
 
         data.top_u[r, d] = convert(ST, values.u[(d - 1) * qx + r])
@@ -846,36 +811,45 @@ end
 """
     check_coupling(problem, coupling::WeakInitialCondition, ansatz)
 
-Refuse a `Free()` space basis: the coupling imposes the initial condition alone, and a basis that
-leaves the ends of `xspan` unconstrained has no boundary condition for the interior weak form to
-fall back on.
+Refuse every space basis but a `Dirichlet()` one, naming the condition the coupling needs and the
+one the ansatz has: the coupling imposes the initial condition alone, so the basis itself must
+constrain the two ends of `xspan`. A `Free()` basis leaves them unconstrained, and every other
+condition constrains them in a way that the interior weak form does not carry.
 """
 function check_coupling(::LagrangianPDEProblem, coupling::WeakInitialCondition,
         ansatz::TensorBSplineAnsatz)
-    x_boundary(ansatz) isa Free || return nothing
-    throw(ArgumentError("$(nameof(typeof(coupling))) needs a space basis that constrains the ends " *
-                        "of xspan; this ansatz has x_boundary = Free()"))
+    b = x_boundary(ansatz)
+    b isa Dirichlet && return nothing
+    throw(ArgumentError("$(nameof(typeof(coupling))) needs a space basis with x_boundary = " *
+                        "Dirichlet(); this ansatz has x_boundary = $(nameof(typeof(b)))"))
 end
 
 """
     check_coupling(problem, coupling::WeakInitialAndBoundaryConditions, ansatz)
 
-Refuse a `Dirichlet()` space basis: every function of it vanishes at the two ends of `xspan`, so the
-boundary rows of the coupling would carry no unknown and the slab would be rank deficient.
+Refuse every space basis but a `Free()` one, naming the condition the coupling needs and the one the
+ansatz has: a `Dirichlet()` basis vanishes at the two ends of `xspan`, so the boundary rows of the
+coupling would carry no unknown, and every other condition constrains the ends in a way the weak
+rows do not undo.
 """
 function check_coupling(::LagrangianPDEProblem, coupling::WeakInitialAndBoundaryConditions,
         ansatz::TensorBSplineAnsatz)
-    x_boundary(ansatz) isa Dirichlet && throw(ArgumentError(
-        "$(nameof(typeof(coupling))) imposes the space boundary conditions itself; a Dirichlet() " *
-        "space basis vanishes at the ends of xspan, so its boundary rows would carry no unknown"))
-    return nothing
+    b = x_boundary(ansatz)
+    b isa Free && return nothing
+    throw(ArgumentError("$(nameof(typeof(coupling))) imposes the space boundary conditions " *
+                        "itself, so it needs a space basis with x_boundary = Free(); this " *
+                        "ansatz has x_boundary = $(nameof(typeof(b)))"))
 end
 
 """
-    internal_variables(coupling, ansatz, problem)
+    coupling_internal(coupling, ansatz, problem)
 
 The coupling's own state of a step, in the solution step's `internal` named tuple: the multiplier of
-the step's top surface, which is the next step's datum.
+the step's top surface.
+
+The ecosystem allocates the named tuple once per solution step and fills it after every step, so the
+`top_multiplier` entry holds the coefficients of the last solved slab's top multiplier in the
+multiplier basis, which is the momentum the next slab enters with.
 """
 function coupling_internal(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz,
         problem::LagrangianPDEProblem)
@@ -887,13 +861,12 @@ end
 """
     copy_internal_variables!(sol, cache)
 
-Carry the multiplier of the step's top surface into the solution step, where the next step's
-[`slab_bottom!`](@ref) reads it as its own bottom datum.
+Fill the solution step's internal state with the coupling's own: the multiplier of the last solved
+slab's top surface, which is the momentum the slab hands on.
 """
-function GeometricIntegratorsBase.copy_internal_variables!(
-        sol::GeometricIntegratorsBase.SolutionStep,
+function copy_internal_variables!(sol::SolutionStep,
         c::SpaceTimeGalerkinCache{ST, T, <:MultiplierData}) where {ST, T}
-    copyto!(GeometricIntegratorsBase.internal(sol).top_multiplier, c.coupling.top_multiplier)
+    copyto!(internal(sol).top_multiplier, c.coupling.top_multiplier)
     return nothing
 end
 

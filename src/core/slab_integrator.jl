@@ -18,10 +18,14 @@ leaves one boundary term at the bottom of the slab, the momentum flux, which the
 as well; the top of the slab is free, so its flux is not imposed but measured, and handed on as the
 next slab's bottom flux.
 
-The unknowns are the `Nt - 1` free rows of each space function and each component, so a step is a
-nonlinear system of `(Nt - 1) * Nx * D` equations, which the ecosystem's Newton solver solves. The
-iterate count and the residual of every step are recorded in the cache, and the trace `(u, v, w)` at
-the top of the slab, at the nodes of the space quadrature, is kept for the diagnostics.
+The unknown count is the coupling's: the free rows of each space function and each component, plus
+the coupling's own unknowns behind them. A [`CoefficientRestriction`](@ref) fixes the bottom row, so
+it leaves `(Nt - 1) * Nx * D` free coefficients; a weak-multiplier coupling imposes the initial
+condition with multipliers of its own, so all `Nt` rows are free and the multipliers follow them. A
+step is a nonlinear system of [`total_free_coefficients`](@ref)`(method, problem)` equations, which
+the ecosystem's Newton solver solves. The iterate count and the residual of every step are recorded
+in the cache, and the trace `(u, v, w)` at the top of the slab, at the nodes of the space
+quadrature, is kept for the diagnostics.
 
 ```julia
 method = SpaceTimeGalerkin(
@@ -144,7 +148,7 @@ A coupling fixes how the free coefficients of a slab are laid out, adds terms to
 may carry unknowns of its own between the coefficients and behind them. The block holds what it
 keeps between slabs — its datum, its unknowns, the tables its residual term evaluates and the
 scratch of that evaluation. It is built once, when the cache is built, and its type is a parameter
-of the cache, so that the coupling's terms are a dispatch and not a branch.
+of the cache, so that a coupling that keeps nothing pays for nothing.
 """
 abstract type CouplingData end
 
@@ -194,15 +198,14 @@ coefficients.
 """
 coupling_unknowns(::SlabCoupling, ::SpaceTimeAnsatz, ::LagrangianPDEProblem) = 0
 
-coupling_unknowns(::NoCouplingData) = 0
-
 """
-    coupling_term!(b, x, data, cache, ansatz, problem)
+    coupling_term!(b, x, coupling, data, cache, ansatz, problem)
 
 The coupling's own part of the residual: its terms on the free rows the interior weak form already
-carries, and its own equations after them.
+carries, and its own equations after them. The coupling is the third argument, so a coupling's term
+is reached whether or not it keeps a block of the cache, and the fourth argument is that block.
 """
-coupling_term!(b, x, ::NoCouplingData, cache, ansatz, problem) = nothing
+coupling_term!(b, x, ::SlabCoupling, ::CouplingData, cache, ansatz, problem) = nothing
 
 """
     coupling_guess!(data, cache, ansatz, problem, sol)
@@ -229,9 +232,9 @@ copy_coupling_data!(::CouplingData, ::CouplingData) = nothing
 """
     coupling_internal(coupling, ansatz, problem)
 
-The coupling's own state of a step: the entries of the solution step's `internal` named tuple that
-[`coupling_carry!`](@ref) fills after every step. A coupling that carries nothing between steps
-declares no entry.
+The coupling's own state of a step: the entries of the solution step's `internal` named tuple, which
+the ecosystem's `copy_internal_variables!` fills after every step. A coupling that carries nothing
+between steps declares no entry.
 """
 coupling_internal(::SlabCoupling, ::SpaceTimeAnsatz, ::LagrangianPDEProblem) = NamedTuple()
 
@@ -465,7 +468,7 @@ function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol, params,
     for d in 1:D, j in 1:nx, k in 1:nf
         b[free_index(k, j, d, nf, nx)] = c.residual[k, j, d]
     end
-    coupling_term!(b, x, c.coupling, c, a, problem(int))
+    coupling_term!(b, x, coupling(method(int)), c.coupling, c, a, problem(int))
     return nothing
 end
 
@@ -504,13 +507,48 @@ function update!(sol, params, x::AbstractVector{ST},
 end
 
 """
+    trace!(trace_u, trace_v, trace_w, cache, ansatz, h)
+
+The trace `(u, v, w)` of the slab's top row at the nodes of the space quadrature, component-major,
+into three matrices with a row per node of the space rule.
+
+`∂ₜu` is the time derivative of the normalised coordinate divided by the slab's `h`, which is the
+factor the interior weak form carries as well.
+"""
+function trace!(trace_u::AbstractMatrix{ST}, trace_v::AbstractMatrix{ST},
+        trace_w::AbstractMatrix{ST}, c::SpaceTimeGalerkinCache{ST}, a::TensorBSplineAnsatz,
+        h) where {ST}
+    e = c.evaluation
+    nt = ntime_functions(a)
+    nx, D = size(c.bottom)
+    hh = convert(ST, h)
+    fill!(trace_u, zero(ST))
+    fill!(trace_v, zero(ST))
+    fill!(trace_w, zero(ST))
+    for d in 1:D
+        for j in 1:nx
+            # the time derivative at the top of the slab, per space function: `∂ₜu` is `∂_{t̂}u / h`
+            tderiv = zero(ST)
+            for k in 1:nt
+                tderiv += c.coeffs[k, j, d] * e.top_slope[k]
+            end
+            tderiv /= hh
+            for i in axes(e.trace, 1)
+                trace_u[i, d] += c.coeffs[nt, j, d] * e.trace[i, j]
+                trace_w[i, d] += c.coeffs[nt, j, d] * e.trace_slope[i, j]
+                trace_v[i, d] += tderiv * e.trace[i, j]
+            end
+        end
+    end
+    return nothing
+end
+
+"""
     assign!(u, v, w, cache, ansatz, nx, D, h)
 
 The solution and its two derivatives at the top of the slab, on the output grid, and beside them the
-trace `(u, v, w)` at the nodes of the space quadrature, in one pass over the top row.
-
-The two tables are the space basis evaluated at two sets of points, so the row is walked once and
-the value of each function is written to both.
+trace `(u, v, w)` at the nodes of the space quadrature, which [`trace!`](@ref) fills from the same
+top row.
 """
 function assign!(u::AbstractVector{ST}, v::AbstractVector{ST}, w::AbstractVector{ST},
         c::SpaceTimeGalerkinCache{ST}, a::TensorBSplineAnsatz, nx::Integer, D::Integer,
@@ -518,14 +556,10 @@ function assign!(u::AbstractVector{ST}, v::AbstractVector{ST}, w::AbstractVector
     e = c.evaluation
     nt = ntime_functions(a)
     n = size(e.output, 1)
-    m = size(e.trace, 1)
     hh = convert(ST, h)
     fill!(u, zero(ST))
     fill!(v, zero(ST))
     fill!(w, zero(ST))
-    fill!(c.trace_u, zero(ST))
-    fill!(c.trace_v, zero(ST))
-    fill!(c.trace_w, zero(ST))
     for d in 1:D
         for j in 1:nx
             # the time derivative at the top of the slab, per space function: `∂ₜu` is `∂_{t̂}u / h`
@@ -539,13 +573,9 @@ function assign!(u::AbstractVector{ST}, v::AbstractVector{ST}, w::AbstractVector
                 w[(d - 1) * n + i] += c.top[j, d] * e.output_slope[i, j]
                 v[(d - 1) * n + i] += tderiv * e.output[i, j]
             end
-            for i in 1:m
-                c.trace_u[i, d] += c.top[j, d] * e.trace[i, j]
-                c.trace_w[i, d] += c.top[j, d] * e.trace_slope[i, j]
-                c.trace_v[i, d] += tderiv * e.trace[i, j]
-            end
         end
     end
+    trace!(c.trace_u, c.trace_v, c.trace_w, c, a, h)
     return nothing
 end
 

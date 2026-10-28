@@ -4,7 +4,7 @@ using GeometricBase
 using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: mul!
+using LinearAlgebra: I, mul!
 using QuadratureRules
 using SimpleSplines
 using SimpleSolvers
@@ -26,7 +26,7 @@ import GeometricIntegratorsBase: GeometricIntegrator, solutionstep, reset!, inte
 import GeometricIntegratorsBase: Cache, CacheType, IntegratorCache, check_solver_status,
                                  nlsolution, default_solver, initial_guess!,
                                  integrate_step!, residual!, solver,
-                                 solverstate
+                                 solverstate, copy_internal_variables!, internal
 
 # abstract types
 include("methods.jl")

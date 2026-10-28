@@ -211,6 +211,28 @@ end
         # the unknowns of the block are the same count, reached from the cache
         @test M.coupling_unknowns(cache(GeometricIntegrator(problem, full)).coupling) ==
               (nf - 2) + 2 * nt
+        # the core asks the coupling for its residual term: the restriction's momentum load reaches
+        # the row of the bottom test function, and setting the load aside takes it away again
+        int = GeometricIntegrator(problem, restricted)
+        c = cache(int)
+        solstep = solutionstep(int, GeometricSolution(problem)[0])
+        M.slab_bottom!(c, coupling(restricted), problem, dirichlet, solstep)
+        x = copy(c.x)
+        b1 = similar(x)
+        b2 = similar(x)
+        p = parameters(problem)
+        M.residual!(b1, x, nothing, p, int)
+        flux = copy(c.flux)
+        fill!(c.flux, zero(T))
+        M.residual!(b2, x, nothing, p, int)
+        c.flux .= flux
+        @test any(x -> !iszero(x), flux)
+        for d in 1:components(problem), j in 1:nx
+
+            row = M.free_index(1, j, d, nt - 1, nx)
+            # the coupling's load is added to the row, and to nothing else
+            @test b1[row] == b2[row] + flux[j, d]
+        end
     end
 
     @testset "S1b a coupling that implements neither hook is refused" for T in (Float64, Float32)
@@ -242,27 +264,32 @@ end
         assert_no_upcast(result.solution.u, T)
     end
 
-    @testset "A1b a free ansatz is refused" for T in (Float64, Float32)
+    @testset "A1b every other boundary condition is refused" for T in (Float64, Float32)
         problem = wave_problem(T)
-        ansatz = wave_ansatz(T; x_boundary = Free())
-        err = try
-            GeometricIntegrator(problem, SpaceTimeGalerkin(ansatz, WeakInitialCondition()))
-            nothing
-        catch e
-            e
+        # each coupling accepts one condition — the one it needs — and refuses the other five,
+        # naming the coupling, the condition it needs and the condition it got
+        for (coupling, needed, accepted, refused) in (
+            (WeakInitialCondition(), "Dirichlet", Dirichlet(),
+            (Free(), Natural(), Neumann(), Periodic(), Robin(1, 1))),
+            (WeakInitialAndBoundaryConditions(), "Free", Free(),
+            (Dirichlet(), Natural(), Neumann(), Periodic(), Robin(1, 1))))
+            @test GeometricIntegrator(problem,
+                SpaceTimeGalerkin(wave_ansatz(T; x_boundary = accepted),
+                    coupling)) isa GeometricIntegrator
+            for b in refused
+                err = try
+                    GeometricIntegrator(problem,
+                        SpaceTimeGalerkin(wave_ansatz(T; x_boundary = b), coupling))
+                    nothing
+                catch e
+                    e
+                end
+                @test err isa ArgumentError
+                @test occursin(string(nameof(typeof(coupling))), err.msg)
+                @test occursin(needed, err.msg)
+                @test occursin(string(nameof(typeof(b))), err.msg)
+            end
         end
-        @test err isa ArgumentError
-        @test occursin("WeakInitialCondition", err.msg)
-        # the full coupling imposes the boundary rows itself, so a Dirichlet ansatz leaves them empty
-        err = try
-            GeometricIntegrator(problem,
-                SpaceTimeGalerkin(wave_ansatz(T), WeakInitialAndBoundaryConditions()))
-            nothing
-        catch e
-            e
-        end
-        @test err isa ArgumentError
-        @test occursin("WeakInitialAndBoundaryConditions", err.msg)
     end
 
     @testset "A1c the momentum carry" for T in (Float64, Float32)
@@ -289,10 +316,20 @@ end
         @test internal(other).top_multiplier == cc.coupling.top_multiplier
         M.slab_bottom!(cc, coupling(method), problem, ansatz(method), other)
         @test cc.coupling.initial_multiplier == cc.coupling.top_multiplier
+        # through integrate: the datum of a run's last slab is the previous slab's top multiplier,
+        # so a run of five slabs enters its fifth with what a run of four slabs handed out
+        _, four_method, five_int, _ = wave_run(T)
+        four_int = GeometricIntegrator(
+            wave_problem(T; timespan = (zero(T), T(0.2))), four_method)
+        integrate(four_int)
+        @test cache(five_int).coupling.initial_multiplier ==
+              cache(four_int).coupling.top_multiplier
+        @test any(x -> !iszero(x), cache(four_int).coupling.top_multiplier)
     end
 
-    @testset "A1d the rank of the first slab" begin
-        T = Float64
+    @testset "A1d the rank of the first slab" for T in (Float64, Float32)
+        # the rank tolerance is the one the coupled layout leaves measurable in each precision
+        rank_tolerance = T === Float64 ? T(1e-10) : eps(T) / 16
         problem = wave_problem(T; timespan = (zero(T), T(0.05)))
         method = SpaceTimeGalerkin(wave_ansatz(T),
             WeakInitialCondition(multiplier_basis = :bspline))
@@ -300,17 +337,21 @@ end
         integrate(int)
         unknown = length(cache(int).x)
         jacobian = slab_jacobian(int)
-        @info "A1d the rank of the first slab" unknown=unknown smallest=svdvals(jacobian)[end]
-        @test rank(jacobian; rtol = T(1e-10)) == unknown
-        # the same measurement for the coupling that imposes the boundary conditions
+        σ = svdvals(jacobian)
+        @info "A1d the rank of the Dirichlet slab" T unknown smallest=σ[end] relative=σ[end]/σ[1]
+        @test rank(jacobian; rtol = rank_tolerance) == unknown
+        # the same measurement for the coupling that imposes the boundary conditions; its λ basis
+        # has lost the two corner functions, which is §Audit 2.8's layout
         full = SpaceTimeGalerkin(wave_ansatz(T; x_boundary = Free()),
             WeakInitialAndBoundaryConditions(stride = 1))
         full_int = GeometricIntegrator(problem, full)
         integrate(full_int)
         full_unknown = length(cache(full_int).x)
         full_jacobian = slab_jacobian(full_int)
-        @info "A1d the rank of the full coupling's first slab" unknown=full_unknown
-        @test rank(full_jacobian; rtol = T(1e-10)) == full_unknown
+        full_σ = svdvals(full_jacobian)
+        @info "A1d the rank of the free slab" T unknown=full_unknown smallest=full_σ[end] relative=full_σ[end]/full_σ[1]
+        @test full_unknown == 116
+        @test rank(full_jacobian; rtol = rank_tolerance) == full_unknown
     end
 
     @testset "A1e a problem without an exact solution" for T in (Float64, Float32)
@@ -399,15 +440,14 @@ end
         @test_throws ArgumentError WeakInitialAndBoundaryConditions(multiplier_basis = :Lagrange)
     end
 
-    @testset "A3a the two bases agree as the mesh refines" begin
-        T = Float64
-        errors = Dict{Symbol, Vector{Float64}}()
-        solutions = Dict{Symbol, Vector{Float64}}()
-        tables = Dict{Symbol, Matrix{Float64}}()
+    @testset "A3a the two bases agree as the mesh refines" for T in (Float64, Float32)
+        errors = Dict{Symbol, Vector{T}}()
+        solutions = Dict{Symbol, Vector{T}}()
+        tables = Dict{Symbol, Matrix{T}}()
         for basis in (:bspline, :lagrange)
-            errors[basis] = Float64[]
-            for cells in (10, 20, 40)
-                problem = wave_problem(T; timestep = T(0.25) / (2 * cells / 5),
+            errors[basis] = T[]
+            for cells in (5, 10, 20)
+                problem = wave_problem(T; timestep = T(0.25 / (2 * cells / 5)),
                     xstep = one(T) / cells)
                 coupling = WeakInitialAndBoundaryConditions(stride = 1,
                     multiplier_basis = basis)
@@ -422,13 +462,14 @@ end
                 # the run's own solution and the table it was assembled in; the finest one stays
                 solutions[basis] = copy(result.solution.u[end])
                 tables[basis] = copy(cache(int).coupling.multiplier_basis)
+                assert_no_upcast(result.solution.u, T)
             end
         end
         orders = map(basis -> [log2(errors[basis][i] / errors[basis][i + 1]) for i in 1:2],
             (:bspline, :lagrange))
-        @info "A3a the observed orders" bspline=orders[1] lagrange=orders[2]
-        @test all(≥(1.9), orders[1])
-        @test all(≥(1.9), orders[2])
+        @info "A3a the observed orders" T errors=errors orders=orders
+        @test all(≥(T(1.9)), orders[1])
+        @test all(≥(T(1.9)), orders[2])
         # the two bases span one space in different functions: the tables differ, and the two runs
         # are the solution of that one space to round-off
         @test size(tables[:bspline]) == size(tables[:lagrange])
@@ -460,11 +501,10 @@ end
         @test size(c.coupling.projection, 1) == size(c.coupling.initial_multiplier, 1)
     end
 
-    @testset "A6a a travelling wave with non-zero boundary values" begin
-        T = Float64
-        errors = Float64[]
+    @testset "A6a a travelling wave with non-zero boundary values" for T in (Float64, Float32)
+        errors = T[]
         for cells in (10, 20, 40)
-            problem = travelling_wave(T; timestep = T(0.25) / (2 * cells / 5),
+            problem = travelling_wave(T; timestep = T(0.25 / (2 * cells / 5)),
                 xstep = one(T) / cells)
             result = integrate(problem,
                 SpaceTimeGalerkin(wave_ansatz(T; ncells = (2, cells), x_boundary = Free()),
@@ -472,11 +512,12 @@ end
             exact = [problem.exact_u(problem.timespan[2], x, parameters(problem))
                      for x in xgrid(problem)]
             push!(errors, maximum(abs.(result.solution.u[end] .- exact)))
+            assert_no_upcast(result.solution.u, T)
         end
         orders = [log2(errors[i] / errors[i + 1]) for i in 1:2]
-        @info "A6a the observed order" errors=errors orders=orders
-        @test all(≥(1.9), orders)
-        @test errors[end] < 1e-4
+        @info "A6a the observed order" T errors=errors orders=orders
+        @test all(≥(T(1.9)), orders)
+        @test errors[end] < T(1e-4)
     end
 
     @testset "A7a the two components and the discrete momentum" for T in (Float64, Float32)
@@ -505,5 +546,28 @@ end
             @test startswith(first_line, string(name))
             @test occursin("<: SlabCoupling", first_line)
         end
+        # the state a step carries between slabs is of the problem's element type as well
+        for T in (Float64, Float32)
+            problem, _, int, _ = wave_run(T)
+            solstep = solutionstep(int, GeometricSolution(problem)[0])
+            copy_internal_variables!(solstep, cache(int))
+            assert_no_upcast(internal(solstep).top_multiplier, T)
+        end
+    end
+
+    @testset "the coupling's buffers hold the longer rule" for T in (Float64, Float32)
+        # two time cells against one space cell: the time rule has more nodes than the space rule,
+        # and the trace a step guesses at the two ends of xspan is taken on the time nodes
+        problem = wave_problem(T; timespan = (zero(T), T(0.1)))
+        int = GeometricIntegrator(problem,
+            SpaceTimeGalerkin(wave_ansatz(T; ncells = (2, 1), x_boundary = Free()),
+                WeakInitialAndBoundaryConditions(stride = 1)))
+        c = cache(int)
+        @test size(c.coupling.top_u, 1) ==
+              max(length(c.tabulation.time.node), length(c.tabulation.space.node))
+        result = integrate(int)
+        @test length(result.traces) == 2
+        @test all(>(0), c.iterations)
+        @test any(x -> !iszero(x), c.coupling.top_values)
     end
 end
