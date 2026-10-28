@@ -363,6 +363,27 @@ end
     method::SpaceTimeGalerkin{<:TensorBSplineAnsatz{T}}) where {T} = SpaceTimeGalerkinCache{
     ST, T, coupling_data_type(coupling(method), ansatz(method), problem, ST)}
 
+"""
+    cache(int::GeometricIntegrator, ST)
+    cache(int::GeometricIntegrator)
+
+The slab cache at element type `ST`, and at the problem's own element type.
+
+The ecosystem's accessor takes the element type as a value, which the compiler cannot specialise on,
+so the type assertion of the cache dictionary rebuilds the cache's type at every lookup. These two
+methods take it as a type parameter, which lets that assertion fold away, so that one slab's residual
+evaluation allocates nothing.
+"""
+@inline function cache(
+        int::GeometricIntegrator{<:SpaceTimeGalerkin, <:LagrangianPDEProblem}, ::Type{ST}) where {ST}
+    return int.caches[ST]
+end
+
+@inline function cache(
+        int::GeometricIntegrator{<:SpaceTimeGalerkin, <:LagrangianPDEProblem{T}}) where {T}
+    return cache(int, T)
+end
+
 nlsolution(cache::SpaceTimeGalerkinCache) = cache.x
 
 function Base.show(io::IO, cache::SpaceTimeGalerkinCache{ST, T}) where {ST, T}

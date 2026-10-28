@@ -6,6 +6,7 @@ using MultisymplecticIntegrators
 using SimpleSplines
 using Test
 
+import GeometricEquations: problem
 import GeometricIntegratorsBase: GeometricIntegrator, cache, copy_internal_variables!,
                                  integrate!, internal, solutionstep
 
@@ -252,6 +253,16 @@ end
         end
         @test err isa ArgumentError
         @test occursin("WeakInitialCondition", err.msg)
+        # the full coupling imposes the boundary rows itself, so a Dirichlet ansatz leaves them empty
+        err = try
+            GeometricIntegrator(problem,
+                SpaceTimeGalerkin(wave_ansatz(T), WeakInitialAndBoundaryConditions()))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("WeakInitialAndBoundaryConditions", err.msg)
     end
 
     @testset "A1c the momentum carry" for T in (Float64, Float32)
@@ -391,6 +402,8 @@ end
     @testset "A3a the two bases agree as the mesh refines" begin
         T = Float64
         errors = Dict{Symbol, Vector{Float64}}()
+        solutions = Dict{Symbol, Vector{Float64}}()
+        tables = Dict{Symbol, Matrix{Float64}}()
         for basis in (:bspline, :lagrange)
             errors[basis] = Float64[]
             for cells in (10, 20, 40)
@@ -398,13 +411,17 @@ end
                     xstep = one(T) / cells)
                 coupling = WeakInitialAndBoundaryConditions(stride = 1,
                     multiplier_basis = basis)
-                result = integrate(problem,
+                int = GeometricIntegrator(problem,
                     SpaceTimeGalerkin(
                         wave_ansatz(T; ncells = (2, cells), x_boundary = Free()),
                         coupling))
+                result = integrate(int)
                 exact = [Wave.exact_u(problem.timespan[2], x, parameters(problem))
                          for x in xgrid(problem)]
                 push!(errors[basis], maximum(abs.(result.solution.u[end] .- exact)))
+                # the run's own solution and the table it was assembled in; the finest one stays
+                solutions[basis] = copy(result.solution.u[end])
+                tables[basis] = copy(cache(int).coupling.multiplier_basis)
             end
         end
         orders = map(basis -> [log2(errors[basis][i] / errors[basis][i + 1]) for i in 1:2],
@@ -412,10 +429,12 @@ end
         @info "A3a the observed orders" bspline=orders[1] lagrange=orders[2]
         @test all(≥(1.9), orders[1])
         @test all(≥(1.9), orders[2])
-        @test abs(orders[1][end] - orders[2][end]) ≤ 0.3
-        # the two bases span one space in different functions, so each run is assembled its own way
-        # and no error is a copy of the other's
-        @test all(errors[:bspline] .!= errors[:lagrange])
+        # the two bases span one space in different functions: the tables differ, and the two runs
+        # are the solution of that one space to round-off
+        @test size(tables[:bspline]) == size(tables[:lagrange])
+        @test tables[:bspline] != tables[:lagrange]
+        @test maximum(abs.(solutions[:bspline] .- solutions[:lagrange])) ≤
+              reference_tolerance(T)
     end
 
     @testset "A4a the guess lives in the guess" for T in (Float64, Float32)
@@ -476,12 +495,14 @@ end
     end
 
     @testset "A8a the two precisions and the record" begin
-        @test WeakInitialCondition in names(MultisymplecticIntegrators)
-        @test WeakInitialAndBoundaryConditions in names(MultisymplecticIntegrators)
-        for coupling in (WeakInitialCondition(), WeakInitialAndBoundaryConditions())
-            doc = string(Base.Docs.doc(typeof(coupling)))
-            first_line = strip(first(filter(!isempty, split(doc, '\n'))))
-            @test startswith(first_line, string(nameof(typeof(coupling))))
+        @test :WeakInitialCondition in names(MultisymplecticIntegrators)
+        @test :WeakInitialAndBoundaryConditions in names(MultisymplecticIntegrators)
+        # the signature is the docstring's first line, before the prose
+        for name in (:WeakInitialCondition, :WeakInitialAndBoundaryConditions)
+            binding = Base.Docs.Binding(MultisymplecticIntegrators, name)
+            documented = join(Base.Docs.docstr(binding).text)
+            first_line = strip(first(filter(!isempty, split(documented, '\n'))))
+            @test startswith(first_line, string(name))
             @test occursin("<: SlabCoupling", first_line)
         end
     end
