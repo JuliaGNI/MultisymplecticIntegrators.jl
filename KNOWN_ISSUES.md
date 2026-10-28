@@ -110,3 +110,31 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `SlabEvaluation`.
 - kind: dead code
 - found: 2026-10-27
+
+### K21 · The `WAVE_GALERKIN_BSPLINE` record is an unconverged solve of a singular layout.
+
+- location: `test/helpers/reference_values.jl:45`
+- evidence: the entry's own Newton record is `iterations = [9, 11, 8, 5, 5]` with
+  `residual = [9.92e-6, 5.43e-5, 3.28e-4, 1.95e-3, 1.28e-2]` and `converged = Bool[1, 1, 1, 1, 1]`:
+  `isconverged` reports a solve whose residual grows by three orders over the run. Its value at
+  `x = 0` reaches `-0.256` where the Dirichlet data of the problem is `0`, its `energy_error` reaches
+  `4.6867`, and its `u` differs from the exact solution of `Wave` by `1.60e-4 … 2.56e-1`. The layout
+  those values come from constrains the two corner functions of its multiplier basis twice, which
+  leaves the first slab's Jacobian rank deficient by two (§Audit 2.8), so the record is an iterate
+  and not a solution. It is kept as the record of that run and is not a reference: the two
+  couplings that replace the family are compared with closed forms, and a later part that wants a
+  full-multiplier comparison takes a converged solve of the corner-dropped layout.
+- kind: defect
+- found: 2026-10-28
+
+### K22 · The `SINE_GORDON_GALERKIN_BSPLINE` record stops seven orders of magnitude above its tolerance.
+
+- location: `test/helpers/reference_values.jl:67`
+- evidence: the entry's `iterations = [6, 16, 12]` end at
+  `residual = [4.88e-8, 2.27e-8, 6.55e-9]`, where `SOLVER_OPTIONS` asks for
+  `f_abstol = 1.7763568394002505e-15` and the converged entries of the same file reach `1e-15`. Its
+  `energy_error` runs `-7.17e-7` to `2.27e-7`, and its last step's is `7.40e-8`. It is the same
+  full-multiplier layout as K21, so it is a record of that layout's run and not a reference:
+  sine-Gordon's order at the head is measured against its exact solution instead.
+- kind: defect
+- found: 2026-10-28; one issue with K21

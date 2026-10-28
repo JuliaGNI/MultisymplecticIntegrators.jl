@@ -101,13 +101,16 @@ needs_exact_solution(::ExactSolution) = true
 """
     initial_guess!(sol, history, params, int)
 
-Fill the nonlinear solver's vector of the slab from the method's initial guess.
+Fill the nonlinear solver's vector of the slab from the method's initial guess, and then the
+coupling's own unknowns from the guess the coupling defines for them.
 """
 function initial_guess!(sol, history, params,
         int::GeometricIntegrator{<:SpaceTimeGalerkin, <:LagrangianPDEProblem})
     c = cache(int)
     m = method(int)
-    apply_guess!(c, initial_guess(m), ansatz(m), problem(int), sol)
+    a = ansatz(m)
+    apply_guess!(c, initial_guess(m), a, problem(int), sol)
+    coupling_guess!(c.coupling, c, a, problem(int), sol)
     return nothing
 end
 
@@ -116,10 +119,10 @@ function apply_guess!(c::SpaceTimeGalerkinCache, guess::Continuation,
     if c.steps == 0
         apply_guess!(c, FitTo(InitialCondition()), ansatz, problem, sol)
     else
-        nt = ntime_functions(ansatz)
+        nf = free_rows(c.coupling, ansatz)
         nx = nspace_functions(ansatz)
-        for d in axes(c.top, 2), j in 1:nx, a in 2:nt
-            c.x[free_index(a, j, d, nt, nx)] = c.top[j, d]
+        for d in axes(c.top, 2), j in 1:nx, a in 1:nf
+            c.x[free_index(a, j, d, nf, nx)] = c.top[j, d]
         end
     end
     return nothing
@@ -132,8 +135,9 @@ function apply_guess!(c::SpaceTimeGalerkinCache, guess::FitTo,
     fit!(c.fit, fit_method(guess, ansatz), ansatz, c.sample, c)
     nt = ntime_functions(ansatz)
     nx = nspace_functions(ansatz)
-    for d in 1:D, j in 1:nx, a in 2:nt
-        c.x[free_index(a, j, d, nt, nx)] = c.fit[a, j, d]
+    nf = free_rows(c.coupling, ansatz)
+    for d in 1:D, j in 1:nx, a in 1:nf
+        c.x[free_index(a, j, d, nf, nx)] = c.fit[a + nt - nf, j, d]
     end
     return nothing
 end

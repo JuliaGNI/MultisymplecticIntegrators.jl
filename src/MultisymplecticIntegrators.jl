@@ -4,7 +4,7 @@ using GeometricBase
 using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: mul!
+using LinearAlgebra: Diagonal, I, mul!
 using QuadratureRules
 using SimpleSplines
 using SimpleSolvers
@@ -26,7 +26,7 @@ import GeometricIntegratorsBase: GeometricIntegrator, solutionstep, reset!, inte
 import GeometricIntegratorsBase: Cache, CacheType, IntegratorCache, check_solver_status,
                                  nlsolution, default_solver, initial_guess!,
                                  integrate_step!, residual!, solver,
-                                 solverstate
+                                 solverstate, copy_internal_variables!, internal
 
 # abstract types
 include("methods.jl")
@@ -68,6 +68,9 @@ export SpaceTimeGalerkin, SpaceTimeGalerkinCache, ansatz, coupling, total_free_c
 # the couplings
 include("couplings/coefficient_restriction.jl")
 export CoefficientRestriction
+
+include("couplings/weak_multipliers.jl")
+export WeakInitialCondition, WeakInitialAndBoundaryConditions
 
 # the initial guess
 include("initial_guess/fit_methods.jl")

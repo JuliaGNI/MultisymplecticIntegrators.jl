@@ -12,6 +12,11 @@ if "core" in GROUPS
     @safetestset "Space-time quadrature" include("quadrature/spacetime_quadrature.jl")
     @safetestset "Tensor B-spline ansatz" include("ansatz/tensor_bspline.jl")
     @safetestset "Coefficient restriction" include("couplings/coefficient_restriction.jl")
+    @safetestset "Coupling seam" include("core/slab_integrator.jl")
     @safetestset "Initial guess" include("initial_guess/guess.jl")
     @safetestset "Integrator shell" include("integration/integrator_shell.jl")
+end
+
+if "slow" in GROUPS
+    @safetestset "Weak multipliers" include("couplings/weak_multipliers.jl")
 end

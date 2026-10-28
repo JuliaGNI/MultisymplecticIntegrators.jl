@@ -37,6 +37,25 @@ function slab_bottom!(c::SpaceTimeGalerkinCache, ::CoefficientRestriction,
 end
 
 """
+    coupling_term!(b, x, coupling::CoefficientRestriction, data, cache, ansatz, problem)
+
+The momentum load of the coupling on the row of the bottom test function, `∫ ∂L/∂v · φ₁ ψ_j dx` at
+`t̂ = 0`, which the previous slab's top weak form already computed. Every other row is the interior
+weak form's alone, so no other entry changes.
+"""
+function coupling_term!(b::AbstractVector{ST}, x, coupling::CoefficientRestriction,
+        data::CouplingData, c::SpaceTimeGalerkinCache{ST}, ansatz::SpaceTimeAnsatz,
+        problem::LagrangianPDEProblem) where {ST}
+    nx, D = size(c.bottom)
+    nf = free_rows(coupling, ansatz)
+    for d in 1:D, j in 1:nx
+
+        b[free_index(1, j, d, nf, nx)] += flux_load(coupling, c, j, d)
+    end
+    return nothing
+end
+
+"""
     initial_trace!(cache, problem, ansatz)
 
 The bottom datum of the first slab — the problem's initial condition, interpolated on the space
