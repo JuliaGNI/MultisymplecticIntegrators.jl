@@ -230,9 +230,10 @@ end
         for d in 1:components(problem), j in 1:nx
 
             row = M.free_index(1, j, d, nt - 1, nx)
-            # the coupling's load is added to the row, and to nothing else
             @test b1[row] == b2[row] + flux[j, d]
         end
+        # the coupling's load reaches the row of the bottom test function, and no other
+        @test count(k -> b1[k] != b2[k], eachindex(b1)) == nx * components(problem)
     end
 
     @testset "S1b a coupling that implements neither hook is refused" for T in (Float64, Float32)
