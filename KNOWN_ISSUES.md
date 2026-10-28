@@ -155,3 +155,16 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   decision, and it is recorded in the pull request body.
 - kind: defect
 - found: 2026-10-28
+
+### K24 · The space-boundary multipliers start their Newton solve from the wrong momentum.
+
+- location: `src/couplings/weak_multipliers.jl:682`
+- evidence: `edge_momentum!` fills the guess of the multipliers at `x = a` and `x = b` from
+  `momentum_load!`, which is `∂L/∂v` of the trace there, and the old stack fitted them to
+  `∂L/∂w` (`294f023:src/integrator/Galerkin_Bspline_int.jl:563-571`, `tem_x₀_∂L∂W` and
+  `tem_x₁_∂L∂W`). The boundary term of the weak form is the space flux, which `∂L/∂w` gives and
+  `∂L/∂v` does not, so the guess is of the wrong quantity. It is a Newton starting value: no clause
+  of the part names it, the solve converges at every step of every scenario, and the change of the
+  value is left to the part that next works on this coupling.
+- kind: defect
+- found: 2026-10-28
