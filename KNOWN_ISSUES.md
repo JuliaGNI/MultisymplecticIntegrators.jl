@@ -137,7 +137,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   full-multiplier layout as K21, so it is a record of that layout's run and not a reference:
   sine-Gordon's order at the head is measured against its exact solution instead.
 - kind: defect
-- found: 2026-10-28
+- found: 2026-10-28; one issue with K21
 
 ### K23 · A `stride` above 1 thins the multiplier basis until the coupling stops converging.
 

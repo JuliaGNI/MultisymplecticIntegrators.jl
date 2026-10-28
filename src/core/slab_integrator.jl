@@ -10,8 +10,8 @@ a method in the place of the ansatz or a target in the place of the guess, is re
 method is built.
 
 One step of the integrator solves one slab. The unknown is the coefficient array of the ansatz,
-`(Nt, Nx)` per component; the bottom row of the time direction is a datum that the coupling
-supplies — the initial condition at the first step and the previous slab's top row after it — and
+`(Nt, Nx)` per component. A coupling that fixes the bottom row of the time direction supplies it as
+a datum — the initial condition at the first step and the previous slab's top row after it — and
 the remaining `Nt - 1` rows are determined by the interior weak Euler–Lagrange form of the slab,
 tested against the basis functions that vanish at the top of the slab. The `v` term of that form
 leaves one boundary term at the bottom of the slab, the momentum flux, which the coupling supplies
@@ -595,7 +595,9 @@ Fix the datum of the slab's bottom trace and its momentum load, in `cache.bottom
 
 A coupling implements this for the two cases it distinguishes: the first slab of a run, where the
 datum is the problem's initial condition, and every later slab, where it is the trace the previous
-slab carried out. The cache counts its steps, so `cache.steps` says which case this is.
+slab carried out. The cache counts its steps, so `cache.steps` says which case this is. A coupling
+whose bottom datum is a multiplier of its own keeps that datum in its block instead, and writes
+neither of those two fields: the seam reaches it through `copy_coupling_data!`.
 """
 function slab_bottom!(cache, coupling::SlabCoupling, problem, ansatz, sol)
     throw(ArgumentError("$(nameof(typeof(coupling))) does not implement slab_bottom!"))

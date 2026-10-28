@@ -208,8 +208,10 @@ makes it worth keeping.
   refuses the rest, naming the condition it needs and the one it got: `Dirichlet()` for
   `WeakInitialCondition` and `Free()` for `WeakInitialAndBoundaryConditions`. The two
   `Galerkin_Bspline_Integrator` entries of the reference values are unconverged solves of a
-  singular layout, and the two couplings are compared with closed forms instead; K21 and K22 record
-  why the entries cannot serve as references.
+  singular layout, so the coupling that imposes the boundary conditions is compared with closed
+  forms instead, and the one that imposes the initial condition alone keeps the
+  `WAVE_GALERKIN_DIRICHLET_BSPLINE` entry, which is a converged solve of its own discrete problem;
+  K21 and K22 record why the entries of the full-multiplier layout cannot serve as references.
 
 ### Changed
 

@@ -40,8 +40,8 @@ end
     coupling_term!(b, x, coupling::CoefficientRestriction, data, cache, ansatz, problem)
 
 The momentum load of the coupling on the row of the bottom test function, `∫ ∂L/∂v · φ₁ ψ_j dx` at
-`t̂ = 0`, which the previous slab's top weak form already computed. Every other row of the interior
-weak form is the coupling's whole contribution, so no other entry changes.
+`t̂ = 0`, which the previous slab's top weak form already computed. Every other row is the interior
+weak form's alone, so no other entry changes.
 """
 function coupling_term!(b::AbstractVector{ST}, x, coupling::CoefficientRestriction,
         data::CouplingData, c::SpaceTimeGalerkinCache{ST}, ansatz::SpaceTimeAnsatz,
