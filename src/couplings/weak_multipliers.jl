@@ -309,11 +309,6 @@ function coupling_unknowns(coupling::MultiplierCoupling, ansatz::TensorBSplineAn
     return (nλ + 2 * nμ) * components(problem)
 end
 
-function coupling_unknowns(data::MultiplierData)
-    length(data.initial_multiplier) +
-    length(data.boundary_multiplier)
-end
-
 """
     multiplier_table(basis, trace, points, indices, ST)
 
@@ -502,6 +497,16 @@ function coupling_term!(
     end
     multiplier_constraints!(b, data, c, nx, D, nf, nλ, nμ, h)
     return nothing
+end
+
+# A multiplier coupling's term is the method above, which dispatches on the coupling, the block, the
+# cache, the ansatz and the problem together. A call that reaches the base's no-op instead carries a
+# multiplier coupling whose term has no method for the arguments it was given, and the no-op would
+# drop the term in silence.
+function coupling_term!(b::AbstractVector, x::AbstractVector, coupling::MultiplierCoupling,
+        data::CouplingData, cache, ansatz, problem)
+    throw(ArgumentError("$(nameof(typeof(coupling))) has no term of the residual for a " *
+                        "$(nameof(typeof(data))) block"))
 end
 
 """
@@ -765,12 +770,15 @@ end
     slab_bottom!(cache, coupling, problem, ansatz, sol)
 
 Fix the data of the slab: the trace the initial condition is compared with — the problem's initial
-condition on the first slab, the previous slab's top trace afterwards — the multiplier the slab
-enters with, and the problem's side traces at each node of the time rule.
+condition on the first slab, the previous slab's top trace afterwards — and the problem's side
+traces at each node of the time rule.
 
-The multiplier of the bottom surface is a datum of the step: the momentum the previous slab handed
-out, which the cache keeps as that slab's top multiplier. The multiplier of the top surface is the
-step's unknown, and the initial guess of it is no datum.
+The multiplier of the bottom surface is a datum of the step as well, the momentum the previous slab
+handed out, and this function does not write it: `copy_internal_variables!(sol, cache)` carried it
+into the cache when it filled the solution step's internal state, and on the first slab the
+coupling's guess fits it to the initial momentum. A step whose hook does not run therefore enters
+with the first slab's multiplier. The multiplier of the top surface is the step's unknown, and the
+initial guess of it is no datum.
 """
 function slab_bottom!(c::SpaceTimeGalerkinCache{ST, T, <:MultiplierData},
         coupling::MultiplierCoupling, problem::LagrangianPDEProblem,
@@ -780,7 +788,6 @@ function slab_bottom!(c::SpaceTimeGalerkinCache{ST, T, <:MultiplierData},
         data.target .= c.initial_sample
     else
         data.target .= c.trace_u
-        copyto!(data.initial_multiplier, data.top_multiplier)
     end
     boundary_data!(data, problem, c, sol)
     return nothing
@@ -861,11 +868,16 @@ end
 """
     copy_internal_variables!(sol, cache)
 
-Fill the solution step's internal state with the coupling's own: the multiplier of the last solved
-slab's top surface, which is the momentum the slab hands on.
+Fill the solution step's internal state with the coupling's own, and carry the multiplier of the
+last solved slab's top surface into the bottom multiplier of the next step.
+
+The ecosystem calls this after every step, so the datum of a slab's bottom surface is the momentum
+the previous slab handed on, and this hook is the carry: a step whose hook is not reached enters
+with the datum it had.
 """
 function copy_internal_variables!(sol::SolutionStep,
         c::SpaceTimeGalerkinCache{ST, T, <:MultiplierData}) where {ST, T}
+    copyto!(c.coupling.initial_multiplier, c.coupling.top_multiplier)
     copyto!(internal(sol).top_multiplier, c.coupling.top_multiplier)
     return nothing
 end

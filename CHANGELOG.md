@@ -193,9 +193,9 @@ makes it worth keeping.
   `WeakInitialAndBoundaryConditions(; stride = 1, multiplier_basis = :bspline)` imposes the space
   boundary conditions at `x = a` and `x = b` weakly as well, from the problem's `bcs_function` at
   every node of the time rule. The multiplier of a slab's top surface is the momentum it hands on:
-  the next step's `slab_bottom!` takes it as its bottom datum, and `copy_internal_variables!` fills
-  the solution step's internal state with it, so the hook that issue #7 records as a no-op carries
-  the coupling's own state. Both couplings take `multiplier_basis = :bspline`, the ansatz's own
+  `copy_internal_variables!` carries it into the cache's datum of the next step and into the
+  solution step's internal state, so the hook that issue #7 records as a no-op carries the
+  coupling's own state. Both couplings take `multiplier_basis = :bspline`, the ansatz's own
   trace basis, or `:lagrange`, the nodal basis of the same space, thinned by `stride`; at
   `stride = 1` the two corner functions of the trace basis leave the bottom surface's multiplier
   set, where they would constrain the corners twice and leave the first slab rank deficient by two

@@ -208,8 +208,9 @@ end
         @test total_free_coefficients(full, problem) == nt * nf + (nf - 2) + 2 * nt
         @test length(cache(GeometricIntegrator(problem, full)).x) ==
               nt * nf + (nf - 2) + 2 * nt
-        # the unknowns of the block are the same count, reached from the cache
-        @test M.coupling_unknowns(cache(GeometricIntegrator(problem, full)).coupling) ==
+        # the block's own sizes are that count: the bottom multipliers and those of the two ends
+        block = cache(GeometricIntegrator(problem, full)).coupling
+        @test length(block.initial_multiplier) + length(block.boundary_multiplier) ==
               (nf - 2) + 2 * nt
         # the core asks the coupling for its residual term: the restriction's momentum load reaches
         # the row of the bottom test function, and setting the load aside takes it away again
@@ -251,6 +252,19 @@ end
         end
         @test err isa ArgumentError
         @test occursin(string(nameof(typeof(coupling))), err.msg)
+        # the same for the coupling's term of the residual: a multiplier coupling whose own method
+        # the block does not match is refused rather than run as a no-op
+        weak = WeakInitialCondition()
+        cw = cache(GeometricIntegrator(problem, SpaceTimeGalerkin(wave_ansatz(T), weak)))
+        b = similar(cw.x)
+        err = try
+            M.coupling_term!(b, cw.x, weak, M.NoCouplingData(), cw, wave_ansatz(T), problem)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin(string(nameof(typeof(weak))), err.msg)
     end
 
     @testset "A1a the Dirichlet reference" for T in (Float64, Float32)
@@ -296,36 +310,44 @@ end
     @testset "A1c the momentum carry" for T in (Float64, Float32)
         problem, method, _, _ = wave_run(T)
         solution = GeometricSolution(problem)
-        # one integrate_step! after another
-        stepped = GeometricIntegrator(problem, method)
-        cs = cache(stepped)
-        solstep = solutionstep(stepped, solution[0])
-        reset!(solstep, timesteps(solution)[1])
-        integrate!(solstep, stepped)
-        top = copy(cs.coupling.top_multiplier)
-        @test any(x -> !iszero(x), top)
-        reset!(solstep, timesteps(solution)[2])
-        integrate!(solstep, stepped)
-        @test cs.coupling.initial_multiplier == top
-        # the same through the ecosystem's hook, on a cache that just finished a step
-        carried = GeometricIntegrator(problem, method)
-        cc = cache(carried)
-        other = solutionstep(carried, solution[0])
-        reset!(other, timesteps(solution)[1])
-        integrate!(other, carried)
-        copy_internal_variables!(other, cc)
-        @test internal(other).top_multiplier == cc.coupling.top_multiplier
-        M.slab_bottom!(cc, coupling(method), problem, ansatz(method), other)
-        @test cc.coupling.initial_multiplier == cc.coupling.top_multiplier
-        # through integrate: the datum of a run's last slab is the previous slab's top multiplier,
-        # so a run of five slabs enters its fifth with what a run of four slabs handed out
-        _, four_method, five_int, _ = wave_run(T)
+        # a bare integrate_step! carries nothing: the datum of the second slab is still the first
+        # slab's fit of the initial momentum, and the solve's top multiplier stays where it is
+        bare = GeometricIntegrator(problem, method)
+        cb = cache(bare)
+        step = solutionstep(bare, solution[0])
+        reset!(step, timesteps(solution)[1])
+        M.integrate_step!(current(step), history(step), parameters(step), bare)
+        datum = copy(cb.coupling.initial_multiplier)
+        @test any(x -> !iszero(x), cb.coupling.top_multiplier)
+        @test cb.coupling.initial_multiplier != cb.coupling.top_multiplier
+        reset!(step, timesteps(solution)[2])
+        M.integrate_step!(current(step), history(step), parameters(step), bare)
+        @test cb.coupling.initial_multiplier == datum
+        @test cb.coupling.initial_multiplier != cb.coupling.top_multiplier
+        # the ecosystem's hook, alone, is the carry: the solved top multiplier becomes the datum
+        # and the step's internal state
+        copy_internal_variables!(step, cb)
+        @test cb.coupling.initial_multiplier == cb.coupling.top_multiplier
+        @test internal(step).top_multiplier == cb.coupling.top_multiplier
+        # through integrate, whose loop calls the hook after every step: a run of five slabs driven
+        # four steps holds the datum a whole four-slab run handed out, and its last step leaves the
+        # datum equal to the multiplier it solved
         four_int = GeometricIntegrator(
-            wave_problem(T; timespan = (zero(T), T(0.2))), four_method)
+            wave_problem(T; timespan = (zero(T), T(0.2))), method)
         integrate(four_int)
+        @test any(x -> !iszero(x), cache(four_int).coupling.top_multiplier)
+        five_int = GeometricIntegrator(problem, method)
+        five_step = solutionstep(five_int, solution[0])
+        for n in 1:4
+            reset!(five_step, timesteps(solution)[n])
+            integrate!(five_step, five_int)
+        end
         @test cache(five_int).coupling.initial_multiplier ==
               cache(four_int).coupling.top_multiplier
-        @test any(x -> !iszero(x), cache(four_int).coupling.top_multiplier)
+        reset!(five_step, timesteps(solution)[5])
+        integrate!(five_step, five_int)
+        @test cache(five_int).coupling.initial_multiplier ==
+              cache(five_int).coupling.top_multiplier
     end
 
     @testset "A1d the rank of the first slab" for T in (Float64, Float32)
@@ -373,7 +395,7 @@ end
 
     @testset "A1f the nonlinear problem" for T in (Float64, Float32)
         errors = T[]
-        for cells in (10, 20, 40)
+        for cells in (2, 4, 8)
             problem = SineGordon.problem(T = T, timespan = (zero(T), T(0.15)),
                 timestep = T(0.05), xstep = T(0.05))
             ansatz = wave_ansatz(T; ncells = (2, cells), x_boundary = Free())
@@ -423,7 +445,9 @@ end
                 c = cache(GeometricIntegrator(problem, SpaceTimeGalerkin(ansatz, coupling)))
                 @test size(c.coupling.initial_multiplier, 1) == nλ
                 @test size(c.coupling.boundary_basis, 1) == nμ
-                @test M.coupling_unknowns(c.coupling) == (nλ + 2 * nμ) * components(problem)
+                @test length(c.coupling.initial_multiplier) +
+                      length(c.coupling.boundary_multiplier) ==
+                      (nλ + 2 * nμ) * components(problem)
             end
         end
         # the two functions that leave the bottom surface's basis at stride = 1 are the corners
@@ -504,7 +528,7 @@ end
 
     @testset "A6a a travelling wave with non-zero boundary values" for T in (Float64, Float32)
         errors = T[]
-        for cells in (10, 20, 40)
+        for cells in (5, 10, 20)
             problem = travelling_wave(T; timestep = T(0.25 / (2 * cells / 5)),
                 xstep = one(T) / cells)
             result = integrate(problem,

@@ -191,7 +191,6 @@ free_rows(::NoCouplingData, ansatz::SpaceTimeAnsatz) = ntime_functions(ansatz) -
 
 """
     coupling_unknowns(coupling, ansatz, problem)
-    coupling_unknowns(data)
 
 The number of the coupling's extra unknowns: the entries of the solver's vector that follow the
 coefficients.
