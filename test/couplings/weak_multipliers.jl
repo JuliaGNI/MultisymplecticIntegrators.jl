@@ -78,8 +78,8 @@ end
 The discrete momentum of every step, `J = Σᵣ ωᵣ (u¹ᵣ λ²ᵣ − u²ᵣ λ¹ᵣ)`, over the top trace `u` at the
 nodes of the space rule, its weights `ω`, and the top multipliers `λ` there.
 
-The steps are driven one at a time, because the multipliers of a step exist only while its cache
-does.
+The steps are driven one at a time, because every step overwrites the trace and the multipliers the
+cache holds.
 """
 function multiplier_momentum(problem, method)
     T = datatype(problem)
@@ -364,7 +364,7 @@ end
         @info "A1d the rank of the Dirichlet slab" T unknown smallest=σ[end] relative=σ[end]/σ[1]
         @test rank(jacobian; rtol = rank_tolerance) == unknown
         # the same measurement for the coupling that imposes the boundary conditions; its λ basis
-        # has lost the two corner functions, which is §Audit 2.8's layout
+        # has lost the two corner functions, which is the repair of §Audit 2.8's rank deficiency
         full = SpaceTimeGalerkin(wave_ansatz(T; x_boundary = Free()),
             WeakInitialAndBoundaryConditions(stride = 1))
         full_int = GeometricIntegrator(problem, full)

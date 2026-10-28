@@ -105,7 +105,7 @@ end
     internal_variables(method::SpaceTimeGalerkin, problem)
 
 The coupling's own state of a step, which the ecosystem's `copy_internal_variables!` fills after
-every step and the next step reads.
+every step.
 """
 function GeometricIntegratorsBase.internal_variables(method::SpaceTimeGalerkin,
         problem::LagrangianPDEProblem)
@@ -245,14 +245,14 @@ Reject a coupling that the ansatz cannot support, when the integrator is built.
 check_coupling(::LagrangianPDEProblem, ::SlabCoupling, ::SpaceTimeAnsatz) = nothing
 
 """
-    SpaceTimeGalerkinCache{ST, T}
+    SpaceTimeGalerkinCache{ST, T, CD}
 
 The cache of the slab integrator.
 
 `x` is the nonlinear solver's vector: the free coefficients of the slab, laid out component-major
-with the time index fastest — the entry of free row `a`, space function `j` and component `d` is
-`a - 1 + (j - 1) * Nf + (d - 1) * Nf * Nx`, with `Nf` the coupling's free-row count — and then the
-coupling's own unknowns, in the layout of the coupling's block `coupling`.
+with the time index fastest — the entry of free row `a ∈ 1:Nf`, space function `j` and component `d`
+is `a + (j - 1) * Nf + (d - 1) * Nf * Nx`, with `Nf` the coupling's free-row count — and then the
+coupling's own unknowns, in the layout of the coupling's block `coupling`, whose type is `CD`.
 
 The data of a step are `bottom` and `flux`, the coupling's datum and its momentum load, and the
 results of the last step are `top`, the top row of the coefficient array, `residual`, the last weak

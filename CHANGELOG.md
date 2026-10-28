@@ -178,11 +178,11 @@ makes it worth keeping.
 - **A documentation build.** `docs/` holds `make.jl`, `Project.toml` and a two-page manual, so
   `Documenter` has something to build and the doctest job has an environment.
 - **`test/runtests.jl` runs each test file in its own `@safetestset`.** Empty `ARGS` runs the `core`
-  and `slow` groups. The `core` group holds eleven files: the Aqua and explicit-imports quality
+  and `slow` groups. The `core` group holds twelve files: the Aqua and explicit-imports quality
   checks, the Lagrangian density and Lagrangian problem tests, the linear transport and vector wave
   tests, the space-time quadrature test, the integrator shell test, the tensor B-spline ansatz,
-  coefficient restriction and initial-guess tests. `runtests.jl` has no `slow` block, so the
-  `slow` group runs no file yet.
+  coefficient restriction, weak-multiplier and initial-guess tests. `runtests.jl` has no `slow`
+  block, so the `slow` group runs no file yet.
 - **Reference values of the integrators at `294f023`.** `scripts/reference_values.jl` runs every
   integrator family on short `Wave` and `SineGordon` cases and writes
   `test/helpers/reference_values.jl`. Two cases fail at `294f023`. The script does not run on this
@@ -196,16 +196,18 @@ makes it worth keeping.
   `copy_internal_variables!` carries it into the cache's datum of the next step and into the
   solution step's internal state, so the hook that issue #7 records as a no-op carries the
   coupling's own state. Both couplings take `multiplier_basis = :bspline`, the ansatz's own
-  trace basis, or `:lagrange`, the nodal basis of the same space, thinned by `stride`; at
-  `stride = 1` the two corner functions of the trace basis leave the bottom surface's multiplier
-  set, where they would constrain the corners twice and leave the first slab rank deficient by two
-  (§Audit 2.8). The first slab's bottom multiplier is the quadrature-weighted `L²` projection of the
-  initial momentum, factorised once per integrator (§Audit 5.4), and the multipliers of a step are
-  guessed in `initial_guess!` rather than inside a residual evaluation (§Audit 2.2). The multiplier
-  blocks of the `D > 1` case keep their components apart (§Audit 1.3). Each coupling accepts one
-  space boundary condition and refuses the rest, naming the condition it needs and the one it got:
-  `Dirichlet()` for `WeakInitialCondition` and `Free()` for `WeakInitialAndBoundaryConditions`. The
-  two `Galerkin_Bspline_Integrator` entries of the reference values are unconverged solves of a
+  trace basis, or `:lagrange`, the nodal basis of the same space, and the second thins it by its
+  `stride`: at `stride = 1` that coupling's bottom-surface multiplier set loses the two corner
+  functions of the trace basis, where they would constrain the corners twice and leave the first
+  slab rank deficient by two (§Audit 2.8). The first slab's bottom multiplier is the initial
+  momentum read into the multiplier set — by the quadrature-weighted `L²` projection where the set
+  is thinned, by the nodal least-squares fit where the whole trace basis is kept — factorised
+  once per integrator (§Audit 5.4), and the multipliers of a step are guessed in `initial_guess!`
+  rather than inside a residual evaluation (§Audit 2.2). The multiplier blocks of the `D > 1` case
+  keep their components apart (§Audit 1.3). Each coupling accepts one space boundary condition and
+  refuses the rest, naming the condition it needs and the one it got: `Dirichlet()` for
+  `WeakInitialCondition` and `Free()` for `WeakInitialAndBoundaryConditions`. The two
+  `Galerkin_Bspline_Integrator` entries of the reference values are unconverged solves of a
   singular layout, and the two couplings are compared with closed forms instead; K21 and K22 record
   why the entries cannot serve as references.
 

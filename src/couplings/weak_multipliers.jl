@@ -100,7 +100,7 @@ end of `xspan`.
 
 A `stride` below 1 throws `ArgumentError`. Only `stride = 1` converges: at `stride > 1` the thinned
 set of multiplier functions no longer reproduces a constant, and the observed order of the slab
-falls with each step of the thinning.
+collapses from about `4` to below `2`.
 
 The boundary rows carry an unknown, so the ansatz must take `x_boundary = Free()`; every other value
 throws an `ArgumentError` naming the condition the coupling needs and the one it got. A `Dirichlet()`
@@ -191,7 +191,7 @@ holds the `2 Nμ` multipliers of the two ends of `xspan` — the first `Nμ` at 
 
 `multiplier_basis` and `boundary_basis` are the tables those multipliers are expanded in, at the
 nodes of the space and of the time quadrature. `projection` reads the bottom multiplier's datum back
-into its coefficients, and `boundary_projection` the flux at the two ends of `xspan`; both are
+into its coefficients, and `boundary_projection` the momentum at the two ends of `xspan`; both are
 factorised once when the cache is built. `target` and `boundary_target` are the data of the step: the
 trace the initial condition is compared with, and the problem's side traces at each node of the time
 rule.
@@ -257,9 +257,10 @@ function coupling_data(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz
     μbasis = multiplier_table(
         basis, tb, tnodes, boundary_multiplier_indices(coupling, ansatz),
         ST)
-    # The datum of the bottom multiplier is the quadrature-weighted L² projection wherever the λ
-    # basis has lost its corner functions, whose thinned set can no longer read the momentum; the
-    # coupling that keeps the whole trace basis keeps the nodal fit its family's entry carries.
+    # The datum of the bottom multiplier is the quadrature-weighted L² projection for the coupling
+    # that imposes the boundary conditions, whose λ basis is thinned and can no longer read the
+    # momentum by a nodal fit; the coupling that keeps the whole trace basis keeps the nodal fit
+    # its family's entry carries.
     λprojection = imposes_boundary_conditions(coupling) ? least_squares(λbasis, xweights) :
                   nodal_fit(λbasis)
     xs = xspan(ansatz)
@@ -649,7 +650,7 @@ function end_coefficients!(data::MultiplierData{ST}, coeffs::Array{ST, 3},
 end
 
 # The trace of the guessed coefficients at one end of `xspan`, over the nodes of the time rule, in
-# `top_u`, `top_v` and `top_w`, and its momentum `∂L/∂w` there.
+# `top_u`, `top_v` and `top_w`, and its momentum `∂L/∂v` there.
 function edge_momentum!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST},
         problem::LagrangianPDEProblem, edge::Integer, h) where {ST}
     tq = c.tabulation.time
@@ -693,7 +694,7 @@ end
 The coupling's initial guess of its unknowns, once per slab.
 
 The top multiplier starts at the momentum `∂L/∂v` of the guessed top trace, and the multipliers of
-the two ends of `xspan` at the flux `∂L/∂w` of the guessed traces there, each read into the
+the two ends of `xspan` at the momentum `∂L/∂v` of the guessed traces there, each read into the
 multiplier basis by the projection the cache factorised. On the first slab the multiplier of the
 bottom surface — the momentum the slab enters with — starts at the momentum of the problem's initial
 data, `∂L/∂v(u₀, v₀, w₀)`, which is a datum of the step and not a guess of the solve.
@@ -774,11 +775,11 @@ condition on the first slab, the previous slab's top trace afterwards — and th
 traces at each node of the time rule.
 
 The multiplier of the bottom surface is a datum of the step as well, the momentum the previous slab
-handed out, and this function does not write it: `copy_internal_variables!(sol, cache)` carried it
-into the cache when it filled the solution step's internal state, and on the first slab the
-coupling's guess fits it to the initial momentum. A step whose hook does not run therefore enters
-with the first slab's multiplier. The multiplier of the top surface is the step's unknown, and the
-initial guess of it is no datum.
+handed out, and this function does not write it: `copy_internal_variables!(sol, cache)` carries it
+into the cache as it fills the solution step's internal state, and on the first slab the coupling's
+guess fits it to the initial momentum. A step whose hook is not reached therefore enters with the
+datum it had. The multiplier of the top surface is the step's unknown, and the initial guess of it
+is no datum.
 """
 function slab_bottom!(c::SpaceTimeGalerkinCache{ST, T, <:MultiplierData},
         coupling::MultiplierCoupling, problem::LagrangianPDEProblem,

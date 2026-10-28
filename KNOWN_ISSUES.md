@@ -127,15 +127,15 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-28
 
-### K22 · The `SINE_GORDON_GALERKIN_BSPLINE` record stops an order of magnitude above its tolerance.
+### K22 · The `SINE_GORDON_GALERKIN_BSPLINE` record stops seven orders of magnitude above its tolerance.
 
 - location: `test/helpers/reference_values.jl:67`
 - evidence: the entry's `iterations = [6, 16, 12]` end at
   `residual = [4.88e-8, 2.27e-8, 6.55e-9]`, where `SOLVER_OPTIONS` asks for
   `f_abstol = 1.7763568394002505e-15` and the converged entries of the same file reach `1e-15`. Its
-  `energy_error` is `-7.17e-7 … 7.40e-8`. It is the same full-multiplier layout as K21, so it is a
-  record of that layout's run and not a reference: sine-Gordon's order at the head is measured
-  against its exact solution instead.
+  `energy_error` runs `-7.17e-7` to `2.27e-7`, and its last step's is `7.40e-8`. It is the same
+  full-multiplier layout as K21, so it is a record of that layout's run and not a reference:
+  sine-Gordon's order at the head is measured against its exact solution instead.
 - kind: defect
 - found: 2026-10-28
 
