@@ -4,7 +4,7 @@ using GeometricBase
 using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: I, mul!
+using LinearAlgebra: Diagonal, I, mul!
 using QuadratureRules
 using SimpleSplines
 using SimpleSolvers

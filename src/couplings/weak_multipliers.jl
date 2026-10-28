@@ -46,7 +46,7 @@ The bottom row of the coefficient array is free, so all `Nt` rows of the slab ar
 slab is closed by one row per multiplier function `ψ_p`,
 
 ```math
-\\int \\bigl( u(0, x) - u_0(x) \\bigr) \\, \\psi_p(x) \\, dx ,
+\\int \\bigl( u_0(x) - u(0, x) \\bigr) \\, \\psi_p(x) \\, dx ,
 ```
 
 where `u₀` is the problem's initial condition on the first slab and the previous slab's top trace on
@@ -86,7 +86,7 @@ The initial condition is imposed as [`WeakInitialCondition`](@ref) imposes it. T
 `x = a` and at `x = b` are unknowns of the step as well, and their rows are
 
 ```math
-\\int \\bigl( u(t, a) - g_a(t) \\bigr) \\, \\chi_p(t) \\, dt ,
+\\int \\bigl( g_a(t) - u(t, a) \\bigr) \\, \\chi_p(t) \\, dt ,
 \\qquad
 \\int \\bigl( g_b(t) - u(t, b) \\bigr) \\, \\chi_p(t) \\, dt ,
 ```
@@ -351,24 +351,9 @@ a thinned one, or one whose corner functions have left — reads the momentum of
 because the fit minimises the residual at the nodes alone.
 """
 function least_squares(basis::AbstractMatrix{ST}, weights) where {ST}
-    m = size(basis, 1)
-    n = size(basis, 2)
-    m == 0 && return zeros(ST, 0, n)
-    mass = zeros(ST, m, m)
-    for q in 1:m, p in 1:m
-
-        s = zero(ST)
-        for r in 1:n
-            s += basis[p, r] * convert(ST, weights[r]) * basis[q, r]
-        end
-        mass[p, q] = s
-    end
-    load = zeros(ST, m, n)
-    for p in 1:m, r in 1:n
-
-        load[p, r] = basis[p, r] * convert(ST, weights[r])
-    end
-    return mass \ load
+    size(basis, 1) == 0 && return zeros(ST, 0, size(basis, 2))
+    load = basis * Diagonal(ST.(weights))
+    return (load * transpose(basis)) \ load
 end
 
 """
@@ -650,8 +635,8 @@ function end_coefficients!(data::MultiplierData{ST}, coeffs::Array{ST, 3},
 end
 
 # The trace of the guessed coefficients at one end of `xspan`, over the nodes of the time rule, in
-# `top_u`, `top_v` and `top_w`, and its momentum `∂L/∂v` there.
-function edge_momentum!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST},
+# `top_u`, `top_v` and `top_w`, and its space flux `∂L/∂w` there, in `momentum`.
+function edge_flux!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST},
         problem::LagrangianPDEProblem, edge::Integer, h) where {ST}
     tq = c.tabulation.time
     qt = nquadrature(tq)
@@ -679,11 +664,29 @@ function edge_momentum!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST},
             data.top_w[rt, d] = gradient
         end
     end
-    momentum_load!(data.momentum, problem.density, data.top_u, data.top_v, data.top_w,
+    flux_load!(data.momentum, problem.density, data.top_u, data.top_v, data.top_w,
         parameters(problem))
-    for d in 1:D, rt in 1:qt
+    return nothing
+end
 
-        data.time_work[rt] = data.momentum[rt, d]
+"""The space flux `∂L/∂w` of a trace, one component at a time."""
+function flux_load!(load::AbstractMatrix{ST}, density::LagrangianDensity,
+        u::AbstractMatrix, v::AbstractMatrix, w::AbstractMatrix, params) where {ST}
+    for d in axes(u, 2), r in axes(u, 1)
+
+        load[r, d] = derivative_w(density, u[r, d], v[r, d], w[r, d], params)
+    end
+    return nothing
+end
+
+"""The space flux `∂L/∂w` of a trace, the components of a point at once."""
+function flux_load!(load::AbstractMatrix{ST}, density, u::AbstractMatrix,
+        v::AbstractMatrix, w::AbstractMatrix, params) where {ST}
+    for r in axes(u, 1)
+        d = derivatives(density, view(u, r, :), view(v, r, :), view(w, r, :), params)
+        for c in axes(u, 2)
+            load[r, c] = d.w[c]
+        end
     end
     return nothing
 end
@@ -694,10 +697,10 @@ end
 The coupling's initial guess of its unknowns, once per slab.
 
 The top multiplier starts at the momentum `∂L/∂v` of the guessed top trace, and the multipliers of
-the two ends of `xspan` at the momentum `∂L/∂v` of the guessed traces there, each read into the
-multiplier basis by the projection the cache factorised. On the first slab the multiplier of the
-bottom surface — the momentum the slab enters with — starts at the momentum of the problem's initial
-data, `∂L/∂v(u₀, v₀, w₀)`, which is a datum of the step and not a guess of the solve.
+the two ends of `xspan` at the space flux `∂L/∂w` of the guessed traces there, each component read
+into the multiplier basis by the projection the cache factorised. On the first slab the multiplier
+of the bottom surface — the momentum the slab enters with — starts at the momentum of the problem's
+initial data, `∂L/∂v(u₀, v₀, w₀)`, which is a datum of the step and not a guess of the solve.
 """
 function coupling_guess!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST},
         ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
@@ -724,8 +727,11 @@ function coupling_guess!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST}
     if nμ > 0
         end_coefficients!(data, c.coeffs, nx, nt, D)
         for edge in 1:2
-            edge_momentum!(data, c, problem, edge, h)
+            edge_flux!(data, c, problem, edge, h)
             for d in 1:D
+                for rt in axes(data.time_work, 1)
+                    data.time_work[rt] = data.momentum[rt, d]
+                end
                 project!(data.boundary_multiplier, (edge - 1) * nμ + 1, d,
                     data.boundary_projection, data.time_work)
                 for p in 1:nμ
@@ -886,8 +892,9 @@ end
 """
     copy_coupling_data!(cache_data, data)
 
-Copy the multiplier the slab enters with from the cache of the problem's element type into the
-cache the solver works in.
+Copy the data of the step — the multiplier the slab enters with, the trace the initial condition is
+compared with and the side traces — from the cache of the problem's element type into the cache the
+solver works in.
 """
 function copy_coupling_data!(c::MultiplierData, data::MultiplierData)
     c.initial_multiplier .= data.initial_multiplier
