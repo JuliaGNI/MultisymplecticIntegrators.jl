@@ -181,37 +181,37 @@ makes it worth keeping.
   and `slow` groups. The `core` group holds twelve files: the Aqua and explicit-imports quality
   checks, the Lagrangian density and Lagrangian problem tests, the linear transport and vector wave
   tests, the space-time quadrature test, the integrator shell test, the tensor B-spline ansatz,
-  coefficient restriction, weak-multiplier and initial-guess tests. `runtests.jl` has no `slow`
-  block, so the `slow` group runs no file yet.
+  coefficient restriction, coupling seam and initial-guess tests. The `slow` group holds the
+  weak-multiplier test.
 - **Reference values of the integrators at `294f023`.** `scripts/reference_values.jl` runs every
   integrator family on short `Wave` and `SineGordon` cases and writes
   `test/helpers/reference_values.jl`. Two cases fail at `294f023`. The script does not run on this
   tree, the file it writes is back, restored byte for byte from `ed13663`, and the slab core's
   three new tests include it.
-- **The two weak-multiplier couplings.** `WeakInitialCondition()` imposes a slab's initial
-  condition weakly, with the multiplier as an unknown of the step, and
-  `WeakInitialAndBoundaryConditions(; stride = 1, multiplier_basis = :bspline)` imposes the space
-  boundary conditions at `x = a` and `x = b` weakly as well, from the problem's `bcs_function` at
-  every node of the time rule. The multiplier of a slab's top surface is the momentum it hands on:
-  `copy_internal_variables!` carries it into the cache's datum of the next step and into the
-  solution step's internal state, so the hook that issue #7 records as a no-op carries the
-  coupling's own state. Both couplings take `multiplier_basis = :bspline`, the ansatz's own
-  trace basis, or `:lagrange`, the nodal basis of the same space, and the second thins it by its
-  `stride`: at `stride = 1` that coupling's bottom-surface multiplier set loses the two corner
-  functions of the trace basis, where they would constrain the corners twice and leave the first
-  slab rank deficient by two (§Audit 2.8). The first slab's bottom multiplier is the initial
-  momentum read into the multiplier set — by the quadrature-weighted `L²` projection where the set
-  is thinned, by the nodal least-squares fit where the whole trace basis is kept — factorised
-  once per integrator (§Audit 5.4), and the multipliers of a step are guessed in `initial_guess!`
-  rather than inside a residual evaluation (§Audit 2.2). The multiplier blocks of the `D > 1` case
-  keep their components apart (§Audit 1.3). Each coupling accepts one space boundary condition and
-  refuses the rest, naming the condition it needs and the one it got: `Dirichlet()` for
-  `WeakInitialCondition` and `Free()` for `WeakInitialAndBoundaryConditions`. The two
-  `Galerkin_Bspline_Integrator` entries of the reference values are unconverged solves of a
-  singular layout, so the coupling that imposes the boundary conditions is compared with closed
-  forms instead, and the one that imposes the initial condition alone keeps the
-  `WAVE_GALERKIN_DIRICHLET_BSPLINE` entry, which is a converged solve of its own discrete problem;
-  K21 and K22 record why the entries of the full-multiplier layout cannot serve as references.
+- **The two weak-multiplier couplings.** `WeakInitialCondition()` imposes a slab's initial condition
+  weakly, with the multiplier as an unknown of the step, and
+  `WeakInitialAndBoundaryConditions(; multiplier_basis = :bspline)` imposes the space boundary
+  conditions at `x = a` and `x = b` weakly as well, from the problem's `bcs_function` at every node
+  of the time rule. The multiplier of a slab's top surface is the momentum it hands on:
+  `slab_bottom!` carries it into the datum of the next step, and `copy_internal_variables!` into
+  the solution step's internal state, so the hook that issue #7 records as a no-op carries the
+  coupling's own state. Both couplings take `multiplier_basis = :bspline`, the ansatz's own trace
+  basis, or `:lagrange`, the nodal basis of the same space, and the second's bottom-surface
+  multiplier set leaves out the two corner functions of the trace basis, where they would constrain
+  the corners twice and leave the first slab rank deficient by two (§Audit 2.8). The first slab's
+  bottom multiplier is the initial momentum read into the multiplier set — by the
+  quadrature-weighted `L²` projection where the corner functions have left, by the nodal
+  least-squares fit where the whole trace basis is kept — factorised once per integrator
+  (§Audit 5.4), and the multipliers of a step are guessed in `initial_guess!` rather than inside a
+  residual evaluation (§Audit 2.2). The multiplier blocks of the `D > 1` case keep their components
+  apart (§Audit 1.3). Each coupling accepts one space boundary condition and refuses the rest,
+  naming the condition it needs and the one it got: `Dirichlet()` for `WeakInitialCondition` and
+  `Free()` for `WeakInitialAndBoundaryConditions`. The two `Galerkin_Bspline_Integrator` entries of
+  the reference values are unconverged solves of a singular layout, so the coupling that imposes
+  the boundary conditions is compared with closed forms instead, and the one that imposes the
+  initial condition alone keeps the `WAVE_GALERKIN_DIRICHLET_BSPLINE` entry, which is a converged
+  solve of its own discrete problem; K21 and K22 record why the entries of the full-multiplier
+  layout cannot serve as references.
 
 ### Changed
 

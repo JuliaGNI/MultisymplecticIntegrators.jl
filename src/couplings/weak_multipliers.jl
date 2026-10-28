@@ -3,18 +3,17 @@
 
 Abstract type of the basis that a weak boundary condition's multiplier is expanded in:
 [`BSplineMultiplier`](@ref), the ansatz's own trace basis, or [`LagrangeMultiplier`](@ref), the
-nodal basis of the same space. Either way there is one function per spline node of the trace,
-thinned by the coupling's `stride`, so the two bases span the same space and differ in their
-functions alone.
+nodal basis of the same space. Either way there is one function per spline node of the trace that
+the coupling keeps, so the two bases span the same space and differ in their functions alone.
 """
 abstract type MultiplierBasis end
 
-"""The multiplier basis of the ansatz's own trace basis, every `stride`-th function of it."""
+"""The multiplier basis of the ansatz's own trace basis, the functions the coupling keeps."""
 struct BSplineMultiplier <: MultiplierBasis end
 
 """
-The multiplier basis of the same space in its nodal functions: the function that is one at a spline
-node of the trace basis and zero at the other nodes the thinning keeps, for every `stride`-th node.
+The multiplier basis of the same space in its nodal functions: for every spline node the coupling
+keeps, the function that is one at that node of the trace basis and zero at the other kept nodes.
 """
 struct LagrangeMultiplier <: MultiplierBasis end
 
@@ -78,7 +77,7 @@ function WeakInitialCondition(; multiplier_basis::Symbol = :bspline)
 end
 
 """
-    WeakInitialAndBoundaryConditions(; stride = 1, multiplier_basis = :bspline) <: SlabCoupling
+    WeakInitialAndBoundaryConditions(; multiplier_basis = :bspline) <: SlabCoupling
 
 The initial condition and the space boundary conditions of a slab, imposed weakly.
 
@@ -93,14 +92,9 @@ The initial condition is imposed as [`WeakInitialCondition`](@ref) imposes it. T
 
 where `g_a` and `g_b` are the problem's side traces, evaluated at each node of the time trace, so
 that inhomogeneous data is imposed as it stands. The multiplier basis is the ansatz's own trace
-basis, every `stride`-th function of it, or the nodal basis of that same set of functions, so that a
-slab with `Nt` time functions and `Nx` space functions has `length(1:stride:Nx)` multipliers at the
-bottom surface, without its two corner functions at `stride = 1`, and `length(1:stride:Nt)` at each
-end of `xspan`.
-
-A `stride` below 1 throws `ArgumentError`. Only `stride = 1` converges: at `stride > 1` the thinned
-set of multiplier functions no longer reproduces a constant, and the observed order of the slab
-collapses from about `4` to below `2`.
+basis, or the nodal basis of that same set of functions, so that a slab with `Nt` time functions
+and `Nx` space functions has `Nx - 2` multipliers at the bottom surface, without its two corner
+functions, and `Nt` at each end of `xspan`.
 
 The boundary rows carry an unknown, so the ansatz must take `x_boundary = Free()`; every other value
 throws an `ArgumentError` naming the condition the coupling needs and the one it got. A `Dirichlet()`
@@ -114,21 +108,12 @@ method = SpaceTimeGalerkin(
 ```
 """
 struct WeakInitialAndBoundaryConditions{B <: MultiplierBasis} <: MultiplierCoupling
-    stride::Int
     multiplier_basis::B
 end
 
-function WeakInitialAndBoundaryConditions(;
-        stride::Integer = 1, multiplier_basis::Symbol = :bspline)
-    stride ≥ 1 || throw(ArgumentError("stride must be ≥ 1, got $stride"))
-    return WeakInitialAndBoundaryConditions(Int(stride), _multiplier_basis(multiplier_basis))
+function WeakInitialAndBoundaryConditions(; multiplier_basis::Symbol = :bspline)
+    return WeakInitialAndBoundaryConditions(_multiplier_basis(multiplier_basis))
 end
-
-"""The spacing of the multiplier functions of a coupling that imposes the initial condition alone."""
-multiplier_stride(::WeakInitialCondition) = 1
-
-"""The spacing of the multiplier functions of a coupling that imposes the boundary conditions too."""
-multiplier_stride(coupling::WeakInitialAndBoundaryConditions) = coupling.stride
 
 """Whether the coupling imposes the space boundary conditions, which are the `2 Nμ` multipliers."""
 imposes_boundary_conditions(::WeakInitialCondition) = false
@@ -151,29 +136,20 @@ end
 
 The functions of the space trace basis that the multiplier of the bottom surface is expanded in.
 
-They are every `stride`-th function of the basis, in either multiplier basis. A coupling that
-imposes the space boundary conditions leaves the two corner functions out at `stride = 1`, where
-the thinned set is the whole basis and the bottom corners carry an initial row already: a
-constraint on the same corner twice would leave the slab rank deficient by two. At `stride ≥ 2`
-nothing leaves, because the thinned set is of full rank as it stands.
+They are every function of the basis, in either multiplier basis, except that a coupling that
+imposes the space boundary conditions leaves the two corner functions out: the bottom corners carry
+a boundary row already, and a constraint on the same corner twice would leave the slab rank
+deficient by two.
 """
 function space_multiplier_indices(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz)
-    indices = _multiplier_indices(coupling, nspace_functions(ansatz))
-    if imposes_boundary_conditions(coupling) && multiplier_stride(coupling) == 1
-        return filter(index -> 1 < index < nspace_functions(ansatz), indices)
-    end
-    return indices
+    nx = nspace_functions(ansatz)
+    return imposes_boundary_conditions(coupling) ? collect(2:(nx - 1)) : collect(1:nx)
 end
 
 """The functions of the time trace basis that the multipliers of the two ends of `xspan` take."""
 function boundary_multiplier_indices(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz)
     imposes_boundary_conditions(coupling) || return Int[]
-    return _multiplier_indices(coupling, ntime_functions(ansatz))
-end
-
-# The indices of the trace basis that the multipliers of one surface take, before the corners go.
-function _multiplier_indices(coupling::MultiplierCoupling, nbasis::Integer)
-    return collect(1:multiplier_stride(coupling):nbasis)
+    return collect(1:ntime_functions(ansatz))
 end
 
 free_rows(coupling::MultiplierCoupling, ansatz::SpaceTimeAnsatz) = ntime_functions(ansatz)
@@ -258,9 +234,9 @@ function coupling_data(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz
         basis, tb, tnodes, boundary_multiplier_indices(coupling, ansatz),
         ST)
     # The datum of the bottom multiplier is the quadrature-weighted L² projection for the coupling
-    # that imposes the boundary conditions, whose λ basis is thinned and can no longer read the
-    # momentum by a nodal fit; the coupling that keeps the whole trace basis keeps the nodal fit
-    # its family's entry carries.
+    # that imposes the boundary conditions, whose λ basis has lost its corner functions and can no
+    # longer read the momentum by a nodal fit; the coupling that keeps the whole trace basis keeps
+    # the nodal fit its family's entry carries.
     λprojection = imposes_boundary_conditions(coupling) ? least_squares(λbasis, xweights) :
                   nodal_fit(λbasis)
     xs = xspan(ansatz)
@@ -346,9 +322,9 @@ quadrature-weighted `L²` projection `(B W Bᵀ)⁻¹ (B W)` of `m`: the coeffic
 for every function of `basis`.
 
 The mass matrix is factored once, here, and the operator is reused by every step. An unweighted
-nodal fit of the same values is not this projection: a basis that no longer reproduces the trace —
-a thinned one, or one whose corner functions have left — reads the momentum of the datum wrongly,
-because the fit minimises the residual at the nodes alone.
+nodal fit of the same values is not this projection: a basis that no longer reproduces the trace,
+such as one whose corner functions have left, reads the momentum of the datum wrongly, because the
+fit minimises the residual at the nodes alone.
 """
 function least_squares(basis::AbstractMatrix{ST}, weights) where {ST}
     size(basis, 1) == 0 && return zeros(ST, 0, size(basis, 2))
@@ -698,9 +674,8 @@ The coupling's initial guess of its unknowns, once per slab.
 
 The top multiplier starts at the momentum `∂L/∂v` of the guessed top trace, and the multipliers of
 the two ends of `xspan` at the space flux `∂L/∂w` of the guessed traces there, each component read
-into the multiplier basis by the projection the cache factorised. On the first slab the multiplier
-of the bottom surface — the momentum the slab enters with — starts at the momentum of the problem's
-initial data, `∂L/∂v(u₀, v₀, w₀)`, which is a datum of the step and not a guess of the solve.
+into the multiplier basis by the projection the cache factorised. The multiplier of the bottom
+surface is a datum of the step, which `slab_bottom!` fixes, and not a guess of the solve.
 """
 function coupling_guess!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST},
         ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
@@ -741,7 +716,6 @@ function coupling_guess!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST}
             end
         end
     end
-    c.steps == 0 && initial_multiplier!(data, problem, ansatz)
     return nothing
 end
 
@@ -780,12 +754,13 @@ Fix the data of the slab: the trace the initial condition is compared with — t
 condition on the first slab, the previous slab's top trace afterwards — and the problem's side
 traces at each node of the time rule.
 
-The multiplier of the bottom surface is a datum of the step as well, the momentum the previous slab
-handed out, and this function does not write it: `copy_internal_variables!(sol, cache)` carries it
-into the cache as it fills the solution step's internal state, and on the first slab the coupling's
-guess fits it to the initial momentum. A step whose hook is not reached therefore enters with the
-datum it had. The multiplier of the top surface is the step's unknown, and the initial guess of it
-is no datum.
+The multiplier of the bottom surface is a datum of the step as well, and this function fixes it with
+the trace: on the first slab it is the momentum of the problem's initial data,
+`∂L/∂v(u₀, v₀, w₀)`, read into the multiplier basis, and afterwards the multiplier the previous slab
+solved at its top surface. The whole datum of a step is therefore carried here, as
+[`CoefficientRestriction`](@ref) carries its own, whether or not the ecosystem's
+`copy_internal_variables!` runs between the steps. The multiplier of the top surface is the step's
+unknown, and the initial guess of it is no datum.
 """
 function slab_bottom!(c::SpaceTimeGalerkinCache{ST, T, <:MultiplierData},
         coupling::MultiplierCoupling, problem::LagrangianPDEProblem,
@@ -793,8 +768,10 @@ function slab_bottom!(c::SpaceTimeGalerkinCache{ST, T, <:MultiplierData},
     data = c.coupling
     if c.steps == 0
         data.target .= c.initial_sample
+        initial_multiplier!(data, problem, ansatz)
     else
         data.target .= c.trace_u
+        copyto!(data.initial_multiplier, data.top_multiplier)
     end
     boundary_data!(data, problem, c, sol)
     return nothing
@@ -875,16 +852,14 @@ end
 """
     copy_internal_variables!(sol, cache)
 
-Fill the solution step's internal state with the coupling's own, and carry the multiplier of the
-last solved slab's top surface into the bottom multiplier of the next step.
+Fill the solution step's internal state with the coupling's own: the multiplier of the last solved
+slab's top surface.
 
-The ecosystem calls this after every step, so the datum of a slab's bottom surface is the momentum
-the previous slab handed on, and this hook is the carry: a step whose hook is not reached enters
-with the datum it had.
+The ecosystem calls this after every step. It writes the solution step alone; the carry of that
+multiplier into the next slab's datum is `slab_bottom!`'s.
 """
 function copy_internal_variables!(sol::SolutionStep,
         c::SpaceTimeGalerkinCache{ST, T, <:MultiplierData}) where {ST, T}
-    copyto!(c.coupling.initial_multiplier, c.coupling.top_multiplier)
     copyto!(internal(sol).top_multiplier, c.coupling.top_multiplier)
     return nothing
 end
