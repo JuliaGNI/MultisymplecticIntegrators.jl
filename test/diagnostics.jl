@@ -68,6 +68,11 @@ end
         @test sum(MultisymplecticIntegrators.space_quadrature_weights(
             ansatz(method))) ≈ 1.0
 
+        # An ansatz of another resolution is not the rule the trace was stored on, and the energy
+        # would be integrated against the wrong nodes.
+        coarse = TensorBSplineAnsatz(degree = 2, ncells = (2, 10), xspan = (0.0, 1.0), n = 3)
+        @test_throws ArgumentError energy_error(problem, coarse, result.traces)
+
         # The same run through the ansatz, which is the signature the driver holds.
         @test energy_error(problem, ansatz(method), result.traces) == err
     end
@@ -137,6 +142,35 @@ end
         @test err[1] == 0
         @test all(isfinite, err)
         @test maximum(err) < 1e-2
+
+        # The plotting layer's data: one matrix per component, of the step times against the output
+        # grid, and component 2 is the second block of the state rather than the first again.
+        t, x, u = solution_data(problem, result2)
+        @test length(t) == 3
+        @test length(x) == length(MultisymplecticIntegrators.xgrid(problem))
+        @test length(u) == 2
+        @test size(u[1]) == (3, length(x))
+        exact2 = Wave.exact_u.(0.0, x, Ref(VectorWave.component_parameters(params, 2)))
+        @test maximum(abs.(u[2][1, :] .- exact2)) ≤ 16 * eps(Float64) * maximum(abs, exact2)
+    end
+
+    @testset "S2a the deviation is the whole field's, and it is unsigned" begin
+        # A hand-built pair of traces, so the expected deviation is arithmetic and not a second run:
+        # the wave density is `½v²` per component at `w = 0`, the weights of the space rule sum to
+        # the interval, and the energy of a trace is therefore known.
+        params = VectorWave.default_parameters()
+        problem = VectorWave.problem(
+            params = params, timespan = (0.0, 0.1), timestep = 0.05,
+            xstep = 0.05)
+        ansatz2 = TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0), n = 3)
+        nq = length(space_quadrature_nodes(ansatz2))
+        moving(v1, v2) = (u = zeros(2 * nq), v = vcat(fill(v1, nq), fill(v2, nq)),
+            w = zeros(2 * nq))
+        # both components moving: energy ½ (1 + 1) = 1, then ½ (1 + 0) = ½
+        err = energy_error(problem, ansatz2, [moving(1.0, 1.0), moving(1.0, 0.0)])
+        @test err[2] ≈ 0.5
+        # the fall is reported as a positive deviation: the error is unsigned
+        @test err[2] > 0
     end
 
     @testset "S2a a run in reduced precision" begin
