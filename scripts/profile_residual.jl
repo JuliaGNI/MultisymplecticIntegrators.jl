@@ -1,4 +1,4 @@
-# One step's residual, timed: what the slab costs and where it goes.
+# One step's residual, timed: what the slab costs, in seconds and in bytes.
 #
 #   julia --project=scripts scripts/profile_residual.jl
 #   julia --project=scripts scripts/profile_residual.jl --steps 0.05,0.025

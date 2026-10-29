@@ -60,7 +60,7 @@ end
 """
     smallest_entry(entries)
 
-The cheapest entry of a family: the largest time step, and among equals the coarsest ansatz.
+The cheapest entry of a family: the largest time step, and among equals the coarsest output grid.
 
 This is what a driver runs when it is given no entry name, because it is the one that answers "does
 this family run at all" in the least time.

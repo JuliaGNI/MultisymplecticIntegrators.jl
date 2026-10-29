@@ -84,8 +84,9 @@ drawn from the wrong keys.
 ### Naming
 
 **One scheme: `<problem>-<family>-h<timestep>`**, so sorting a directory groups the methods of one
-problem together and the steps of one method. An archive and its figure share the stem, because the
-renderer globs the directory rather than consulting a registry.
+problem together and the steps of one method; a run that compares several steps rather than fixing
+one is named for its study instead (`wave-spline-energy`). An archive and its figure share the stem,
+because the renderer globs the directory rather than consulting a registry.
 
 ### Where the registry entries come from
 

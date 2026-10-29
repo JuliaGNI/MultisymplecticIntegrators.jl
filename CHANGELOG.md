@@ -235,11 +235,12 @@ makes it worth keeping.
   as `CairoMakie`, loads `MultisymplecticIntegratorsPlots`, which fills them in and applies one
   theme. The names live in a submodule rather than at the package's top level because
   `plot_solution` and `plot_energy_error` are names `GeometricProblems` already exports, and the
-  extension therefore extends `Diagnostics.plot_solution` instead of shadowing it. Fonts, sizes and
-  colours come from `Diagnostics.plot_theme()`, applied inside each figure method, so no figure sets
-  a size, a font or a colour of its own; the colour cycle is Makie's colour-blind-safe one. The
-  dependency is the weak dependency `Makie = "0.24"` with `[extensions] MultisymplecticIntegratorsPlots =
-  "Makie"`, so a caller who loads no backend pays nothing for the layer.
+  extension therefore extends `Diagnostics.plot_solution` instead of shadowing it. Fonts, line
+  widths and colours come from `Diagnostics.plot_theme()`, applied inside each figure method, so no
+  figure sets a font, a line width or a colour of its own; the colour cycle is the colour-blind-safe
+  palette Makie provides. The dependency is the weak dependency `Makie = "0.24"` with
+  `[extensions] MultisymplecticIntegratorsPlots = "Makie"`, so a caller who loads no backend pays
+  nothing for the layer.
 - **`scripts/` is a project of its own.** It declares the packages its drivers use, with this
   package as a path source, so a driver finds `JLD2` and `CairoMakie` where the package's own
   environment holds neither. `archives.jl` holds the two output directories, the option parser that

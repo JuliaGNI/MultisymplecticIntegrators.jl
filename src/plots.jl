@@ -11,12 +11,13 @@ each name is documented whether or not a backend is loaded.
 
 # Why a submodule rather than three more exports
 
-`plot_solution` and `plot_energy_error` are names `GeometricProblems` already exports, from every
-problem submodule and from its own `Diagnostics`. Exporting them from this package's top level would
-make them ambiguous in any scope that also does `using GeometricProblems.Wave`-style imports, which
-is what a script integrating a problem naturally writes. The extension therefore defines
-`Diagnostics.plot_solution`, which extends the declaration rather than shadowing a name, and a
-caller reaches it as `MultisymplecticIntegrators.Diagnostics.plot_solution`.
+`plot_solution` and `plot_energy_error` are names `GeometricProblems` already exports —
+`plot_solution` from its problem submodules and `plot_energy_error` from its own `Diagnostics`.
+Exporting them from this package's top level would make them ambiguous in any scope that also does
+`using GeometricProblems.Wave`-style imports, which is what a script integrating a problem naturally
+writes. The extension therefore defines `Diagnostics.plot_solution`, which extends the declaration
+rather than shadowing a name, and a caller reaches it as
+`MultisymplecticIntegrators.Diagnostics.plot_solution`.
 """
 module Diagnostics
 
@@ -30,8 +31,8 @@ sizes, and the colour cycle.
 
 A function rather than a value, because a Makie `Theme` can only exist where Makie does, and this
 module is loaded whether or not a backend is. The extension defines it, and applies it inside each
-figure method, so that no method sets a size, a font or a colour of its own: the attributes the
-theme names are the theme's in every figure, whatever ambient theme the caller set.
+figure method, so that no method sets a font, a line width or a colour of its own: the attributes
+the theme names are the theme's in every figure, whatever ambient theme the caller set.
 """
 function plot_theme end
 

@@ -19,8 +19,8 @@ const M = MultisymplecticIntegrators
 # why the methods apply the theme themselves: the attributes named here are this theme's in every
 # figure, whatever ambient theme the caller set.
 #
-# The colour cycle is Makie's own, which is colour-blind safe and is what the rest of the
-# ecosystem's Makie code uses; the order is fixed, so a role keeps its colour across a set.
+# The colour cycle is Wong's palette as `wong_colors()` provides it, which is colour-blind safe;
+# its order is fixed, so a role keeps its colour across a set of figures.
 const PLOT_THEME = Theme(
     fontsize = 18,
     palette = (color = wong_colors(),),
