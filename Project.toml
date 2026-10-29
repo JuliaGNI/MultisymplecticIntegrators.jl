@@ -14,12 +14,19 @@ SimpleSplines = "ac480f6c-9a94-4d53-a283-9db69f109154"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 
+[weakdeps]
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+
+[extensions]
+MultisymplecticIntegratorsPlots = "Makie"
+
 [compat]
 GeometricBase = "0.15.0"
 GeometricEquations = "0.21.5"
 GeometricIntegratorsBase = "0.6.9"
 GeometricSolutions = "0.6.6"
 LinearAlgebra = "1"
+Makie = "0.24"
 QuadratureRules = "0.2.2"
 SimpleSolvers = "0.14.1"
 SimpleSplines = "0.3.1"

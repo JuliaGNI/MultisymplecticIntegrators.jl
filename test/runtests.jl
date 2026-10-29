@@ -16,6 +16,7 @@ if "core" in GROUPS
     @safetestset "Initial guess" include("initial_guess/guess.jl")
     @safetestset "Integrator shell" include("integration/integrator_shell.jl")
     @safetestset "Diagnostics" include("diagnostics.jl")
+    @safetestset "Plotting" include("plots.jl")
 end
 
 if "slow" in GROUPS

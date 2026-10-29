@@ -87,4 +87,7 @@ export integrate, top_trace
 include("diagnostics.jl")
 export energy_density, energy_error
 
+# the plotting API, implemented in the `MultisymplecticIntegratorsPlots` extension
+include("plots.jl")
+
 end
