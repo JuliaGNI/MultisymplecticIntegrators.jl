@@ -34,7 +34,10 @@ docs/site/
 # environment.
 Manifest.toml
 
-# Example output files
+# Script output. `scripts/` holds the code and is committed; these two hold what it produces and
+# are not. Root-anchored, so they cover whatever a run drops there and not just the extensions
+# below — and so that a `results.jl` somewhere in `src/` would still be tracked.
+/runs
 /results
 *.csv
 *.jld2

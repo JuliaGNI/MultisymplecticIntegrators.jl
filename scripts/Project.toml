@@ -1,0 +1,25 @@
+# The environment of `scripts/`. Every driver, scan and figure script here runs in it:
+#
+#     julia --project=scripts -e 'using Pkg; Pkg.instantiate()'
+#
+# `scripts/` is a project of its own, and that is what makes it runnable at all: a driver started
+# from the repository root would load the package's environment, which holds neither `JLD2` nor
+# `CairoMakie`.
+#
+# **No `Plots`.** `CairoMakie` is the one plotting backend here, as everywhere in this tree, and it
+# is what activates the package's plotting extension.
+
+[deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+GeometricBase = "9a0b12b7-583b-4f04-aa1f-d8551b6addc9"
+GeometricIntegratorsBase = "71212ab4-08a2-48eb-a02b-4cbad0e9c44a"
+GeometricSolutions = "7843afe4-64f4-4df4-9231-049495c56661"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+MultisymplecticIntegrators = "287958db-332d-4045-951c-e8138db0f134"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+
+[compat]
+julia = "1.11"
+
+[sources]
+MultisymplecticIntegrators = { path = ".." }
