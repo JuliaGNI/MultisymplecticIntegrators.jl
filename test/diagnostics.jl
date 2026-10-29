@@ -173,6 +173,30 @@ end
         @test err[2] > 0
     end
 
+    @testset "S2a a density that couples the components" begin
+        # A problem may carry a density that takes the `D` components of one point at once
+        # (`VectorWave.vector_density`). Uncoupled it is the sum of the scalar densities, so the
+        # energy error on the same traces must equal the one the scalar density gives — an oracle
+        # by construction, and the only path that reads a trace node as a vector of components.
+        params = VectorWave.default_parameters()
+        problem = VectorWave.problem(
+            params = params, timespan = (0.0, 0.1), timestep = 0.05, xstep = 0.05)
+        coupled = LagrangianPDEProblem(VectorWave.vector_density(; params = params, D = 2);
+            D = 2, ics_function = problem.ics_function, bcs_function = problem.bcs_function,
+            exact_u = problem.exact_u, exact_v = problem.exact_v, exact_w = problem.exact_w,
+            timespan = problem.timespan, timestep = problem.timestep,
+            xspan = problem.xspan, xstep = problem.xstep, params = params)
+        ansatz2 = TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0), n = 3)
+        nq = length(space_quadrature_nodes(ansatz2))
+        moving(v1, v2) = (u = zeros(2 * nq), v = vcat(fill(v1, nq), fill(v2, nq)),
+            w = zeros(2 * nq))
+        # ½(1 + 0.25) = 5/8, then ½(1 + 0.0625) = 17/32, so the deviation is 3/20
+        traces = [moving(1.0, 0.5), moving(1.0, 0.25)]
+        err = energy_error(coupled, ansatz2, traces)
+        @test err ≈ energy_error(problem, ansatz2, traces)
+        @test err[2] ≈ 0.15
+    end
+
     @testset "S2a a run in reduced precision" begin
         problem = Wave.problem(T = Float32, timespan = (0.0f0, 0.1f0), timestep = 0.05f0,
             xstep = 0.05f0)
