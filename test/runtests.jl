@@ -15,6 +15,7 @@ if "core" in GROUPS
     @safetestset "Coupling seam" include("core/slab_integrator.jl")
     @safetestset "Initial guess" include("initial_guess/guess.jl")
     @safetestset "Integrator shell" include("integration/integrator_shell.jl")
+    @safetestset "Diagnostics" include("diagnostics.jl")
 end
 
 if "slow" in GROUPS
