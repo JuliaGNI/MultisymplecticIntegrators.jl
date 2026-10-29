@@ -173,6 +173,40 @@ end
         @test err[2] > 0
     end
 
+    @testset "S2a a trace of the wrong shape is refused" begin
+        # A trace is the `D` components at the `nq` nodes of the space quadrature, and the energy of
+        # a step reads all three of its parts at every node. A trace of another shape is refused
+        # rather than read at the nodes it happens to hold.
+        params = VectorWave.default_parameters()
+        problem = VectorWave.problem(
+            params = params, timespan = (0.0, 0.1), timestep = 0.05, xstep = 0.05)
+        ansatz2 = TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0), n = 3)
+        nq = length(space_quadrature_nodes(ansatz2))
+        entries = 2 * nq
+
+        # One entry more than the nodes carry: the floored count of components per node agrees with
+        # the quadrature's length, so without a remainder check the surplus entry goes unread.
+        surplus = (u = zeros(entries + 1), v = ones(entries + 1), w = zeros(entries + 1))
+        @test_throws ArgumentError energy_error(problem, ansatz2, [surplus])
+
+        # The three parts of a trace are read at the same node, so a `v` shorter than `u` or a `w`
+        # longer than it is a malformed trace as well.
+        @test_throws ArgumentError energy_error(problem, ansatz2,
+            [(u = zeros(entries), v = ones(entries - 1), w = zeros(entries))])
+        @test_throws ArgumentError energy_error(problem, ansatz2,
+            [(u = zeros(entries), v = ones(entries), w = zeros(entries + 1))])
+
+        # The scalar case refuses the same disagreement.
+        problem1, method1, result1 = five_step_wave(Float64)
+        trace1 = result1.traces[1]
+        @test_throws ArgumentError energy_error(problem1, method1,
+            [(u = trace1.u, v = trace1.v[1:(end - 1)], w = trace1.w)])
+
+        # A well-shaped trace is still accepted: the guard refuses a shape and not the value.
+        @test energy_error(problem, ansatz2,
+            [(u = zeros(entries), v = ones(entries), w = zeros(entries))]) == [0.0]
+    end
+
     @testset "S2a a density that couples the components" begin
         # A problem may carry a density that takes the `D` components of one point at once
         # (`VectorWave.vector_density`). Uncoupled it is the sum of the scalar densities, so the

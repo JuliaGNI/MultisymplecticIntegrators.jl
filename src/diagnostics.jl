@@ -42,7 +42,10 @@ A run whose first energy vanishes — an all-zero trace, for one — has no rela
 deviation is the absolute one.
 
 A run that stored no trace raises an `ArgumentError`: the energy of a step is a function of its
-trace, and no other value of the run carries the velocity and the slope at the quadrature nodes.
+trace, and no other value of the run carries the velocity and the slope at the quadrature nodes. A
+trace whose `u`, `v` and `w` hold different numbers of entries, or whose length is not a whole
+number of the problem's components, raises one as well rather than being read at the nodes it
+happens to hold.
 """
 function energy_error(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin, traces)
     return energy_error(problem, ansatz(method), traces)
@@ -64,14 +67,24 @@ function energy_error(problem::LagrangianPDEProblem{T}, ansatz::TensorBSplineAns
 end
 
 # The energy of one trace, as the quadrature sum of the energy density at its nodes. A trace with
-# `D` components is component-major, one block of `nq` entries per component.
+# `D` components is component-major, one block of `nq` entries per component, and the same number of
+# entries in `u`, `v` and `w`: a trace of another shape is refused before it is read, because a
+# floored node count would drop the surplus entries in silence.
 function step_energy(problem::LagrangianPDEProblem{T}, weights::AbstractVector,
         trace, n::Integer) where {T}
     trace === nothing &&
         throw(ArgumentError("the run stored no trace at step $n; the energy of a step needs " *
                             "the trace `(u, v, w)` at the nodes of the space quadrature"))
     D = problem.D
-    nq = length(trace.u) ÷ D
+    entries = length(trace.u)
+    entries == length(trace.v) == length(trace.w) ||
+        throw(ArgumentError("the trace of step $n holds $(entries), $(length(trace.v)) and " *
+                            "$(length(trace.w)) entries of `u`, `v` and `w`; a trace holds the " *
+                            "same number of each"))
+    nq, remainder = divrem(entries, D)
+    iszero(remainder) ||
+        throw(ArgumentError("the trace of step $n holds $(entries) entries, which is not a " *
+                            "whole number of the problem's $(D) components"))
     length(weights) == nq ||
         throw(ArgumentError("the trace holds $(nq) nodes per component and the quadrature " *
                             "$(length(weights))"))

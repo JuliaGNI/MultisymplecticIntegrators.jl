@@ -65,6 +65,15 @@ end
             @test all(ax -> ax.xticklabelsize[] == 16, axes)
             @test all(ax -> ax.titlesize[] == 20, axes)
 
+            # The heading's weight is the theme's and not a literal of the method: a title is bold
+            # because the theme says so.
+            @test Diagnostics.plot_theme().Label.font[] == :bold
+            titled = Diagnostics.plot_solution(problem, result; title = "Wave")
+            headings = filter(x -> x isa Label, titled.content)
+            @test length(headings) == 1
+            @test only(headings).font[] == Diagnostics.plot_theme().Label.font[]
+            @test only(headings).fontsize[] == 18
+
             # Two energy series take their colours from the theme's cycle, in its order, and their
             # width from the theme as well.
             energy = Diagnostics.plot_energy_error(times, [err, err]; labels = ["a", "b"])

@@ -223,9 +223,10 @@ makes it worth keeping.
   the space quadrature at the nodes the trace is stored on, taking the weights from the ansatz, and
   returns the relative deviation from the first stored step: one value per step, the first of which
   is zero. A first step whose energy vanishes falls back to the absolute deviation rather than a
-  `NaN`, and a run that stored no trace raises an `ArgumentError`. `solution_data(problem, result)`
-  is the plain `(t, x, u)` a figure is drawn from, so an archived run can be redrawn without a
-  solution object tied to the version that built it.
+  `NaN`, and a run that stored no trace raises an `ArgumentError`; so does a trace whose `u`, `v`
+  and `w` hold different numbers of entries, or whose length is not a whole number of the field's
+  components. `solution_data(problem, result)` is the plain `(t, x, u)` a figure is drawn from, so
+  an archived run can be redrawn without a solution object tied to the version that built it.
 - **The plotting extension.** The `Diagnostics` submodule holds the declarations of three figures —
   a space-time plot of a solution, the energy error of several runs over time on a logarithmic
   axis, and an animation of the field over the stored steps — together with the dispatcher that
@@ -236,8 +237,8 @@ makes it worth keeping.
   `plot_solution` and `plot_energy_error` are names `GeometricProblems` already exports, and the
   extension therefore extends `Diagnostics.plot_solution` instead of shadowing it. Fonts, sizes and
   colours come from `Diagnostics.plot_theme()`, applied inside each figure method, so no figure sets
-  a size or a colour of its own; the colour cycle is Makie's colour-blind-safe one. The dependency
-  is the weak dependency `Makie = "0.24"` with `[extensions] MultisymplecticIntegratorsPlots =
+  a size, a font or a colour of its own; the colour cycle is Makie's colour-blind-safe one. The
+  dependency is the weak dependency `Makie = "0.24"` with `[extensions] MultisymplecticIntegratorsPlots =
   "Makie"`, so a caller who loads no backend pays nothing for the layer.
 - **`scripts/` is a project of its own.** It declares the packages its drivers use, with this
   package as a path source, so a driver finds `JLD2` and `CairoMakie` where the package's own

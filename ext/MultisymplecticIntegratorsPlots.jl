@@ -12,17 +12,18 @@ const M = MultisymplecticIntegrators
 
 # ---- the one theme -----------------------------------------------------------
 #
-# Every font size, line width, marker size and colour of every figure here comes from this theme:
-# no method below sets one of its own. That is what makes a figure of this package sit beside one
-# of the ecosystem's other packages without a visible change of typeface size, and it is why the
-# methods apply the theme themselves — a caller who wants another look sets the ambient theme and
-# is not overruled.
+# Every font size, font weight, line width, marker size and colour of every figure here comes from
+# this theme: no method below sets one of its own. That is what makes a figure of this package sit
+# beside one of the ecosystem's other packages without a visible change of typeface size, and it is
+# why the methods apply the theme themselves: the attributes named here are this theme's in every
+# figure, whatever ambient theme the caller set.
 #
 # The colour cycle is Makie's own, which is colour-blind safe and is what the rest of the
 # ecosystem's Makie code uses; the order is fixed, so a role keeps its colour across a set.
 const PLOT_THEME = Theme(
     fontsize = 18,
     palette = (color = Makie.wong_colors(),),
+    Label = (font = :bold,),
     Lines = (linewidth = 2,),
     Scatter = (markersize = 10,),
     Axis = (
@@ -114,7 +115,7 @@ function draw_solution(fields::SolutionFields; path = nothing, title = nothing,
         D = length(fields.u)
         fig = Figure(size = _figsize(figsize, D))
         isempty(heading) ||
-            Label(fig[0, 1], heading; font = :bold, tellwidth = false)
+            Label(fig[0, 1], heading; tellwidth = false)
         for d in 1:D
             ax = Axis(fig[d, 1]; xlabel = "x", ylabel = "t",
                 title = D == 1 ? "" : "component $d")
@@ -148,7 +149,7 @@ function Diagnostics.plot_energy_error(times, errors; labels = nothing, path = n
         throw(ArgumentError("$(length(errors)) error series against $(length(labels)) labels"))
     figure = with_theme(PLOT_THEME) do
         fig = Figure(size = _figsize(figsize, 1))
-        isempty(title) || Label(fig[0, 1], title; font = :bold, tellwidth = false)
+        isempty(title) || Label(fig[0, 1], title; tellwidth = false)
         ax = Axis(fig[1, 1]; xlabel = "t", ylabel = "|ΔH / H₀|", yscale = log10)
         for (i, series) in enumerate(errors)
             t = collect(eltype(times) <: AbstractVector ? times[i] : times)

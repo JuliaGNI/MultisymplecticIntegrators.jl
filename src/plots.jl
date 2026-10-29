@@ -25,13 +25,13 @@ export plot_theme, plot_solution, plot_energy_error, animate_solution, figures
 """
     plot_theme()
 
-The one theme of every figure of this package: the font sizes, the line and marker sizes, and the
-colour cycle.
+The one theme of every figure of this package: the font sizes and weight, the line and marker
+sizes, and the colour cycle.
 
 A function rather than a value, because a Makie `Theme` can only exist where Makie does, and this
 module is loaded whether or not a backend is. The extension defines it, and applies it inside each
-figure method, so that no method sets a size or a colour of its own: a caller who wants something
-else sets the ambient theme and every figure follows.
+figure method, so that no method sets a size, a font or a colour of its own: the attributes the
+theme names are the theme's in every figure, whatever ambient theme the caller set.
 """
 function plot_theme end
 
@@ -39,8 +39,9 @@ function plot_theme end
     plot_solution(problem, result; path = nothing, title = "", figsize = nothing)
     plot_solution(data::AbstractDict; kwargs...)
 
-A space-time plot of one run: the field `u(t, x)` over the whole slab, and its profile at the last
-stored step, against the exact solution where the problem has one.
+A space-time plot of one run: one heatmap panel per component of the field, the time axis running
+down the page and the problem's output grid across it, with the values read off the panel's
+colourbar.
 
 `result` is what [`integrate`](@ref) returns, and `problem` the problem it was integrated with. The
 dictionary form reads the archive that `scripts/archives.jl` writes, whose `"kind"` is `"solution"`.
