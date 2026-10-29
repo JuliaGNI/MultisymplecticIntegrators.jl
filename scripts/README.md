@@ -65,9 +65,10 @@ diagnostics, and saves what comes back:
 | an animation of the field over the stored steps | `Diagnostics.animate_solution` |
 | every figure one archive earns, named from its `"kind"` and `"stem"` | `Diagnostics.figures` |
 
-Fonts, sizes and colours come from `Diagnostics.plot_theme()`, which the figure methods apply
-themselves; nothing in the extension sets a size of its own, so changing the theme changes every
-figure.
+Fonts, line widths and colours come from `Diagnostics.plot_theme()`, which the figure methods
+apply themselves, so changing the theme restyles every figure. A figure's own extent is not the
+theme's: the extension sizes it from `FIGURE_WIDTH` and `PANEL_HEIGHT` per panel, and the `figsize`
+keyword overrides that.
 
 ### The archive schema
 
