@@ -1,14 +1,12 @@
 module MultisymplecticIntegratorsPlots
 
 using Makie
-# `using Makie` also exports names of this ecosystem — its `TimeSeries` recipe against
-# `GeometricSolutions.TimeSeries` is the one that clashes — so the few names needed from elsewhere
-# are imported one at a time.
-import GeometricBase: ntime
-import GeometricSolutions: GeometricSolution
 
+# `using Makie` exports a wide set of names of this ecosystem — its `TimeSeries` recipe is the one
+# that clashes with `GeometricSolutions`' — so nothing here takes a name from Makie's own export
+# list unqualified, and the names of this package are reached through the module.
 import MultisymplecticIntegrators
-import MultisymplecticIntegrators: Diagnostics, components, xgrid
+import MultisymplecticIntegrators: Diagnostics
 
 const M = MultisymplecticIntegrators
 
@@ -57,16 +55,8 @@ struct SolutionFields{T}
 end
 
 function solution_fields(problem::M.LagrangianPDEProblem, result)
-    solution = result.solution
-    D = components(problem)
-    x = collect(xgrid(problem))
-    nx = length(x)
-    steps = ntime(solution)
-    T = eltype(x)
-    t = [solution.t[n] for n in 0:steps]
-    # A step's state is component-major: the `nx` entries of component `d` follow those of `d - 1`.
-    u = [T[solution.u[n][(d - 1) * nx + j] for n in 0:steps, j in 1:nx] for d in 1:D]
-    return SolutionFields{T}(t, x, u, "")
+    t, x, u = M.solution_data(problem, result)
+    return SolutionFields{eltype(t)}(t, x, u, "")
 end
 
 function solution_fields(data::AbstractDict)

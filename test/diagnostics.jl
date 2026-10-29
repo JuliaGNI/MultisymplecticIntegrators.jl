@@ -84,6 +84,61 @@ end
         @test energy_error(problem, method, [zero_trace, zero_trace]) == [0.0, 0.0]
     end
 
+    @testset "S2a the quadrature the trace is stored on" begin
+        # The energy of a step is the density integrated at the nodes of the ansatz's space
+        # quadrature, so the rule there is part of the diagnostic: it has to integrate the exact
+        # wave Lagrangian and its Hamiltonian to round-off, against the closed forms of the
+        # standing wave, and not merely be a rule of the right total weight.
+        problem, method, _ = five_step_wave(Float64)
+        a = ansatz(method)
+        nodes = collect(space_quadrature_nodes(a))
+        weights = MultisymplecticIntegrators.space_quadrature_weights(a)
+        p = problem.params
+        c = p.c
+        ω = π * c / p.l
+        k = π / p.l
+
+        @test sum(weights) ≈ problem.xspan[2] - problem.xspan[1]
+
+        for t in (0.0, 0.3)
+            u = Wave.exact_u.(t, nodes, Ref(p))
+            v = Wave.exact_v.(t, nodes, Ref(p))
+            w = Wave.exact_w.(t, nodes, Ref(p))
+            # the two coefficients of the standing wave at this time, and the two closed forms
+            A = -p.A1 * sin(ω * t) + p.B1 * cos(ω * t + π / 6)
+            B = p.A1 * cos(ω * t) + p.B1 * sin(ω * t + π / 6)
+            energy = (ω^2 * A^2 + c^2 * k^2 * B^2) * p.l / 4
+            lagrangian = (ω^2 * A^2 - c^2 * k^2 * B^2) * p.l / 4
+
+            @test sum(weights[j] * energy_density(problem.density, u[j], v[j], w[j], p)
+            for j in eachindex(nodes)) ≈ energy rtol = 32 * eps(Float64)
+            @test sum(weights[j] * problem.density(u[j], v[j], w[j], p)
+            for j in eachindex(nodes)) ≈ lagrangian rtol = 32 * eps(Float64)
+        end
+    end
+
+    @testset "S2a a run of two components" begin
+        # `D = 2`: each component is its own scalar wave problem, and the trace of a step is the two
+        # components at every node. The energy is the sum over the components, so the deviation is
+        # that of the whole field and not of its first component.
+        params = VectorWave.default_parameters()
+        problem = VectorWave.problem(
+            params = params, timespan = (0.0, 0.1), timestep = 0.05,
+            xstep = 0.05)
+        ansatz2 = TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0), n = 3)
+        method2 = SpaceTimeGalerkin(ansatz2, CoefficientRestriction())
+        result2 = integrate(problem, method2)
+        nq = length(space_quadrature_nodes(ansatz2))
+        @test components(problem) == 2
+        @test length(result2.traces) == 2
+        @test length(result2.traces[1].u) == 2 * nq
+        err = energy_error(problem, method2, result2.traces)
+        @test length(err) == 2
+        @test err[1] == 0
+        @test all(isfinite, err)
+        @test maximum(err) < 1e-2
+    end
+
     @testset "S2a a run in reduced precision" begin
         problem = Wave.problem(T = Float32, timespan = (0.0f0, 0.1f0), timestep = 0.05f0,
             xstep = 0.05f0)

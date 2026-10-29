@@ -79,12 +79,32 @@ function step_energy(problem::LagrangianPDEProblem{T}, weights::AbstractVector,
     params = problem.params
     energy = zero(T)
     for j in 1:nq
-        energy += weights[j] * energy_density(density,
-            node_values(trace.u, j, nq, D),
-            node_values(trace.v, j, nq, D),
-            node_values(trace.w, j, nq, D), params)
+        energy += weights[j] * node_energy_density(density, trace, j, nq, D, params)
     end
     return energy
+end
+
+# A density of one component at a time is applied to each component of the node, which is the split
+# the slab's own residual makes between a `LagrangianDensity` and a density that couples the
+# components of the field.
+@inline function node_energy_density(density::LagrangianDensity, trace, j::Integer,
+        nq::Integer, D::Integer, params)
+    energy = zero(eltype(trace.u))
+    for d in 1:D
+        i = (d - 1) * nq + j
+        energy += energy_density(density, trace.u[i], trace.v[i], trace.w[i], params)
+    end
+    return energy
+end
+
+# A density that takes the `D` components of one point at once gets the vectors of them, and its own
+# derivative with respect to `v` is the vector that closes the inner product.
+@inline function node_energy_density(density, trace, j::Integer, nq::Integer, D::Integer,
+        params)
+    return energy_density(density,
+        node_values(trace.u, j, nq, D),
+        node_values(trace.v, j, nq, D),
+        node_values(trace.w, j, nq, D), params)
 end
 
 # One component's value at node `j`: the entry itself for a scalar field, and the `D` components of
@@ -93,4 +113,27 @@ end
         D::Integer) where {T}
     D === 1 && return values[j]
     return T[values[(d - 1) * nq + j] for d in 1:D]
+end
+
+"""
+    solution_data(problem, result) -> (t, x, u)
+
+The solution of a run as the plain values a figure is drawn from: the step times including the
+problem's initial time, the output grid, and one matrix per component of the field, of size
+`length(t) × length(x)`.
+
+`result` is what [`integrate`](@ref) returns. A figure needs vectors and not a solution object: a
+solution is tied to the version of `GeometricSolutions` that built it, so an archived run could not
+be drawn without pinning that version, while these three values survive a round trip through a file.
+"""
+function solution_data(problem::LagrangianPDEProblem{T}, result) where {T}
+    solution = result.solution
+    D = problem.D
+    x = collect(xgrid(problem))
+    nx = length(x)
+    steps = ntime(solution)
+    t = T[solution.t[n] for n in 0:steps]
+    # A step's state is component-major: the `nx` entries of component `d` follow those of `d - 1`.
+    u = [T[solution.u[n][(d - 1) * nx + j] for n in 0:steps, j in 1:nx] for d in 1:D]
+    return t, x, u
 end
