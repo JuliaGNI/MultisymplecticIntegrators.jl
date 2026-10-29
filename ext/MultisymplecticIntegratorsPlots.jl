@@ -3,10 +3,11 @@ module MultisymplecticIntegratorsPlots
 using Makie
 
 # `using Makie` exports a wide set of names of this ecosystem — its `TimeSeries` recipe is the one
-# that clashes with `GeometricSolutions`' — so nothing here takes a name from Makie's own export
-# list unqualified, and the names of this package are reached through the module.
+# that clashes with `GeometricSolutions`' — so the names of this package are reached through the
+# module (`M.solution_data`, `M.LagrangianPDEProblem`), and the names used bare here are Makie's.
 import MultisymplecticIntegrators
 import MultisymplecticIntegrators: Diagnostics
+import Makie: wong_colors
 
 const M = MultisymplecticIntegrators
 
@@ -22,7 +23,7 @@ const M = MultisymplecticIntegrators
 # ecosystem's Makie code uses; the order is fixed, so a role keeps its colour across a set.
 const PLOT_THEME = Theme(
     fontsize = 18,
-    palette = (color = Makie.wong_colors(),),
+    palette = (color = wong_colors(),),
     Label = (font = :bold,),
     Lines = (linewidth = 2,),
     Scatter = (markersize = 10,),
@@ -37,8 +38,8 @@ const PLOT_THEME = Theme(
 
 Diagnostics.plot_theme() = PLOT_THEME
 
-# Twice as wide as tall per panel, so that figures of different panel counts can be included at one
-# width; a caller passes `figsize` for anything else.
+# Four times as wide as tall per panel, so that figures of different panel counts can be included at
+# one width; a caller passes `figsize` for anything else.
 const FIGURE_WIDTH = 1200
 const PANEL_HEIGHT = 300
 
