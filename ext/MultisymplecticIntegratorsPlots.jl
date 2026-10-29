@@ -211,4 +211,34 @@ function Diagnostics.animate_solution(problem::M.LagrangianPDEProblem, result; p
     return figure
 end
 
+# ---- figures from an archive --------------------------------------------------
+#
+# The layer above the three figures: given one archive, draw the figure its kind asks for and name
+# it as its stem does. The archive is a plain dictionary of flat keys — see the schema in
+# `scripts/archives.jl` — so this knows nothing about how a run was stored or which study made it.
+
+"""
+    figures(data) -> Vector{Pair{String, Figure}}
+
+Every figure one archive earns, each paired with the name it belongs under.
+
+Implemented in the `MultisymplecticIntegratorsPlots` extension; the argument and the schema are
+documented at the declaration in `src/plots.jl` and in `scripts/archives.jl`.
+"""
+function Diagnostics.figures(data::AbstractDict)
+    haskey(data, "kind") ||
+        throw(ArgumentError("the archive has no \"kind\"; cannot tell what to draw"))
+    haskey(data, "stem") ||
+        throw(ArgumentError("the archive has no \"stem\"; cannot tell what to call the figure"))
+    kind = data["kind"]
+    stem = data["stem"]
+    if kind == "solution"
+        return [stem => Diagnostics.plot_solution(data)]
+    elseif kind == "energy"
+        return [stem => Diagnostics.plot_energy_error(data)]
+    end
+    throw(ArgumentError("the archive `$(stem)` has kind \"$(kind)\", and this module draws " *
+                        "\"solution\" and \"energy\""))
+end
+
 end

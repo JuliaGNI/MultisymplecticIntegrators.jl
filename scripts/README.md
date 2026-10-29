@@ -63,6 +63,7 @@ diagnostics, and saves what comes back:
 | the field over the whole slab | `Diagnostics.plot_solution` |
 | the energy error of several runs over time | `Diagnostics.plot_energy_error` |
 | an animation of the field over the stored steps | `Diagnostics.animate_solution` |
+| every figure one archive earns, named from its `"kind"` and `"stem"` | `Diagnostics.figures` |
 
 Fonts, sizes and colours come from `Diagnostics.plot_theme()`, which the figure methods apply
 themselves; nothing in the extension sets a size of its own, so changing the theme changes every

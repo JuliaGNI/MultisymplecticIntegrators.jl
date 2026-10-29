@@ -109,6 +109,39 @@ end
             @test isfile(energy_path) && filesize(energy_path) > 0
         end
 
+        @testset "P1 the archive's kind picks the figure" begin
+            # The renderer's one decision: which figure an archive earns. A kind this module cannot
+            # draw is refused rather than drawn from the keys of another kind, because a figure
+            # made from the wrong vectors looks like a result.
+            nx = length(MultisymplecticIntegrators.xgrid(problem))
+            steps = ntime(result.solution)
+            archive = Dict{String, Any}(
+                "kind" => "solution", "stem" => "wave-spline-h0.05",
+                "t" => [result.solution.t[n] for n in 0:steps],
+                "x" => collect(MultisymplecticIntegrators.xgrid(problem)),
+                "u" => [[result.solution.u[n][j] for n in 0:steps, j in 1:nx]])
+            energy_archive = Dict{String, Any}(
+                "kind" => "energy", "stem" => "wave-spline-energy",
+                "t" => times, "labels" => ["h = 0.05"], "errors" => [err])
+
+            solution_drawn = only(Diagnostics.figures(archive))
+            @test first(solution_drawn) == "wave-spline-h0.05"
+            @test last(solution_drawn) isa Figure
+            # a space-time figure: no logarithmic axis anywhere in it
+            @test !any(ax -> ax isa Axis && ax.yscale[] === log10, last(solution_drawn).content)
+
+            energy_drawn = only(Diagnostics.figures(energy_archive))
+            @test first(energy_drawn) == "wave-spline-energy"
+            @test last(energy_drawn) isa Figure
+            # the energy figure's one axis is logarithmic, which is what distinguishes it
+            @test any(ax -> ax isa Axis && ax.yscale[] === log10, last(energy_drawn).content)
+
+            @test_throws ArgumentError Diagnostics.figures(
+                Dict{String, Any}("kind" => "phase-portrait", "stem" => "x"))
+            @test_throws ArgumentError Diagnostics.figures(Dict{String, Any}("stem" => "x"))
+            @test_throws ArgumentError Diagnostics.figures(Dict{String, Any}("kind" => "solution"))
+        end
+
         @testset "P1 a series with nothing to draw" begin
             # The first energy error is zero and a logarithmic axis cannot take it, so the point is
             # dropped from the time vector too; a series of nothing but zeros is left out rather

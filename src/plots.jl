@@ -2,7 +2,8 @@
     MultisymplecticIntegrators.Diagnostics
 
 Figures for the integrators of this package: a space-time plot of a solution, the energy error of
-several runs over time, and an animation of the field.
+several runs over time, an animation of the field, and the dispatcher that turns one archived run
+into the figure its kind asks for.
 
 The methods are implemented in the `MultisymplecticIntegratorsPlots` extension, which loads
 together with `Makie` or a backend such as `CairoMakie`. The declarations here hold the API, so that
@@ -19,7 +20,7 @@ caller reaches it as `MultisymplecticIntegrators.Diagnostics.plot_solution`.
 """
 module Diagnostics
 
-export plot_theme, plot_solution, plot_energy_error, animate_solution
+export plot_theme, plot_solution, plot_energy_error, animate_solution, figures
 
 """
     plot_theme()
@@ -82,5 +83,22 @@ frame at step `n` is the field on the problem's output grid, at the time of that
 animation shows the solution of the discrete problem and nothing interpolated between the steps.
 """
 function animate_solution end
+
+"""
+    figures(data) -> Vector{Pair{String, Figure}}
+
+Every figure one archive earns, each paired with the name it belongs under.
+
+`data` is a run's archive as a plain dictionary — the schema is documented in
+`scripts/archives.jl`. Its `"kind"` selects the shape of figure and its `"stem"` names it, and a
+kind this module cannot draw is refused rather than guessed at: two figures drawn from the wrong
+keys look like a result.
+
+This is what makes a renderer a dispatcher — glob a run directory, hand each archive over, save what
+comes back — rather than a second registry of which experiment produces which picture, kept in step
+with the first by hand. The caller does the saving, because where output goes is a property of the
+caller and not of the figure.
+"""
+function figures end
 
 end

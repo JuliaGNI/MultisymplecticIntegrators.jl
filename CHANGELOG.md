@@ -228,7 +228,9 @@ makes it worth keeping.
   solution object tied to the version that built it.
 - **The plotting extension.** The `Diagnostics` submodule holds the declarations of three figures —
   a space-time plot of a solution, the energy error of several runs over time on a logarithmic
-  axis, and an animation of the field over the stored steps — and `using Makie`, or a backend such
+  axis, and an animation of the field over the stored steps — together with the dispatcher that
+  turns one archive into the figure its `"kind"` asks for, so a renderer needs no second registry of
+  which experiment produces which picture. `using Makie`, or a backend such
   as `CairoMakie`, loads `MultisymplecticIntegratorsPlots`, which fills them in and applies one
   theme. The names live in a submodule rather than at the package's top level because
   `plot_solution` and `plot_energy_error` are names `GeometricProblems` already exports, and the

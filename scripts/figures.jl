@@ -1,8 +1,8 @@
-# The renderer: glob `runs/`, draw every archive as the kind it says it is, and write the figure
-# under `results/`. This is the only place a figure is saved.
+# The renderer: glob `runs/`, draw every archive as the kind it declares, and write the figure under
+# `results/`. This is the only place a figure is saved.
 #
 #   julia --project=scripts scripts/figures.jl                    # every archive
-#   julia --project=scripts scripts/figures.jl wave-spline-h0.1   # one archive
+#   julia --project=scripts scripts/figures.jl wave-spline-h0.2   # one archive
 #   julia --project=scripts scripts/figures.jl --results-dir talk/figures
 #
 # Loading `CairoMakie` is what activates the plotting extension; the archive layer needs neither it
@@ -25,24 +25,19 @@ function main(args)
     failures = 0
     for data in runs
         stem = get(data, "stem", "")
-        try
-            # The kind decides the figure, and an archive of a kind this renderer cannot draw is
-            # refused: a figure guessed at would be drawn from the wrong keys.
-            kind = get(data, "kind", nothing)
-            figure = if kind == "solution"
-                Diagnostics.plot_solution(data)
-            elseif kind == "energy"
-                Diagnostics.plot_energy_error(data)
-            else
-                throw(ArgumentError("the archive `$(stem)` has kind `$(kind)`, and this renderer " *
-                                    "draws \"solution\" and \"energy\""))
-            end
-            path = joinpath(RESULTS_DIR[], stem * ".pdf")
-            save(path, figure)
-            report_path("figure", path)
+        # The extension picks the figure from the archive's kind and names it from its stem; a kind
+        # it cannot draw is refused there rather than drawn from the wrong keys.
+        drawn = try
+            Diagnostics.figures(data)
         catch exception
             failures += 1
             report(stem, "FAILED: $(failure_message(exception))")
+            continue
+        end
+        for (name, figure) in drawn
+            path = joinpath(RESULTS_DIR[], name * ".pdf")
+            save(path, figure)
+            report_path("figure", path)
         end
     end
     return failures == 0 ? 0 : 1
