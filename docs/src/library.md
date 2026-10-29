@@ -10,5 +10,5 @@ lives in its own submodule.
 ```@autodocs
 Modules = [MultisymplecticIntegrators, MultisymplecticIntegrators.Wave,
     MultisymplecticIntegrators.VectorWave, MultisymplecticIntegrators.SineGordon,
-    MultisymplecticIntegrators.LinearTransport]
+    MultisymplecticIntegrators.LinearTransport, MultisymplecticIntegrators.Diagnostics]
 ```
