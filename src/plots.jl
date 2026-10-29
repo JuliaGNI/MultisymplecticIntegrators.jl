@@ -43,7 +43,7 @@ A space-time plot of one run: one heatmap panel per component of the field, the 
 down the page and the problem's output grid across it, with the values read off the panel's
 colourbar.
 
-`result` is what [`integrate`](@ref) returns, and `problem` the problem it was integrated with. The
+`result` is what `integrate` returns, and `problem` the problem it was integrated with. The
 dictionary form reads the archive that `scripts/archives.jl` writes, whose `"kind"` is `"solution"`.
 
 # Keyword arguments
@@ -60,7 +60,8 @@ function plot_solution end
 
 The relative energy error of several runs against time, on a logarithmic axis.
 
-`errors` holds one series per run, in [`energy_error`](@ref)'s units, and `times` either one time
+`errors` holds one series per run, in
+[`energy_error`](@ref MultisymplecticIntegrators.energy_error)'s units, and `times` either one time
 vector shared by every series or one per series. A zero error cannot be drawn on a logarithmic axis,
 so its point is dropped from both vectors rather than masked, which keeps the curve whole.
 
@@ -79,9 +80,9 @@ function plot_energy_error end
 
 An animation of the field `u(t, ·)` over the stored steps of one run, written to `path`.
 
-`result` is what [`integrate`](@ref) returns and `problem` the problem it was integrated with. The
-frame at step `n` is the field on the problem's output grid, at the time of that step, so the
-animation shows the solution of the discrete problem and nothing interpolated between the steps.
+`result` is what `integrate` returns and `problem` the problem it was integrated with. The frame at
+step `n` is the field on the problem's output grid, at the time of that step, so the animation shows
+the solution of the discrete problem and nothing interpolated between the steps.
 """
 function animate_solution end
 
