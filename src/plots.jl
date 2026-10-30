@@ -81,6 +81,8 @@ function plot_energy_error end
 
 An animation of the field `u(t, ·)` over the stored steps of one run, written to `path`.
 
+Only the first component of the field is animated, whatever the problem's dimension `D`.
+
 `result` is what `integrate` returns and `problem` the problem it was integrated with. The frame at
 step `n` is the field on the problem's output grid, at the time of that step, so the animation shows
 the solution of the discrete problem and nothing interpolated between the steps.
