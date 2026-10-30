@@ -154,6 +154,18 @@ end
         @test maximum(abs.(u[2][1, :] .- exact2)) ≤ 16 * eps(Float64) * maximum(abs, exact2)
     end
 
+    @testset "S2a the data of a run that stopped early" begin
+        # `integrate` ends a run at a NaN or a failed solve, and its traces then end before the
+        # output grid does. The steps it never computed are not data: the times and the field stop
+        # at the last stored trace, and the field there is the solution's own.
+        problem, _, result = five_step_wave(Float64)
+        stopped = (; solution = result.solution, traces = result.traces[1:2])
+        t, x, u = solution_data(problem, stopped)
+        @test t == [result.solution.t[n] for n in 0:2]
+        @test size(only(u)) == (3, length(x))
+        @test only(u)[3, :] == result.solution.u[2]
+    end
+
     @testset "S2a the deviation is the whole field's, and it is unsigned" begin
         # A hand-built pair of traces, so the expected deviation is arithmetic and not a second run:
         # the wave density is `½v²` per component at `w = 0`, the weights of the space rule sum to

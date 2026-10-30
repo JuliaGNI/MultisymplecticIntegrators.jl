@@ -20,8 +20,8 @@ One registry, three drivers, one renderer. Each stage reads what the previous on
 
 ```sh
 julia --project=scripts scripts/run_spline.jl        # the smallest spline entry → runs/<stem>.jld2
-julia --project=scripts scripts/run_network.jl       # says which part adds its entries; runs nothing
-julia --project=scripts scripts/run_symbolic.jl      # says which part adds its entries; runs nothing
+julia --project=scripts scripts/run_network.jl       # says the registry has no entry; runs nothing
+julia --project=scripts scripts/run_symbolic.jl      # says the registry has no entry; runs nothing
 julia --project=scripts scripts/figures.jl           # every archive → the PDFs in results/
 ```
 
@@ -42,10 +42,10 @@ failed run.
 | file | does |
 |:--|:--|
 | `archives.jl` | where output goes, the archive schema and its reader and writer, the option parser, the printing helpers. Depends on `JLD2` and `Printf` alone, so a renderer loads it cheaply. No work at top level. |
-| `experiments.jl` | the registry: the entries of every family that is merged, as plain data — the problem, its time step and grid, the ansatz resolution and the coupling — plus the ladders of the two scans. It builds nothing and runs nothing on `include`; a family whose part has not merged holds an empty tuple. |
+| `experiments.jl` | the registry: the entries of every family, as plain data — the problem, its time step and grid, the ansatz resolution and the coupling — plus the ladders of the two scans. It builds nothing and runs nothing on `include`; a family whose ansatz the package does not have holds an empty tuple. |
 | `spline_model.jl` | the spline family, built: the problem and the method of an entry, one run timed, the archive of a run, and the error of a run against the exact solution at its final time. |
 | `run_spline.jl` | the spline family's driver: the smallest entry by default, or the entries named on the command line, each archived under `runs/`. |
-| `run_network.jl` | the network family's driver. The registry holds no network entry yet, and the driver says so, naming the part that adds them. |
+| `run_network.jl` | the network family's driver. The registry holds no network entry, and the driver says so rather than inventing one. |
 | `run_symbolic.jl` | the symbolic family's driver, in the same state. |
 | `figures.jl` | globs `runs/`, draws each archive as the kind it declares, and writes `results/<stem>.pdf`. **The only place `save` is called.** |
 | `spline_energy_scan.jl` | the relative energy error over time at a ladder of time steps, archived as one `"energy"` run that `figures.jl` draws as a comparison. |
@@ -92,5 +92,5 @@ because the renderer globs the directory rather than consulting a registry.
 ### Where the registry entries come from
 
 `experiments.jl` holds the spline family. The network and symbolic families are empty on purpose:
-their ansätze arrive with their parts, and each of those parts adds its own registry entries rather
-than this one guessing at constructors that do not exist yet.
+their entries come with their ansätze, rather than guessing at constructors that the package does
+not have.

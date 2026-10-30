@@ -133,7 +133,7 @@ end
 
 The solution of a run as the plain values a figure is drawn from: the step times including the
 problem's initial time, the output grid, and one matrix per component of the field, of size
-`length(t) × length(x)`.
+`length(t) × length(x)`. A run that `integrate` stopped early ends at its last stored trace.
 
 `result` is what [`integrate`](@ref) returns. A figure needs vectors and not a solution object: a
 solution is tied to the version of `GeometricSolutions` that built it, so an archived run could not
@@ -144,7 +144,7 @@ function solution_data(problem::LagrangianPDEProblem{T}, result) where {T}
     D = problem.D
     x = collect(xgrid(problem))
     nx = length(x)
-    steps = ntime(solution)
+    steps = min(ntime(solution), length(result.traces))
     t = T[solution.t[n] for n in 0:steps]
     # A step's state is component-major: the `nx` entries of component `d` follow those of `d - 1`.
     u = [T[solution.u[n][(d - 1) * nx + j] for n in 0:steps, j in 1:nx] for d in 1:D]

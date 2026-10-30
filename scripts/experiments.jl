@@ -26,10 +26,10 @@ const SPLINE = (
         timespan = (0.0, 1.0), timestep = 0.05, xspan = (0.0, 1.0), xstep = 0.05,
         degree = 2, ncells = (2, 20), n = 3, coupling = :restriction))
 
-"""The network family: empty, because part F adds its ansatz and its guess and with them its entries."""
+"""The network family: empty until the package has a network ansatz and its initial guess."""
 const NETWORK = ()
 
-"""The symbolic family: empty, because part G adds its ansatz and with it its entries."""
+"""The symbolic family: empty until the package has a symbolic ansatz."""
 const SYMBOLIC = ()
 
 """

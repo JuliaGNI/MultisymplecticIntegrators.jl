@@ -49,6 +49,19 @@ end
             @test filesize(animation_path) > 0
         end
 
+        @testset "P1 the space-time plot puts space across and time up" begin
+            # Makie lays the first dimension of a heatmap's matrix along the first interval, the
+            # `x` axis. The run has six stored times and 21 grid points, so a field drawn without
+            # its transpose would show here as a 6 × 21 matrix.
+            nx = length(MultisymplecticIntegrators.xgrid(problem))
+            nt = ntime(result.solution) + 1
+            @test nt != nx
+            figure = Diagnostics.plot_solution(problem, result)
+            heatmaps = [plot for ax in figure.content if ax isa Axis
+                        for plot in ax.scene.plots if plot isa Heatmap]
+            @test size(only(heatmaps)[3][]) == (nx, nt)
+        end
+
         @testset "P1 one theme, read by every figure" begin
             @test Diagnostics.plot_theme() isa Theme
             @test Diagnostics.plot_theme().fontsize[] == 18

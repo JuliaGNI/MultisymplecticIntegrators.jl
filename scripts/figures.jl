@@ -19,10 +19,18 @@ function main(args)
     mkpath(RESULTS_DIR[])
     runs = load_runs()
     isempty(positional) || (runs = filter(run -> get(run, "stem", "") in positional, runs))
-    isempty(runs) && (println("figures.jl: no archive under $(RUNS_DIR[])"); return 0)
+    # A named stem that matches no archive counts as a failure, so that a mistyped stem does not
+    # pass for a figure that was drawn.
+    unmatched = setdiff(positional, (get(run, "stem", "") for run in runs))
+    isempty(unmatched) ||
+        println("figures.jl: no archive under $(RUNS_DIR[]) for $(join(unmatched, ", "))")
+    if isempty(runs)
+        isempty(positional) && println("figures.jl: no archive under $(RUNS_DIR[])")
+        return isempty(unmatched) ? 0 : 1
+    end
 
     banner("figures: $(length(runs)) archive(s) into $(RESULTS_DIR[])")
-    failures = 0
+    failures = length(unmatched)
     for data in runs
         stem = get(data, "stem", "")
         # The extension picks the figure from the archive's kind and names it from its stem; a kind

@@ -254,8 +254,8 @@ makes it worth keeping.
   diagnostic, and the two scans and the profile are rewritten for the new constructors. `runs/` and
   `results/` are anchored in `.gitignore`.
 - **The old `scripts/` are deleted.** The drivers of the removed families stay reachable at
-  `294f023`. `run_network.jl` and `run_symbolic.jl` ship with an empty registry and name the part of
-  the rebuild that adds their entries, rather than carrying a constructor that does not exist.
+  `294f023`. `run_network.jl` and `run_symbolic.jl` ship with an empty registry and say so, naming
+  the ansatz that their entries come with, rather than carrying a constructor that does not exist.
 
 ### Changed
 

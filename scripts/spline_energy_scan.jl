@@ -21,8 +21,7 @@ function main(args)
     errors = Vector{Vector{Float64}}()
     banner("energy scan: $(length(steps)) step(s) into $(RUNS_DIR[])")
     for timestep in steps
-        entry = merge(template, (
-            timestep = timestep, stem = "wave-spline-energy-h$(timestep)"))
+        entry = merge(template, (; timestep = timestep))
         problem, method, result, seconds = run_entry(entry)
         series = energy_error(problem, method, result.traces)
         push!(labels, "h = $(timestep)")

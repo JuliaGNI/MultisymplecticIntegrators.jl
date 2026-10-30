@@ -113,11 +113,15 @@ function store_run!(stem::String, data::Dict{String, Any})
     mkpath(RUNS_DIR[])
     data["stem"] = stem
     path = archive_path(stem)
-    jldopen(path, "w") do file
+    # Written beside the archive and moved over it, so that an interrupted write leaves the earlier
+    # archive whole; `load_runs` reads only `.jld2` files and skips the temporary one.
+    temporary = path * ".tmp"
+    jldopen(temporary, "w") do file
         for (key, value) in data
             file[key] = value
         end
     end
+    mv(temporary, path; force = true)
     return path
 end
 

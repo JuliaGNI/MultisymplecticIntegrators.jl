@@ -41,7 +41,7 @@ function plot_theme end
     plot_solution(data::AbstractDict; kwargs...)
 
 A space-time plot of one run: one heatmap panel per component of the field, the time axis running
-down the page and the problem's output grid across it, with the values read off the panel's
+up the page and the problem's output grid across it, with the values read off the panel's
 colourbar.
 
 `result` is what `integrate` returns, and `problem` the problem it was integrated with. The

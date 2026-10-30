@@ -93,7 +93,7 @@ end
     plot_solution(data::AbstractDict; kwargs...)
 
 A space-time plot of one run: one heatmap panel per component of the field, the time axis running
-down the page and the problem's output grid across it.
+up the page and the problem's output grid across it.
 
 Implemented in the `MultisymplecticIntegratorsPlots` extension; the arguments and the keywords are
 documented at the declaration in `src/plots.jl`.
@@ -121,10 +121,12 @@ function draw_solution(fields::SolutionFields; path = nothing, title = nothing,
             ax = Axis(fig[d, 1]; xlabel = "x", ylabel = "t",
                 title = D == 1 ? "" : "component $d")
             # An interval range and not the grid: a heatmap of a matrix takes the extent of the
-            # cells, which is what a vector format such as PDF can place.
+            # cells, which is what a vector format such as PDF can place. Makie lays the first
+            # dimension of the matrix along the first interval, so the `nt × nx` field is
+            # transposed to put space across and time up.
             heatmap = heatmap!(
                 ax, fields.x[1] .. fields.x[end], fields.t[1] .. fields.t[end],
-                fields.u[d])
+                permutedims(fields.u[d]))
             Colorbar(fig[d, 2], heatmap; label = "u")
         end
         fig
