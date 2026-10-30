@@ -113,39 +113,53 @@ function store_run!(stem::String, data::Dict{String, Any})
     mkpath(RUNS_DIR[])
     data["stem"] = stem
     path = archive_path(stem)
-    # Written beside the archive and moved over it, so that an interrupted write leaves the earlier
-    # archive whole; `load_runs` reads only `.jld2` files and skips the temporary one.
-    temporary = path * ".tmp"
-    jldopen(temporary, "w") do file
-        for (key, value) in data
-            file[key] = value
+    # Written to a file of its own beside the archive and renamed over it, so that an interrupted
+    # write leaves the earlier archive whole and two writers of one stem never share a file;
+    # `load_runs` reads only `.jld2` files and skips the temporary one. `rename` replaces the
+    # destination in one step, where `mv(...; force = true)` removes it first on Julia 1.11.
+    temporary = tempname(RUNS_DIR[]; cleanup = false)
+    try
+        jldopen(temporary, "w") do file
+            for (key, value) in data
+                file[key] = value
+            end
         end
+        Base.Filesystem.rename(temporary, path)
+    finally
+        rm(temporary; force = true)
     end
-    mv(temporary, path; force = true)
     return path
 end
 
 load_run(stem::String) = load(archive_path(stem))
 
 """
-    load_runs() -> Vector{Dict}
+    load_runs() -> (runs::Vector{Dict}, unreadable::Vector{String})
 
-Every archive under `runs/`, sorted by file name.
+Every archive under `runs/`, sorted by file name, and the names of the files that could not be read.
 
 Read from the directory rather than enumerated from a registry: the directory is the record of what
 exists, and a registry that has drifted from the stem a driver wrote produces a figure that silently
-is not drawn.
+is not drawn. A file that fails to load is reported with a warning and left out of `runs`, so one
+corrupt archive does not stop the figures of the others; the caller counts `unreadable` as failures.
 """
 function load_runs()
-    isdir(RUNS_DIR[]) || return Dict{String, Any}[]
     runs = Dict{String, Any}[]
+    unreadable = String[]
+    isdir(RUNS_DIR[]) || return runs, unreadable
     for file in sort(filter(endswith(".jld2"), readdir(RUNS_DIR[])))
-        data = load(joinpath(RUNS_DIR[], file))
+        data = try
+            load(joinpath(RUNS_DIR[], file))
+        catch exception
+            push!(unreadable, file)
+            @warn "cannot read the archive $(file): $(failure_message(exception))"
+            continue
+        end
         # The file name is the stem, by construction in `store_run!`.
         get!(data, "stem", chop(file; tail = length(".jld2")))
         push!(runs, data)
     end
-    return runs
+    return runs, unreadable
 end
 
 # ---- reporting ---------------------------------------------------------------

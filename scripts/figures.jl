@@ -17,20 +17,21 @@ import MultisymplecticIntegrators.Diagnostics as Diagnostics
 function main(args)
     positional, _ = parse_arguments(args)
     mkpath(RESULTS_DIR[])
-    runs = load_runs()
+    runs, unreadable = load_runs()
     isempty(positional) || (runs = filter(run -> get(run, "stem", "") in positional, runs))
     # A named stem that matches no archive counts as a failure, so that a mistyped stem does not
-    # pass for a figure that was drawn.
+    # pass for a figure that was drawn. So does an archive that cannot be read, whether it is named
+    # or not: the other archives are still drawn.
     unmatched = setdiff(positional, (get(run, "stem", "") for run in runs))
     isempty(unmatched) ||
         println("figures.jl: no archive under $(RUNS_DIR[]) for $(join(unmatched, ", "))")
+    failures = length(unmatched) + length(unreadable)
     if isempty(runs)
         isempty(positional) && println("figures.jl: no archive under $(RUNS_DIR[])")
-        return isempty(unmatched) ? 0 : 1
+        return failures == 0 ? 0 : 1
     end
 
     banner("figures: $(length(runs)) archive(s) into $(RESULTS_DIR[])")
-    failures = length(unmatched)
     for data in runs
         stem = get(data, "stem", "")
         # The extension picks the figure from the archive's kind and names it from its stem; a kind
