@@ -26,8 +26,10 @@ makes it worth keeping.
   The floor goes down from 1.12 to 1.11, and CI's `min` job resolves this bound. The dependency
   list drops `AbstractNeuralNetworks`, `BSplineKit`, `CompactBasisFunctions`, `ForwardDiff`,
   `GeometricMachineLearning`, `IterTools`, `Parameters`, `Plots`, `StaticArrays`,
-  `SymbolicNeuralNetworks`, `Zygote`, `Random` and `Statistics`. The package has
-  no `[weakdeps]` and no `[extensions]`. Every `[compat]` entry is a patch-level floor
+  `SymbolicNeuralNetworks`, `Zygote`, `Random` and `Statistics`. The package carries no `Plots`
+  dependency: the plotting layer of the entry below arrives as the weak dependency
+  `[weakdeps] Makie` with `[extensions] MultisymplecticIntegratorsPlots = "Makie"`. Every
+  `[compat]` entry is a patch-level floor
   (`GeometricBase = "0.15.0"`, `GeometricEquations = "0.21.5"`, `GeometricIntegratorsBase = "0.6.9"`,
   `GeometricSolutions = "0.6.6"`, `QuadratureRules = "0.2.2"`, `SimpleSplines = "0.3.1"`,
   `SimpleSolvers = "0.14.1"`, `Symbolics = "7.18.1"`), except `LinearAlgebra = "1"` and `SparseArrays = "1"`,
@@ -212,6 +214,48 @@ makes it worth keeping.
   initial condition alone keeps the `WAVE_GALERKIN_DIRICHLET_BSPLINE` entry, which is a converged
   solve of its own discrete problem; K21 and K22 record why the entries of the full-multiplier
   layout cannot serve as references.
+- **The energy diagnostics.** `energy_density(density, u, v, w, params)` is the Hamiltonian density
+  `v ∂L/∂v − L` of a Lagrangian density, built from the density's own derivative and value, so every
+  problem the package integrates has a conserved quantity without a formula of its own. A density
+  of one component at a time is applied to each component of the field, and a density that couples
+  the components — `VectorWave.vector_density` for one — takes the vectors of a point and closes
+  the product as their inner product. `energy_error(problem, method, traces)` integrates it over
+  the space quadrature at the nodes the trace is stored on, taking the weights from the ansatz, and
+  returns the relative deviation from the first stored step: one value per step, the first of which
+  is zero. A first step whose energy vanishes falls back to the absolute deviation rather than a
+  `NaN`, and a run that stored no trace raises an `ArgumentError`; so does a trace whose `u`, `v`
+  and `w` hold different numbers of entries, or whose length is not a whole number of the field's
+  components. `solution_data(problem, result)` is the plain `(t, x, u)` a figure is drawn from, so
+  an archived run can be redrawn without a solution object tied to the version that built it.
+- **The plotting extension.** The `Diagnostics` submodule holds the declarations of three figures —
+  a space-time plot of a solution, the energy error of several runs over time on a logarithmic
+  axis, and an animation of the field over the stored steps — together with the dispatcher that
+  turns one archive into the figure its `"kind"` asks for, so a renderer needs no second registry of
+  which experiment produces which picture. `using Makie`, or a backend such
+  as `CairoMakie`, loads `MultisymplecticIntegratorsPlots`, which fills them in and applies one
+  theme. The names live in a submodule rather than at the package's top level because
+  `plot_solution` and `plot_energy_error` are names `GeometricProblems` already exports, and the
+  extension therefore extends `Diagnostics.plot_solution` instead of shadowing it. Fonts, line
+  widths and colours come from `Diagnostics.plot_theme()`, applied inside each figure method, so no
+  figure sets a font, a line width or a colour of its own; the colour cycle is the colour-blind-safe
+  palette Makie provides. The dependency is the weak dependency `Makie = "0.24"` with
+  `[extensions] MultisymplecticIntegratorsPlots = "Makie"`, so a caller who loads no backend pays
+  nothing for the layer.
+- **`scripts/` is a project of its own.** It declares the packages its drivers use, with this
+  package as a path source, so a driver finds `JLD2` and `CairoMakie` where the package's own
+  environment holds neither. `archives.jl` holds the two output directories, the option parser that
+  refuses an unknown flag, and the archive schema: one JLD2 file per run at `runs/<stem>.jld2`, with
+  a `"kind"` that `store_run!` requires and `load_runs()` reading the directory back, so a renderer
+  needs no registry to know what an archive is. `experiments.jl` holds the merged families as plain
+  data — the problem, its time step and grid, the ansatz resolution, the coupling — and runs nothing
+  on `include`. `run_spline.jl` runs its smallest entry by default, `figures.jl` is the only place a
+  figure is saved, and the energy scan, the phase-drift scan and the residual profile are carried
+  against the merged family: the quadrature check that was a script is a test of the energy
+  diagnostic, and the two scans and the profile are rewritten for the new constructors. `runs/` and
+  `results/` are anchored in `.gitignore`.
+- **The old `scripts/` are deleted (K6).** The drivers of the removed families stay reachable at
+  `294f023`. `run_network.jl` and `run_symbolic.jl` ship with an empty registry and say so, naming
+  the ansatz that their entries come with, rather than carrying a constructor that does not exist.
 
 ### Changed
 

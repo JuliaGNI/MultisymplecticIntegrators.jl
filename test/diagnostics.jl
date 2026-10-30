@@ -1,0 +1,264 @@
+using MultisymplecticIntegrators
+using MultisymplecticIntegrators: space_quadrature_nodes
+using Test
+
+include("helpers/testsetup.jl")
+
+# Five steps of the wave equation on the ansatz of `test/ansatz/tensor_bspline.jl`.
+function five_step_wave(::Type{T}) where {T}
+    problem = Wave.problem(T = T, timespan = (zero(T), 5 * T(0.05)), timestep = T(0.05),
+        xstep = T(0.05))
+    ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (zero(T), one(T)),
+        n = 3)
+    method = SpaceTimeGalerkin(ansatz, CoefficientRestriction())
+    return problem, method, integrate(problem, method)
+end
+
+@testset "Diagnostics" begin
+    @testset "S2a the energy density is the density's Hamiltonian" begin
+        problem = Wave.problem()
+        density = problem.density
+        c = problem.params.c
+        for (u, v, w) in ((0.3, -0.7, 1.1), (-1.5, 0.25, -0.4), (zero(Float64), 2.0, 0.5))
+            # `v ∂L/∂v − L` for `L = ½v² − ½c²w²`, and the density's own accessor
+            @test energy_density(density, u, v, w, problem.params) ≈
+                  v * derivative_v(density, u, v, w, problem.params) -
+                  density(u, v, w, problem.params)
+            @test energy_density(density, u, v, w, problem.params) ≈
+                  (v^2 + c^2 * w^2) / 2
+        end
+
+        # A mass adds `½m²u²` to the energy, which is what the density's own value does not show:
+        # the difference between the Hamiltonian and the density is the term the formula keeps.
+        massive = Wave.density(; params = problem.params, m = 0.4)
+        @test energy_density(massive, 0.3, -0.7, 1.1, problem.params) ≈
+              (0.7^2 + (c * 1.1)^2 + (0.4 * 0.3)^2) / 2
+
+        # A vector density sums the components' energies: `v` and `∂L/∂v` are vectors of the `D`
+        # components at one point, and the product is their inner product.
+        params = VectorWave.default_parameters()
+        vector = VectorWave.vector_density(; params = params, D = 2)
+        u, v, w = [0.3, -0.2], [-0.7, 0.4], [1.1, 0.5]
+        scalar = Wave.density(; params = params)
+        @test energy_density(vector, u, v, w, params) ≈
+              sum(energy_density(scalar, u[i], v[i], w[i], params) for i in eachindex(u))
+    end
+
+    @testset "S2a the energy error of a five-step wave run" begin
+        problem, method, result = five_step_wave(Float64)
+        err = energy_error(problem, method, result.traces)
+
+        # One value per stored step, of the problem's element type, and none of them negative.
+        @test length(err) == length(result.traces) == 5
+        @test eltype(err) === Float64
+        @test all(isfinite, err)
+        @test all(≥(0), err)
+
+        # The deviation is relative to the first stored step, so it is zero there to round-off.
+        @test err[1] == 0
+        @test abs(err[1]) ≤ eps(Float64)
+
+        # The energy is the conserved quantity of the wave equation, so the deviation stays at the
+        # discretisation level of the run rather than drifting with it. This is the oracle: a
+        # quantity the density defines, not a second run of the code under test.
+        @test maximum(err) < 1e-3
+
+        # The ansatz's quadrature is the rule the trace is stored on, and its own weights integrate
+        # the space interval: a wrong measure would show here before it showed in the deviation.
+        @test sum(MultisymplecticIntegrators.space_quadrature_weights(
+            ansatz(method))) ≈ 1.0
+
+        # An ansatz of another resolution is not the rule the trace was stored on, and the energy
+        # would be integrated against the wrong nodes.
+        coarse = TensorBSplineAnsatz(degree = 2, ncells = (2, 10), xspan = (0.0, 1.0), n = 3)
+        @test_throws ArgumentError energy_error(problem, coarse, result.traces)
+
+        # The same run through the ansatz, which is the signature the driver holds.
+        @test energy_error(problem, ansatz(method), result.traces) == err
+    end
+
+    @testset "S2a a run without a trace, and an energy that vanishes" begin
+        problem, method, result = five_step_wave(Float64)
+        nq = length(result.traces[1].u)
+
+        @test_throws ArgumentError energy_error(problem, method, [nothing])
+        @test_throws ArgumentError energy_error(problem, method, Any[])
+        # A trace that vanishes has no relative scale, and the deviation is the absolute one
+        # rather than a `NaN` from `0 / 0`.
+        zero_trace = (u = zeros(nq), v = zeros(nq), w = zeros(nq))
+        @test energy_error(problem, method, [zero_trace, zero_trace]) == [0.0, 0.0]
+    end
+
+    @testset "S2a the quadrature the trace is stored on" begin
+        # The energy of a step is the density integrated at the nodes of the ansatz's space
+        # quadrature, so the rule there is part of the diagnostic: it has to integrate the exact
+        # wave Lagrangian and its Hamiltonian to round-off, against the closed forms of the
+        # standing wave, and not merely be a rule of the right total weight.
+        problem, method, _ = five_step_wave(Float64)
+        a = ansatz(method)
+        nodes = collect(space_quadrature_nodes(a))
+        weights = MultisymplecticIntegrators.space_quadrature_weights(a)
+        p = problem.params
+        c = p.c
+        ω = π * c / p.l
+        k = π / p.l
+
+        @test sum(weights) ≈ problem.xspan[2] - problem.xspan[1]
+
+        for t in (0.0, 0.3)
+            u = Wave.exact_u.(t, nodes, Ref(p))
+            v = Wave.exact_v.(t, nodes, Ref(p))
+            w = Wave.exact_w.(t, nodes, Ref(p))
+            # the two coefficients of the standing wave at this time, and the two closed forms
+            A = -p.A1 * sin(ω * t) + p.B1 * cos(ω * t + π / 6)
+            B = p.A1 * cos(ω * t) + p.B1 * sin(ω * t + π / 6)
+            energy = (ω^2 * A^2 + c^2 * k^2 * B^2) * p.l / 4
+            lagrangian = (ω^2 * A^2 - c^2 * k^2 * B^2) * p.l / 4
+
+            @test sum(weights[j] * energy_density(problem.density, u[j], v[j], w[j], p)
+            for j in eachindex(nodes)) ≈ energy rtol = 32 * eps(Float64)
+            @test sum(weights[j] * problem.density(u[j], v[j], w[j], p)
+            for j in eachindex(nodes)) ≈ lagrangian rtol = 32 * eps(Float64)
+        end
+    end
+
+    @testset "S2a a run of two components" begin
+        # `D = 2`: each component is its own scalar wave problem, and the trace of a step is the two
+        # components at every node. The energy is the sum over the components, so the deviation is
+        # that of the whole field and not of its first component.
+        params = VectorWave.default_parameters()
+        problem = VectorWave.problem(
+            params = params, timespan = (0.0, 0.1), timestep = 0.05,
+            xstep = 0.05)
+        ansatz2 = TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0), n = 3)
+        method2 = SpaceTimeGalerkin(ansatz2, CoefficientRestriction())
+        result2 = integrate(problem, method2)
+        nq = length(space_quadrature_nodes(ansatz2))
+        @test components(problem) == 2
+        @test length(result2.traces) == 2
+        @test length(result2.traces[1].u) == 2 * nq
+        err = energy_error(problem, method2, result2.traces)
+        @test length(err) == 2
+        @test err[1] == 0
+        @test all(isfinite, err)
+        @test maximum(err) < 1e-2
+
+        # The plotting layer's data: one matrix per component, of the step times against the output
+        # grid, and component 2 is the second block of the state rather than the first again.
+        t, x, u = solution_data(problem, result2)
+        @test length(t) == 3
+        @test length(x) == length(MultisymplecticIntegrators.xgrid(problem))
+        @test length(u) == 2
+        @test size(u[1]) == (3, length(x))
+        exact2 = Wave.exact_u.(0.0, x, Ref(VectorWave.component_parameters(params, 2)))
+        @test maximum(abs.(u[2][1, :] .- exact2)) ≤ 16 * eps(Float64) * maximum(abs, exact2)
+    end
+
+    @testset "S2a the data of a run that stopped early" begin
+        # `integrate` ends a run at a NaN or a failed solve, and its traces then end before the
+        # output grid does. The steps it never computed are not data: the times and the field stop
+        # at the last stored trace, and the field there is the solution's own.
+        problem, _, result = five_step_wave(Float64)
+        stopped = (; solution = result.solution, traces = result.traces[1:2])
+        t, x, u = solution_data(problem, stopped)
+        @test t == [result.solution.t[n] for n in 0:2]
+        @test size(only(u)) == (3, length(x))
+        @test only(u)[3, :] == result.solution.u[2]
+    end
+
+    @testset "S2a the deviation is the whole field's, and it is unsigned" begin
+        # A hand-built pair of traces, so the expected deviation is arithmetic and not a second run:
+        # the wave density is `½v²` per component at `w = 0`, the weights of the space rule sum to
+        # the interval, and the energy of a trace is therefore known.
+        params = VectorWave.default_parameters()
+        problem = VectorWave.problem(
+            params = params, timespan = (0.0, 0.1), timestep = 0.05,
+            xstep = 0.05)
+        ansatz2 = TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0), n = 3)
+        nq = length(space_quadrature_nodes(ansatz2))
+        moving(v1, v2) = (u = zeros(2 * nq), v = vcat(fill(v1, nq), fill(v2, nq)),
+            w = zeros(2 * nq))
+        # both components moving: energy ½ (1 + 1) = 1, then ½ (1 + 0) = ½
+        err = energy_error(problem, ansatz2, [moving(1.0, 1.0), moving(1.0, 0.0)])
+        @test err[2] ≈ 0.5
+        # the fall is reported as a positive deviation: the error is unsigned
+        @test err[2] > 0
+    end
+
+    @testset "S2a a trace of the wrong shape is refused" begin
+        # A trace is the `D` components at the `nq` nodes of the space quadrature, and the energy of
+        # a step reads all three of its parts at every node. A trace of another shape is refused
+        # rather than read at the nodes it happens to hold.
+        params = VectorWave.default_parameters()
+        problem = VectorWave.problem(
+            params = params, timespan = (0.0, 0.1), timestep = 0.05, xstep = 0.05)
+        ansatz2 = TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0), n = 3)
+        nq = length(space_quadrature_nodes(ansatz2))
+        entries = 2 * nq
+
+        # One entry more than the nodes carry: the floored count of components per node agrees with
+        # the quadrature's length, so without a remainder check the surplus entry goes unread.
+        surplus = (u = zeros(entries + 1), v = ones(entries + 1), w = zeros(entries + 1))
+        @test_throws ArgumentError energy_error(problem, ansatz2, [surplus])
+
+        # The three parts of a trace are read at the same node, so a `v` shorter than `u` or a `w`
+        # longer than it is a malformed trace as well.
+        @test_throws ArgumentError energy_error(problem, ansatz2,
+            [(u = zeros(entries), v = ones(entries - 1), w = zeros(entries))])
+        @test_throws ArgumentError energy_error(problem, ansatz2,
+            [(u = zeros(entries), v = ones(entries), w = zeros(entries + 1))])
+
+        # The scalar case refuses the same disagreement.
+        problem1, method1, result1 = five_step_wave(Float64)
+        trace1 = result1.traces[1]
+        @test_throws ArgumentError energy_error(problem1, method1,
+            [(u = trace1.u, v = trace1.v[1:(end - 1)], w = trace1.w)])
+
+        # A well-shaped trace is still accepted: the guard refuses a shape and not the value.
+        @test energy_error(problem, ansatz2,
+            [(u = zeros(entries), v = ones(entries), w = zeros(entries))]) == [0.0]
+    end
+
+    @testset "S2a a density that couples the components" begin
+        # A problem may carry a density that takes the `D` components of one point at once
+        # (`VectorWave.vector_density`). Uncoupled it is the sum of the scalar densities, so the
+        # energy error on the same traces must equal the one the scalar density gives — an oracle
+        # by construction, and the only path that reads a trace node as a vector of components.
+        params = VectorWave.default_parameters()
+        problem = VectorWave.problem(
+            params = params, timespan = (0.0, 0.1), timestep = 0.05, xstep = 0.05)
+        coupled = LagrangianPDEProblem(VectorWave.vector_density(; params = params, D = 2);
+            D = 2, ics_function = problem.ics_function, bcs_function = problem.bcs_function,
+            exact_u = problem.exact_u, exact_v = problem.exact_v, exact_w = problem.exact_w,
+            timespan = problem.timespan, timestep = problem.timestep,
+            xspan = problem.xspan, xstep = problem.xstep, params = params)
+        ansatz2 = TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0), n = 3)
+        nq = length(space_quadrature_nodes(ansatz2))
+        moving(v1, v2) = (u = zeros(2 * nq), v = vcat(fill(v1, nq), fill(v2, nq)),
+            w = zeros(2 * nq))
+        # ½(1 + 0.25) = 5/8, then ½(1 + 0.0625) = 17/32, so the deviation is 3/20
+        traces = [moving(1.0, 0.5), moving(1.0, 0.25)]
+        err = energy_error(coupled, ansatz2, traces)
+        @test err ≈ energy_error(problem, ansatz2, traces)
+        @test err[2] ≈ 0.15
+    end
+
+    @testset "S2a a run in reduced precision" begin
+        problem = Wave.problem(T = Float32, timespan = (0.0f0, 0.1f0), timestep = 0.05f0,
+            xstep = 0.05f0)
+        ansatz32 = TensorBSplineAnsatz(
+            degree = 2, ncells = (2, 20), xspan = (0.0f0, 1.0f0),
+            n = 3)
+        nodes = collect(space_quadrature_nodes(ansatz32))
+        ics = problem.ics_function(nodes, problem.params)
+        # Two traces of a Float32 run: the initial data, and the initial data with a perturbed
+        # velocity, which is a non-zero energy error of that precision's own scale.
+        traces = [(u = ics.u, v = ics.v, w = ics.w),
+            (u = ics.u, v = ics.v .+ 0.5f0, w = ics.w)]
+        err = energy_error(problem, ansatz32, traces)
+        @test eltype(err) === Float32
+        @test length(err) == 2
+        @test err[1] == 0.0f0
+        @test err[2] > 16 * eps(Float32)
+    end
+end

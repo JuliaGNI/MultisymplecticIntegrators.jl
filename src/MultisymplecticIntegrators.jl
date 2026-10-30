@@ -4,7 +4,7 @@ using GeometricBase
 using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: Diagonal, I, mul!
+using LinearAlgebra: Diagonal, I, dot, mul!
 using QuadratureRules
 using SimpleSplines
 using SimpleSolvers
@@ -82,5 +82,12 @@ export default_fit
 # the integrator shell
 include("core/integrate.jl")
 export integrate, top_trace
+
+# the diagnostics
+include("diagnostics.jl")
+export energy_density, energy_error, solution_data
+
+# the plotting API, implemented in the `MultisymplecticIntegratorsPlots` extension
+include("plots.jl")
 
 end
