@@ -162,8 +162,8 @@ The block of a weak-multiplier coupling `C` in the slab cache.
 `coupling` is the coupling itself. `initial_multiplier` is the datum of the step, the multiplier of
 the bottom surface, and `top_multiplier` its unknown, the multiplier of the top surface;
 `top_values` is the unknown at the nodes of the space quadrature, which is the momentum that leaves
-the slab. `boundary_multiplier` holds the `2 Nμ` multipliers of the two ends of `xspan` — the first `Nμ` at `x = a`, the rest at
-`x = b`.
+the slab. `boundary_multiplier` holds the `2 Nμ` multipliers of the two ends of `xspan` — the first
+`Nμ` at `x = a`, the rest at `x = b`.
 
 `multiplier_basis` and `boundary_basis` are the tables those multipliers are expanded in, at the
 nodes of the space and of the time quadrature. `projection` reads the bottom multiplier's datum back
@@ -741,7 +741,7 @@ function initial_multiplier!(data::MultiplierData{ST}, problem::LagrangianPDEPro
 end
 
 """
-    slab_bottom!(cache, coupling, problem, ansatz, sol)
+    slab_bottom!(cache, data::MultiplierData, problem, ansatz, sol)
 
 Fix the data of the slab: the trace the initial condition is compared with — the problem's initial
 condition on the first slab, the previous slab's top trace afterwards — and the problem's side

@@ -127,8 +127,9 @@ makes it worth keeping.
   converged, beside the top trace at the nodes of the space quadrature. The initial-guess
   interface of `src/initial_guess/` fills the solver's vector before a step: `Continuation()`, the
   default, carries the previous slab's top row into every row of the new slab;
-  `FitTo(target; method = nothing)` fits the ansatz to `InitialCondition()`, to `PreviousSlab()` — the polynomial piece of the top time cell
-  expanded about its top, so a quadratic field continues as the same quadratic — to
+  `FitTo(target; method = nothing)` fits the ansatz to `InitialCondition()`, to `PreviousSlab()`
+  — the polynomial piece of the top time cell expanded about its top, so a quadratic field
+  continues as the same quadratic — to
   `ExactSolution()` or to a `TargetFunction(f)`, with `Projection()` where the ansatz names no fit
   of its own, and a user-defined target or fit method is one method of `evaluate!` or `fit!`. Four
   refusals are `ArgumentError`s at construction: `FitTo(ExactSolution())` on a problem with no
