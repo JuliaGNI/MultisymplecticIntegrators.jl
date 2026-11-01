@@ -123,14 +123,20 @@ end
             @test maximum(abs, v) ≥ floor
         end
     end
-    @test Set(e.degree[1] for e in set) == Set(1:3)
-    @test Set(e.degree[2] for e in set) == Set(2:3)
-    # the cell counts vary in each direction, and the Gauss counts per cell exceed the degree by
-    # one or by two in each direction
+    # every fifth entry has a fixed ansatz with a time rule longer than the space rule; the other
+    # entries draw the degrees, the cell counts and the Gauss counts per cell, and their draws
+    # cover the full range of each in each direction
+    drawn = [e for (i, e) in enumerate(set) if i % 5 != 0]
+    fixed = [e for (i, e) in enumerate(set) if i % 5 == 0]
+    @test Set(e.degree[1] for e in drawn) == Set(1:3)
+    @test Set(e.degree[2] for e in drawn) == Set(2:3)
+    @test Set(e.ncells[1] for e in drawn) == Set(1:3)
+    @test Set(e.ncells[2] for e in drawn) == Set(4:7)
     for k in 1:2
-        @test length(Set(e.ncells[k] for e in set)) ≥ 3
-        @test Set(e.n[k] - e.degree[k] for e in set) == Set(1:2)
+        @test Set(e.n[k] - e.degree[k] for e in drawn) == Set(1:2)
     end
+    @test length(fixed) == 4
+    @test all(e -> (e.degree, e.ncells, e.n) == ((3, 2), (3, 3), (5, 3)), fixed)
     # the restriction runs on both space bases
     @test Set(typeof(e.x_boundary) for e in set) == Set([Dirichlet, Free])
     @test length(Set(parameters(e.problem).c for e in set)) == length(set)
