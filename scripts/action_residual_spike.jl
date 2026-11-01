@@ -39,6 +39,7 @@ using DifferentiationInterface: AutoEnzyme, AutoForwardDiff, AutoMooncake, Const
 using Enzyme: Enzyme
 using GeometricBase: parameters
 using GeometricIntegratorsBase: solver
+using LinearAlgebra: BLAS
 using Mooncake: Mooncake
 using Printf: @printf
 using Random: Xoshiro
@@ -285,8 +286,13 @@ One process's work: at each target size, the mesh, the two checks and the timing
 one problem, printed as one `result` line per size.
 """
 function worker(problem_name, backend_name, targets, samples)
-    println("== $problem_name, $backend_name, Julia $(VERSION), $(Threads.nthreads()) thread(s)")
+    BLAS.set_num_threads(1)
+    println("== $problem_name, $backend_name, Julia $(VERSION), $(Threads.nthreads()) thread(s), " *
+            "$(BLAS.get_num_threads()) BLAS thread(s)")
     println("uptime: ", strip(read(`uptime`, String)))
+    haskey(BACKENDS, backend_name) ||
+        throw(ArgumentError("unknown backend `$backend_name`; the spike runs " *
+                            join(sort!(collect(keys(BACKENDS))), ", ")))
     backend = BACKENDS[backend_name]
     problem = spike_problem(problem_name)
     println("result\tproblem\tbackend\tN\tncells\tgradient error\tHessian error\t" *
@@ -316,8 +322,8 @@ end
 
 Both checks on `SineGordon` at the smallest size with ForwardDiff: first at the slab's vector, where
 they must pass, then with the AD derivatives at a vector shifted by `PERTURBATION`, where each must
-fail. Returns 1 where both reject the shifted vector, and 0, with the check that accepted it named,
-otherwise.
+fail. Returns 1 where the unperturbed checks pass and both checks reject the shifted vector, and 0,
+with the failing or accepting check named, otherwise.
 """
 function selfcheck()
     problem = spike_problem("SineGordon")
@@ -326,7 +332,13 @@ function selfcheck()
     backend = BACKENDS["ForwardDiff"]
     preparation = prepare(slab, backend)
     context = "N = $N (SineGordon, ForwardDiff)"
-    checks(slab, backend, preparation, context)
+    try
+        checks(slab, backend, preparation, context)
+    catch e
+        e isa CheckFailure || rethrow()
+        println(stderr, "selfcheck: ", sprint(showerror, e))
+        return 0
+    end
     θ = slab.θ
     perturbed = θ .+ PERTURBATION
     accepted = String[]
@@ -367,9 +379,11 @@ end
     driver(arguments)
 
 One ForwardDiff process and one reverse-mode process per problem. A ForwardDiff failure stops the
-run; an Enzyme failure starts Mooncake in its place, and a Mooncake failure leaves ForwardDiff alone.
+run; an Enzyme failure starts Mooncake in its place, and a Mooncake failure leaves ForwardDiff alone
+and returns non-zero after the run.
 """
 function driver(arguments)
+    status = 0
     for problem_name in PROBLEMS
         if !run_worker(problem_name, "ForwardDiff", arguments)
             println(stderr, "ForwardDiff failed on $problem_name; the run stops")
@@ -378,33 +392,78 @@ function driver(arguments)
         run_worker(problem_name, "Enzyme", arguments) && continue
         println("Enzyme failed on $problem_name; Mooncake runs in its place")
         run_worker(problem_name, "Mooncake", arguments) && continue
-        println("neither reverse-mode backend runs on $problem_name; ForwardDiff alone is measured")
+        println(stderr,
+            "neither reverse-mode backend runs on $problem_name; ForwardDiff alone is measured")
+        status = 1
     end
-    return 0
+    return status
 end
 
-"""The sizes of `--sizes 60,120`, or every target."""
-function sizes(arguments)
-    i = findfirst(==("--sizes"), arguments)
-    i === nothing && return TARGETS
-    return Tuple(parse.(Int, split(arguments[i + 1], ",")))
+"""
+    parse_arguments(arguments)
+
+The spike's command-line options: `--selfcheck`, `--quick`, `--sizes n1,n2,…` and
+`--worker problem backend`. Rejects any other argument.
+"""
+function parse_arguments(arguments)
+    selfcheck_flag = false
+    quick = false
+    targets = TARGETS
+    worker_args = nothing
+    i = firstindex(arguments)
+    while i ≤ lastindex(arguments)
+        arg = arguments[i]
+        if arg == "--selfcheck"
+            selfcheck_flag = true
+            i += 1
+        elseif arg == "--quick"
+            quick = true
+            i += 1
+        elseif arg == "--sizes"
+            i < lastindex(arguments) || throw(ArgumentError("`--sizes` needs a value"))
+            targets = Tuple(parse.(Int, split(arguments[i + 1], ",")))
+            i += 2
+        elseif arg == "--worker"
+            i + 1 < lastindex(arguments) ||
+                throw(ArgumentError("`--worker` needs a problem and a backend"))
+            worker_args = (arguments[i + 1], arguments[i + 2])
+            i += 3
+        else
+            throw(ArgumentError(
+                "unknown argument `$arg`; this script takes `--quick`, `--selfcheck`, " *
+                "`--sizes` and `--worker`"))
+        end
+    end
+    quick && (targets = (first(TARGETS),))
+    return (; selfcheck = selfcheck_flag, quick, targets, worker = worker_args)
 end
 
 function main(arguments)
-    "--selfcheck" in arguments && return selfcheck()
-    quick = "--quick" in arguments
-    targets = quick ? (first(TARGETS),) : sizes(arguments)
-    samples = quick ? 1 : 10_000
-    i = findfirst(==("--worker"), arguments)
-    if i !== nothing
+    options = try
+        parse_arguments(arguments)
+    catch e
+        println(stderr, "argument error: ", sprint(showerror, e))
+        return "--selfcheck" in arguments ? 0 : 1
+    end
+    if options.selfcheck
         try
-            return worker(arguments[i + 1], arguments[i + 2], targets, samples)
+            return selfcheck()
+        catch e
+            println(stderr, "selfcheck failed: ", sprint(showerror, e))
+            return 0
+        end
+    end
+    samples = options.quick ? 1 : 10_000
+    if options.worker !== nothing
+        problem_name, backend_name = options.worker
+        try
+            return worker(problem_name, backend_name, options.targets, samples)
         catch e
             println(stderr, "worker failed: ", sprint(showerror, e))
             return 1
         end
     end
-    forwarded = quick ? ["--quick"] : ["--sizes", join(targets, ",")]
+    forwarded = options.quick ? ["--quick"] : ["--sizes", join(options.targets, ",")]
     return driver(forwarded)
 end
 
