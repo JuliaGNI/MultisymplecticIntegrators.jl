@@ -84,7 +84,8 @@ Within a step, every function of the coupling dispatches on its block:
 The initial guess fills the solver's vector before each solve, through [`initial_guess!`](@ref):
 [`Continuation`](@ref) repeats the previous slab's top row, and [`FitTo`](@ref) evaluates a
 [`SlabTarget`](@ref) on the slab with [`evaluate!`](@ref) and fits the ansatz to it with a
-[`SlabFitMethod`](@ref) through `fit!`, whose contract [`Projection`](@ref) states. The coupling then guesses its own unknowns.
+[`SlabFitMethod`](@ref) through `fit!`, whose contract [`Projection`](@ref) states. The coupling
+then guesses its own unknowns.
 
 ## A step
 
@@ -92,3 +93,35 @@ The initial guess fills the solver's vector before each solve, through [`initial
 record of the solve, and [`update!`](@ref), which evaluates the solved slab, writes the solution and
 the trace, and calls [`coupling_update!`](@ref). [`integrate`](@ref) drives the steps and returns
 the solution, the traces and the [`solve_stats`](@ref) of the run.
+
+## The action form (U17)
+
+The interior weak form of a slab is the gradient of its discrete action with respect to the
+parameters `ĉ` of the ansatz, the whole coefficient array for the tensor B-spline ansatz, and the
+residual keeps the rows of it that the free rows carry. The action is the sum over the nodes of the
+slab's quadrature of the weighted density `L(u, v, w)`, where `u`, `v` and `w` are the field and its
+derivatives that `ĉ` gives at the nodes. By the chain rule, the gradient is the pullback of the
+density's derivatives `∂u`, `∂v`, `∂w` at the nodes through the map from `ĉ` to the field there.
+The core already evaluates the residual in that order, one seam function per factor:
+
+1. [`slab_field!`](@ref) applies the field map: it builds `ĉ` from the solver's vector and the
+   coupling's bottom row, and gives the field at the nodes;
+2. [`transform_field!`](@ref) applies the coupling's transform; a lift `ℓ(t̂, x)` that does not
+   depend on `ĉ` changes the point at which the density is evaluated and not the pullback;
+3. the core evaluates `∂u`, `∂v` and `∂w` of the density at the nodes;
+4. [`slab_weak_form!`](@ref) pulls them back through the field map, with the quadrature weights;
+5. [`free_residual!`](@ref) writes the rows of the free coefficients in the solver's layout.
+
+For the tensor B-spline ansatz the field map is linear in `θ`, so its pullback is the product with
+the tabulated basis, which is the weak form in `src/core/weak_form.jl`. An ansatz whose field map
+is not linear, such as a network, implements [`slab_field!`](@ref) as its map and
+[`slab_weak_form!`](@ref) as the pullback of `∂u`, `∂v` and `∂w` through that map by automatic
+differentiation, with [`free_residual!`](@ref) on its own block. A coupling may compute
+[`coupling_term!`](@ref) as the gradient, by automatic differentiation, of its own action terms:
+the function receives the solver's vector `x` and the coupling's block, which is all those terms
+read. Neither the core nor the existing couplings change for either.
+
+The variant that the seam carries is the pullback of `∂L` at the nodes: the core evaluates the
+density's derivatives, and the ansatz differentiates only its field map. The seam does not
+differentiate `L` inside the ansatz's block, so an ansatz never sees the density, and the density
+keeps the derivatives that its problem defines.
