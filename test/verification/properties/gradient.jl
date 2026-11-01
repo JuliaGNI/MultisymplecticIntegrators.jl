@@ -1,6 +1,5 @@
-using GeometricBase: datatype, ntime, parameters, timespan, timestep
+using GeometricBase: parameters
 using GeometricIntegratorsBase
-using GeometricSolutions
 using MultisymplecticIntegrators
 using Random
 using Test

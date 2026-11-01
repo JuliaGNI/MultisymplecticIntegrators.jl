@@ -122,3 +122,16 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   that reason.
 - kind: defect
 - found: 2026-10-31
+
+### K29 · `LagrangianPDEProblem` refuses an `xstep` that divides the span exactly in real numbers.
+
+- location: `src/problems/lagrangian_problem.jl:84`
+- evidence: the output grid is the range `xspan[1]:xstep:xspan[2]`, and for `xstep = (b − a)/m`
+  the range can stop one point short of `b`, and the constructor raises: on the span
+  `(-0.2907370896924628, 0.9623679443952706)` with `m = 9`, `Wave.problem` throws
+  `ArgumentError: xstep 0.13923389267641484 does not reach the end of xspan (…): the grid stops at 0.8231340517188559`.
+  Of 2000 random spans `(a, b)` with `a ∈ [−0.6, 0.4]`, `b − a ∈ [0.6, 1.3]` and `m ∈ 8:12`, the
+  range stops short on 294 in `Float64` and 284 in `Float32`. The property suite's generator lowers
+  `xstep` with `prevfloat` until the range reaches `b`.
+- kind: defect
+- found: 2026-11-01

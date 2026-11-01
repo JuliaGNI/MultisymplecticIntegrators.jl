@@ -242,19 +242,17 @@ restriction, all `Nt` rows otherwise — then `−∂S/∂λ₀` on the rows of 
 """
 function oracle_residual(o::ActionOracle, datum::SlabDatum, θ::AbstractVector{T}) where {T}
     ĉ, λ, μa, μb = decode(o, datum, θ)
-    sizes = (length(ĉ), length(datum.λ₀), length(μa), length(μb))
+    parts = cumsum((0, length(ĉ), length(datum.λ₀), length(μa), length(μb)))
     z = vcat(vec(ĉ), vec(datum.λ₀), vec(μa), vec(μb))
+    block(v, k) = v[(parts[k] + 1):parts[k + 1]]
     function action(z)
-        parts = cumsum((0, sizes...))
-        block(k, shape...) = reshape(z[(parts[k] + 1):parts[k + 1]], shape...)
-        return slab_action(o, datum, block(1, o.nt, o.nx, o.D), block(2, o.nλ, o.D), λ,
-            block(3, o.nμ, o.D), block(4, o.nμ, o.D))
+        return slab_action(o, datum, reshape(block(z, 1), o.nt, o.nx, o.D),
+            reshape(block(z, 2), o.nλ, o.D), λ, reshape(block(z, 3), o.nμ, o.D),
+            reshape(block(z, 4), o.nμ, o.D))
     end
     g = action_gradient(action, z)
-    ∂c = reshape(g[1:sizes[1]], o.nt, o.nx, o.D)
-    ∂λ₀ = g[(sizes[1] + 1):(sizes[1] + sizes[2])]
-    ∂μa = g[(sizes[1] + sizes[2] + 1):(sizes[1] + sizes[2] + sizes[3])]
-    ∂μb = g[(sizes[1] + sizes[2] + sizes[3] + 1):end]
+    ∂c = reshape(block(g, 1), o.nt, o.nx, o.D)
+    ∂λ₀, ∂μa, ∂μb = block(g, 2), block(g, 3), block(g, 4)
     R = zeros(T, unknown_count(o))
     for d in 1:o.D, j in 1:o.nx, k in 1:free_time_rows(o)
         R[coefficient_entry(o, k, j, d)] = ∂c[k, j, d]

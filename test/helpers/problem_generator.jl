@@ -52,7 +52,7 @@ function uniform(rng::AbstractRNG, ::Type{T}, lo, hi) where {T}
 end
 
 # A draw in `[lo, hi]` with a random sign.
-function signed(rng::AbstractRNG, ::Type{T}, lo, hi) where {T}
+function signed_uniform(rng::AbstractRNG, ::Type{T}, lo, hi) where {T}
     rand(rng, Bool) ? uniform(rng, T, lo, hi) :
     -uniform(rng, T, lo, hi)
 end
@@ -167,7 +167,7 @@ function generate_problem(::Type{T}, rng::AbstractRNG, density, i::Integer, kind
     m = rand(rng, 8:12)
     b = a + uniform(rng, T, 0.6, 1.3)
     # a step of `m` cells whose range `a:xstep:b`, the problem's output grid, reaches `b`: a step
-    # that rounds up stops the range one point short
+    # that rounds up stops the range one point short, and `LagrangianPDEProblem` refuses it (K29)
     xstep = (b - a) / m
     while abs(last(a:xstep:b) - b) > xstep / 4
         xstep = prevfloat(xstep)
@@ -194,8 +194,8 @@ function generate_problem(::Type{T}, rng::AbstractRNG, density, i::Integer, kind
         a₁, a₃, a₄ = zero(T), zero(T), zero(T)
         β = uniform(rng, T, 0.3, 1.0)
     else
-        a₁ = signed(rng, T, 0.1, 0.8)
-        a₃ = potential == 3 ? signed(rng, T, 0.3, 1.0) : zero(T)
+        a₁ = signed_uniform(rng, T, 0.1, 0.8)
+        a₃ = potential == 3 ? signed_uniform(rng, T, 0.3, 1.0) : zero(T)
         a₄ = potential == 4 ? uniform(rng, T, 0.3, 1.0) : zero(T)
         β = zero(T)
     end
@@ -215,30 +215,31 @@ function initial_field(::Type{T}, rng::AbstractRNG, kind::Symbol, d::Integer) wh
     if kind === :noether
         # zero at both ends; the two components take different modes, so that neither is a
         # multiple of the other and the rotation charge is not zero
-        A = d == 1 ? [signed(rng, T, 0.5, 1.0), zero(T)] :
-            [zero(T), signed(rng, T, 0.5, 1.0)]
-        B = d == 1 ? [zero(T), signed(rng, T, 0.5, 1.0)] :
-            [signed(rng, T, 0.5, 1.0), zero(T)]
+        A = d == 1 ? [signed_uniform(rng, T, 0.5, 1.0), zero(T)] :
+            [zero(T), signed_uniform(rng, T, 0.5, 1.0)]
+        B = d == 1 ? [zero(T), signed_uniform(rng, T, 0.5, 1.0)] :
+            [signed_uniform(rng, T, 0.5, 1.0), zero(T)]
         return FieldData(zero(T), A, zeros(T, 2), zero(T), B, zeros(T, 2), false)
     elseif kind === :symmetric
         # cosines of `2kπs` with no phase: symmetric about the middle, and non-zero at the ends
-        A = [signed(rng, T, 0.3, 1.0), signed(rng, T, 0.1, 0.5)]
+        A = [signed_uniform(rng, T, 0.3, 1.0), signed_uniform(rng, T, 0.1, 0.5)]
         A₀ = sum(A) > 0 ? uniform(rng, T, 0.2, 0.6) : -uniform(rng, T, 0.2, 0.6)
-        B₀ = signed(rng, T, 0.3, 0.8)
-        B = [signed(rng, T, 0.1, 0.5), zero(T)]
+        B₀ = signed_uniform(rng, T, 0.3, 0.8)
+        B = [signed_uniform(rng, T, 0.1, 0.5), zero(T)]
         return FieldData(A₀, A, zeros(T, 2), B₀, B, zeros(T, 2), true)
     else
-        A = [signed(rng, T, 0.2, 1.0), signed(rng, T, 0.1, 0.5)]
+        A = [signed_uniform(rng, T, 0.2, 1.0), signed_uniform(rng, T, 0.1, 0.5)]
         φ = [uniform(rng, T, 0, 2π), uniform(rng, T, 0, 2π)]
-        B = [signed(rng, T, 0.1, 0.5), signed(rng, T, 0.1, 0.5)]
+        B = [signed_uniform(rng, T, 0.1, 0.5), signed_uniform(rng, T, 0.1, 0.5)]
         χ = [uniform(rng, T, 0, 2π), uniform(rng, T, 0, 2π)]
-        return FieldData(signed(rng, T, 0.1, 0.5), A, φ, signed(rng, T, 0.3, 0.8), B, χ,
+        return FieldData(
+            signed_uniform(rng, T, 0.1, 0.5), A, φ, signed_uniform(rng, T, 0.3, 0.8), B, χ,
             false)
     end
 end
 
 function side_data(::Type{T}, rng::AbstractRNG, kind::Symbol, D::Integer) where {T}
-    draw() = SideData(signed(rng, T, 0.2, 0.8), signed(rng, T, 0.2, 0.6),
+    draw() = SideData(signed_uniform(rng, T, 0.2, 0.8), signed_uniform(rng, T, 0.2, 0.6),
         uniform(rng, T, 1, 6), uniform(rng, T, 0, 2π))
     if kind === :noether
         zero_side = SideData(zero(T), zero(T), zero(T), zero(T))

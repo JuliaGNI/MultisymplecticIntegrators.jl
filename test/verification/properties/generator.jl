@@ -1,4 +1,4 @@
-using GeometricBase: datatype, ntime, parameters, timespan, timestep
+using GeometricBase: ntime, parameters, timespan, timestep
 using GeometricSolutions
 using MultisymplecticIntegrators
 using Random
@@ -125,6 +125,12 @@ end
     end
     @test Set(e.degree[1] for e in set) == Set(1:3)
     @test Set(e.degree[2] for e in set) == Set(2:3)
+    # the cell counts vary in each direction, and the Gauss counts per cell exceed the degree by
+    # one or by two in each direction
+    for k in 1:2
+        @test length(Set(e.ncells[k] for e in set)) ≥ 3
+        @test Set(e.n[k] - e.degree[k] for e in set) == Set(1:2)
+    end
     # the restriction runs on both space bases
     @test Set(typeof(e.x_boundary) for e in set) == Set([Dirichlet, Free])
     @test length(Set(parameters(e.problem).c for e in set)) == length(set)
@@ -158,6 +164,9 @@ end
     for e in noether
         @test components(e.problem) == 2
         @test e.problem.density isa VectorWave.VectorDensity
+        # the scalar potential holds only the rotation-invariant `a₂u²/2`
+        p = parameters(e.problem)
+        @test iszero(p.a1) && iszero(p.a3) && iszero(p.a4) && !iszero(p.a2)
         t₀ = timespan(e.problem)[1]
         @test all(d -> sides(e, t₀, d) == (zero(T), zero(T)), 1:2)
         a, b = xspan(e.problem)

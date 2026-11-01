@@ -22,8 +22,9 @@ makes it worth keeping.
   `LagrangianDensity` and `SpaceTimeQuadrature`, together with the `SpaceTimeAnsatz`,
   `SlabCoupling` and `SlabInitialGuess` abstract types. A caller of a family that has not returned
   yet works at `294f023`.
-- **`julia = "1.11"` is the floor**, and every dependency has a `[compat]` entry.
-  The floor goes down from 1.12 to 1.11, and CI's `min` job resolves this bound. The dependency
+- **`julia = "1.12"` is the floor**, and every dependency has a `[compat]` entry.
+  The floor stays at 1.12, because every `SimpleSplines` release from 0.3.3 on requires Julia 1.12,
+  and CI's `min` job resolves this bound. The dependency
   list drops `AbstractNeuralNetworks`, `BSplineKit`, `CompactBasisFunctions`, `ForwardDiff`,
   `GeometricMachineLearning`, `IterTools`, `Parameters`, `Plots`, `StaticArrays`,
   `SymbolicNeuralNetworks`, `Zygote`, `Random` and `Statistics`. The package carries no `Plots`
