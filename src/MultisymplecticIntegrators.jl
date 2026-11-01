@@ -5,13 +5,11 @@ using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
 using LinearAlgebra: Diagonal, I, dot
-using QuadratureRules
 using SimpleSplines
 using SimpleSolvers
 using SparseArrays
 using Symbolics
 
-import QuadratureRules: nodes
 import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrature,
                       BSplineBasis, UniformMesh, evaluate, basis, bases,
                       basis_values, degree, nbasis, ncells, quadrature_nodes,
@@ -19,7 +17,8 @@ import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrat
 import SimpleSolvers: initial_residual, method, solve_with_status!, NonlinearSolverException
 import SimpleSolvers: config
 import GeometricBase: datatype, timetype, arrtype, equtype, timespan, timestep, parameters,
-                      periodicity, ntime, initialstate, timesteps, integrate, update!
+                      periodicity, ntime, initialstate, timesteps, integrate, update!,
+                      nodes
 import GeometricEquations: initial_conditions, GeometricProblem, GeometricEquation,
                            compute_vectorfields!, problem, equation
 import GeometricIntegratorsBase: GeometricIntegrator, solutionstep, reset!, integrate!,

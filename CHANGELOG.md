@@ -29,13 +29,13 @@ makes it worth keeping.
   The floor stays at 1.12, because every `SimpleSplines` release from 0.3.3 on requires Julia 1.12,
   and CI's `min` job resolves this bound. The dependency
   list drops `AbstractNeuralNetworks`, `BSplineKit`, `CompactBasisFunctions`, `ForwardDiff`,
-  `GeometricMachineLearning`, `IterTools`, `Parameters`, `Plots`, `StaticArrays`,
-  `SymbolicNeuralNetworks`, `Zygote`, `Random` and `Statistics`. The package carries no `Plots`
-  dependency: the plotting layer of the entry below arrives as the weak dependency
+  `GeometricMachineLearning`, `IterTools`, `Parameters`, `Plots`, `QuadratureRules`,
+  `StaticArrays`, `SymbolicNeuralNetworks`, `Zygote`, `Random` and `Statistics`. The package
+  carries no `Plots` dependency: the plotting layer of the entry below arrives as the weak dependency
   `[weakdeps] Makie` with `[extensions] MultisymplecticIntegratorsPlots = "Makie"`. Every
   `[compat]` entry is a patch-level floor
   (`GeometricBase = "0.15.0"`, `GeometricEquations = "0.21.5"`, `GeometricIntegratorsBase = "0.6.9"`,
-  `GeometricSolutions = "0.6.6"`, `QuadratureRules = "0.2.2"`, `SimpleSplines = "0.3.4"`,
+  `GeometricSolutions = "0.6.6"`, `SimpleSplines = "0.3.4"`,
   `SimpleSolvers = "0.14.1"`, `Symbolics = "7.18.1"`), except `LinearAlgebra = "1"` and `SparseArrays = "1"`,
   which name the major. `SimpleSplines` requires `DomainSets = "0.8"`, which `Symbolics` accepts only from `7.18.1`,
   so the `Symbolics` floor is that patch rather than the major.
