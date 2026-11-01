@@ -162,7 +162,7 @@ end
         @test all(d -> sides(e, t₀, d) == (zero(T), zero(T)), 1:2)
         a, b = xspan(e.problem)
         for d in 1:2
-            u, v, _ = component(e, [a, b], d)
+            u, _, _ = component(e, [a, b], d)
             @test maximum(abs, u) ≤ 16 * eps(T)
         end
         x = xgrid(e.problem)
