@@ -58,18 +58,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
-### K18 · The §A oracle was absent from the base tree.
-
-- location: `test/helpers/reference_values.jl`
-- evidence: part C's test-tree commit removed `test/helpers/reference_values.jl`, although C's spec
-  does not list it, and the file is absent at `9d706ba`;
-  `git show ed13663:test/helpers/reference_values.jl` returns the 93-line file with its twenty-five
-  `const` entries. The part that returns the slab core restored it byte for byte from `ed13663`. It
-  is the oracle the tests read, not a testset: `test/runtests.jl` lists it under no
-  `@safetestset`.
-- kind: defect
-- found: 2026-10-27
-
 ### K19 · The coupled density's derivatives allocate at every quadrature point.
 
 - location: `src/problems/wave.jl`
@@ -123,3 +111,14 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   sine-Gordon's order at the head is measured against its exact solution instead.
 - kind: defect
 - found: 2026-10-28; one issue with K21
+
+### K28 · `ntime(problem)` counts one step more than the solution on some timesteps.
+
+- location: `src/problems/lagrangian_problem.jl:203`
+- evidence: `ntime(problem)` is `div(t₁ − t₀, h, RoundUp)`, and in `Float64`
+  `div(0.38 - 0.0, 0.076, RoundUp)` is `6.0` where `(0.38 - 0.0) / 0.076` is `5.0`, so a problem with
+  `timespan = (0, 0.38)` and `timestep = 0.076` reports 6 steps where `GeometricSolution(problem)`
+  and `integrate` take 5. The property suite counts the steps of a run with `ntime(solution)` for
+  that reason.
+- kind: defect
+- found: 2026-10-31

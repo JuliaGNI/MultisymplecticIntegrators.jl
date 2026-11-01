@@ -10,7 +10,8 @@ import GeometricIntegratorsBase: GeometricIntegrator, cache, solver
 
 include("../../helpers/problem_generator.jl")
 
-# A density of degree 2 gives a linear slab, which Newton solves in one iteration up to round-off.
+# A density of degree 2 gives a slab that is linear in its unknowns, so one Newton step with the
+# exact Jacobian solves it up to round-off.
 # The run bounds the iterations at two and asserts the convergence rule after them, with the
 # tolerances of the integrator's own solver; it compares no iteration count exactly, because a
 # count on a round-off edge differs between machines.
