@@ -188,6 +188,12 @@ end
 
             @test getfield(c, name) !== entries
         end
+        # a write into the cache's record leaves the stats as they were
+        fill!(c.iterations, -1)
+        fill!(c.residuals, T(NaN))
+        fill!(c.initial_residuals, T(NaN))
+        fill!(c.converged, false)
+        @test first.stats == kept
         second = integrate(int)
         @test first.stats == kept
         @test second.stats == kept
@@ -234,6 +240,65 @@ end
             on_failure = :ignore)
         @test_throws ArgumentError("on_failure must be :warn or :error, got \"warn\"") integrate(
             short, slab; on_failure = "warn")
+        # the policy is checked before the first step: the integrator has solved nothing
+        fresh = GeometricIntegrator(short, slab)
+        @test_throws ArgumentError(message) integrate(fresh; on_failure = :ignore)
+        @test isempty(cache(fresh).iterations)
+        @test isempty(cache(fresh).converged)
+    end
+
+    @testset "a NaN in the state of a spline run keeps its step, $T" for T in (Float64, Float32)
+        # With no Newton iteration the state is the guess, which is NaN from the second slab on.
+        short = Wave.problem(T = T, timespan = (zero(T), T(0.15)), timestep = T(0.05),
+            xstep = T(0.05))
+        guess = FitTo(TargetFunction((t, x, p) -> t > T(0.05) ? T(NaN) :
+                                                  Wave.exact_u(t, x, p)))
+        slab = SpaceTimeGalerkin(
+            TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (zero(T), one(T)), n = 3);
+            initial_guess = guess)
+        stopped = @test_logs (
+            :warn, r"^The nonlinear solve did not converge at timestep n=1: ") (
+            :warn, r"^The nonlinear solve did not converge at timestep n=2: ") (
+            :warn, r"NaN at timestep n=2") integrate(short, slab; max_iterations = 0)
+        @test length(stopped.traces) == 2
+        @test any(isnan, stopped.traces[2].u)
+        @test all(entries -> length(entries) == 2, values(stopped.stats))
+        @test stopped.stats.converged == [false, false]
+    end
+
+    @testset "a step with a residual that is not finite has not converged, $T" for T in (
+        Float64, Float32)
+        # The guess is finite on the first slab and huge on the second, so the second Newton solve
+        # starts and ends at an infinite residual, which no relative tolerance may accept.
+        short = Wave.problem(T = T, timespan = (zero(T), T(0.15)), timestep = T(0.05),
+            xstep = T(0.05))
+        big = T === Float64 ? T(1e200) : T(1e30)
+        guess = FitTo(TargetFunction((t, x, p) -> t > T(0.05) ? big :
+                                                  Wave.exact_u(t, x, p)))
+        slab = SpaceTimeGalerkin(
+            TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (zero(T), one(T)), n = 3);
+            initial_guess = guess)
+        result = @test_logs (
+            :warn, r"^The nonlinear solve did not converge at timestep n=2: ") (
+            :warn, r"^The nonlinear solve did not converge at timestep n=3: ") match_mode=:any integrate(
+            short, slab)
+        @test !isfinite(result.stats.residuals[2])
+        @test result.stats.converged == [true, false, false]
+        @test_throws r"^The nonlinear solve did not converge at timestep n=2: " integrate(
+            short, slab; on_failure = :error)
+    end
+
+    @testset "the rule of a step with an infinite initial residual, $T" for T in (Float64, Float32)
+        opts = (f_abstol = 8eps(T), f_reltol = sqrt(eps(T)))
+        @test !MultisymplecticIntegrators.step_converged(T(Inf), T(Inf), opts)
+        @test !MultisymplecticIntegrators.step_converged(one(T), T(Inf), opts)
+        @test !MultisymplecticIntegrators.step_converged(T(NaN), T(NaN), opts)
+        @test MultisymplecticIntegrators.step_converged(T(1e-20), T(Inf), opts)
+        # the bound itself is accepted
+        @test MultisymplecticIntegrators.step_converged(opts.f_abstol, T(Inf), opts)
+        # on finite data the rule is the relative one
+        @test MultisymplecticIntegrators.step_converged(T(1e-3), T(1e6), opts)
+        @test !MultisymplecticIntegrators.step_converged(T(1e-3), one(T), opts)
     end
 
     @testset "a run that starts at a time other than zero" begin

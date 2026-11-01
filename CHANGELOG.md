@@ -160,7 +160,8 @@ makes it worth keeping.
   the top trace at the nodes of the space quadrature, where the energy diagnostics integrate it,
   and `stats = (; iterations, residuals, initial_residuals, converged)`, the record of each step's
   Newton solve, with one entry per stored trace. A step has converged when its residual is at most
-  `f_abstol + f_reltol · r₀`, with the tolerances of the integrator's own solver options. A step
+  `f_abstol + f_reltol · r₀`, with the tolerances of the integrator's own solver options; the term
+  in `r₀` counts only for a finite `r₀`, so a residual that is not finite never converges. A step
   that has not converged warns with `on_failure = :warn`, the default, and throws with
   `on_failure = :error`; both name the step, and another value of `on_failure` throws an
   `ArgumentError`. A method extends `solve_stats(cache)` to give the record. Every

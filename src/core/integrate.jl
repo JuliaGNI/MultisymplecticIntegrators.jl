@@ -42,8 +42,9 @@ the accuracy of the Gauss rule.
 nonlinear solves, with one entry per stored trace, as the method's [`solve_stats`](@ref) records
 them, or `nothing` where the method keeps no record; `on_failure` then has nothing to act on. A
 step has converged when its residual is at most `f_abstol + f_reltol · r₀`, with `r₀` its
-initial residual and the tolerances of the integrator's own solver options. A step that has not
-converged warns with `on_failure = :warn`, the default, and throws an `ErrorException` with
+initial residual and the tolerances of the integrator's own solver options; the term in `r₀`
+counts only for a finite `r₀`, so a residual that is not finite never converges. A step that has
+not converged warns with `on_failure = :warn`, the default, and throws an `ErrorException` with
 `on_failure = :error`; both name the step. Any other value of `on_failure` throws an
 `ArgumentError` before the first step.
 

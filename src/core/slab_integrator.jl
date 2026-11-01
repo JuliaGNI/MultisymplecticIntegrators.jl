@@ -518,10 +518,14 @@ end
     step_converged(residual, initial_residual, options)
 
 Whether a step's Newton solve converged: `residual ≤ f_abstol + f_reltol · initial_residual`, with
-the tolerances of the solver's `options`.
+the tolerances of the solver's `options`. The relative term counts only for a finite
+`initial_residual`, as in SimpleSolvers' own residual test, so the bound is finite and a residual
+of `Inf` or `NaN` never converges.
 """
 function step_converged(residual, initial_residual, options)
-    return residual ≤ options.f_abstol + options.f_reltol * initial_residual
+    relative = isfinite(initial_residual) ? options.f_reltol * initial_residual :
+               zero(residual)
+    return residual ≤ options.f_abstol + relative
 end
 
 """

@@ -124,6 +124,7 @@ end
             @test abs(problem.params.c * problem.timestep / problem.xstep - one(T)) ≤
                   tolerance(T)
             result = integrate(problem, SpaceTimeGalerkin(ansatz, CoefficientRestriction()))
+            @test all(result.stats.converged)
             grid = collect(xgrid(problem))
             exact = [Wave.exact_u(t, x, rest) for x in grid]
             @test maximum(abs.(result.solution.u[end] .- exact)) ≤ T(45_000) * eps(T)

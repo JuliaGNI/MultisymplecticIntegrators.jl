@@ -139,11 +139,14 @@ end
         for n in 1:5
             @test abs(recomputed[n] - cs.residuals[n]) ≤ T(100) * eps(T) * recomputed[n]
         end
+        @test all(cs.converged)
         # a second run of one integrator starts again from the problem's initial data, and its
         # records belong to that run alone
         reused = GeometricIntegrator(problem, method)
         first_run = integrate(reused)
         second_run = integrate(reused)
+        @test all(first_run.stats.converged)
+        @test all(second_run.stats.converged)
         @test second_run.solution.u == first_run.solution.u
         @test length(cache(reused).iterations) == 5
         @test length(cache(reused).residuals) == 5
@@ -196,6 +199,7 @@ end
         problem = VectorWave.problem(T = T, params = params, timespan = (zero(T), T(0.25)),
             timestep = T(0.05), xstep = T(0.05))
         result = integrate(problem, SpaceTimeGalerkin(ansatz, CoefficientRestriction()))
+        @test all(result.stats.converged)
         @test components(problem) == 2
         assert_no_upcast(result.solution.u, T)
         n = length(xgrid(problem))
@@ -204,6 +208,7 @@ end
                 T = T, params = VectorWave.component_parameters(params, d),
                 timespan = (zero(T), T(0.25)), timestep = T(0.05), xstep = T(0.05))
             one_d = integrate(scalar, SpaceTimeGalerkin(ansatz, CoefficientRestriction()))
+            @test all(one_d.stats.converged)
             for s in 1:5
                 component = result.solution.u[s][((d - 1) * n + 1):(d * n)]
                 @test maximum(abs.(component .- one_d.solution.u[s])) ≤

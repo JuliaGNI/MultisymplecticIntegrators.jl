@@ -264,7 +264,8 @@ end
         # whole four-slab run hands out, and its fifth slab enters with that multiplier
         four_int = GeometricIntegrator(
             wave_problem(T; timespan = (zero(T), T(0.2))), method)
-        integrate(four_int)
+        four = integrate(four_int)
+        @test all(four.stats.converged)
         @test any(x -> !iszero(x), cache(four_int).coupling.top_multiplier)
         five_int = GeometricIntegrator(problem, method)
         five_step = solutionstep(five_int, solution[0])
@@ -278,6 +279,9 @@ end
         integrate!(five_step, five_int)
         @test cache(five_int).coupling.initial_multiplier ==
               cache(four_int).coupling.top_multiplier
+        # a run driven through integrate! records each step's convergence in the cache
+        @test length(cache(five_int).converged) == 5
+        @test all(cache(five_int).converged)
     end
 
     @testset "A1d the rank of the first slab" for T in (Float64, Float32)
@@ -287,7 +291,7 @@ end
         method = SpaceTimeGalerkin(wave_ansatz(T),
             WeakInitialCondition(multiplier_basis = :bspline))
         int = GeometricIntegrator(problem, method)
-        integrate(int)
+        @test all(integrate(int).stats.converged)
         unknown = length(cache(int).x)
         jacobian = slab_jacobian(int)
         σ = svdvals(jacobian)
@@ -298,7 +302,7 @@ end
         full = SpaceTimeGalerkin(wave_ansatz(T; x_boundary = Free()),
             WeakInitialAndBoundaryConditions())
         full_int = GeometricIntegrator(problem, full)
-        integrate(full_int)
+        @test all(integrate(full_int).stats.converged)
         full_unknown = length(cache(full_int).x)
         full_jacobian = slab_jacobian(full_int)
         full_σ = svdvals(full_jacobian)
@@ -319,6 +323,8 @@ end
         method = SpaceTimeGalerkin(wave_ansatz(T), WeakInitialCondition())
         with_solution = integrate(template, method)
         without = integrate(bare, method)
+        @test all(with_solution.stats.converged)
+        @test all(without.stats.converged)
         @test without.solution.u == with_solution.solution.u
         assert_no_upcast(without.solution.u, T)
     end
@@ -357,6 +363,7 @@ end
         result = integrate(int)
         p = parameters(problem)
         @test length(result.traces) == 5
+        @test all(result.stats.converged)
         for n in 1:5
             exact = [problem.exact_u(timesteps(result.solution)[n], x, p)
                      for x in xgrid(problem)]
@@ -418,6 +425,7 @@ end
                         wave_ansatz(T; ncells = (2, cells), x_boundary = Free()),
                         coupling))
                 result = integrate(int)
+                @test all(result.stats.converged)
                 exact = [Wave.exact_u(problem.timespan[2], x, parameters(problem))
                          for x in xgrid(problem)]
                 push!(errors[basis], maximum(abs.(result.solution.u[end] .- exact)))
@@ -471,6 +479,7 @@ end
             result = integrate(problem,
                 SpaceTimeGalerkin(wave_ansatz(T; ncells = (2, cells), x_boundary = Free()),
                     WeakInitialAndBoundaryConditions()))
+            @test all(result.stats.converged)
             exact = [problem.exact_u(problem.timespan[2], x, parameters(problem))
                      for x in xgrid(problem)]
             push!(errors, maximum(abs.(result.solution.u[end] .- exact)))
@@ -531,6 +540,7 @@ end
               max(length(c.ansatz.tabulation.time.node), length(c.ansatz.tabulation.space.node))
         result = integrate(int)
         @test length(result.traces) == 2
+        @test all(result.stats.converged)
         @test all(>(0), c.iterations)
         @test any(x -> !iszero(x), c.coupling.top_values)
     end
