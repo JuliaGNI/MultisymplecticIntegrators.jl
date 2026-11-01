@@ -206,8 +206,8 @@ The block of a [`TensorBSplineAnsatz`](@ref) in the slab cache: what the ansatz 
 `coeffs` is the coefficient array of the slab, of size `(Nt, Nx, D)`, `residual` its interior weak
 form, and `top` the top row of the last solved slab. `tabulation` holds the tables of the slab's
 quadrature, which the ansatz owns. `output` and `trace` evaluate the space basis at the output grid
-and at the nodes of the space quadrature, and `top_slope` holds the time functions' first derivatives
-at the top of the slab.
+and at the nodes of the space quadrature, and `top_slope` holds the time functions' first
+derivatives at the top of the slab.
 """
 struct TensorBSplineSlab{ST, T}
     coeffs::Array{ST, 3}

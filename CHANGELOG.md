@@ -31,8 +31,8 @@ makes it worth keeping.
   list drops `AbstractNeuralNetworks`, `BSplineKit`, `CompactBasisFunctions`, `ForwardDiff`,
   `GeometricMachineLearning`, `IterTools`, `Parameters`, `Plots`, `QuadratureRules`,
   `StaticArrays`, `SymbolicNeuralNetworks`, `Zygote`, `Random` and `Statistics`. The package
-  carries no `Plots` dependency: the plotting layer of the entry below arrives as the weak dependency
-  `[weakdeps] Makie` with `[extensions] MultisymplecticIntegratorsPlots = "Makie"`. Every
+  carries no `Plots` dependency: the plotting layer of the entry below arrives as the weak
+  dependency `[weakdeps] Makie` with `[extensions] MultisymplecticIntegratorsPlots = "Makie"`. Every
   `[compat]` entry is a patch-level floor
   (`GeometricBase = "0.15.0"`, `GeometricEquations = "0.21.5"`, `GeometricIntegratorsBase = "0.6.9"`,
   `GeometricSolutions = "0.6.6"`, `SimpleSplines = "0.3.4"`,
@@ -126,8 +126,8 @@ makes it worth keeping.
   count, its final residual `‖F(x)‖₂`, its initial residual `r₀ = ‖F(x₀)‖₂` and whether it
   converged, beside the top trace at the nodes of the space quadrature. The initial-guess
   interface of `src/initial_guess/` fills the solver's vector before a step: `Continuation()`, the
-  default, carries the previous slab's top row into every row of the new slab; `FitTo(target; method = nothing)` fits the
-  ansatz to `InitialCondition()`, to `PreviousSlab()` — the polynomial piece of the top time cell
+  default, carries the previous slab's top row into every row of the new slab;
+  `FitTo(target; method = nothing)` fits the ansatz to `InitialCondition()`, to `PreviousSlab()` — the polynomial piece of the top time cell
   expanded about its top, so a quadratic field continues as the same quadratic — to
   `ExactSolution()` or to a `TargetFunction(f)`, with `Projection()` where the ansatz names no fit
   of its own, and a user-defined target or fit method is one method of `evaluate!` or `fit!`. Four
@@ -207,8 +207,7 @@ makes it worth keeping.
   quality checks, the Lagrangian density and Lagrangian problem tests, the linear transport and
   vector wave tests, the tensor B-spline ansatz, coefficient restriction, coupling seam and
   initial-guess tests, the integrator shell test, and the diagnostics and plotting tests. The
-  `slow` group holds the
-  weak-multiplier test.
+  `slow` group holds the weak-multiplier test and the six property files of the entry below.
 - **Reference values of the integrators at `294f023`.** `scripts/reference_values.jl` runs every
   integrator family on short `Wave` and `SineGordon` cases and writes
   `test/helpers/reference_values.jl`. Two cases fail at `294f023`. The script does not run on this

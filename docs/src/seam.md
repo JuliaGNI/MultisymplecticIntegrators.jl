@@ -112,7 +112,7 @@ The core already evaluates the residual in that order, one seam function per fac
 4. [`slab_weak_form!`](@ref) pulls them back through the field map, with the quadrature weights;
 5. [`free_residual!`](@ref) writes the rows of the free coefficients in the solver's layout.
 
-For the tensor B-spline ansatz the field map is linear in `θ`, so its pullback is the product with
+For the tensor B-spline ansatz the field map is linear in `ĉ`, so its pullback is the product with
 the tabulated basis, which is the weak form in `src/core/weak_form.jl`. An ansatz whose field map
 is not linear, such as a network, implements [`slab_field!`](@ref) as its map and
 [`slab_weak_form!`](@ref) as the pullback of `∂u`, `∂v` and `∂w` through that map by automatic

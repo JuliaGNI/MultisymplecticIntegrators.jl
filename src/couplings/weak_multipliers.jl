@@ -159,10 +159,10 @@ free_rows(::MultiplierCoupling, ansatz::SpaceTimeAnsatz) = ntime_functions(ansat
 
 The block of a weak-multiplier coupling `C` in the slab cache.
 
-`coupling` is the coupling itself. `initial_multiplier` is the datum of the step, the multiplier of the bottom surface, and
-`top_multiplier` its unknown, the multiplier of the top surface; `top_values` is the unknown at the
-nodes of the space quadrature, which is the momentum that leaves the slab. `boundary_multiplier`
-holds the `2 Nμ` multipliers of the two ends of `xspan` — the first `Nμ` at `x = a`, the rest at
+`coupling` is the coupling itself. `initial_multiplier` is the datum of the step, the multiplier of
+the bottom surface, and `top_multiplier` its unknown, the multiplier of the top surface;
+`top_values` is the unknown at the nodes of the space quadrature, which is the momentum that leaves
+the slab. `boundary_multiplier` holds the `2 Nμ` multipliers of the two ends of `xspan` — the first `Nμ` at `x = a`, the rest at
 `x = b`.
 
 `multiplier_basis` and `boundary_basis` are the tables those multipliers are expanded in, at the
