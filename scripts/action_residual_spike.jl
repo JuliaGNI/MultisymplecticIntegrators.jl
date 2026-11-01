@@ -21,8 +21,8 @@
 #
 # At each size `N`, before any timing, the AD gradient must equal `residual!` within `100 eps`, and
 # the AD Hessian block the solver's Jacobian within `1e-8`, both relative to the largest entry of
-# the AD value, in the max norm, at a random vector away from a solution. A failed check stops the
-# process with the size and the error, and that process records no number.
+# the AD value, in the max norm, at a seeded random vector. A failed check stops the process with
+# the size and the error, and that process records no number at that size or after it.
 #
 # Each backend runs in a fresh process per problem, which this script starts itself, and each
 # process prints `uptime` first. The first call of each function compiles and is not timed;
@@ -70,9 +70,8 @@ const PROBLEMS = ("Wave", "SineGordon")
 
 """
 The gradient and Hessian backends of each name. The two reverse-mode backends take the Hessian
-reverse over ForwardDiff. Enzyme runs with runtime activity, because the oracle's action stores its
-constant tables into arrays that also hold active values, which Enzyme's static activity analysis
-refuses.
+reverse over ForwardDiff. Enzyme runs with runtime activity, because without it Enzyme stops on the
+oracle's action with an `EnzymeRuntimeActivityError`.
 """
 const BACKENDS = Dict(
     "ForwardDiff" => (gradient = AutoForwardDiff(), hessian = AutoForwardDiff()),

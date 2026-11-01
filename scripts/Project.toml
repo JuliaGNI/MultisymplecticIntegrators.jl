@@ -10,7 +10,8 @@
 # is what activates the package's plotting extension.
 #
 # `action_residual_spike.jl` includes the property suite's action oracle and problem generator from
-# `test/helpers/`, so the packages those two load are here too, with the AD backends it compares.
+# `test/helpers/`, so the packages those two load are here too, with the AD backends it compares
+# and `SimpleSolvers`, whose Jacobian it times.
 
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
