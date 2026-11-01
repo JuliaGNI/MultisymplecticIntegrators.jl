@@ -17,6 +17,7 @@ makedocs(;
     ),
     pages = [
         "Home" => "index.md",
+        "The slab seam" => "seam.md",
         "Library" => "library.md"
     ]
 )

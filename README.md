@@ -5,7 +5,7 @@ implementation of multi-symplectic schemes in julia
 
 ## Development
 
-> **The package is mid-rebuild.** The problem layer, the space-time quadrature and the integrator
+> **The package is mid-rebuild.** The problem layer, the slab integrator and the integrator
 > shell are on the current GeometricBase stack, and the integrator families come back one at a
 > time: a family that has not returned yet is unavailable on `main`, and a caller of it works at
 > `294f023` meanwhile. `julia = "1.12"` is the floor, every dependency has a `[compat]` entry, and

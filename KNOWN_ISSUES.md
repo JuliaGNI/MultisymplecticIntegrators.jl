@@ -75,12 +75,13 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 - location: `src/ansatz/tensor_bspline.jl`
 - evidence: `grep -rn 'output_grid' src/` finds the definition and the export only. The slab
-  integrator reports its solution on `xgrid(problem)`, and `SlabEvaluation` tabulates the space
-  basis there, so `output_grid` is a public helper that the integrator does not call yet. It holds
+  integrator reports its solution on `xgrid(problem)`, and the ansatz's `TensorBSplineSlab`
+  tabulates the space basis there, so `output_grid` is a public helper that the integrator does not
+  call yet. It holds
   a deferred `InexactError`: `output_grid(ansatz, 1e-30)` passes the positive-finite check and then
   fails in `round(Int, Δx / step)` with `InexactError: Int64(9.999999999999999e29)`, where the
-  documented refusal is an `ArgumentError`. Kept rather than deleted or wired into
-  `SlabEvaluation`.
+  documented refusal is an `ArgumentError`. Kept rather than deleted or wired into the ansatz's
+  block.
 - kind: dead code
 - found: 2026-10-27
 

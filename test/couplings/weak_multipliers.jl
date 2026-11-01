@@ -52,7 +52,10 @@ function wave_run(::Type{T}; coupling = WeakInitialCondition(), x_boundary = Dir
     ansatz = wave_ansatz(T; ncells = ncells, x_boundary = x_boundary)
     method = SpaceTimeGalerkin(ansatz, coupling; initial_guess = guess)
     int = GeometricIntegrator(problem, method)
-    return problem, method, int, integrate(int)
+    result = integrate(int)
+    # the spline family must converge at every step, under its integrator's own tolerances
+    @test all(result.stats.converged)
+    return problem, method, int, result
 end
 
 """
@@ -92,7 +95,7 @@ function multiplier_momentum(problem, method)
     T = datatype(problem)
     int = GeometricIntegrator(problem, method)
     c = cache(int)
-    ω = c.tabulation.space.weight
+    ω = c.ansatz.tabulation.space.weight
     solution = GeometricSolution(problem)
     solstep = solutionstep(int, solution[0])
     momenta = T[]
@@ -333,7 +336,8 @@ end
             c = cache(int)
             @test length(result.traces) == 3
             @test length(c.iterations) == 3
-            @test all(value -> isfinite(value), c.residuals)
+            @test all(result.stats.converged)
+            @test result.stats.residuals == c.residuals
             assert_no_upcast(result.solution.u, T)
             exact = [SineGordon.exact_u(problem.timespan[2], x, parameters(problem))
                      for x in xgrid(problem)]
@@ -513,7 +517,7 @@ end
                 WeakInitialAndBoundaryConditions()))
         c = cache(int)
         @test size(c.coupling.top_u, 1) ==
-              max(length(c.tabulation.time.node), length(c.tabulation.space.node))
+              max(length(c.ansatz.tabulation.time.node), length(c.ansatz.tabulation.space.node))
         result = integrate(int)
         @test length(result.traces) == 2
         @test all(>(0), c.iterations)

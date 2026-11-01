@@ -16,8 +16,8 @@ of size `(Nt, Nx, D)`, from the sampled target, in one method of
 fit!(coeffs, method, ansatz, sample, cache)
 ```
 
-`cache` is the [`SpaceTimeGalerkinCache`](@ref), which owns the buffers a step reuses: a fit that
-allocates nothing works in them.
+`cache` is the [`SpaceTimeGalerkinCache`](@ref) of the slab, which a fit may read; it holds no
+scratch of the fit.
 """
 struct Projection <: SlabFitMethod end
 
@@ -40,40 +40,7 @@ function fit!(coeffs::AbstractArray{ST, 3}, ::Projection, ansatz::TensorBSplineA
         sample::AbstractArray{ST, 3}, c::SpaceTimeGalerkinCache) where {ST}
     q = quadrature(ansatz)
     for d in axes(coeffs, 3)
-        l2_projection!(view(coeffs, :, :, d), q, view(sample, :, :, d), c)
+        l2_projection!(view(coeffs, :, :, d), q, view(sample, :, :, d))
     end
     return nothing
-end
-
-"""
-    l2_projection!(û, q::TensorProductQuadrature, f, cache::SpaceTimeGalerkinCache)
-
-The `L²` projection of `f`, sampled on the quadrature grid of `q` in two directions, written into
-`û`, in the buffers of `cache`: nothing is allocated. The load `Φₜ (w ⊙ f) Φₓᵀ` is formed by two
-sparse products and the mass system is solved along each direction, as `SimpleSplines`'
-`l2_projection` does, which allocates the weighted sample, the products and the solution.
-"""
-function l2_projection!(û::AbstractMatrix, q::TensorProductQuadrature{T, 2},
-        f::AbstractMatrix, c::SpaceTimeGalerkinCache) where {T}
-    qt, qx = quadratures(q)
-    wt = quadrature_weights(qt)
-    wx = quadrature_weights(qx)
-    for j in axes(f, 2), i in axes(f, 1)
-
-        c.weighted[i, j] = f[i, j] * wt[i] * wx[j]
-    end
-    mul!(c.load, basis_values(qt, 0), c.weighted)
-    mul!(û, c.load, basis_values(qx, 0)')
-    mt = mass_operator(qt)
-    for j in axes(û, 2)
-        column = view(û, :, j)
-        mass_solve!(column, mt, column)
-    end
-    mx = mass_operator(qx)
-    for i in axes(û, 1)
-        c.fibre .= view(û, i, :)
-        mass_solve!(c.fibre, mx, c.fibre)
-        û[i, :] .= c.fibre
-    end
-    return û
 end

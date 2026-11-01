@@ -19,7 +19,10 @@ function slab_run(::Type{T}; degree = 2, ncells = (2, 20), n = 3, guess = Contin
         xspan = (zero(T), one(T)), n = n)
     method = SpaceTimeGalerkin(ansatz, CoefficientRestriction(); initial_guess = guess)
     int = GeometricIntegrator(problem, method)
-    return problem, method, int, integrate(int)
+    result = integrate(int)
+    # the spline family must converge at every step, under its integrator's own tolerances
+    @test all(result.stats.converged)
+    return problem, method, int, result
 end
 
 """
@@ -67,8 +70,9 @@ function slab_momentum(problem, method)
         reset!(solstep, timesteps(solution)[n])
         integrate!(solstep, int)
         push!(momenta,
-            sum(c.top[j, 1] * c.flux[j, 2] - c.top[j, 2] * c.flux[j, 1]
-            for j in axes(c.top, 1)))
+            sum(c.ansatz.top[j, 1] * c.coupling.flux[j, 2] -
+                c.ansatz.top[j, 2] * c.coupling.flux[j, 1]
+            for j in axes(c.ansatz.top, 1)))
         push!(iterations, c.iterations[end])
     end
     return momenta, iterations
@@ -104,7 +108,7 @@ end
         _, _, two_int, _ = slab_run(T;
             problem = Wave.problem(T = T,
                 timespan = (zero(T), T(0.1)), timestep = T(0.05), xstep = T(0.05)))
-        @test cache(two_int).bottom == cache(one_int).top
+        @test cache(two_int).coupling.bottom == cache(one_int).ansatz.top
         # every entry of `residuals` is `‖F(x)‖₂` at its own step's final iterate, under the datum
         # and the momentum load that step started from, which the cache overwrites as the step ends
         stepped = GeometricIntegrator(problem, method)
@@ -113,22 +117,22 @@ end
         solstep = solutionstep(stepped, solution[0])
         p = parameters(problem)
         b = similar(cs.x)
-        datum = similar(cs.bottom)
-        load = similar(cs.flux)
+        datum = similar(cs.coupling.bottom)
+        load = similar(cs.coupling.flux)
         recomputed = Vector{T}(undef, ntime(solution))
         for n in 1:ntime(solution)
             # the datum and the momentum load the step will solve under
-            M.slab_bottom!(cs, coupling(method), problem, ansatz(method), solstep)
-            datum .= cs.bottom
-            load .= cs.flux
+            M.slab_bottom!(cs, cs.coupling, problem, ansatz(method), solstep)
+            datum .= cs.coupling.bottom
+            load .= cs.coupling.flux
             reset!(solstep, timesteps(solution)[n])
             integrate!(solstep, stepped)
-            top_load = copy(cs.flux)
-            cs.bottom .= datum
-            cs.flux .= load
+            top_load = copy(cs.coupling.flux)
+            cs.coupling.bottom .= datum
+            cs.coupling.flux .= load
             M.residual!(b, cs.x, nothing, p, stepped)
             recomputed[n] = sqrt(sum(abs2, b))
-            cs.flux .= top_load
+            cs.coupling.flux .= top_load
         end
         for n in 1:5
             @test abs(recomputed[n] - cs.residuals[n]) ≤ T(100) * eps(T) * recomputed[n]

@@ -19,7 +19,7 @@ makes it worth keeping.
 - **The package is rebuilt on the current GeometricBase stack, and every integrator family leaves
   `src/`** for a return of its own. `LPDEProblem`, `LPDESystem`, `PDEIntegrator` and every
   `*_Integrator` type are gone. The names that replace them are `LagrangianPDEProblem`,
-  `LagrangianDensity` and `SpaceTimeQuadrature`, together with the `SpaceTimeAnsatz`,
+  `LagrangianDensity`, together with the `SpaceTimeAnsatz`,
   `SlabCoupling` and `SlabInitialGuess` abstract types. A caller of a family that has not returned
   yet works at `294f023`.
 - **`julia = "1.12"` is the floor**, and every dependency has a `[compat]` entry.
@@ -103,8 +103,6 @@ makes it worth keeping.
   `VectorWave` carries the angular momentum `J` as the conserved diagnostic of the vector case.
   `VectorWave.density` is the scalar density of one component and takes the mass `m` only;
   `vector_density(; params, D, m, β)` carries the coupling.
-- **`SpaceTimeQuadrature{T}`.** Composite Gauss–Legendre nodes and weights on given breakpoints, in
-  `t̂ ∈ [0, 1]` and in `x`, with the four boundary point sets of a slab and the element type kept.
 - **The first integrator family returns: the space-time Galerkin slab core.**
   `SpaceTimeGalerkin{A, C, G} <: SpaceTimeMethod` holds a tensor B-spline ansatz, a coupling of
   consecutive slabs and an initial guess, and one step of it solves one slab.
@@ -122,7 +120,8 @@ makes it worth keeping.
   determined by the interior weak Euler–Lagrange form of `src/core/weak_form.jl`, tested against
   the basis functions that vanish at the top. That is a nonlinear system of `(Nt - 1) * Nx * D`
   equations, which the `SimpleSolvers` Newton solver solves; the cache keeps each step's iterate
-  count, its final residual `‖F(x)‖₂` and its initial residual `r₀ = ‖F(x₀)‖₂`, beside the top
+  count, its final residual `‖F(x)‖₂`, its initial residual `r₀ = ‖F(x₀)‖₂` and whether it
+  converged, beside the top
   trace at the nodes of the space quadrature. The initial-guess interface of `src/initial_guess/`
   fills the solver's vector before a step: `Continuation()`, the default, carries the previous
   slab's top row into every row of the new slab; `FitTo(target; method = nothing)` fits the
@@ -144,8 +143,25 @@ makes it worth keeping.
   `test/helpers/fem_stencil.jl`, an independent FEM stencil oracle for the assembly. The §A
   oracle, `test/helpers/reference_values.jl`, which part C's test-tree commit had removed, is back
   in the tree byte for byte from `ed13663` (K18), and the three new tests read it.
-- **`integrate` returns `(; solution, traces)`.** The solution on the output grid, and per step the
-  top trace at the nodes of the space quadrature, where the energy diagnostics integrate it. Every
+- **The slab core reaches its ansatz and its coupling through one seam.** The cache holds an
+  ansatz block, `TensorBSplineSlab` for the B-spline ansatz, with the coefficient array, the tables
+  of the slab's quadrature and the evaluation of the top of the slab, and a coupling block that
+  carries its coupling: `NoCouplingData`, `RestrictionData` with the restriction's bottom row and
+  momentum load, or `MultiplierData`. Every function of a coupling that runs within a step
+  dispatches on its block. Every coupling declares its own `free_rows`, and `coupling_term!` has no
+  default, so a coupling that implements neither is refused with a `MethodError` that names the
+  function. A coupling may transform the field through `transform_field!`, which the core applies
+  in the residual, the trace and the solution. The trace and the solution come from one evaluation
+  of the top of the slab. The manual's page *The slab seam* states the roles of the ansatz, the
+  coupling and the guess, what each keeps in the cache, and the functions of the seam.
+- **`integrate` returns `(; solution, traces, stats)`.** The solution on the output grid, per step
+  the top trace at the nodes of the space quadrature, where the energy diagnostics integrate it,
+  and `stats = (; iterations, residuals, initial_residuals, converged)`, the record of each step's
+  Newton solve, with one entry per stored trace. A step has converged when its residual is at most
+  `f_abstol + f_reltol · r₀`, with the tolerances of the integrator's own solver options. A step
+  that has not converged warns with `on_failure = :warn`, the default, and throws with
+  `on_failure = :error`; both name the step, and another value of `on_failure` throws an
+  `ArgumentError`. A method extends `solve_stats(cache)` to give the record. Every
   call starts a new run: the method's cache is reset first, so the first slab takes the problem's
   initial data and the steps a method records belong to that run alone. A step whose state holds a
   NaN ends the run with a warning: `traces` ends at that step, and the solution holds the NaN
@@ -162,23 +178,22 @@ makes it worth keeping.
   construction, where each failed with a `MethodError` at the first step. `SpaceTimeGalerkin` of
   a method and `integrate(problem, ansatz)` raise a named `ArgumentError`. A user-defined target
   subtypes `SlabTarget`, and a user-defined fit method `SlabFitMethod`, whose `fit!` takes the
-  cache as a fifth argument: the cache now holds the buffers of the guess, so `initial_guess!`
-  allocates 0 B for `Continuation()` and for every `FitTo` guess, where a `FitTo` guess allocated
-  about 17 kB per step.
+  cache as a fifth argument. A `FitTo` guess allocates its sample and its fitted coefficients once
+  per step, and `Projection()` is `SimpleSplines`' `l2_projection!`; the cache holds no scratch of
+  the guess.
 - **A failed nonlinear solve ends the run with a warning, as a NaN does.** When a slab's Newton
   solve raises SimpleSolvers' `NonlinearSolverException`, `integrate` warns with the timestep and
   returns the steps already taken: `traces` ends at the step before, and the solution is valid up
   to that step, its later entries not computed. Any other exception still propagates. This closes
   the known issue K17.
-- **The suite is the standard layout**: `core` testsets for the problem layer, the quadrature and
-  the shell, `Aqua.test_all` with no `broken` mark, and `test_explicit_imports`. This closes the
+- **The suite is the standard layout**: `core` testsets for the problem layer and the shell, `Aqua.test_all` with no `broken` mark, and `test_explicit_imports`. This closes the
   known issues K1 (the broken marks), K2 (the stale bounds), K3 (`Plots` and the GUI packages in
   the test environment), K5 (the two files the formatter could not write), KI-2 (the unused test
   dependencies), KI-3 (the mark that asserts nothing) and KI-4 (the README and the manual saying
   the package does not load).
 - **Continuous integration.** `.github/workflows/` holds three workflows, `CI.yml`, `Documenter.yml`
   and `TagBot.yml`.
-- **A documentation build.** `docs/` holds `make.jl`, `Project.toml` and a two-page manual, so
+- **A documentation build.** `docs/` holds `make.jl`, `Project.toml` and a three-page manual, so
   `Documenter` has something to build and the doctest job has an environment.
 - **`test/runtests.jl` runs each test file in its own `@safetestset`.** Empty `ARGS` runs the `core`
   and `slow` groups. The `core` group holds twelve files: the Aqua and explicit-imports quality

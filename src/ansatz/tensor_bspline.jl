@@ -155,15 +155,203 @@ function output_grid(ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem)
     output_grid(ansatz, xstep(problem))
 end
 
-"""
-    is_linear_in_coefficients(ansatz)
-
-Whether the ansatz is linear in its coefficients, which is what an `L²` projection can fit.
-
-A tensor B-spline ansatz is; an ansatz whose coefficients enter a nonlinearity is not, and a
-[`Projection`](@ref) refuses it at construction.
-"""
+# A tensor B-spline ansatz is linear in its coefficients, so a `Projection()` fits it.
 is_linear_in_coefficients(::TensorBSplineAnsatz) = true
+
+"""
+    check_ansatz(problem, ansatz)
+
+Reject an ansatz that the problem cannot support, when the integrator is built.
+
+A tensor B-spline ansatz must be of the problem's element type and on the problem's space interval.
+Each refusal is an `ArgumentError` that names the two values it compared, and the element type is
+compared first, so a pair that mismatches in both hears about the type.
+"""
+function check_ansatz(problem::LagrangianPDEProblem{PT}, a::TensorBSplineAnsatz{T}) where {
+        PT, T}
+    T === PT || throw(ArgumentError(
+        "the ansatz element type $T does not match the problem's $PT"))
+    xspan(a) == xspan(problem) || throw(ArgumentError(
+        "the ansatz xspan $(xspan(a)) does not match the problem's $(xspan(problem))"))
+    return nothing
+end
+
+"""
+    PointEvaluation{T}
+
+The space basis at a set of points: the points, and the basis functions and their first derivatives
+there, a row per point.
+"""
+struct PointEvaluation{T}
+    points::Vector{T}
+    value::Matrix{T}
+    slope::Matrix{T}
+end
+
+function PointEvaluation(xb, points::AbstractVector{T}) where {T}
+    nx = nbasis(xb)
+    return PointEvaluation{T}(collect(points),
+        [evaluate(xb, j, x) for x in points, j in 1:nx],
+        [evaluate(xb, j, x, 1) for x in points, j in 1:nx])
+end
+
+"""The points of an evaluation, at which the core applies the coupling's transform of the field."""
+evaluation_points(e::PointEvaluation) = e.points
+
+"""
+    TensorBSplineSlab{ST, T}
+
+The block of a [`TensorBSplineAnsatz`](@ref) in the slab cache: what the ansatz keeps of one slab.
+
+`coeffs` is the coefficient array of the slab, of size `(Nt, Nx, D)`, `residual` its interior weak
+form, and `top` the top row of the last solved slab. `tabulation` holds the tables of the slab's
+quadrature, which the ansatz owns. `output` and `trace` evaluate the space basis at the output grid
+and at the nodes of the space quadrature, and `top_slope` holds the time functions' first derivatives
+at the top of the slab.
+"""
+struct TensorBSplineSlab{ST, T}
+    coeffs::Array{ST, 3}
+    residual::Array{ST, 3}
+    top::Matrix{ST}
+    tabulation::SlabTabulation{T}
+    output::PointEvaluation{T}
+    trace::PointEvaluation{T}
+    top_slope::Vector{T}
+end
+
+"""
+    ansatz_data(ansatz, problem, ST)
+
+The ansatz's block of the slab cache, built once per integrator.
+"""
+function ansatz_data(a::TensorBSplineAnsatz{T}, problem::LagrangianPDEProblem,
+        ::Type{ST}) where {T, ST}
+    nt = ntime_functions(a)
+    nx = nspace_functions(a)
+    coeffs = zeros(ST, nt, nx, components(problem))
+    xb = space_basis(a)
+    return TensorBSplineSlab{ST, T}(
+        coeffs, similar(coeffs), zeros(ST, nx, components(problem)),
+        SlabTabulation(quadrature(a)), PointEvaluation(xb, xgrid(problem)),
+        PointEvaluation(xb, space_quadrature_nodes(a)),
+        [evaluate(time_basis(a), k, one(T), 1) for k in 1:nt])
+end
+
+"""
+    ansatz_data_type(ansatz, problem, ST)
+
+The type of [`ansatz_data`](@ref)`(ansatz, problem, ST)`, computed without building the block.
+"""
+function ansatz_data_type(::TensorBSplineAnsatz{T}, ::LagrangianPDEProblem,
+        ::Type{ST}) where {T, ST}
+    return TensorBSplineSlab{ST, T}
+end
+
+"""The normalised time nodes and the space nodes of the slab's quadrature."""
+function quadrature_points(s::TensorBSplineSlab)
+    return (s.tabulation.time.node, s.tabulation.space.node)
+end
+
+"""The evaluation of the space basis at the output grid."""
+output_evaluation(s::TensorBSplineSlab) = s.output
+
+"""The evaluation of the space basis at the nodes of the space quadrature."""
+trace_evaluation(s::TensorBSplineSlab) = s.trace
+
+"""
+    scatter!(coeffs, x, bottom, nf)
+
+Scatter the solver's vector into the coefficient array: the free rows, the last `nf` rows, from
+`x`, and the rows below them from `bottom`, the coupling's fixed bottom row, where `nf < Nt`.
+"""
+function scatter!(coeffs::Array{ST, 3}, x::AbstractVector{ST}, bottom,
+        nf::Integer) where {ST}
+    nt, nx, D = size(coeffs)
+    m = nt - nf
+    for d in 1:D
+        for j in 1:nx
+            m == 0 || (coeffs[1, j, d] = bottom[j, d])
+            for a in (m + 1):nt
+                coeffs[a, j, d] = x[free_index(a - m, j, d, nf, nx)]
+            end
+        end
+    end
+    return nothing
+end
+
+"""
+    slab_field!(u, v, w, slab, x, bottom, nf, h)
+
+The field of the slab that the solver's vector `x` describes, at the nodes of the slab's quadrature:
+the coefficient array from `x` and the coupling's fixed bottom row, and the field and its two
+derivatives from it.
+"""
+function slab_field!(
+        u::AbstractArray{ST, 3}, v::AbstractArray{ST, 3}, w::AbstractArray{ST, 3},
+        s::TensorBSplineSlab{ST}, x::AbstractVector{ST}, bottom, nf::Integer,
+        h) where {ST}
+    scatter!(s.coeffs, x, bottom, nf)
+    slab_values!(u, v, w, s.coeffs, s.tabulation, h)
+    return nothing
+end
+
+"""The interior weak form of the density's derivatives `∂u`, `∂v`, `∂w`, into the block."""
+function slab_weak_form!(s::TensorBSplineSlab, ∂u, ∂v, ∂w, h)
+    interior_weak_form!(s.residual, ∂u, ∂v, ∂w, s.tabulation, h)
+    return nothing
+end
+
+"""
+    free_residual!(b, slab, nf)
+
+The rows of the weak form that the free rows carry, into the solver's layout: the rows of the test
+functions `1:nf`, which vanish at the top of the slab.
+"""
+function free_residual!(b::AbstractVector, s::TensorBSplineSlab, nf::Integer)
+    _, nx, D = size(s.residual)
+    for d in 1:D, j in 1:nx, k in 1:nf
+        b[free_index(k, j, d, nf, nx)] = s.residual[k, j, d]
+    end
+    return nothing
+end
+
+"""Keep the top row of the solved slab, which the coupling and the guess of the next slab read."""
+function keep_top!(s::TensorBSplineSlab)
+    s.top .= view(s.coeffs, size(s.coeffs, 1), :, :)
+    return nothing
+end
+
+"""
+    top_values!(u, v, w, slab, evaluation, h)
+
+The field and its two derivatives at the top of the slab, `t̂ = 1`, at the points of `evaluation`,
+into `u[i, d]`, `v[i, d]` and `w[i, d]`. `∂ₜu` is the time derivative of the normalised coordinate
+divided by the slab's `h`, which is the factor the interior weak form carries as well.
+"""
+function top_values!(u::AbstractMatrix{ST}, v::AbstractMatrix{ST}, w::AbstractMatrix{ST},
+        s::TensorBSplineSlab{ST}, e::PointEvaluation, h) where {ST}
+    nt, nx, D = size(s.coeffs)
+    hh = convert(ST, h)
+    fill!(u, zero(ST))
+    fill!(v, zero(ST))
+    fill!(w, zero(ST))
+    for d in 1:D
+        for j in 1:nx
+            # the time derivative at the top of the slab, per space function: `∂ₜu` is `∂_{t̂}u / h`
+            tderiv = zero(ST)
+            for k in 1:nt
+                tderiv += s.coeffs[k, j, d] * s.top_slope[k]
+            end
+            tderiv /= hh
+            for i in axes(e.value, 1)
+                u[i, d] += s.coeffs[nt, j, d] * e.value[i, j]
+                w[i, d] += s.coeffs[nt, j, d] * e.slope[i, j]
+                v[i, d] += tderiv * e.value[i, j]
+            end
+        end
+    end
+    return nothing
+end
 
 function Base.show(io::IO, ansatz::TensorBSplineAnsatz{T}) where {T}
     print(io,

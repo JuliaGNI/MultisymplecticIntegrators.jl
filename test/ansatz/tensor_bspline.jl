@@ -18,7 +18,10 @@ function wave_run(::Type{T}; degree = 2, ncells = (2, 20), n = 3, timestep = T(0
     ansatz = TensorBSplineAnsatz(degree = degree, ncells = ncells,
         xspan = (zero(T), one(T)), n = n)
     method = SpaceTimeGalerkin(ansatz, CoefficientRestriction(); initial_guess = guess)
-    return problem, method, integrate(problem, method)
+    result = integrate(problem, method)
+    # the spline family must converge at every step, under its integrator's own tolerances
+    @test all(result.stats.converged)
+    return problem, method, result
 end
 
 @testset "Tensor B-spline ansatz" begin
@@ -214,7 +217,8 @@ end
         c = cache(int)
         @test length(c.iterations) == 3
         @test all(≥(1), c.iterations)
-        @test all(isfinite, c.residuals)
+        @test all(result.stats.converged)
+        @test result.stats.residuals == c.residuals
         @test datatype(result.solution) === T
         assert_no_upcast(result.solution.u, T)
         grid = collect(xgrid(problem))
@@ -239,8 +243,9 @@ end
             assert_no_upcast(entry, T)
         end
         c = cache(GeometricIntegrator(problem, method))
-        assert_no_upcast(c.coeffs, T)
-        assert_no_upcast(c.bottom, T)
+        assert_no_upcast(c.ansatz.coeffs, T)
+        assert_no_upcast(c.coupling.bottom, T)
+        @test all(result.stats.converged)
         # the run meets the exact solution on the output grid to a discretisation bound, which is
         # the same number in both precisions and not an `eps` multiple
         grid = collect(xgrid(problem))

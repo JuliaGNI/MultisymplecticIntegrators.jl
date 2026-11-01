@@ -48,15 +48,16 @@ nquadrature(axis::AxisTabulation) = size(axis.index, 1)
 """
     SlabTabulation{T}
 
-The assembly tables of a tensor B-spline ansatz: one [`AxisTabulation`](@ref) per direction.
+The assembly tables of a tensor B-spline ansatz, from its tensor quadrature: one
+[`AxisTabulation`](@ref) per direction.
 """
 struct SlabTabulation{T}
     time::AxisTabulation{T}
     space::AxisTabulation{T}
 end
 
-function SlabTabulation(ansatz::TensorBSplineAnsatz{T}) where {T}
-    rules = quadratures(quadrature(ansatz))
+function SlabTabulation(q::TensorProductQuadrature{T, 2}) where {T}
+    rules = quadratures(q)
     return SlabTabulation{T}(AxisTabulation(rules[1]), AxisTabulation(rules[2]))
 end
 

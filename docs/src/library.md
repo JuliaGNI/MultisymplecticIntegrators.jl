@@ -4,8 +4,9 @@ CurrentModule = MultisymplecticIntegrators
 
 # MultisymplecticIntegrators Library Functions
 
-The problem types and the quadrature of the package, and the four example problems, each of which
-lives in its own submodule.
+The problem types, the slab integrator with its ansatz, couplings and initial guesses, and the four
+example problems, each of which lives in its own submodule. The page *The slab seam* says how the
+parts of the slab integrator fit together.
 
 ```@autodocs
 Modules = [MultisymplecticIntegrators, MultisymplecticIntegrators.Wave,
