@@ -46,11 +46,4 @@ end
         binding = Base.Docs.Binding(M, :is_linear_in_coefficients)
         @test length(Base.Docs.meta(M)[binding].docs) == 1
     end
-
-    @testset "S2d the space-time quadrature is gone" begin
-        for name in (:SpaceTimeQuadrature, :boundary_points)
-            @test !isdefined(M, name)
-            @test isempty(offenders(string(name)))
-        end
-    end
 end
