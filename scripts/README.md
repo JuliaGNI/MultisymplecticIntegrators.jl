@@ -51,6 +51,16 @@ failed run.
 | `spline_energy_scan.jl` | the relative energy error over time at a ladder of time steps, archived as one `"energy"` run that `figures.jl` draws as a comparison. |
 | `spline_phase_drift_scan.jl` | the error against the exact solution at the final time, at a ladder of ansatz resolutions. Prints a table and writes nothing. |
 | `profile_residual.jl` | one slab's residual, timed, with its allocations and the cost of a full step. |
+| `action_residual_spike.jl` | the slab residual and Jacobian as the AD gradient and Hessian of the property suite's discrete action (`test/helpers/action_oracle.jl`), checked against `residual!` and the solver's Jacobian and then timed against them, with ForwardDiff and with Enzyme (Mooncake where Enzyme fails), one fresh process per backend and problem. Prints a table and writes nothing. |
+
+The spike's gate is `--quick`, the smallest size with one sample, and `--selfcheck`, which must exit
+non-zero because both of its checks reject a perturbed vector:
+
+```sh
+julia --startup-file=no --project=scripts scripts/action_residual_spike.jl --quick
+julia --startup-file=no --project=scripts scripts/action_residual_spike.jl --selfcheck
+julia --startup-file=no --project=scripts scripts/action_residual_spike.jl --sizes 60,120,250
+```
 
 ### No figure code lives here
 

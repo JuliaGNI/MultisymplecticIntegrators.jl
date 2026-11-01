@@ -299,6 +299,14 @@ makes it worth keeping.
   environment adds `ForwardDiff`, `Random` and `SimpleSolvers`, and the `SimpleSplines` bound is
   `0.3.4`, the release whose mesh ends at `b` exactly and whose Greville nodes stay inside the span.
   This closes the known issue K18, whose fix had already landed.
+- **`scripts/action_residual_spike.jl` measures the residual as the gradient of a discrete action.**
+  It differentiates the property suite's slab action under `CoefficientRestriction` on `Wave` and
+  `SineGordon`, checks the gradient against `residual!` and a block of the Hessian against the
+  solver's Jacobian at each size, and then times both against the package's code, with ForwardDiff
+  and with Enzyme (Mooncake where Enzyme fails), one fresh process per backend and problem.
+  `--quick` and `--selfcheck` are its gate. The `scripts/` environment adds `BenchmarkTools`,
+  `DifferentiationInterface`, `Enzyme`, `Mooncake`, `SimpleSolvers` and the packages of the two
+  test helpers it includes.
 
 ### Changed
 

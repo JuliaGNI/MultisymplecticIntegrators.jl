@@ -8,18 +8,39 @@
 #
 # **No `Plots`.** `CairoMakie` is the one plotting backend here, as everywhere in this tree, and it
 # is what activates the package's plotting extension.
+#
+# `action_residual_spike.jl` includes the property suite's action oracle and problem generator from
+# `test/helpers/`, so the packages those two load are here too, with the AD backends it compares
+# and `SimpleSolvers`, whose Jacobian it times.
 
 [deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+DifferentiationInterface = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
+Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 GeometricBase = "9a0b12b7-583b-4f04-aa1f-d8551b6addc9"
 GeometricIntegratorsBase = "71212ab4-08a2-48eb-a02b-4cbad0e9c44a"
 GeometricSolutions = "7843afe4-64f4-4df4-9231-049495c56661"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 MultisymplecticIntegrators = "287958db-332d-4045-951c-e8138db0f134"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SimpleSolvers = "36b790f5-6434-4fbe-b711-1f64a1e2f6a2"
+SimpleSplines = "ac480f6c-9a94-4d53-a283-9db69f109154"
+Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 
 [compat]
-julia = "1.11"
+BenchmarkTools = "1.8"
+CairoMakie = "0.15"
+DifferentiationInterface = "0.7.21"
+Enzyme = "0.13"
+ForwardDiff = "0.10, 1"
+JLD2 = "0.6"
+Mooncake = "0.5"
+julia = "1.12"
 
 [sources]
 MultisymplecticIntegrators = { path = ".." }
