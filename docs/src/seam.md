@@ -72,8 +72,8 @@ Within a step, every function of the coupling dispatches on its block:
 - [`bottom_datum`](@ref): the bottom row the coupling fixes, or `nothing`;
 - [`transform_field!`](@ref): the coupling's transform of the field, wherever the core evaluates
   the field — in the residual, the trace and the solution; the default leaves the field as it is;
-- [`coupling_term!`](@ref): the coupling's terms of the residual, with no default, so that a coupling
-  without a term declares its no-op;
+- [`coupling_term!`](@ref): the coupling's terms of the residual, with no default, so that a
+  coupling without a term declares its no-op;
 - [`coupling_guess!`](@ref): the guess of the coupling's own unknowns;
 - [`coupling_update!`](@ref): what the coupling reads out of the solved slab and hands on;
 - [`copy_coupling_data!`](@ref): the datum, from the cache of the problem's element type into the

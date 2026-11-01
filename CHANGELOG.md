@@ -18,10 +18,13 @@ makes it worth keeping.
 
 - **The package is rebuilt on the current GeometricBase stack, and every integrator family leaves
   `src/`** for a return of its own. `LPDEProblem`, `LPDESystem`, `PDEIntegrator` and every
-  `*_Integrator` type are gone. The names that replace them are `LagrangianPDEProblem`,
-  `LagrangianDensity`, together with the `SpaceTimeAnsatz`,
-  `SlabCoupling` and `SlabInitialGuess` abstract types. A caller of a family that has not returned
-  yet works at `294f023`.
+  `*_Integrator` type are gone. The names that replace them are `LagrangianPDEProblem` and
+  `LagrangianDensity`, together with the `SpaceTimeAnsatz`, `SlabCoupling` and `SlabInitialGuess`
+  abstract types. A caller of a family that has not returned yet works at `294f023`.
+- **`SpaceTimeQuadrature` and `boundary_points` are removed, with their test.** Nothing in the
+  package used them: the slab integrates on the tensor-product rule of `SimpleSplines` that the
+  ansatz owns. The package no longer exports `nodes`, `weights` and `nnodes`, whose only methods of
+  its own were those on `SpaceTimeQuadrature`.
 - **`julia = "1.12"` is the floor**, and every dependency has a `[compat]` entry.
   The floor stays at 1.12, because every `SimpleSplines` release from 0.3.3 on requires Julia 1.12,
   and CI's `min` job resolves this bound. The dependency
@@ -121,10 +124,9 @@ makes it worth keeping.
   the basis functions that vanish at the top. That is a nonlinear system of `(Nt - 1) * Nx * D`
   equations, which the `SimpleSolvers` Newton solver solves; the cache keeps each step's iterate
   count, its final residual `‖F(x)‖₂`, its initial residual `r₀ = ‖F(x₀)‖₂` and whether it
-  converged, beside the top
-  trace at the nodes of the space quadrature. The initial-guess interface of `src/initial_guess/`
-  fills the solver's vector before a step: `Continuation()`, the default, carries the previous
-  slab's top row into every row of the new slab; `FitTo(target; method = nothing)` fits the
+  converged, beside the top trace at the nodes of the space quadrature. The initial-guess
+  interface of `src/initial_guess/` fills the solver's vector before a step: `Continuation()`, the
+  default, carries the previous slab's top row into every row of the new slab; `FitTo(target; method = nothing)` fits the
   ansatz to `InitialCondition()`, to `PreviousSlab()` — the polynomial piece of the top time cell
   expanded about its top, so a quadratic field continues as the same quadratic — to
   `ExactSolution()` or to a `TargetFunction(f)`, with `Projection()` where the ansatz names no fit
@@ -186,20 +188,25 @@ makes it worth keeping.
   returns the steps already taken: `traces` ends at the step before, and the solution is valid up
   to that step, its later entries not computed. Any other exception still propagates. This closes
   the known issue K17.
-- **The suite is the standard layout**: `core` testsets for the problem layer and the shell, `Aqua.test_all` with no `broken` mark, and `test_explicit_imports`. This closes the
-  known issues K1 (the broken marks), K2 (the stale bounds), K3 (`Plots` and the GUI packages in
+- **The suite is the standard layout**: `core` testsets for the problem layer and the shell,
+  `Aqua.test_all` with no `broken` mark, and `test_explicit_imports`. This closes the known issues
+  K1 (the broken marks), K2 (the stale bounds), K3 (`Plots` and the GUI packages in
   the test environment), K5 (the two files the formatter could not write), KI-2 (the unused test
   dependencies), KI-3 (the mark that asserts nothing) and KI-4 (the README and the manual saying
   the package does not load).
 - **Continuous integration.** `.github/workflows/` holds three workflows, `CI.yml`, `Documenter.yml`
   and `TagBot.yml`.
-- **A documentation build.** `docs/` holds `make.jl`, `Project.toml` and a three-page manual, so
-  `Documenter` has something to build and the doctest job has an environment.
+- **A documentation build.** `docs/` holds `make.jl`, `Project.toml` and a four-page manual, so
+  `Documenter` has something to build and the doctest job has an environment. The page
+  `docs/src/seam.md`, *The slab seam*, states the seam of the slab integrator and the action form
+  that it admits. The library is split over two pages, the package module and its submodules, so
+  that each page stays below Documenter's size threshold.
 - **`test/runtests.jl` runs each test file in its own `@safetestset`.** Empty `ARGS` runs the `core`
-  and `slow` groups. The `core` group holds twelve files: the Aqua and explicit-imports quality
-  checks, the Lagrangian density and Lagrangian problem tests, the linear transport and vector wave
-  tests, the space-time quadrature test, the integrator shell test, the tensor B-spline ansatz,
-  coefficient restriction, coupling seam and initial-guess tests. The `slow` group holds the
+  and `slow` groups. The `core` group holds fourteen files: the Aqua, explicit-imports and sources
+  quality checks, the Lagrangian density and Lagrangian problem tests, the linear transport and
+  vector wave tests, the tensor B-spline ansatz, coefficient restriction, coupling seam and
+  initial-guess tests, the integrator shell test, and the diagnostics and plotting tests. The
+  `slow` group holds the
   weak-multiplier test.
 - **Reference values of the integrators at `294f023`.** `scripts/reference_values.jl` runs every
   integrator family on short `Wave` and `SineGordon` cases and writes
