@@ -25,11 +25,12 @@
 # the size and the error, and that process records no number at that size or after it.
 #
 # Each backend runs in a fresh process per problem, which this script starts itself, and each
-# process prints `uptime` first. The first call of each function compiles and is not timed;
-# `BenchmarkTools` then gives the median time and the allocations of one call. The reverse-mode
-# backend is Enzyme, through DifferentiationInterface; where its process fails, Mooncake runs in its
-# place. `--quick` runs the smallest size with one sample. `--selfcheck` hands the gradient and the
-# Hessian a perturbed vector, which both checks must reject: it exits non-zero when they do.
+# process prints its Julia version, its thread count and `uptime` before it measures. The first call
+# of each function compiles and is not timed; `BenchmarkTools` then gives the median time and the
+# allocations of one call. The reverse-mode backend is Enzyme, through DifferentiationInterface;
+# where its process fails, Mooncake runs in its place. `--quick` runs the smallest size with one
+# sample. `--selfcheck` hands the gradient and the Hessian a perturbed vector, which both checks
+# must reject: it exits non-zero when they do.
 
 using BenchmarkTools: @benchmark, allocs, median, memory
 using DifferentiationInterface: AutoEnzyme, AutoForwardDiff, AutoMooncake, Constant,
@@ -259,7 +260,8 @@ end
     timings(slab, backend, preparation, samples)
 
 The package's residual and Jacobian, and the AD residual and Jacobian, each benchmarked after its
-first call. One sample each where `samples == 1`, otherwise five seconds of samples each.
+first call. One sample each where `samples == 1`, otherwise at most `samples` samples in at most
+five seconds each.
 """
 function timings(slab::Slab, backend, preparation, samples::Integer)
     θ = slab.θ
