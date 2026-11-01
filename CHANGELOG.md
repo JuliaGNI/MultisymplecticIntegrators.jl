@@ -165,12 +165,15 @@ makes it worth keeping.
   in `r₀` counts only for a finite `r₀`, so a residual that is not finite never converges. A step
   that has not converged warns with `on_failure = :warn`, the default, and throws with
   `on_failure = :error`; both name the step, and another value of `on_failure` throws an
-  `ArgumentError`. A method extends `solve_stats(cache)` to give the record. Every
-  call starts a new run: the method's cache is reset first, so the first slab takes the problem's
-  initial data and the steps a method records belong to that run alone. A step whose state holds a
-  NaN ends the run with a warning: `traces` ends at that step, and the solution holds the NaN
-  there. `SpaceTimeMethod` defaults to `NoExtrapolation()`, so the history states of the solution
-  step hold the initial data.
+  `ArgumentError`. `integrate(integrator; on_failure)` takes the keyword itself, so a keyword call
+  on an integrator no longer falls through to GeometricIntegratorsBase's `integrate`, which threw a
+  `MethodError` for `Solution`. Any other keyword is refused with Julia's `MethodError` for an
+  unsupported keyword. This closes the known issue K10. A method extends `solve_stats(cache)` to
+  give the record. Every call starts a new run: the method's cache is reset first, so the first
+  slab takes the problem's initial data and the steps a method records belong to that run alone.
+  A step whose state holds a NaN ends the run with a warning: `traces` ends at that step, and the
+  solution holds the NaN there. `SpaceTimeMethod` defaults to `NoExtrapolation()`, so the history
+  states of the solution step hold the initial data.
 - **The method, the ansatz and the three roles of an initial guess have abstract types of their
   own.** `SpaceTimeMethod <: GeometricMethod` is the supertype of `SpaceTimeGalerkin`, and
   `SpaceTimeAnsatz` is the supertype of `TensorBSplineAnsatz` alone, which is no

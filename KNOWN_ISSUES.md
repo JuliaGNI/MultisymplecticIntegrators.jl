@@ -14,17 +14,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
-### K10 · `integrate(integrator; keyword)` falls through to the ecosystem's method.
-
-- location: `src/core/integrate.jl`
-- evidence: the package's `integrate(::GeometricIntegrator…)` takes no keyword, so Julia's keyword
-  dispatch chooses `GeometricIntegratorsBase`'s, whose body throws
-  `MethodError: no method matching Solution(::LagrangianPDEProblem…)`. The documented forms are
-  `integrate(problem, method; kwargs...)` and `integrate(integrator)`. A guard that names the
-  supported form would read better.
-- kind: defect
-- found: 2026-10-26
-
 ### K11 · `field_exact` infers a small union on a scalar call.
 
 - location: `src/problems/lagrangian_problem.jl`
