@@ -13,9 +13,15 @@ import SimpleSplines
 # and lays out the solver's vector by its own formula.
 
 """
-    ActionOracle(problem, method)
+    ActionOracle(problem, method; restricted = coupling(method) isa CoefficientRestriction,
+                 lift = nothing)
 
 The tables of the discrete action of one slab of `method` on `problem`.
+
+`restricted` says whether the coupling restricts the bottom row, as `CoefficientRestriction` does;
+a test coupling that restricts it under another type says so here. `lift`, where given, is a
+function `(t̂, x, d) -> (ℓ, ∂_t̂ℓ, ∂ₓℓ)` that the coupling adds to component `d` of the field: the
+action is then that of the ansatz's field plus `ℓ`.
 
 The action of the full coefficient array `ĉ`, of size `(Nt, Nx, D)`, is
 
@@ -30,9 +36,11 @@ the space basis without its two corner functions where the coupling imposes the 
 conditions — and `χ` those of the multipliers of the two ends at the time nodes, the whole time
 basis. `nodes` and `interpolation` are the spline nodes of the space basis and the basis there.
 """
-struct ActionOracle{T, P, C}
+struct ActionOracle{T, P, C, F}
     problem::P
     coupling::C
+    restricted::Bool
+    lift::F
     nt::Int
     nx::Int
     D::Int
@@ -57,7 +65,8 @@ struct ActionOracle{T, P, C}
     interpolation::Matrix{T}
 end
 
-function ActionOracle(problem, method)
+function ActionOracle(problem, method;
+        restricted::Bool = coupling(method) isa CoefficientRestriction, lift = nothing)
     T = eltype(timespan(problem))
     a = ansatz(method)
     c = coupling(method)
@@ -74,9 +83,9 @@ function ActionOracle(problem, method)
     corners = c isa WeakInitialAndBoundaryConditions
     λindices = corners ? (2:(nx - 1)) : (1:nx)
     nodes = collect(T, SimpleSplines.nodes(xb))
-    return ActionOracle{T, typeof(problem), typeof(c)}(
-        problem, c, nt, nx, components(problem),
-        c isa CoefficientRestriction ? 0 : length(λindices), corners ? nt : 0,
+    return ActionOracle{T, typeof(problem), typeof(c), typeof(lift)}(
+        problem, c, restricted, lift, nt, nx, components(problem),
+        restricted ? 0 : length(λindices), corners ? nt : 0,
         T(timestep(problem)),
         collect(T, SimpleSplines.quadrature_weights(qt)), t̂,
         collect(T, SimpleSplines.quadrature_weights(qx)), x,
@@ -86,7 +95,7 @@ function ActionOracle(problem, method)
         ψ[:, λindices], table(tb, t̂, nt, 0), nodes, table(xb, nodes, nx, 0))
 end
 
-restricted(o::ActionOracle) = o.coupling isa CoefficientRestriction
+restricted(o::ActionOracle) = o.restricted
 
 """The number of free time rows: `Nt - 1` under the restriction, whose bottom row is a datum."""
 free_time_rows(o::ActionOracle) = restricted(o) ? o.nt - 1 : o.nt
@@ -178,6 +187,14 @@ function interior_action(o::ActionOracle, ĉ::AbstractArray{S, 3}) where {S}
     U = [o.φ * ĉ[:, :, d] * transpose(o.ψ) for d in 1:o.D]
     V = [o.φ′ * ĉ[:, :, d] * transpose(o.ψ) / o.h for d in 1:o.D]
     W = [o.φ * ĉ[:, :, d] * transpose(o.ψ′) for d in 1:o.D]
+    if o.lift !== nothing
+        for d in 1:o.D, q in eachindex(o.t̂), r in eachindex(o.x)
+            ℓ, ℓt, ℓx = o.lift(o.t̂[q], o.x[r], d)
+            U[d][q, r] += ℓ
+            V[d][q, r] += ℓt / o.h
+            W[d][q, r] += ℓx
+        end
+    end
     params = parameters(o.problem)
     action = zero(S)
     for q in eachindex(o.t̂), r in eachindex(o.x)

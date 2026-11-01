@@ -52,7 +52,10 @@ function wave_run(::Type{T}; coupling = WeakInitialCondition(), x_boundary = Dir
     ansatz = wave_ansatz(T; ncells = ncells, x_boundary = x_boundary)
     method = SpaceTimeGalerkin(ansatz, coupling; initial_guess = guess)
     int = GeometricIntegrator(problem, method)
-    return problem, method, int, integrate(int)
+    result = integrate(int)
+    # the spline family must converge at every step, under its integrator's own tolerances
+    @test all(result.stats.converged)
+    return problem, method, int, result
 end
 
 """
@@ -92,7 +95,7 @@ function multiplier_momentum(problem, method)
     T = datatype(problem)
     int = GeometricIntegrator(problem, method)
     c = cache(int)
-    ω = c.tabulation.space.weight
+    ω = c.ansatz.tabulation.space.weight
     solution = GeometricSolution(problem)
     solstep = solutionstep(int, solution[0])
     momenta = T[]
@@ -261,7 +264,8 @@ end
         # whole four-slab run hands out, and its fifth slab enters with that multiplier
         four_int = GeometricIntegrator(
             wave_problem(T; timespan = (zero(T), T(0.2))), method)
-        integrate(four_int)
+        four = integrate(four_int)
+        @test all(four.stats.converged)
         @test any(x -> !iszero(x), cache(four_int).coupling.top_multiplier)
         five_int = GeometricIntegrator(problem, method)
         five_step = solutionstep(five_int, solution[0])
@@ -275,6 +279,9 @@ end
         integrate!(five_step, five_int)
         @test cache(five_int).coupling.initial_multiplier ==
               cache(four_int).coupling.top_multiplier
+        # a run driven through integrate! records each step's convergence in the cache
+        @test length(cache(five_int).converged) == 5
+        @test all(cache(five_int).converged)
     end
 
     @testset "A1d the rank of the first slab" for T in (Float64, Float32)
@@ -284,7 +291,7 @@ end
         method = SpaceTimeGalerkin(wave_ansatz(T),
             WeakInitialCondition(multiplier_basis = :bspline))
         int = GeometricIntegrator(problem, method)
-        integrate(int)
+        @test all(integrate(int).stats.converged)
         unknown = length(cache(int).x)
         jacobian = slab_jacobian(int)
         σ = svdvals(jacobian)
@@ -295,7 +302,7 @@ end
         full = SpaceTimeGalerkin(wave_ansatz(T; x_boundary = Free()),
             WeakInitialAndBoundaryConditions())
         full_int = GeometricIntegrator(problem, full)
-        integrate(full_int)
+        @test all(integrate(full_int).stats.converged)
         full_unknown = length(cache(full_int).x)
         full_jacobian = slab_jacobian(full_int)
         full_σ = svdvals(full_jacobian)
@@ -316,6 +323,8 @@ end
         method = SpaceTimeGalerkin(wave_ansatz(T), WeakInitialCondition())
         with_solution = integrate(template, method)
         without = integrate(bare, method)
+        @test all(with_solution.stats.converged)
+        @test all(without.stats.converged)
         @test without.solution.u == with_solution.solution.u
         assert_no_upcast(without.solution.u, T)
     end
@@ -333,7 +342,8 @@ end
             c = cache(int)
             @test length(result.traces) == 3
             @test length(c.iterations) == 3
-            @test all(value -> isfinite(value), c.residuals)
+            @test all(result.stats.converged)
+            @test result.stats.residuals == c.residuals
             assert_no_upcast(result.solution.u, T)
             exact = [SineGordon.exact_u(problem.timespan[2], x, parameters(problem))
                      for x in xgrid(problem)]
@@ -353,6 +363,7 @@ end
         result = integrate(int)
         p = parameters(problem)
         @test length(result.traces) == 5
+        @test all(result.stats.converged)
         for n in 1:5
             exact = [problem.exact_u(timesteps(result.solution)[n], x, p)
                      for x in xgrid(problem)]
@@ -370,6 +381,7 @@ end
         for basis in (:bspline, :lagrange)
             coupling = WeakInitialAndBoundaryConditions(multiplier_basis = basis)
             c = cache(GeometricIntegrator(problem, SpaceTimeGalerkin(ansatz, coupling)))
+            @test M.coupling(c.coupling) === coupling
             @test size(c.coupling.initial_multiplier, 1) == nλ
             @test size(c.coupling.boundary_basis, 1) == nμ
             @test length(c.coupling.initial_multiplier) +
@@ -384,6 +396,14 @@ end
         # the coupling that imposes the initial condition alone keeps the whole space basis
         @test M.space_multiplier_indices(WeakInitialCondition(), wave_ansatz(T)) ==
               collect(1:M.nspace_functions(wave_ansatz(T)))
+        # and its block, built through the seam, holds that basis and no boundary multiplier
+        initial = WeakInitialCondition()
+        c = cache(GeometricIntegrator(problem, SpaceTimeGalerkin(wave_ansatz(T), initial)))
+        @test M.coupling(c.coupling) === initial
+        @test size(c.coupling.initial_multiplier, 1) == M.nspace_functions(wave_ansatz(T))
+        @test isempty(c.coupling.boundary_multiplier)
+        @test length(c.coupling.initial_multiplier) ==
+              M.nspace_functions(wave_ansatz(T)) * components(problem)
         # the multiplier set is fixed: the coupling takes no stride
         @test_throws MethodError WeakInitialAndBoundaryConditions(stride = 2)
         @test_throws ArgumentError WeakInitialCondition(multiplier_basis = :BSplineDirichlet)
@@ -405,6 +425,7 @@ end
                         wave_ansatz(T; ncells = (2, cells), x_boundary = Free()),
                         coupling))
                 result = integrate(int)
+                @test all(result.stats.converged)
                 exact = [Wave.exact_u(problem.timespan[2], x, parameters(problem))
                          for x in xgrid(problem)]
                 push!(errors[basis], maximum(abs.(result.solution.u[end] .- exact)))
@@ -458,6 +479,7 @@ end
             result = integrate(problem,
                 SpaceTimeGalerkin(wave_ansatz(T; ncells = (2, cells), x_boundary = Free()),
                     WeakInitialAndBoundaryConditions()))
+            @test all(result.stats.converged)
             exact = [problem.exact_u(problem.timespan[2], x, parameters(problem))
                      for x in xgrid(problem)]
             push!(errors, maximum(abs.(result.solution.u[end] .- exact)))
@@ -478,6 +500,8 @@ end
         @test maximum(abs.(momenta .- momenta[1])) ≤ reference_tolerance(T)
         int = GeometricIntegrator(problem, method)
         result = integrate(int)
+        # the spline family must converge at every step, under its integrator's own tolerances
+        @test all(result.stats.converged)
         assert_no_upcast(result.solution.u, T)
         c = cache(int)
         @test c.coupling.top_multiplier[:, 1] != c.coupling.top_multiplier[:, 2]
@@ -513,9 +537,10 @@ end
                 WeakInitialAndBoundaryConditions()))
         c = cache(int)
         @test size(c.coupling.top_u, 1) ==
-              max(length(c.tabulation.time.node), length(c.tabulation.space.node))
+              max(length(c.ansatz.tabulation.time.node), length(c.ansatz.tabulation.space.node))
         result = integrate(int)
         @test length(result.traces) == 2
+        @test all(result.stats.converged)
         @test all(>(0), c.iterations)
         @test any(x -> !iszero(x), c.coupling.top_values)
     end

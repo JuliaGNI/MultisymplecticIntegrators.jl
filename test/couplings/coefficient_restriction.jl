@@ -19,7 +19,10 @@ function slab_run(::Type{T}; degree = 2, ncells = (2, 20), n = 3, guess = Contin
         xspan = (zero(T), one(T)), n = n)
     method = SpaceTimeGalerkin(ansatz, CoefficientRestriction(); initial_guess = guess)
     int = GeometricIntegrator(problem, method)
-    return problem, method, int, integrate(int)
+    result = integrate(int)
+    # the spline family must converge at every step, under its integrator's own tolerances
+    @test all(result.stats.converged)
+    return problem, method, int, result
 end
 
 """
@@ -51,7 +54,7 @@ end
 
 The discrete momentum of every step, `J_h = Σⱼ (q¹ⱼ p²ⱼ − q²ⱼ p¹ⱼ)` over the top coefficient row
 `q` and the top row `p` of the slab's weak form, which is the momentum the coupling carries out;
-and the Newton iteration count of the step beside it.
+and the Newton iteration count of the step and whether the step converged beside it.
 
 The steps are driven one at a time, because the momentum of a step exists only while its cache does.
 """
@@ -63,15 +66,18 @@ function slab_momentum(problem, method)
     solstep = solutionstep(int, solution[0])
     momenta = T[]
     iterations = Int[]
+    converged = Bool[]
     for n in 1:ntime(solution)
         reset!(solstep, timesteps(solution)[n])
         integrate!(solstep, int)
         push!(momenta,
-            sum(c.top[j, 1] * c.flux[j, 2] - c.top[j, 2] * c.flux[j, 1]
-            for j in axes(c.top, 1)))
+            sum(c.ansatz.top[j, 1] * c.coupling.flux[j, 2] -
+                c.ansatz.top[j, 2] * c.coupling.flux[j, 1]
+            for j in axes(c.ansatz.top, 1)))
         push!(iterations, c.iterations[end])
+        push!(converged, c.converged[end])
     end
-    return momenta, iterations
+    return momenta, iterations, converged
 end
 
 @testset "Coefficient restriction" begin
@@ -104,7 +110,7 @@ end
         _, _, two_int, _ = slab_run(T;
             problem = Wave.problem(T = T,
                 timespan = (zero(T), T(0.1)), timestep = T(0.05), xstep = T(0.05)))
-        @test cache(two_int).bottom == cache(one_int).top
+        @test cache(two_int).coupling.bottom == cache(one_int).ansatz.top
         # every entry of `residuals` is `‖F(x)‖₂` at its own step's final iterate, under the datum
         # and the momentum load that step started from, which the cache overwrites as the step ends
         stepped = GeometricIntegrator(problem, method)
@@ -113,31 +119,34 @@ end
         solstep = solutionstep(stepped, solution[0])
         p = parameters(problem)
         b = similar(cs.x)
-        datum = similar(cs.bottom)
-        load = similar(cs.flux)
+        datum = similar(cs.coupling.bottom)
+        load = similar(cs.coupling.flux)
         recomputed = Vector{T}(undef, ntime(solution))
         for n in 1:ntime(solution)
             # the datum and the momentum load the step will solve under
-            M.slab_bottom!(cs, coupling(method), problem, ansatz(method), solstep)
-            datum .= cs.bottom
-            load .= cs.flux
+            M.slab_bottom!(cs, cs.coupling, problem, ansatz(method), solstep)
+            datum .= cs.coupling.bottom
+            load .= cs.coupling.flux
             reset!(solstep, timesteps(solution)[n])
             integrate!(solstep, stepped)
-            top_load = copy(cs.flux)
-            cs.bottom .= datum
-            cs.flux .= load
+            top_load = copy(cs.coupling.flux)
+            cs.coupling.bottom .= datum
+            cs.coupling.flux .= load
             M.residual!(b, cs.x, nothing, p, stepped)
             recomputed[n] = sqrt(sum(abs2, b))
-            cs.flux .= top_load
+            cs.coupling.flux .= top_load
         end
         for n in 1:5
             @test abs(recomputed[n] - cs.residuals[n]) ≤ T(100) * eps(T) * recomputed[n]
         end
+        @test all(cs.converged)
         # a second run of one integrator starts again from the problem's initial data, and its
         # records belong to that run alone
         reused = GeometricIntegrator(problem, method)
         first_run = integrate(reused)
         second_run = integrate(reused)
+        @test all(first_run.stats.converged)
+        @test all(second_run.stats.converged)
         @test second_run.solution.u == first_run.solution.u
         @test length(cache(reused).iterations) == 5
         @test length(cache(reused).residuals) == 5
@@ -190,6 +199,7 @@ end
         problem = VectorWave.problem(T = T, params = params, timespan = (zero(T), T(0.25)),
             timestep = T(0.05), xstep = T(0.05))
         result = integrate(problem, SpaceTimeGalerkin(ansatz, CoefficientRestriction()))
+        @test all(result.stats.converged)
         @test components(problem) == 2
         assert_no_upcast(result.solution.u, T)
         n = length(xgrid(problem))
@@ -198,6 +208,7 @@ end
                 T = T, params = VectorWave.component_parameters(params, d),
                 timespan = (zero(T), T(0.25)), timestep = T(0.05), xstep = T(0.05))
             one_d = integrate(scalar, SpaceTimeGalerkin(ansatz, CoefficientRestriction()))
+            @test all(one_d.stats.converged)
             for s in 1:5
                 component = result.solution.u[s][((d - 1) * n + 1):(d * n)]
                 @test maximum(abs.(component .- one_d.solution.u[s])) ≤
@@ -207,9 +218,11 @@ end
         # β ≠ 0: the quartic term couples the components, and the discrete momentum is conserved
         coupled = vector_density_problem(T; β = T(0.5), timespan = (zero(T), T(2.5)),
             timestep = T(0.05), xstep = T(0.05))
-        momenta, iterations = slab_momentum(coupled,
+        momenta, iterations, converged = slab_momentum(coupled,
             SpaceTimeGalerkin(ansatz, CoefficientRestriction()))
         @test length(momenta) == 50
+        # the spline family must converge at every step, under its integrator's own tolerances
+        @test all(converged)
         @test maximum(abs.(momenta .- momenta[1])) ≤
               T(100) * newton_tolerance(T, SOLVER_OPTIONS)
         @test maximum(iterations) > 1

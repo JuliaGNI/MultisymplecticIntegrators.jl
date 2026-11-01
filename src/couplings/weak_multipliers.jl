@@ -152,18 +152,18 @@ function boundary_multiplier_indices(coupling::MultiplierCoupling, ansatz::Tenso
     return collect(1:ntime_functions(ansatz))
 end
 
-free_rows(coupling::MultiplierCoupling, ansatz::SpaceTimeAnsatz) = ntime_functions(ansatz)
+free_rows(::MultiplierCoupling, ansatz::SpaceTimeAnsatz) = ntime_functions(ansatz)
 
 """
-    MultiplierData{ST} <: CouplingData
+    MultiplierData{ST, C} <: CouplingData
 
-The block of a weak-multiplier coupling in the slab cache.
+The block of a weak-multiplier coupling `C` in the slab cache.
 
-`initial_multiplier` is the datum of the step, the multiplier of the bottom surface, and
-`top_multiplier` its unknown, the multiplier of the top surface; `top_values` is the unknown at the
-nodes of the space quadrature, which is the momentum that leaves the slab. `boundary_multiplier`
-holds the `2 Nμ` multipliers of the two ends of `xspan` — the first `Nμ` at `x = a`, the rest at
-`x = b`.
+`coupling` is the coupling itself. `initial_multiplier` is the datum of the step, the multiplier of
+the bottom surface, and `top_multiplier` its unknown, the multiplier of the top surface;
+`top_values` is the unknown at the nodes of the space quadrature, which is the momentum that leaves
+the slab. `boundary_multiplier` holds the `2 Nμ` multipliers of the two ends of `xspan` — the first
+`Nμ` at `x = a`, the rest at `x = b`.
 
 `multiplier_basis` and `boundary_basis` are the tables those multipliers are expanded in, at the
 nodes of the space and of the time quadrature. `projection` reads the bottom multiplier's datum back
@@ -177,7 +177,8 @@ and `left_space`, `right_space`, `left_slope` and `right_slope` those of the spa
 their derivatives at the two ends of `xspan`. The remaining fields are the scratch of the residual,
 of the guess and of the boundary data, so that none of them allocates.
 """
-struct MultiplierData{ST} <: CouplingData
+struct MultiplierData{ST, C <: MultiplierCoupling} <: CouplingData
+    coupling::C
     initial_multiplier::Matrix{ST}
     top_multiplier::Matrix{ST}
     guess_multiplier::Matrix{ST}
@@ -240,7 +241,8 @@ function coupling_data(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz
     λprojection = imposes_boundary_conditions(coupling) ? least_squares(λbasis, xweights) :
                   nodal_fit(λbasis)
     xs = xspan(ansatz)
-    return MultiplierData{ST}(
+    return MultiplierData{ST, typeof(coupling)}(
+        coupling,
         zeros(ST, nλ, D),
         zeros(ST, nλ, D),
         zeros(ST, nλ, D),
@@ -273,12 +275,13 @@ function coupling_data(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz
 end
 
 function coupling_data_type(
-        ::MultiplierCoupling, ::TensorBSplineAnsatz, ::LagrangianPDEProblem,
+        coupling::MultiplierCoupling, ::TensorBSplineAnsatz, ::LagrangianPDEProblem,
         ::Type{ST}) where {ST}
-    return MultiplierData{ST}
+    return MultiplierData{ST, typeof(coupling)}
 end
 
-free_rows(::MultiplierData, ansatz::SpaceTimeAnsatz) = ntime_functions(ansatz)
+# The bottom row of a weak-multiplier slab is free: the coupling fixes no row of the coefficients.
+bottom_datum(::MultiplierData) = nothing
 
 function coupling_unknowns(coupling::MultiplierCoupling, ansatz::TensorBSplineAnsatz,
         problem::LagrangianPDEProblem)
@@ -338,9 +341,9 @@ end
 The operator that reads a trace given at the nodes back into the coefficients of `basis` by the
 unweighted least-squares fit `(B Bᵀ)⁻¹ B`.
 
-It is the datum of the family that keeps the whole trace basis: that basis reproduces the momentum
-at the nodes, which is what the §A entry of the Dirichlet coupling was generated with. A basis whose
-corner functions have left does not, and takes [`least_squares`](@ref) instead.
+It is the datum of the coupling that keeps the whole trace basis: that basis reproduces the
+momentum at the nodes. A basis whose corner functions have left does not, and takes
+[`least_squares`](@ref) instead.
 """
 function nodal_fit(basis::AbstractMatrix{ST}) where {ST}
     n = size(basis, 2)
@@ -419,7 +422,7 @@ function add_edge_load!(b::AbstractVector{ST}, load::AbstractVector{ST},
 end
 
 """
-    coupling_term!(b, x, coupling, data::MultiplierData, cache, ansatz, problem)
+    coupling_term!(b, x, data::MultiplierData, cache, ansatz, problem)
 
 The coupling's part of one slab's residual.
 
@@ -430,15 +433,15 @@ enter the same way, weighted by the space functions there. After the rows of the
 comes one row per multiplier function, the boundary data of that function.
 """
 function coupling_term!(
-        b::AbstractVector{ST}, x::AbstractVector{ST}, coupling::MultiplierCoupling,
-        data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST}, ansatz::TensorBSplineAnsatz,
+        b::AbstractVector{ST}, x::AbstractVector{ST}, data::MultiplierData{ST},
+        c::SpaceTimeGalerkinCache{ST}, ansatz::TensorBSplineAnsatz,
         problem::LagrangianPDEProblem) where {ST}
-    nx, D = size(c.bottom)
+    nx, D = size(c.ansatz.top)
     nf = ntime_functions(ansatz)
     nλ = size(data.initial_multiplier, 1)
     nμ = size(data.boundary_basis, 1)
-    tq = c.tabulation.time
-    xq = c.tabulation.space
+    tq = c.ansatz.tabulation.time
+    xq = c.ansatz.tabulation.space
     h = convert(ST, timestep(problem))
     coupling_unknowns!(data, x, D)
     for d in 1:D
@@ -461,16 +464,6 @@ function coupling_term!(
     return nothing
 end
 
-# A multiplier coupling's term is the method above, which dispatches on the coupling, the block, the
-# cache, the ansatz and the problem together. A call that reaches the base's no-op instead carries a
-# multiplier coupling whose term has no method for the arguments it was given, and the no-op would
-# drop the term in silence.
-function coupling_term!(b::AbstractVector, x::AbstractVector, coupling::MultiplierCoupling,
-        data::CouplingData, cache, ansatz, problem)
-    throw(ArgumentError("$(nameof(typeof(coupling))) has no term of the residual for a " *
-                        "$(nameof(typeof(data))) block"))
-end
-
 """
     multiplier_constraints!(b, data, cache, nx, D, nf, Nλ, Nμ, h)
 
@@ -482,8 +475,8 @@ conditions on its two ends, over the nodes of the space and of the time quadratu
 function multiplier_constraints!(b::AbstractVector{ST}, data::MultiplierData{ST},
         c::SpaceTimeGalerkinCache{ST}, nx::Integer, D::Integer, nf::Integer,
         nλ::Integer, nμ::Integer, h::ST) where {ST}
-    xq = c.tabulation.space
-    tq = c.tabulation.time
+    xq = c.ansatz.tabulation.space
+    tq = c.ansatz.tabulation.time
     qt = nquadrature(tq)
     nt = size(data.left_coefficients, 1)
     base = nf * nx * D
@@ -493,7 +486,7 @@ function multiplier_constraints!(b::AbstractVector{ST}, data::MultiplierData{ST}
             for l in axes(xq.index, 2)
                 j = xq.index[r, l]
                 j == 0 && continue
-                value += c.coeffs[1, j, d] * xq.value[r, l]
+                value += c.ansatz.coeffs[1, j, d] * xq.value[r, l]
             end
             data.space_work[r] = xq.weight[r] * (value - data.target[r, d])
         end
@@ -506,7 +499,7 @@ function multiplier_constraints!(b::AbstractVector{ST}, data::MultiplierData{ST}
         end
     end
     nμ == 0 && return nothing
-    end_coefficients!(data, c.coeffs, nx, nt, D)
+    end_coefficients!(data, c.ansatz.coeffs, nx, nt, D)
     for d in 1:D
         for edge in 1:2
             coefficients = edge == 1 ? data.left_coefficients : data.right_coefficients
@@ -614,7 +607,7 @@ end
 # `top_u`, `top_v` and `top_w`, and its space flux `∂L/∂w` there, in `momentum`.
 function edge_flux!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST},
         problem::LagrangianPDEProblem, edge::Integer, h) where {ST}
-    tq = c.tabulation.time
+    tq = c.ansatz.tabulation.time
     qt = nquadrature(tq)
     D = size(data.top_u, 2)
     hh = convert(ST, h)
@@ -680,14 +673,14 @@ surface is a datum of the step, which `slab_bottom!` fixes, and not a guess of t
 function coupling_guess!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST},
         ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
     nt = ntime_functions(ansatz)
-    nx, D = size(c.bottom)
+    nx, D = size(c.ansatz.top)
     nf = ntime_functions(ansatz)
     nλ = size(data.initial_multiplier, 1)
     nμ = size(data.boundary_basis, 1)
     h = timestep(problem)
     base = nf * nx * D
-    scatter!(c.coeffs, c.x, c.bottom, nt, nf)
-    trace!(data.top_u, data.top_v, data.top_w, c, ansatz, h)
+    scatter!(c.ansatz.coeffs, c.x, nothing, nf)
+    top_values!(data.top_u, data.top_v, data.top_w, c.ansatz, trace_evaluation(c.ansatz), h)
     momentum_load!(data.momentum, problem.density, data.top_u, data.top_v, data.top_w,
         parameters(problem))
     for d in 1:D
@@ -700,7 +693,7 @@ function coupling_guess!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST}
         end
     end
     if nμ > 0
-        end_coefficients!(data, c.coeffs, nx, nt, D)
+        end_coefficients!(data, c.ansatz.coeffs, nx, nt, D)
         for edge in 1:2
             edge_flux!(data, c, problem, edge, h)
             for d in 1:D
@@ -748,7 +741,7 @@ function initial_multiplier!(data::MultiplierData{ST}, problem::LagrangianPDEPro
 end
 
 """
-    slab_bottom!(cache, coupling, problem, ansatz, sol)
+    slab_bottom!(cache, data::MultiplierData, problem, ansatz, sol)
 
 Fix the data of the slab: the trace the initial condition is compared with — the problem's initial
 condition on the first slab, the previous slab's top trace afterwards — and the problem's side
@@ -762,12 +755,10 @@ solved at its top surface. The whole datum of a step is therefore carried here, 
 `copy_internal_variables!` runs between the steps. The multiplier of the top surface is the step's
 unknown, and the initial guess of it is no datum.
 """
-function slab_bottom!(c::SpaceTimeGalerkinCache{ST, T, <:MultiplierData},
-        coupling::MultiplierCoupling, problem::LagrangianPDEProblem,
-        ansatz::TensorBSplineAnsatz, sol) where {ST, T}
-    data = c.coupling
+function slab_bottom!(c::SpaceTimeGalerkinCache{ST}, data::MultiplierData{ST},
+        problem::LagrangianPDEProblem, ansatz::TensorBSplineAnsatz, sol) where {ST}
     if c.steps == 0
-        data.target .= c.initial_sample
+        data.target .= initial_condition_sample(ST, problem, ansatz)
         initial_multiplier!(data, problem, ansatz)
     else
         data.target .= c.trace_u
@@ -783,7 +774,7 @@ function boundary_data!(data::MultiplierData{ST}, problem::LagrangianPDEProblem,
         c::SpaceTimeGalerkinCache{ST}, sol) where {ST}
     nμ = size(data.boundary_basis, 1)
     nμ == 0 && return nothing
-    tq = c.tabulation.time
+    tq = c.ansatz.tabulation.time
     qt = nquadrature(tq)
     D = size(data.boundary_target, 2)
     h = timestep(problem)
@@ -859,7 +850,7 @@ The ecosystem calls this after every step. It writes the solution step alone; th
 multiplier into the next slab's datum is `slab_bottom!`'s.
 """
 function copy_internal_variables!(sol::SolutionStep,
-        c::SpaceTimeGalerkinCache{ST, T, <:MultiplierData}) where {ST, T}
+        c::SpaceTimeGalerkinCache{<:Any, <:Any, <:MultiplierData})
     copyto!(internal(sol).top_multiplier, c.coupling.top_multiplier)
     return nothing
 end

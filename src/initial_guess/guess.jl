@@ -72,8 +72,8 @@ evaluate!(sample, target, cache, ansatz, problem, sol)
 ```
 
 filling `sample`, of size `(Qt, Qx, D)`, with the target's value at the quadrature points of the
-slab. The fit that follows takes `sample` from the cache, so a target that allocates nothing keeps
-the guess free of allocations.
+slab. The guess allocates `sample` and the fitted coefficients once per step; the slab cache holds
+no scratch of the guess.
 """
 struct FitTo{T <: SlabTarget, M <: Union{Nothing, SlabFitMethod}} <: SlabInitialGuess
     target::T
@@ -119,27 +119,41 @@ function apply_guess!(c::SpaceTimeGalerkinCache, guess::Continuation,
     if c.steps == 0
         apply_guess!(c, FitTo(InitialCondition()), ansatz, problem, sol)
     else
-        nf = free_rows(c.coupling, ansatz)
+        top = c.ansatz.top
+        nf = free_rows(coupling(c.coupling), ansatz)
         nx = nspace_functions(ansatz)
-        for d in axes(c.top, 2), j in 1:nx, a in 1:nf
-            c.x[free_index(a, j, d, nf, nx)] = c.top[j, d]
+        for d in axes(top, 2), j in 1:nx, a in 1:nf
+            c.x[free_index(a, j, d, nf, nx)] = top[j, d]
         end
     end
     return nothing
 end
 
-function apply_guess!(c::SpaceTimeGalerkinCache, guess::FitTo,
-        ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem, sol)
-    D = size(c.bottom, 2)
-    evaluate!(c.sample, guess.target, c, ansatz, problem, sol)
-    fit!(c.fit, fit_method(guess, ansatz), ansatz, c.sample, c)
+function apply_guess!(c::SpaceTimeGalerkinCache{ST}, guess::FitTo,
+        ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
+    tnodes, xnodes = quadrature_points(c.ansatz)
     nt = ntime_functions(ansatz)
     nx = nspace_functions(ansatz)
-    nf = free_rows(c.coupling, ansatz)
+    D = components(problem)
+    sample = zeros(ST, length(tnodes), length(xnodes), D)
+    fit = zeros(ST, nt, nx, D)
+    evaluate!(sample, guess.target, c, ansatz, problem, sol)
+    fit!(fit, fit_method(guess, ansatz), ansatz, sample, c)
+    nf = free_rows(coupling(c.coupling), ansatz)
     for d in 1:D, j in 1:nx, a in 1:nf
-        c.x[free_index(a, j, d, nf, nx)] = c.fit[a + nt - nf, j, d]
+        c.x[free_index(a, j, d, nf, nx)] = fit[a + nt - nf, j, d]
     end
     return nothing
+end
+
+# The problem's initial condition at the nodes of the space quadrature, per component.
+function initial_condition_sample(::Type{ST}, problem::LagrangianPDEProblem,
+        ansatz::TensorBSplineAnsatz) where {ST}
+    xq = collect(space_quadrature_nodes(ansatz))
+    qx = length(xq)
+    values = problem.ics_function(xq, parameters(problem))
+    return ST[convert(ST, values.u[(d - 1) * qx + r])
+              for r in 1:qx, d in 1:components(problem)]
 end
 
 """
@@ -151,8 +165,9 @@ slab, of which `sol` fixes the physical time.
 function evaluate!(sample::AbstractArray{ST, 3}, ::InitialCondition,
         c::SpaceTimeGalerkinCache, ansatz::TensorBSplineAnsatz,
         problem::LagrangianPDEProblem, sol) where {ST}
+    initial = initial_condition_sample(ST, problem, ansatz)
     for d in axes(sample, 3), r in axes(sample, 2), q in axes(sample, 1)
-        sample[q, r, d] = c.initial_sample[r, d]
+        sample[q, r, d] = initial[r, d]
     end
     return nothing
 end
@@ -166,20 +181,21 @@ function evaluate!(sample::AbstractArray{ST, 3}, ::PreviousSlab,
     tb = time_basis(ansatz)
     nt = ntime_functions(ansatz)
     nx = nspace_functions(ansatz)
-    D = size(c.bottom, 2)
+    D = components(problem)
     order = degree(tb)
     T = eltype(ansatz.xspan)
+    coeffs = c.ansatz.coeffs
     # the Taylor coefficients of the top time cell at t̂ = 1, one per space function and component
-    deriv = c.taylor
+    deriv = zeros(ST, nx, D, order + 1)
     for k in 0:order, d in 1:D, j in 1:nx
         coefficient = zero(ST)
         for a in 1:nt
-            coefficient += c.coeffs[a, j, d] * evaluate(tb, a, one(T), k)
+            coefficient += coeffs[a, j, d] * evaluate(tb, a, one(T), k)
         end
         deriv[j, d, k + 1] = coefficient
     end
-    t = c.tabulation.time
-    x = c.tabulation.space
+    t = c.ansatz.tabulation.time
+    x = c.ansatz.tabulation.space
     for q in 1:nquadrature(t)
         # the displacement beyond the top of the previous slab, about which `deriv` expands
         δ = t.node[q]
@@ -231,11 +247,12 @@ end
 function evaluate!(sample::AbstractArray{ST, 3}, target::TargetFunction,
         c::SpaceTimeGalerkinCache, ansatz::TensorBSplineAnsatz,
         problem::LagrangianPDEProblem, sol) where {ST}
-    return target_values!(sample, target.f, c.tabulation, ansatz, problem, sol)
+    return target_values!(sample, target.f, c.ansatz.tabulation, ansatz, problem, sol)
 end
 
 function evaluate!(sample::AbstractArray{ST, 3}, ::ExactSolution,
         c::SpaceTimeGalerkinCache, ansatz::TensorBSplineAnsatz,
         problem::LagrangianPDEProblem, sol) where {ST}
-    return target_values!(sample, problem.exact_u, c.tabulation, ansatz, problem, sol)
+    return target_values!(
+        sample, problem.exact_u, c.ansatz.tabulation, ansatz, problem, sol)
 end

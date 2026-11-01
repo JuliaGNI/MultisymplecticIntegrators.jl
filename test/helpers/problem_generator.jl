@@ -293,7 +293,7 @@ of that slab, as a run does before it solves the slab.
 """
 function next_slab!(slab, n::Integer)
     reset!(slab.solstep, timesteps(slab.solution)[n])
-    MultisymplecticIntegrators.slab_bottom!(cache(slab.int), coupling(slab.method),
+    MultisymplecticIntegrators.slab_bottom!(cache(slab.int), cache(slab.int).coupling,
         slab.problem, ansatz(slab.method), current(slab.solstep))
     return nothing
 end

@@ -4,21 +4,21 @@ using GeometricBase
 using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: Diagonal, I, dot, mul!
-using QuadratureRules
+using LinearAlgebra: Diagonal, I, dot
 using SimpleSplines
 using SimpleSolvers
 using SparseArrays
 using Symbolics
 
-import QuadratureRules: nodes, weights, nnodes
 import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrature,
                       BSplineBasis, UniformMesh, evaluate, basis, bases,
                       basis_values, degree, nbasis, ncells, quadrature_nodes,
                       quadrature_weights, l2_projection!, nodes as spline_nodes
 import SimpleSolvers: initial_residual, method, solve_with_status!, NonlinearSolverException
+import SimpleSolvers: config
 import GeometricBase: datatype, timetype, arrtype, equtype, timespan, timestep, parameters,
-                      periodicity, ntime, initialstate, timesteps, integrate, update!
+                      periodicity, ntime, initialstate, timesteps, integrate, update!,
+                      nodes
 import GeometricEquations: initial_conditions, GeometricProblem, GeometricEquation,
                            compute_vectorfields!, problem, equation
 import GeometricIntegratorsBase: GeometricIntegrator, solutionstep, reset!, integrate!,
@@ -50,9 +50,8 @@ export SineGordon
 include("problems/linear_transport.jl")
 export LinearTransport
 
-# quadrature
-include("quadrature/spacetime_quadrature.jl")
-export SpaceTimeQuadrature, boundary_points, nodes, weights, nnodes
+# the weak form of a slab on its tensor quadrature
+include("core/weak_form.jl")
 
 # the ansatz
 include("ansatz/tensor_bspline.jl")
@@ -61,7 +60,6 @@ export TensorBSplineAnsatz, degree, ncells, output_grid, quadrature,
        space_quadrature_nodes
 
 # the slab core
-include("core/weak_form.jl")
 include("core/slab_integrator.jl")
 export SpaceTimeGalerkin, SpaceTimeGalerkinCache, ansatz, coupling, total_free_coefficients
 
@@ -81,7 +79,7 @@ export default_fit
 
 # the integrator shell
 include("core/integrate.jl")
-export integrate, top_trace
+export integrate, top_trace, solve_stats
 
 # the diagnostics
 include("diagnostics.jl")

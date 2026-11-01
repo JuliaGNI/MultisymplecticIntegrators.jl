@@ -13,7 +13,8 @@ const SOURCE = joinpath(@__DIR__, "..", "..", "..", "src")
 """The names of the package's assembly that the action oracle must not use."""
 const FORBIDDEN = [
     "residual!", "density_derivatives!", "interior_weak_form!", "slab_values!",
-    "SlabTabulation", "AxisTabulation", "SlabEvaluation", "trace!", "assign!", "momentum_load!",
+    "SlabTabulation", "AxisTabulation", "PointEvaluation", "top_values!", "slab_field!",
+    "trace!", "assign!", "momentum_load!",
     "flux_load!", "coupling_term!", "boundary_form!", "derivative_u", "derivative_v",
     "derivative_w", "derivatives", "free_index", "scatter!", "multiplier_table", "least_squares",
     "nodal_fit"]

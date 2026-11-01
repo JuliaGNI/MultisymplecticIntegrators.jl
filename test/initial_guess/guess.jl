@@ -95,18 +95,18 @@ end
             SpaceTimeGalerkin(ansatz, CoefficientRestriction();
                 initial_guess = FitTo(PreviousSlab()))))
         field(t̂, x) = (one(T) + t̂ + t̂^2) * x * (one(T) - x)
-        c.coeffs[:, :, 1] .= SimpleSplines.l2_projection(quadrature(ansatz),
+        c.ansatz.coeffs[:, :, 1] .= SimpleSplines.l2_projection(quadrature(ansatz),
             p -> field(p[1], p[2]))
         c.steps = ncells(ansatz)[1]
-        qt = M.nquadrature(c.tabulation.time)
-        qx = M.nquadrature(c.tabulation.space)
+        qt = M.nquadrature(c.ansatz.tabulation.time)
+        qx = M.nquadrature(c.ansatz.tabulation.space)
         sample = Array{T, 3}(undef, qt, qx, 1)
         M.evaluate!(sample, PreviousSlab(), c, ansatz, problem, nothing)
         xq = space_quadrature_nodes(ansatz)
         scale = T(100) * eps(T) * maximum(abs, sample)
         for q in 1:qt, r in 1:qx
 
-            u = one(T) + c.tabulation.time.node[q]
+            u = one(T) + c.ansatz.tabulation.time.node[q]
             @test abs(sample[q, r, 1] - field(u, xq[r])) ≤ scale
         end
     end
@@ -145,53 +145,6 @@ end
         @test galerkin(FitTo(PreviousSlab(); method = Projection())) isa SpaceTimeGalerkin
     end
 
-    @testset "A4e the in-place projection is the allocating one" for T in (Float64, Float32)
-        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (3, 20),
-            xspan = (zero(T), one(T)), n = 3)
-        problem = Wave.problem(T = T, timespan = (zero(T), T(0.25)), timestep = T(0.05),
-            xstep = T(0.05))
-        c = cache(GeometricIntegrator(problem,
-            SpaceTimeGalerkin(ansatz, CoefficientRestriction())))
-        q = quadrature(ansatz)
-        field(p) = (one(T) + p[1]^2) * sin(T(π) * p[2]) + p[1] * p[2]
-        sample = SimpleSplines.quadrature_sample(q, field)
-        expected = SimpleSplines.l2_projection(q, sample)
-        coeffs = similar(expected)
-        SimpleSplines.l2_projection!(coeffs, q, sample, c)
-        @test maximum(abs, coeffs .- expected) ≤ T(16) * eps(T) * maximum(abs, expected)
-    end
-
-    @testset "A4f every guess allocates nothing" for T in (Float64, Float32)
-        # `Pkg.test()` runs the floor under `--check-bounds=yes`, which allocates in the loops, so
-        # the count is asserted under `--check-bounds=auto` only
-        allocations(f::F, a::A, b::B, s::S) where {F, A, B, S} = (
-            f(a, b, s); @allocated f(a, b, s))
-        run!(c, int, sol) = M.initial_guess!(sol, nothing, nothing, int)
-        # the helper sees an allocation, so a zero below is the guess's and not the helper's
-        @test allocations((c, int, sol) -> collect(1:10), nothing, nothing, nothing) > 0
-        guesses = [Continuation(), FitTo(InitialCondition()), FitTo(PreviousSlab()),
-            FitTo(ExactSolution()),
-            FitTo(TargetFunction((t, x, p) -> Wave.exact_u(t, x, p)))]
-        for guess in guesses
-            problem = Wave.problem(
-                T = T, timespan = (zero(T), T(0.25)), timestep = T(0.05),
-                xstep = T(0.05))
-            ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 20),
-                xspan = (zero(T), one(T)), n = 3)
-            int = GeometricIntegrator(problem,
-                SpaceTimeGalerkin(ansatz, CoefficientRestriction(); initial_guess = guess))
-            c = cache(int)
-            sol = (; t = problem.timestep)
-            if Base.JLOptions().check_bounds != 1
-                # the first slab of a run, and every later one
-                @test c.steps == 0
-                @test allocations(run!, c, int, sol) == 0
-                c.steps = 2
-                @test allocations(run!, c, int, sol) == 0
-            end
-        end
-    end
-
     @testset "A4b the two refusals and the element type of a target" begin
         T = Float64
         plain = Wave.problem(T = T, timespan = (zero(T), T(0.1)), timestep = T(0.05),
@@ -210,8 +163,8 @@ end
                 initial_guess = FitTo(ExactSolution())))
         # the projection's refusal names the reason: an ansatz that is not linear in its
         # coefficients. The fit is named, because the fixture's own default fit method is not a
-        # `Projection()`; the fixture also makes the cache refuse its ansatz, so an assertion on the
-        # type alone would pass on the cache's own `ArgumentError`.
+        # `Projection()`. The fixture has no block of the slab cache either, so the assertion names
+        # the message rather than the type alone.
         @test M.fit_method(FitTo(InitialCondition()), NonlinearFixtureAnsatz()) isa
               FixtureFit
         @test M.fit_method(FitTo(InitialCondition()), ansatz) isa Projection
@@ -233,18 +186,21 @@ end
             FitTo(TargetFunction((t, x, p) -> Float64(Wave.exact_u(Float64(t), Float64(x), p))));
             timestep = small(0.05), xstep = small(0.05))
         @test eltype(cache(int).x) === small
-        assert_no_upcast(cache(int).coeffs, small)
+        assert_no_upcast(cache(int).ansatz.coeffs, small)
         assert_no_upcast(result.solution.u, small)
         # a target is evaluated in physical time: the step that ends at `t = 0.1` starts at
         # `t = 0.05`, so the sample of `f(t, x) = t` is `0.05 + 0.05 t̂`
         c = cache(GeometricIntegrator(plain,
             SpaceTimeGalerkin(ansatz, CoefficientRestriction())))
-        qt, qx = M.nquadrature(c.tabulation.time), M.nquadrature(c.tabulation.space)
+        qt, qx = M.nquadrature(c.ansatz.tabulation.time),
+        M.nquadrature(c.ansatz.tabulation.space)
         sample = Array{T, 3}(undef, qt, qx, 1)
-        M.target_values!(sample, (t, x, p) -> t, c.tabulation, ansatz, plain, (t = T(0.1),))
+        M.target_values!(
+            sample, (t, x, p) -> t, c.ansatz.tabulation, ansatz, plain, (t = T(0.1),))
         for q in 1:qt, r in 1:qx
 
-            @test abs(sample[q, r, 1] - (T(0.05) + T(0.05) * c.tabulation.time.node[q])) ≤
+            @test abs(sample[q, r, 1] -
+                      (T(0.05) + T(0.05) * c.ansatz.tabulation.time.node[q])) ≤
                   tolerance(T)
         end
     end
