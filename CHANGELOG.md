@@ -22,8 +22,9 @@ makes it worth keeping.
   `LagrangianDensity` and `SpaceTimeQuadrature`, together with the `SpaceTimeAnsatz`,
   `SlabCoupling` and `SlabInitialGuess` abstract types. A caller of a family that has not returned
   yet works at `294f023`.
-- **`julia = "1.11"` is the floor**, and every dependency has a `[compat]` entry.
-  The floor goes down from 1.12 to 1.11, and CI's `min` job resolves this bound. The dependency
+- **`julia = "1.12"` is the floor**, and every dependency has a `[compat]` entry.
+  The floor stays at 1.12, because every `SimpleSplines` release from 0.3.3 on requires Julia 1.12,
+  and CI's `min` job resolves this bound. The dependency
   list drops `AbstractNeuralNetworks`, `BSplineKit`, `CompactBasisFunctions`, `ForwardDiff`,
   `GeometricMachineLearning`, `IterTools`, `Parameters`, `Plots`, `StaticArrays`,
   `SymbolicNeuralNetworks`, `Zygote`, `Random` and `Statistics`. The package carries no `Plots`
@@ -31,7 +32,7 @@ makes it worth keeping.
   `[weakdeps] Makie` with `[extensions] MultisymplecticIntegratorsPlots = "Makie"`. Every
   `[compat]` entry is a patch-level floor
   (`GeometricBase = "0.15.0"`, `GeometricEquations = "0.21.5"`, `GeometricIntegratorsBase = "0.6.9"`,
-  `GeometricSolutions = "0.6.6"`, `QuadratureRules = "0.2.2"`, `SimpleSplines = "0.3.1"`,
+  `GeometricSolutions = "0.6.6"`, `QuadratureRules = "0.2.2"`, `SimpleSplines = "0.3.4"`,
   `SimpleSolvers = "0.14.1"`, `Symbolics = "7.18.1"`), except `LinearAlgebra = "1"` and `SparseArrays = "1"`,
   which name the major. `SimpleSplines` requires `DomainSets = "0.8"`, which `Symbolics` accepts only from `7.18.1`,
   so the `Symbolics` floor is that patch rather than the major.
@@ -137,7 +138,7 @@ makes it worth keeping.
   `L(u, v, w, params)` and a `derivatives` method — not a
   `LagrangianDensity` alone, so the density built by `VectorWave.vector_density`, which couples the
   components, reaches a problem; the problem's parameters default to the density's own `params`
-  field where it has one. `Project.toml` gains `SimpleSplines` (compat `0.3.1`), `SimpleSolvers`
+  field where it has one. `Project.toml` gains `SimpleSplines` (compat `0.3.4`), `SimpleSolvers`
   (compat `0.14.1`), `LinearAlgebra` and `SparseArrays` (compat `1`). Three new test files — the tensor B-spline
   ansatz, the coefficient restriction and the initial guess — join the `core` group, with
   `test/helpers/fem_stencil.jl`, an independent FEM stencil oracle for the assembly. The §A
@@ -256,6 +257,22 @@ makes it worth keeping.
 - **The old `scripts/` are deleted (K6).** The drivers of the removed families stay reachable at
   `294f023`. `run_network.jl` and `run_symbolic.jl` ship with an empty registry and say so, naming
   the ansatz that their entries come with, rather than carrying a constructor that does not exist.
+- **A property suite over seeded generated problems** checks the slab core against an oracle that
+  shares none of its code. `test/helpers/problem_generator.jl` draws 24 problems from a keyword
+  RNG alone: `D = 1` and `D = 2`, potentials of degree 2, 3 and 4 with random coefficients, the
+  rotation-invariant vector density, random wave speeds, timesteps, spans, start times, degrees,
+  cell counts and Gauss counts, Noether problems and problems symmetric under `x ↦ a + b − x`.
+  `test/helpers/action_oracle.jl` builds the discrete slab action from the density, the data
+  functions and SimpleSplines' evaluation of the ansatz, with each coupling's terms and datums, and
+  differentiates it with ForwardDiff. Six files under `test/verification/properties/`, in the group
+  `slow`, assert in `Float64` and `Float32` the generator's controls and the oracle's independence,
+  and under all three couplings: that `residual!` is the gradient of the action on the first and the
+  second slab; that the solver's Jacobian equals central differences; that a linear density
+  converges in at most two Newton iterations; that the rotation charge of a Noether problem is
+  conserved; and that symmetric data give a symmetric top row and symmetric multipliers. The test
+  environment adds `ForwardDiff`, `Random` and `SimpleSolvers`, and the `SimpleSplines` bound is
+  `0.3.4`, the release whose mesh ends at `b` exactly and whose Greville nodes stay inside the span.
+  This closes the known issue K18, whose fix had already landed.
 
 ### Changed
 
