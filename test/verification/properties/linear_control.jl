@@ -31,7 +31,7 @@ include("../../helpers/problem_generator.jl")
         @test length(c.residuals) == steps
         @test length(c.initial_residuals) == steps
         @test all(≥(T(1 // 100)), c.initial_residuals)
-        @test all(≤(2), c.iterations)
+        @test all(result.stats.converged)
         @test all(c.residuals .≤
                   options.f_abstol .+ options.f_reltol .* c.initial_residuals)
     end

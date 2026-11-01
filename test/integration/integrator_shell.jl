@@ -5,8 +5,8 @@ using MultisymplecticIntegrators
 using SimpleSolvers
 using Test
 
-import GeometricIntegratorsBase: Cache, CacheType, IntegratorCache, integrate_step!, method,
-                                 solutionstep, solver
+import GeometricIntegratorsBase: Cache, CacheType, IntegratorCache, cache, integrate_step!,
+                                 method, solutionstep, solver
 
 include("../helpers/testsetup.jl")
 
@@ -14,8 +14,8 @@ include("../helpers/testsetup.jl")
 # exercise the shell — the solution the integrator builds, and the trace it stores beside it. Its
 # cache holds the trace at `n` points of the space interval, as a method's cache holds it at the
 # nodes of a space quadrature. Each step adds one to `u`, so the solution at step `n` is the initial
-# data plus `n`, and the step `nan_at` writes a NaN into the state. Its record of a step is that of a
-# solve that converged at once.
+# data plus `n`, and the step `nan_at` writes a NaN into the state. It solves nothing, so it keeps
+# no record of a solve.
 struct FixtureMethod{T} <: SpaceTimeMethod
     nodes::Vector{T}
     nan_at::Int
@@ -30,12 +30,6 @@ struct FixtureCache{DT} <: IntegratorCache{DT}
     v::Vector{DT}
     w::Vector{DT}
     steps::Base.RefValue{Int}
-end
-
-function MultisymplecticIntegrators.solve_stats(c::FixtureCache{DT}) where {DT}
-    n = c.steps[]
-    return (; iterations = zeros(Int, n), residuals = zeros(DT, n),
-        initial_residuals = zeros(DT, n), converged = fill(true, n))
 end
 
 function Cache{ST}(problem::LagrangianPDEProblem, method::FixtureMethod; kwargs...) where {ST}
@@ -72,8 +66,9 @@ end
 
     @testset "the named tuple of the shell" begin
         @test keys(result) == (:solution, :traces, :stats)
-        @test keys(result.stats) ==
-              (:iterations, :residuals, :initial_residuals, :converged)
+        # a method whose cache keeps no record of a solve has no stats
+        @test solve_stats(cache(GeometricIntegrator(problem, method))) === nothing
+        @test result.stats === nothing
         @test result.solution isa GeometricSolution
         @test datatype(result.solution) === Float64
     end
@@ -117,18 +112,20 @@ end
         failing = FixtureMethod((-0.5, 0.0); n = 2, nan_at = 2)
         stopped = @test_logs (:warn, r"NaN at timestep n=2") integrate(problem, failing)
         @test length(stopped.traces) == 2
-        @test all(entries -> length(entries) == 2, values(stopped.stats))
+        @test stopped.stats === nothing
         @test isnan(stopped.solution.u[2][1])
         @test stopped.solution.u[1] ≈ problem.ics.u .+ 1
     end
 
-    @testset "a failed nonlinear solve stops the run" begin
+    @testset "a failed nonlinear solve stops the run, $T" for T in (Float64, Float32)
         # The guess is finite on the first slab and NaN on the second, so the second Newton solve
         # meets a non-finite direction and raises `NonlinearSolverException`.
-        short = Wave.problem(timespan = (0.0, 0.15), timestep = 0.05, xstep = 0.05)
-        guess = FitTo(TargetFunction((t, x, p) -> t > 0.05 ? NaN : Wave.exact_u(t, x, p)))
+        short = Wave.problem(T = T, timespan = (zero(T), T(0.15)), timestep = T(0.05),
+            xstep = T(0.05))
+        guess = FitTo(TargetFunction((t, x, p) -> t > T(0.05) ? T(NaN) :
+                                                  Wave.exact_u(t, x, p)))
         slab = SpaceTimeGalerkin(
-            TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (0.0, 1.0), n = 3);
+            TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (zero(T), one(T)), n = 3);
             initial_guess = guess)
         stopped = @test_logs (:warn, r"nonlinear solver failed at timestep n=2") integrate(
             short, slab)
@@ -142,26 +139,29 @@ end
     @testset "R1a a step that does not converge, $T" for T in (Float64, Float32)
         # One Newton iteration on the nonlinear sine-Gordon density leaves a residual of about
         # `3e-5` of the initial one, which the relative tolerance `100 eps(T)` does not accept.
-        short = SineGordon.problem(T = T, timespan = (zero(T), T(0.1)), timestep = T(0.05),
+        short = SineGordon.problem(
+            T = T, timespan = (zero(T), T(0.15)), timestep = T(0.05),
             xstep = T(0.05))
         slab = SpaceTimeGalerkin(TensorBSplineAnsatz(degree = 2, ncells = (2, 20),
             xspan = (zero(T), one(T)), n = 3))
         options = (max_iterations = 1, f_reltol = 100 * eps(T))
         warned = @test_logs (
             :warn, r"^The nonlinear solve did not converge at timestep n=1: ") (
-            :warn, r"^The nonlinear solve did not converge at timestep n=2: ") integrate(
+            :warn, r"^The nonlinear solve did not converge at timestep n=2: ") (
+            :warn, r"^The nonlinear solve did not converge at timestep n=3: ") integrate(
             short, slab; options...)
-        @test warned.stats.converged == [false, false]
-        @test warned.stats.iterations == [1, 1]
+        @test warned.stats.converged == [false, false, false]
+        @test warned.stats.iterations == [1, 1, 1]
         @test all(r -> r > zero(T), warned.stats.residuals)
         @test eltype(warned.stats.residuals) === T
         @test eltype(warned.stats.initial_residuals) === T
         # `:warn` is the default, and names the step as the default does
         explicit = @test_logs (
             :warn, r"^The nonlinear solve did not converge at timestep n=1: ") (
-            :warn, r"^The nonlinear solve did not converge at timestep n=2: ") integrate(
+            :warn, r"^The nonlinear solve did not converge at timestep n=2: ") (
+            :warn, r"^The nonlinear solve did not converge at timestep n=3: ") integrate(
             short, slab; on_failure = :warn, options...)
-        @test explicit.stats.converged == [false, false]
+        @test explicit.stats.converged == [false, false, false]
         # `:error` throws at the first step that does not converge, and names it
         @test_throws r"^The nonlinear solve did not converge at timestep n=1: " integrate(
             short, slab; on_failure = :error, options...)
@@ -169,8 +169,28 @@ end
             GeometricIntegrator(short, slab; options...); on_failure = :error)
         # a run that converges warns of nothing, under either policy
         converged = @test_logs integrate(short, slab; on_failure = :error)
-        @test converged.stats.converged == [true, true]
+        @test converged.stats.converged == [true, true, true]
         @test all(≥(2), converged.stats.iterations)
+    end
+
+    @testset "R1d the stats belong to the run, $T" for T in (Float64, Float32)
+        short = SineGordon.problem(
+            T = T, timespan = (zero(T), T(0.15)), timestep = T(0.05),
+            xstep = T(0.05))
+        slab = SpaceTimeGalerkin(TensorBSplineAnsatz(degree = 2, ncells = (2, 20),
+            xspan = (zero(T), one(T)), n = 3))
+        int = GeometricIntegrator(short, slab)
+        first = integrate(int)
+        kept = deepcopy(first.stats)
+        # the cache's record is emptied and filled again by every run, so the stats hold copies
+        c = cache(int)
+        for entries in values(first.stats), name in fieldnames(typeof(c))
+
+            @test getfield(c, name) !== entries
+        end
+        second = integrate(int)
+        @test first.stats == kept
+        @test second.stats == kept
     end
 
     @testset "R1b the per-step rule reads the integrator's own tolerances, $T" for T in (

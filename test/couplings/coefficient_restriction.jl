@@ -54,7 +54,7 @@ end
 
 The discrete momentum of every step, `J_h = Σⱼ (q¹ⱼ p²ⱼ − q²ⱼ p¹ⱼ)` over the top coefficient row
 `q` and the top row `p` of the slab's weak form, which is the momentum the coupling carries out;
-and the Newton iteration count of the step beside it.
+and the Newton iteration count of the step and whether the step converged beside it.
 
 The steps are driven one at a time, because the momentum of a step exists only while its cache does.
 """
@@ -66,6 +66,7 @@ function slab_momentum(problem, method)
     solstep = solutionstep(int, solution[0])
     momenta = T[]
     iterations = Int[]
+    converged = Bool[]
     for n in 1:ntime(solution)
         reset!(solstep, timesteps(solution)[n])
         integrate!(solstep, int)
@@ -74,8 +75,9 @@ function slab_momentum(problem, method)
                 c.ansatz.top[j, 2] * c.coupling.flux[j, 1]
             for j in axes(c.ansatz.top, 1)))
         push!(iterations, c.iterations[end])
+        push!(converged, c.converged[end])
     end
-    return momenta, iterations
+    return momenta, iterations, converged
 end
 
 @testset "Coefficient restriction" begin
@@ -211,9 +213,11 @@ end
         # β ≠ 0: the quartic term couples the components, and the discrete momentum is conserved
         coupled = vector_density_problem(T; β = T(0.5), timespan = (zero(T), T(2.5)),
             timestep = T(0.05), xstep = T(0.05))
-        momenta, iterations = slab_momentum(coupled,
+        momenta, iterations, converged = slab_momentum(coupled,
             SpaceTimeGalerkin(ansatz, CoefficientRestriction()))
         @test length(momenta) == 50
+        # the spline family must converge at every step, under its integrator's own tolerances
+        @test all(converged)
         @test maximum(abs.(momenta .- momenta[1])) ≤
               T(100) * newton_tolerance(T, SOLVER_OPTIONS)
         @test maximum(iterations) > 1

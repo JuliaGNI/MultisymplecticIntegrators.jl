@@ -374,6 +374,7 @@ end
         for basis in (:bspline, :lagrange)
             coupling = WeakInitialAndBoundaryConditions(multiplier_basis = basis)
             c = cache(GeometricIntegrator(problem, SpaceTimeGalerkin(ansatz, coupling)))
+            @test M.coupling(c.coupling) === coupling
             @test size(c.coupling.initial_multiplier, 1) == nλ
             @test size(c.coupling.boundary_basis, 1) == nμ
             @test length(c.coupling.initial_multiplier) +
@@ -388,6 +389,14 @@ end
         # the coupling that imposes the initial condition alone keeps the whole space basis
         @test M.space_multiplier_indices(WeakInitialCondition(), wave_ansatz(T)) ==
               collect(1:M.nspace_functions(wave_ansatz(T)))
+        # and its block, built through the seam, holds that basis and no boundary multiplier
+        initial = WeakInitialCondition()
+        c = cache(GeometricIntegrator(problem, SpaceTimeGalerkin(wave_ansatz(T), initial)))
+        @test M.coupling(c.coupling) === initial
+        @test size(c.coupling.initial_multiplier, 1) == M.nspace_functions(wave_ansatz(T))
+        @test isempty(c.coupling.boundary_multiplier)
+        @test length(c.coupling.initial_multiplier) ==
+              M.nspace_functions(wave_ansatz(T)) * components(problem)
         # the multiplier set is fixed: the coupling takes no stride
         @test_throws MethodError WeakInitialAndBoundaryConditions(stride = 2)
         @test_throws ArgumentError WeakInitialCondition(multiplier_basis = :BSplineDirichlet)
@@ -482,6 +491,8 @@ end
         @test maximum(abs.(momenta .- momenta[1])) ≤ reference_tolerance(T)
         int = GeometricIntegrator(problem, method)
         result = integrate(int)
+        # the spline family must converge at every step, under its integrator's own tolerances
+        @test all(result.stats.converged)
         assert_no_upcast(result.solution.u, T)
         c = cache(int)
         @test c.coupling.top_multiplier[:, 1] != c.coupling.top_multiplier[:, 2]

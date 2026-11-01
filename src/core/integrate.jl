@@ -14,10 +14,10 @@ top_trace(::Any) = nothing
 The records of the nonlinear solves of the steps taken since the last `reset!` of the cache, as the
 named tuple `(; iterations, residuals, initial_residuals, converged)`, one entry per step.
 
-[`integrate`](@ref) reads it after every step. A method extends it for its cache; there is no
-default.
+[`integrate`](@ref) reads it after every step. A method whose cache keeps no record returns
+`nothing`, which is the default. A method that keeps one extends this function for its cache.
 """
-function solve_stats end
+solve_stats(::Any) = nothing
 
 # The two values of the keyword `on_failure` of `integrate`.
 function check_on_failure(on_failure)
@@ -40,7 +40,8 @@ the accuracy of the Gauss rule.
 
 `stats` is the named tuple `(; iterations, residuals, initial_residuals, converged)` of the
 nonlinear solves, with one entry per stored trace, as the method's [`solve_stats`](@ref) records
-them. A step has converged when its residual is at most `f_abstol + f_reltol · r₀`, with `r₀` its
+them, or `nothing` where the method keeps no record; `on_failure` then has nothing to act on. A
+step has converged when its residual is at most `f_abstol + f_reltol · r₀`, with `r₀` its
 initial residual and the tolerances of the integrator's own solver options. A step that has not
 converged warns with `on_failure = :warn`, the default, and throws an `ErrorException` with
 `on_failure = :error`; both name the step. Any other value of `on_failure` throws an
@@ -90,7 +91,7 @@ function integrate(
         copy!(solution, current(solstep), n)
         push!(traces, deepcopy(top_trace(c)))
         record = solve_stats(c)
-        if !record.converged[n]
+        if record !== nothing && !record.converged[n]
             message = "The nonlinear solve did not converge at timestep n=$(n): residual " *
                       "$(record.residuals[n]) after $(record.iterations[n]) iterations, from " *
                       "an initial residual of $(record.initial_residuals[n])."
@@ -102,6 +103,7 @@ function integrate(
             break
         end
     end
-    stats = map(entries -> entries[1:length(traces)], solve_stats(c))
+    record = solve_stats(c)
+    stats = record === nothing ? nothing : map(entries -> entries[1:length(traces)], record)
     return (; solution, traces, stats)
 end
