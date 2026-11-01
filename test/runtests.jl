@@ -21,4 +21,10 @@ end
 
 if "slow" in GROUPS
     @safetestset "Weak multipliers" include("couplings/weak_multipliers.jl")
+    @safetestset "Property: generated problems" include("verification/properties/generator.jl")
+    @safetestset "Property: gradient" include("verification/properties/gradient.jl")
+    @safetestset "Property: Jacobian" include("verification/properties/jacobian.jl")
+    @safetestset "Property: linear control" include("verification/properties/linear_control.jl")
+    @safetestset "Property: Noether charge" include("verification/properties/noether.jl")
+    @safetestset "Property: symmetry" include("verification/properties/symmetry.jl")
 end
