@@ -318,5 +318,10 @@ makes it worth keeping.
   release that the resolve of the merged environment reaches. It adds `SafeTestsets = "0.1"`, so
   that every test dependency outside the standard library has a bound; 0.1.0 is again the lowest
   release that the merged resolve reaches.
+- **`SimpleSplines` 0.3.5 is the floor**, from 0.3.4. With FFTA 0.3.2 or later loaded beside
+  FFTW, as CairoMakie loads it, SimpleSplines 0.3.4 builds the periodic mass solver through
+  FFTA's `plan_rfft`, which takes no `flags` keyword. The ansatz with a `Periodic()` boundary then
+  raises a `MethodError`, and a weak-multiplier coupling no longer refuses it with an
+  `ArgumentError`. SimpleSplines 0.3.5 calls FFTW's method by `invoke`.
 - **Repository hygiene.** `figures/` (13 files that nothing referenced), the tracked `.DS_Store`
   files and `rename_error.jl` are deleted.
