@@ -312,5 +312,11 @@ makes it worth keeping.
 
 - **CI coverage and cache.** CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of
   `Julia min`, and a test job saves the Julia cache only when it succeeds.
+- **Test floors for the merged downgrade check.** CI's Downgrade job resolves `Project.toml` and
+  `test/Project.toml` together at their lower bounds and requires each bound to be the version it
+  resolves to. `test/Project.toml` raises `ForwardDiff` from `0.10` to `0.10.36, 1`, the lowest
+  release that the resolve of the merged environment reaches. It adds `SafeTestsets = "0.1"`, so
+  that every test dependency outside the standard library has a bound; 0.1.0 is again the lowest
+  release that the merged resolve reaches.
 - **Repository hygiene.** `figures/` (13 files that nothing referenced), the tracked `.DS_Store`
   files and `rename_error.jl` are deleted.
