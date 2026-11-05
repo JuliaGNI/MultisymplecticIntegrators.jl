@@ -151,12 +151,13 @@ function basis_load!(load::AbstractVector{ST}, coeffs::AbstractMatrix{ST},
 end
 function add_tensor_load!(b::AbstractVector{ST}, tvec::AbstractVector{ST},
         xvec::AbstractVector{ST}, nf::Integer, nx::Integer, d::Integer, sgn::ST) where {ST}
+    # No short circuit on a zero entry: for some element types `==` compares the primal part
+    # only, as ForwardDiff's `Dual` before 1.0 does, and a skipped entry loses its derivative.
+    # Either vector is a load of the slab, so either can carry one.
     for a in 1:nf
         s = sgn * tvec[a]
-        s == zero(ST) && continue
         for j in 1:nx
-            v = xvec[j]
-            v == zero(ST) || (b[free_index(a, j, d, nf, nx)] += s * v)
+            b[free_index(a, j, d, nf, nx)] += s * xvec[j]
         end
     end
     return nothing

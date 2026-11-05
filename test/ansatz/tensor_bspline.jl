@@ -291,13 +291,14 @@ end
                 end
             end
             # D = 3 unrolled branches in density_derivatives!, momentum_load! and flux_load!
+            vw3_density = VectorWave.vector_density(; params = params, D = 3, β = 0.5)
             u3, v3, w3 = ones(T, 2, 2, 3), ones(T, 2, 2, 3), ones(T, 2, 2, 3)
             du3, dv3, dw3 = zeros(T, 2, 2, 3), zeros(T, 2, 2, 3), zeros(T, 2, 2, 3)
             u2, v2, w2 = ones(T, 4, 3), ones(T, 4, 3), ones(T, 4, 3)
             ml3, fl3 = zeros(T, 4, 3), zeros(T, 4, 3)
-            dd3(a) = M.density_derivatives!(du3, dv3, dw3, vw_nl_density, a, v3, w3, params)
-            ml_fn(a) = M.momentum_load!(ml3, vw_nl_density, a, v2, w2, params)
-            fl_fn(a) = M.flux_load!(fl3, vw_nl_density, a, v2, w2, params)
+            dd3(a) = M.density_derivatives!(du3, dv3, dw3, vw3_density, a, v3, w3, params)
+            ml_fn(a) = M.momentum_load!(ml3, vw3_density, a, v2, w2, params)
+            fl_fn(a) = M.flux_load!(fl3, vw3_density, a, v2, w2, params)
             if Base.JLOptions().check_bounds != 1
                 @test allocations(dd3, u3) == 0
                 @test allocations(ml_fn, u2) == 0
