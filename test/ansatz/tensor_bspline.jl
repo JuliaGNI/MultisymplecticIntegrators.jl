@@ -360,20 +360,23 @@ end
                     @test M.factorisations(int_lin) == 1
                     @test res_lin_2.solution.u == res_lin.solution.u
                 end
+                res_nl_0 = integrate(
+                    prob1, SpaceTimeGalerkin(ansatz, coupling; linear_solver = false))
+                res_lin_0 = integrate(
+                    prob1, SpaceTimeGalerkin(ansatz, coupling; linear_solver = true))
                 for cval in (zero(T), T(1e4))
                     ig = FitTo(TargetFunction((t, x, p) -> cval))
                     @test SpaceTimeGalerkin(
                         ansatz, coupling, ig; linear_solver = true).linear_solver === true
                     @test SpaceTimeGalerkin(ansatz, coupling;
                         initial_guess = ig, linear_solver = true).linear_solver === true
-                    res_nl_ig = integrate(
-                        prob1, SpaceTimeGalerkin(ansatz, coupling, ig; linear_solver = false))
                     res_lin_ig = integrate(
                         prob1, SpaceTimeGalerkin(ansatz, coupling, ig; linear_solver = true))
+                    @test res_lin_ig.solution.u == res_lin_0.solution.u
                     for n in 1:5
-                        scale = max(one(T), maximum(abs, res_nl_ig.solution.u[n]))
+                        scale = max(one(T), maximum(abs, res_nl_0.solution.u[n]))
                         @test maximum(
-                            abs.(res_lin_ig.solution.u[n] .- res_nl_ig.solution.u[n])) ≤
+                            abs.(res_lin_ig.solution.u[n] .- res_nl_0.solution.u[n])) ≤
                               T(100) * eps(T) * scale
                     end
                 end
