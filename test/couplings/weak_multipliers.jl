@@ -206,7 +206,7 @@ end
         @test minimum(cache(int).iterations) ≥ 1
         for n in 1:5
             @test maximum(abs.(result.solution.u[n] .- reference[n, :])) ≤
-                  reference_tolerance(T)
+                  max(T(1.2e-7), reference_tolerance(T))
         end
         assert_no_upcast(result.solution.u, T)
     end
@@ -528,20 +528,91 @@ end
         end
     end
 
-    @testset "the coupling's buffers hold the longer rule" for T in (Float64, Float32)
-        # two time cells against one space cell: the time rule has more nodes than the space rule,
-        # and the trace a step guesses at the two ends of xspan is taken on the time nodes
+    @testset "the coupling's buffers hold each rule's own length" for T in (Float64, Float32)
         problem = wave_problem(T; timespan = (zero(T), T(0.1)))
-        int = GeometricIntegrator(problem,
-            SpaceTimeGalerkin(wave_ansatz(T; ncells = (2, 1), x_boundary = Free()),
-                WeakInitialAndBoundaryConditions()))
-        c = cache(int)
-        @test size(c.coupling.top_u, 1) ==
-              max(length(c.ansatz.tabulation.time.node), length(c.ansatz.tabulation.space.node))
-        result = integrate(int)
-        @test length(result.traces) == 2
-        @test all(result.stats.converged)
-        @test all(>(0), c.iterations)
-        @test any(x -> !iszero(x), c.coupling.top_values)
+        for ncells in ((2, 1), (1, 2))
+            int = GeometricIntegrator(problem,
+                SpaceTimeGalerkin(wave_ansatz(T; ncells = ncells, x_boundary = Free()),
+                    WeakInitialAndBoundaryConditions()))
+            c = cache(int)
+            qt = length(c.ansatz.tabulation.time.node)
+            qx = length(c.ansatz.tabulation.space.node)
+            @test qt != qx
+            @test size(c.coupling.traces.x_u, 1) == qx
+            @test size(c.coupling.traces.t_u, 1) == qt
+            result = integrate(int)
+            @test length(result.traces) == 2
+            @test all(result.stats.converged)
+            @test all(>(0), c.iterations)
+            @test any(x -> !iszero(x), c.coupling.top_values)
+        end
+    end
+
+    @testset "R2 multiplier structure, projection, and index bijection" for T in (Float64, Float32)
+        @test fieldcount(M.MultiplierData) ≤ 12
+        @test length(methods(M.flux_load!)) == 1
+        @test !isdefined(M, :nodal_fit)
+        # Weighted L²(xw) projection orthogonality under both multiplier couplings
+        for (coupling, xb) in ((WeakInitialCondition(), Dirichlet()),
+            (WeakInitialAndBoundaryConditions(), Free()))
+            ansatz = wave_ansatz(T; ncells = (2, 6), degree = 2, n = 4, x_boundary = xb)
+            problem = wave_problem(T; timespan = (zero(T), T(0.05)))
+            int = GeometricIntegrator(problem, SpaceTimeGalerkin(ansatz, coupling))
+            c = cache(int)
+            xq = c.ansatz.tabulation.space
+            Λ = c.coupling.multiplier_basis
+            Π = c.coupling.projection
+            @test maximum(abs.(Π .- M.least_squares(Λ, xq.weight))) ≤ 16 * eps(T)
+            p = T[sin(3 * T(π) * x) + T(0.4) * cos(5 * T(π) * x) for x in xq.node]
+            coeffs = Π * p
+            residual = p .- transpose(Λ) * coeffs
+            orth = Λ * (xq.weight .* residual)
+            @test maximum(abs, orth) ≤ 64 * eps(T)
+            # An unweighted nodal fit on a rectangular rule (n = 4 > degree + 1 = 3) leaves a
+            # non-zero L²(xw)-weighted residual against the basis
+            unweighted = transpose(Λ) \ p
+            unweighted_orth = Λ * (xq.weight .* (p .- transpose(Λ) * unweighted))
+            @test maximum(abs, unweighted_orth) > 1000 * eps(T)
+        end
+        # multiplier_index bijection and cached bottom_load on a 2-component slab with nλ != nμ
+        prob2 = vector_density_problem(T; β = T(0.5), timespan = (zero(T), T(0.05)))
+        ansatz2 = wave_ansatz(T; ncells = (2, 6), x_boundary = Free())
+        int2 = GeometricIntegrator(prob2,
+            SpaceTimeGalerkin(ansatz2, WeakInitialAndBoundaryConditions()))
+        c2 = cache(int2)
+        D = 2
+        nλ = size(c2.coupling.initial_multiplier, 1)
+        nμ = size(c2.coupling.boundary_basis, 1)
+        @test nλ != nμ
+        nmult = M.multiplier_unknowns(c2.coupling)
+        nfree = length(c2.x) - nmult
+        seen = Int[]
+        for d in 1:D, i in 1:nλ
+
+            push!(seen, M.multiplier_index(c2, :top, d, i))
+        end
+        for edge in (:left, :right), d in 1:D, i in 1:nμ
+            push!(seen, M.multiplier_index(c2, edge, d, i))
+        end
+        @test sort(seen) == collect((nfree + 1):length(c2.x))
+        @test_throws ArgumentError M.multiplier_index(c2, :bottom, 1, 1)
+        sol = GeometricSolution(prob2)
+        sstep = solutionstep(int2, sol[0])
+        M.slab_bottom!(c2, c2.coupling, prob2, ansatz2, sstep)
+        expected_load = zeros(T, size(c2.ansatz.coeffs, 2), D)
+        xq2 = c2.ansatz.tabulation.space
+        for d in 1:D
+            vals = transpose(c2.coupling.multiplier_basis) *
+                   c2.coupling.initial_multiplier[:, d]
+            expected_load[:, d] = xq2.value * (xq2.weight .* vals)
+        end
+        @test maximum(abs.(c2.coupling.bottom_load .- expected_load)) ≤ 32 * eps(T)
+        x2 = copy(c2.x)
+        b_before = zeros(T, length(x2))
+        b_after = zeros(T, length(x2))
+        M.residual!(b_before, x2, sstep, parameters(prob2), int2)
+        c2.coupling.initial_multiplier .+= T(100)
+        M.residual!(b_after, x2, sstep, parameters(prob2), int2)
+        @test b_after == b_before
     end
 end

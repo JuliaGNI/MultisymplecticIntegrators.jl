@@ -185,19 +185,33 @@ components, minus the quartic coupling `¼β|u|⁴`. The scalar `density` carrie
 that the whole is invariant under a rotation of `(u, v, w)`. `u`, `v` and `w` are vectors of the
 `D` components' values at one point.
 """
-struct VectorDensity{DT, BT}
+struct VectorDensity{DT, BT, D}
     density::DT
     D::Int
     β::BT
 end
 
+function VectorDensity(density::DT, D::Integer, β::BT) where {DT, BT}
+    d = Int(D)
+    return VectorDensity{DT, BT, d}(density, d, β)
+end
+
+function VectorDensity{DT, BT}(density::DT, D::Integer, β::BT) where {DT, BT}
+    VectorDensity(density, D, β)
+end
+
 VectorDensity(density; D::Integer = 2, β = 0.0) = VectorDensity(density, Int(D), β)
 
-function (density::VectorDensity)(u, v, w, params)
-    length(u) == density.D ||
-        throw(ArgumentError("expected $(density.D) components, got $(length(u))"))
-    r² = sum(abs2, u)
-    return sum(density.density(u[i], v[i], w[i], params) for i in eachindex(u)) -
+function MultisymplecticIntegrators.is_linear_density(density::VectorDensity)
+    iszero(density.β) &&
+        MultisymplecticIntegrators.is_linear_density(density.density)
+end
+
+function (density::VectorDensity{DT, BT, D})(u, v, w, params) where {DT, BT, D}
+    length(u) == D ||
+        throw(ArgumentError("expected $(D) components, got $(length(u))"))
+    r² = sum(i -> abs2(u[i]), 1:D)
+    return sum(i -> density.density(u[i], v[i], w[i], params), 1:D) -
            oftype(r², density.β) * r²^2 / 4
 end
 
@@ -205,14 +219,22 @@ end
 The derivatives of a vector density, component by component: those of the scalar density, and
 `−β|u|²uᵢ` from the quartic coupling in `∂L/∂uᵢ`.
 """
-function derivatives(density::VectorDensity, u, v, w, params)
-    length(u) == density.D ||
-        throw(ArgumentError("expected $(density.D) components, got $(length(u))"))
-    r² = sum(abs2, u)
+function derivatives(density::VectorDensity{DT, BT, D}, u, v, w, params) where {DT, BT, D}
+    length(u) == D ||
+        throw(ArgumentError("expected $(D) components, got $(length(u))"))
+    r² = sum(i -> abs2(u[i]), 1:D)
     β = oftype(r², density.β)
-    each = [derivatives(density.density, u[i], v[i], w[i], params) for i in eachindex(u)]
-    return (u = [d.u - β * r² * uᵢ for (d, uᵢ) in zip(each, u)], v = [d.v for d in each],
-        w = [d.w for d in each])
+    T = typeof(r²)
+    return (
+        u = ntuple(
+            i -> T(derivative_u(density.density, u[i], v[i], w[i], params) - β * r² * u[i]),
+            Val(D)),
+        v = ntuple(
+            i -> T(derivative_v(density.density, u[i], v[i], w[i], params)),
+            Val(D)),
+        w = ntuple(
+            i -> T(derivative_w(density.density, u[i], v[i], w[i], params)),
+            Val(D)))
 end
 
 """

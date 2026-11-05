@@ -79,6 +79,11 @@ function integrate(
     sample = top_trace(c)
     traces = sizehint!(Vector{typeof(sample)}(), steps)
     solstep = solutionstep(integrator, solution[0])
+    return integrate_steps!(solution, solstep, traces, integrator, c, on_failure)
+end
+
+function integrate_steps!(solution, solstep, traces, integrator, c, on_failure)
+    steps = ntime(solution)
     for n in 1:steps
         reset!(solstep, timesteps(solution)[n])
         try

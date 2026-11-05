@@ -47,19 +47,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
-### K19 · The coupled density's derivatives allocate at every quadrature point.
-
-- location: `src/problems/wave.jl`
-- evidence: `derivatives(::VectorWave.VectorDensity, …)` builds three heap vectors and an array of
-  named tuples per point, so the slab core's `residual!` on a `D = 2` problem allocates 184 320 B
-  per call — 360 quadrature points at 512 B each — where the scalar path allocates 0. Measured by
-  the slab core's pre-pull-request verification pass as the minimum of `@allocated` over 20 warm
-  calls in a fresh process under `--check-bounds=auto`; `derivatives(vd, u, v, w, params)` alone
-  allocates 1056 B and is unchanged when given `view` arguments. No clause of the part binds this
-  path, and the fix belongs in `src/problems/wave.jl`.
-- kind: defect
-- found: 2026-10-27
-
 ### K20 · `output_grid` is exported and tested, and nothing in `src` calls it.
 
 - location: `src/ansatz/tensor_bspline.jl`
@@ -121,20 +108,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `(-0.2907370896924628, 0.9623679443952706)` with `m = 9`, `Wave.problem` throws
   `ArgumentError: xstep 0.13923389267641484 does not reach the end of xspan (…): the grid stops at 0.8231340517188559`.
   The property suite's generator lowers `xstep` with `prevfloat` until the range reaches `b`.
-- kind: defect
-- found: 2026-11-01
-
-### K30 · The step loop of `integrate` dispatches dynamically, because `GeometricSolution(problem)` does not infer a concrete type.
-
-- location: `src/core/integrate.jl:77`
-- evidence: on a `Wave` problem (`Float64`), `Base.return_types(GeometricSolution, (typeof(p),))`
-  gives a `UnionAll` (`TimeSeries{Float64, _A, …}`, `NamedTuple{names, T}`, `_A1 <: OffsetVector`).
-  In `code_warntype` of the keyword body of `integrate`, `steps::Any` and `n::Any`, and `solution`
-  and `solstep` are not concrete. So `reset!`, `integrate!`, `copy!` and the per-step convergence
-  check (`solve_stats`, `on_failure`) dispatch at run time. `record`, `traces`, `c` and the `stats`
-  of the result are concrete. `residual!`, `update!`, `integrate_step!` and the seam functions have
-  no dynamic call (`code_typed`). One dispatch per step costs little next to one Newton solve. A
-  function barrier around the step loop fixes the loop and the convergence check together.
 - kind: defect
 - found: 2026-11-01
 

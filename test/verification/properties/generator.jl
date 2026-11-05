@@ -16,8 +16,7 @@ const FORBIDDEN = [
     "SlabTabulation", "AxisTabulation", "PointEvaluation", "top_values!", "slab_field!",
     "trace!", "assign!", "momentum_load!",
     "flux_load!", "coupling_term!", "boundary_form!", "derivative_u", "derivative_v",
-    "derivative_w", "derivatives", "free_index", "scatter!", "multiplier_table", "least_squares",
-    "nodal_fit"]
+    "derivative_w", "derivatives", "free_index", "scatter!", "multiplier_table", "least_squares"]
 
 """
 A use of `name`: a call `name(` with no identifier character or `.` before it, or a qualified

@@ -12,6 +12,12 @@ include("../helpers/reference_values.jl")
 
 const M = MultisymplecticIntegrators
 
+struct DummyNonlinearAnsatz{T} <: SpaceTimeAnsatz
+    xspan::Tuple{T, T}
+end
+Base.eltype(::DummyNonlinearAnsatz{T}) where {T} = T
+M.xspan(a::DummyNonlinearAnsatz) = a.xspan
+
 function wave_run(::Type{T}; degree = 2, ncells = (2, 20), n = 3, timestep = T(0.05),
         xstep = T(0.05), timespan = (zero(T), T(0.25)), guess = Continuation()) where {T}
     problem = Wave.problem(T = T, timespan = timespan, timestep = timestep, xstep = xstep)
@@ -252,5 +258,152 @@ end
         grid = collect(xgrid(problem))
         exact = [Wave.exact_u(T(0.25), x) for x in grid]
         @test maximum(abs.(result.solution.u[end] .- exact)) ≤ T(2.0e-3)
+    end
+
+    @testset "R2 single density_derivatives! and zero-allocation VectorWave residual!" begin
+        @test length(methods(M.density_derivatives!)) == 1
+        params = VectorWave.default_parameters()
+        vw_nl_density = VectorWave.vector_density(; params = params, β = 0.5)
+        allocations(f::F, a::A) where {F, A} = (f(a); @allocated f(a))
+        for T in (Float64, Float32)
+            template = VectorWave.problem(
+                T = T, params = params, timespan = (zero(T), T(0.05)),
+                timestep = T(0.05), xstep = T(0.25))
+            prob = LagrangianPDEProblem(vw_nl_density;
+                D = 2, ics_function = template.ics_function,
+                bcs_function = template.bcs_function,
+                timespan = template.timespan, timestep = template.timestep,
+                xspan = template.xspan, xstep = template.xstep, params = params)
+            cases = T === Float64 ?
+                    ((CoefficientRestriction(), Dirichlet()),
+                (WeakInitialCondition(), Dirichlet()),
+                (WeakInitialAndBoundaryConditions(), Free())) :
+                    ((CoefficientRestriction(), Dirichlet()),)
+            for (coupling, xb) in cases
+                ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 4),
+                    xspan = (zero(T), one(T)), n = 3, x_boundary = xb)
+                int = GeometricIntegrator(prob, SpaceTimeGalerkin(ansatz, coupling))
+                c = cache(int)
+                b = similar(c.x)
+                x = copy(c.x)
+                p = parameters(prob)
+                res(y) = M.residual!(b, y, nothing, p, int)
+                if Base.JLOptions().check_bounds != 1
+                    @test allocations(res, x) == 0
+                end
+            end
+        end
+    end
+
+    @testset "R2 linear_solver = true direct LU path and linearity guards" begin
+        w_density = Wave.density()
+        w_nl_density = Wave.density(; m = 0.0, β = 0.5)
+        vw_density = VectorWave.vector_density(; β = 0.0)
+        vw_nl_density = VectorWave.vector_density(; β = 0.5)
+        sg_density = SineGordon.density()
+        @test M.is_linear_density(w_density)
+        @test M.is_linear_density(Wave.density(; m = 1.0, β = 0.0))
+        @test !M.is_linear_density(w_nl_density)
+        @test !M.is_linear_density(sg_density)
+        @test M.is_linear_density(LinearTransport.density())
+        @test M.is_linear_density(vw_density)
+        @test !M.is_linear_density(vw_nl_density)
+        @test !M.is_linear_density(nothing)
+
+        for T in (Float64, Float32)
+            t1 = Wave.problem(T = T, timespan = (zero(T), T(0.25)), timestep = T(0.05),
+                xstep = T(0.25))
+            prob1 = LagrangianPDEProblem(w_density;
+                D = 1, ics_function = t1.ics_function, bcs_function = t1.bcs_function,
+                timespan = t1.timespan, timestep = t1.timestep,
+                xspan = t1.xspan, xstep = t1.xstep, params = t1.params)
+            couplings = T === Float64 ?
+                        ((CoefficientRestriction(), Dirichlet()),
+                (WeakInitialCondition(), Dirichlet()),
+                (WeakInitialAndBoundaryConditions(), Free())) :
+                        ((CoefficientRestriction(), Dirichlet()),)
+            for (coupling, xb) in couplings
+                ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 4),
+                    xspan = (zero(T), one(T)), n = 3, x_boundary = xb)
+                m_nl = SpaceTimeGalerkin(ansatz, coupling; linear_solver = false)
+                m_lin = SpaceTimeGalerkin(ansatz, coupling; linear_solver = true)
+                int_nl = GeometricIntegrator(prob1, m_nl)
+                int_lin = GeometricIntegrator(prob1, m_lin)
+                res_nl = integrate(int_nl)
+                res_lin = integrate(int_lin)
+                @test M.factorisations(int_lin) == 1
+                @test M.factorisations(cache(int_lin)) == 1
+                @test res_lin.stats.iterations == fill(1, 5)
+                @test all(res_lin.stats.converged)
+                for n in 1:5
+                    scale = max(one(T), maximum(abs, res_nl.solution.u[n]))
+                    @test maximum(abs.(res_lin.solution.u[n] .- res_nl.solution.u[n])) ≤
+                          T(100) * eps(T) * scale
+                end
+                # A second integrate call resets the cache and factorises once for the new run
+                res_lin_2 = integrate(int_lin)
+                @test M.factorisations(int_lin) == 1
+                @test res_lin_2.solution.u == res_lin.solution.u
+            end
+        end
+
+        T = Float64
+        t1 = Wave.problem(T = T, timespan = (zero(T), T(0.25)), timestep = T(0.05),
+            xstep = T(0.25))
+        prob1 = LagrangianPDEProblem(w_density;
+            D = 1, ics_function = t1.ics_function, bcs_function = t1.bcs_function,
+            timespan = t1.timespan, timestep = t1.timestep,
+            xspan = t1.xspan, xstep = t1.xstep, params = t1.params)
+        t2 = VectorWave.problem(
+            T = T, timespan = (zero(T), T(0.25)), timestep = T(0.05), xstep = T(0.25))
+        prob2 = LagrangianPDEProblem(vw_density;
+            D = 2, ics_function = t2.ics_function, bcs_function = t2.bcs_function,
+            timespan = t2.timespan, timestep = t2.timestep,
+            xspan = t2.xspan, xstep = t2.xstep, params = t2.params)
+        ansatz_d = TensorBSplineAnsatz(degree = 2, ncells = (2, 4),
+            xspan = (zero(T), one(T)), n = 3, x_boundary = Dirichlet())
+        res_vw_nl = integrate(
+            prob2, SpaceTimeGalerkin(ansatz_d, CoefficientRestriction(); linear_solver = false))
+        int_vw_lin = GeometricIntegrator(
+            prob2, SpaceTimeGalerkin(ansatz_d, CoefficientRestriction(); linear_solver = true))
+        res_vw_lin = integrate(int_vw_lin)
+        @test M.factorisations(int_vw_lin) == 1
+        @test res_vw_lin.stats.iterations == fill(1, 5)
+        @test all(res_vw_lin.stats.converged)
+        for n in 1:5
+            scale = max(one(T), maximum(abs, res_vw_nl.solution.u[n]))
+            @test maximum(abs.(res_vw_lin.solution.u[n] .- res_vw_nl.solution.u[n])) ≤
+                  T(100) * eps(T) * scale
+        end
+
+        # Non-convergence reporting in the linear solver path when tolerances are impossible
+        m_lin_d = SpaceTimeGalerkin(ansatz_d, CoefficientRestriction(); linear_solver = true)
+        @test_throws ErrorException integrate(prob1, m_lin_d;
+            f_abstol = zero(T), f_reltol = zero(T), on_failure = :error)
+
+        # Nonlinear problems and non-linear-in-coefficients ansatz are refused at construction
+        ansatz_f = TensorBSplineAnsatz(degree = 2, ncells = (2, 4),
+            xspan = (zero(T), one(T)), n = 3, x_boundary = Free())
+        sg = LagrangianPDEProblem(sg_density;
+            D = 1, ics_function = prob1.ics_function, bcs_function = prob1.bcs_function,
+            timespan = prob1.timespan, timestep = prob1.timestep,
+            xspan = prob1.xspan, xstep = prob1.xstep)
+        @test_throws ArgumentError GeometricIntegrator(
+            sg, SpaceTimeGalerkin(ansatz_f, CoefficientRestriction(); linear_solver = true))
+        nl_wave = LagrangianPDEProblem(w_nl_density;
+            D = 1, ics_function = prob1.ics_function, bcs_function = prob1.bcs_function,
+            timespan = prob1.timespan, timestep = prob1.timestep,
+            xspan = prob1.xspan, xstep = prob1.xstep, params = prob1.params)
+        @test_throws ArgumentError GeometricIntegrator(
+            nl_wave, SpaceTimeGalerkin(ansatz_d, CoefficientRestriction(); linear_solver = true))
+        vw_nl = LagrangianPDEProblem(vw_nl_density;
+            D = 2, ics_function = prob2.ics_function, bcs_function = prob2.bcs_function,
+            timespan = prob2.timespan, timestep = prob2.timestep,
+            xspan = prob2.xspan, xstep = prob2.xstep, params = prob2.params)
+        @test_throws ArgumentError GeometricIntegrator(
+            vw_nl, SpaceTimeGalerkin(ansatz_d, CoefficientRestriction(); linear_solver = true))
+        @test_throws ArgumentError M.check_method(
+            prob1, SpaceTimeGalerkin(DummyNonlinearAnsatz(prob1.xspan),
+                CoefficientRestriction(); linear_solver = true))
     end
 end

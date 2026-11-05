@@ -228,19 +228,18 @@ makes it worth keeping.
   basis, or `:lagrange`, the nodal basis of the same space, and the second's bottom-surface
   multiplier set leaves out the two corner functions of the trace basis, where they would constrain
   the corners twice and leave the first slab rank deficient by two (§Audit 2.8). The first slab's
-  bottom multiplier is the initial momentum read into the multiplier set — by the
-  quadrature-weighted `L²` projection where the corner functions have left, by the nodal
-  least-squares fit where the whole trace basis is kept — factorised once per integrator
-  (§Audit 5.4), and the multipliers of a step are guessed in `initial_guess!` rather than inside a
-  residual evaluation (§Audit 2.2). The multiplier blocks of the `D > 1` case keep their components
-  apart (§Audit 1.3). Each coupling accepts one space boundary condition and refuses the rest,
-  naming the condition it needs and the one it got: `Dirichlet()` for `WeakInitialCondition` and
-  `Free()` for `WeakInitialAndBoundaryConditions`. The two `Galerkin_Bspline_Integrator` entries of
-  the reference values are unconverged solves of a singular layout, so the coupling that imposes
-  the boundary conditions is compared with closed forms instead, and the one that imposes the
-  initial condition alone keeps the `WAVE_GALERKIN_DIRICHLET_BSPLINE` entry, which is a converged
-  solve of its own discrete problem; K21 and K22 record why the entries of the full-multiplier
-  layout cannot serve as references.
+  bottom multiplier is the initial momentum read into the multiplier set by the
+  quadrature-weighted `L²` projection, factorised once per integrator (§Audit 5.4), its bottom load
+  vector is cached once per step in `slab_bottom!`, and the multipliers of a step are guessed in
+  `initial_guess!` rather than inside a residual evaluation (§Audit 2.2). The multiplier blocks of
+  the `D > 1` case keep their components apart (§Audit 1.3). Each coupling accepts one space
+  boundary condition and refuses the rest, naming the condition it needs and the one it got:
+  `Dirichlet()` for `WeakInitialCondition` and `Free()` for `WeakInitialAndBoundaryConditions`. The
+  two `Galerkin_Bspline_Integrator` entries of the reference values are unconverged solves of a
+  singular layout, so the coupling that imposes the boundary conditions is compared with closed
+  forms instead, and the one that imposes the initial condition alone keeps the
+  `WAVE_GALERKIN_DIRICHLET_BSPLINE` entry, which is a converged solve of its own discrete problem;
+  K21 and K22 record why the entries of the full-multiplier layout cannot serve as references.
 - **The energy diagnostics.** `energy_density(density, u, v, w, params)` is the Hamiltonian density
   `v ∂L/∂v − L` of a Lagrangian density, built from the density's own derivative and value, so every
   problem the package integrates has a conserved quantity without a formula of its own. A density
@@ -307,6 +306,21 @@ makes it worth keeping.
   `--quick` and `--selfcheck` are its gate. The `scripts/` environment adds `BenchmarkTools`,
   `DifferentiationInterface`, `Enzyme`, `Mooncake`, `SimpleSolvers` and the packages of the two
   test helpers it includes.
+
+- **Direct single-factorisation solve for linear densities.** `SpaceTimeGalerkin` takes the keyword
+  `linear_solver = false`. When `linear_solver = true`, `check_method` verifies that the ansatz is
+  linear in its coefficients and that the problem's density is linear (`is_linear_density`, checked
+  symbolically when `LagrangianDensity` is built and true for `VectorWave.VectorDensity` when
+  `β == 0`), refusing a nonlinear ansatz or density with an `ArgumentError`. On the first step,
+  `integrate_step!` evaluates and LU-factorises the constant slab Jacobian once and reuses that
+  factorisation on every later step (`factorisations(int) == 1`).
+- **One pointwise density-derivative path and a function barrier for the step loop.**
+  `density_derivatives!`, `momentum_load!` and `flux_load!` each call `point_derivatives`,
+  `CoefficientRestriction` computes `p_bottom` once per step in `slab_bottom!`, and
+  `VectorWave.derivatives(::VectorDensity, …)` returns `NTuple{D, T}` tuples on the stack rather
+  than heap `Vector` comprehensions, so `residual!` allocates 0 bytes on `VectorWave` as well as
+  `Wave`, closing K19. `integrate` delegates its step loop to `integrate_steps!`, where the
+  solution, solution step, trace vector, integrator and cache have concrete types, closing K30.
 
 ### Changed
 

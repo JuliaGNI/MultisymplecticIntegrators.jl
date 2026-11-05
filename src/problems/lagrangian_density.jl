@@ -15,6 +15,7 @@ density: every built function takes their values as further positional arguments
 - `∂u(u, v, w, p...)`, `∂v(u, v, w, p...)`, `∂w(u, v, w, p...)`: its partial derivatives.
 - `names`: the names of the parameters, in the order of the built functions' arguments.
 - `params`: the default parameter values.
+- `linear`: whether the partial derivatives are affine in `(u, v, w)`.
 
 # Example
 
@@ -33,6 +34,11 @@ struct LagrangianDensity{LT, UT, VT, WT, NT, PT}
     ∂w::WT
     names::NT
     params::PT
+    linear::Bool
+end
+
+function LagrangianDensity(L, ∂u, ∂v, ∂w, names, params)
+    return LagrangianDensity(L, ∂u, ∂v, ∂w, names, params, false)
 end
 
 function LagrangianDensity(L, u, v, w; params = NamedTuple())
@@ -40,16 +46,39 @@ function LagrangianDensity(L, u, v, w; params = NamedTuple())
     psyms = map(name -> Symbolics.variable(name), names)
     args = (u, v, w, psyms...)
     build(expression) = Symbolics.build_function(expression, args...; expression = Val(false))
-    return LagrangianDensity(build(L),
-        build(Symbolics.derivative(L, u)),
-        build(Symbolics.derivative(L, v)),
-        build(Symbolics.derivative(L, w)),
-        names, params)
+    du = Symbolics.derivative(L, u)
+    dv = Symbolics.derivative(L, v)
+    dw = Symbolics.derivative(L, w)
+    hessian = (
+        Symbolics.derivative(du, u),
+        Symbolics.derivative(du, v),
+        Symbolics.derivative(du, w),
+        Symbolics.derivative(dv, v),
+        Symbolics.derivative(dv, w),
+        Symbolics.derivative(dw, w))
+    linear = all(
+        iszero(h) || all(
+            let d = Symbolics.derivative(h, x)
+                iszero(d) || iszero(Symbolics.simplify(d))
+            end for x in (u, v, w))
+    for h in hessian)
+    return LagrangianDensity(
+        build(L), build(du), build(dv), build(dw), names, params, linear)
 end
 
+"""Whether the density's partial derivatives are affine in `(u, v, w)`."""
+is_linear_density(density::LagrangianDensity) = density.linear
+is_linear_density(::Any) = false
+
 """The values of `params` in the order of the density's built functions."""
-function parameter_values(density::LagrangianDensity, params)
-    map(name -> getfield(params, name), density.names)
+@inline function parameter_values(
+        ::LagrangianDensity{LT, UT, VT, WT, NT, PT}, params::NamedTuple) where {
+        LT, UT, VT, WT, NT, PT <: NamedTuple}
+    return Tuple(NamedTuple{fieldnames(PT)}(params))
+end
+
+@inline function parameter_values(density::LagrangianDensity, params)
+    return map(name -> getfield(params, name), density.names)
 end
 
 function (density::LagrangianDensity)(u, v, w, params = density.params)
@@ -76,6 +105,54 @@ function derivatives(density::LagrangianDensity, u, v, w, params = density.param
     return (u = derivative_u(density, u, v, w, params),
         v = derivative_v(density, u, v, w, params),
         w = derivative_w(density, u, v, w, params))
+end
+
+"""The three partial derivatives of `density` at point `(q, r)` of a slab grid, as `D`-tuples."""
+@inline function point_derivatives(density::LagrangianDensity,
+        u::AbstractArray{ST, 3}, v::AbstractArray{ST, 3}, w::AbstractArray{ST, 3},
+        q::Integer, r::Integer, params, ::Val{D} = Val(1)) where {ST, D}
+    return (
+        u = ntuple(
+            d -> ST(derivative_u(density, u[q, r, d], v[q, r, d], w[q, r, d], params)),
+            Val(D)),
+        v = ntuple(
+            d -> ST(derivative_v(density, u[q, r, d], v[q, r, d], w[q, r, d], params)),
+            Val(D)),
+        w = ntuple(
+            d -> ST(derivative_w(density, u[q, r, d], v[q, r, d], w[q, r, d], params)),
+            Val(D)))
+end
+
+@inline function point_derivatives(density,
+        u::AbstractArray{ST, 3}, v::AbstractArray{ST, 3}, w::AbstractArray{ST, 3},
+        q::Integer, r::Integer, params, ::Val{D} = Val(2)) where {ST, D}
+    u_pt = ntuple(d -> u[q, r, d], Val(D))
+    v_pt = ntuple(d -> v[q, r, d], Val(D))
+    w_pt = ntuple(d -> w[q, r, d], Val(D))
+    return derivatives(density, u_pt, v_pt, w_pt, params)
+end
+
+"""The three partial derivatives of `density` at node `r` of a boundary trace, as `D`-tuples."""
+@inline function point_derivatives(density::LagrangianDensity,
+        u::AbstractMatrix, v::AbstractMatrix, w::AbstractMatrix,
+        r::Integer, params, ::Val{D} = Val(1)) where {D}
+    T = promote_type(eltype(u), eltype(v), eltype(w))
+    return (
+        u = ntuple(
+            d -> T(derivative_u(density, u[r, d], v[r, d], w[r, d], params)), Val(D)),
+        v = ntuple(
+            d -> T(derivative_v(density, u[r, d], v[r, d], w[r, d], params)), Val(D)),
+        w = ntuple(
+            d -> T(derivative_w(density, u[r, d], v[r, d], w[r, d], params)), Val(D)))
+end
+
+@inline function point_derivatives(density,
+        u::AbstractMatrix, v::AbstractMatrix, w::AbstractMatrix,
+        r::Integer, params, ::Val{D} = Val(2)) where {D}
+    u_pt = ntuple(d -> u[r, d], Val(D))
+    v_pt = ntuple(d -> v[r, d], Val(D))
+    w_pt = ntuple(d -> w[r, d], Val(D))
+    return derivatives(density, u_pt, v_pt, w_pt, params)
 end
 
 function Base.show(io::IO, density::LagrangianDensity)

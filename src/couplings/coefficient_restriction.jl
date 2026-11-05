@@ -122,23 +122,28 @@ function initial_trace!(data::RestrictionData{ST}, c::SpaceTimeGalerkinCache{ST}
     return nothing
 end
 
-"""The momentum `∂L/∂v` of the initial data, one component at a time."""
-function momentum_load!(load::AbstractMatrix{ST}, density::LagrangianDensity,
-        u::AbstractMatrix, v::AbstractMatrix, w::AbstractMatrix, params) where {ST}
-    for d in axes(u, 2), r in axes(u, 1)
-
-        load[r, d] = derivative_v(density, u[r, d], v[r, d], w[r, d], params)
-    end
-    return nothing
-end
-
-"""The momentum `∂L/∂v` of the initial data, the components of a point at once."""
+"""The momentum `∂L/∂v` of a trace at the quadrature nodes."""
 function momentum_load!(load::AbstractMatrix{ST}, density, u::AbstractMatrix,
         v::AbstractMatrix, w::AbstractMatrix, params) where {ST}
-    for r in axes(u, 1)
-        d = derivatives(density, view(u, r, :), view(v, r, :), view(w, r, :), params)
-        for c in axes(u, 2)
-            load[r, c] = d.v[c]
+    D = size(u, 2)
+    if D == 1
+        for r in axes(u, 1)
+            d = point_derivatives(density, u, v, w, r, params, Val(1))
+            load[r, 1] = d.v[1]
+        end
+    elseif D == 2
+        for r in axes(u, 1)
+            d = point_derivatives(density, u, v, w, r, params, Val(2))
+            for c in 1:2
+                load[r, c] = d.v[c]
+            end
+        end
+    else
+        for r in axes(u, 1)
+            d = point_derivatives(density, u, v, w, r, params, Val(D))
+            for c in 1:D
+                load[r, c] = d.v[c]
+            end
         end
     end
     return nothing

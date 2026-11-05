@@ -44,13 +44,22 @@ struct SpaceTimeGalerkin{A <: SpaceTimeAnsatz, C <: SlabCoupling, G <: SlabIniti
     ansatz::A
     coupling::C
     initial_guess::G
+    linear_solver::Bool
+end
+
+function SpaceTimeGalerkin(ansatz::A,
+        coupling::C,
+        initial_guess::G) where {
+        A <: SpaceTimeAnsatz, C <: SlabCoupling, G <: SlabInitialGuess}
+    return SpaceTimeGalerkin{A, C, G}(ansatz, coupling, initial_guess, false)
 end
 
 function SpaceTimeGalerkin(ansatz::SpaceTimeAnsatz,
         coupling::SlabCoupling = CoefficientRestriction();
-        initial_guess::SlabInitialGuess = Continuation())
+        initial_guess::SlabInitialGuess = Continuation(),
+        linear_solver::Bool = false)
     return SpaceTimeGalerkin{typeof(ansatz), typeof(coupling), typeof(initial_guess)}(
-        ansatz, coupling, initial_guess)
+        ansatz, coupling, initial_guess, linear_solver)
 end
 
 function SpaceTimeGalerkin(method::SpaceTimeMethod, args...; kwargs...)
@@ -75,10 +84,20 @@ default_solver(::SpaceTimeGalerkin) = Newton()
 Reject a method that the problem cannot support, before any step runs.
 
 The refusals are `ArgumentError`s: a target that reads the exact solution of a problem that has
-none, a fit that needs an ansatz linear in its coefficients on one that is not, and what the
-ansatz's [`check_ansatz`](@ref) and the coupling's [`check_coupling`](@ref) refuse.
+none, a fit that needs an ansatz linear in its coefficients on one that is not, a direct linear
+solve (`linear_solver = true`) on an ansatz that is not linear in its coefficients or a density
+that is not linear, and what the ansatz's [`check_ansatz`](@ref) and the coupling's
+[`check_coupling`](@ref) refuse.
 """
 function check_method(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin)
+    if method.linear_solver
+        is_linear_in_coefficients(ansatz(method)) ||
+            throw(ArgumentError("linear_solver = true needs an ansatz that is linear in its " *
+                                "coefficients; $(nameof(typeof(ansatz(method)))) is not"))
+        is_linear_density(problem.density) ||
+            throw(ArgumentError("linear_solver = true needs a linear Lagrangian density; " *
+                                "the problem's density is not linear"))
+    end
     guess = initial_guess(method)
     if guess isa FitTo
         if needs_exact_solution(guess.target) && problem.exact_u === nothing
@@ -302,6 +321,10 @@ mutable struct SpaceTimeGalerkinCache{ST, AD, CD <: CouplingData} <: IntegratorC
     initial_residuals::Vector{ST}
     converged::Vector{Bool}
     steps::Int
+    factorisations::Base.RefValue{Int}
+    linear_lu::Base.RefValue{Union{Nothing, LU{ST, Matrix{ST}, Vector{Int}}}}
+    linear_rhs::Vector{ST}
+    linear_zero::Vector{ST}
     ansatz::AD
     coupling::CD
 end
@@ -315,9 +338,11 @@ function Cache{ST}(problem::LagrangianPDEProblem,
     qt = length(tnodes)
     qx = length(xnodes)
     D = components(problem)
+    nfree = total_free_coefficients(method, problem)
+    nlin = method.linear_solver ? nfree : 0
     return SpaceTimeGalerkinCache{ST, typeof(slab),
         coupling_data_type(coupling(method), a, problem, ST)}(
-        zeros(ST, total_free_coefficients(method, problem)),
+        zeros(ST, nfree),
         zeros(ST, qt, qx, D),
         zeros(ST, qt, qx, D),
         zeros(ST, qt, qx, D),
@@ -332,6 +357,10 @@ function Cache{ST}(problem::LagrangianPDEProblem,
         ST[],
         Bool[],
         0,
+        Ref(0),
+        Ref{Union{Nothing, LU{ST, Matrix{ST}, Vector{Int}}}}(nothing),
+        zeros(ST, nlin),
+        zeros(ST, nlin),
         slab,
         coupling_data(coupling(method), a, problem, ST))
 end
@@ -372,18 +401,34 @@ end
     reset!(cache::SpaceTimeGalerkinCache)
 
 Clear the state a run leaves in the cache: the step counter, which is what tells the coupling and
-the guess whether the slab is the run's first, and the per-step records of the Newton solve.
+the guess whether the slab is the run's first, the linear-solver factorisation and counter, and the
+per-step records of the Newton solve.
 
 A run starts at the problem's initial data, so a cache that still counted the previous run's steps
 would hand that run's last top row to the new first slab as its bottom datum.
 """
 function reset!(c::SpaceTimeGalerkinCache)
     c.steps = 0
+    c.factorisations[] = 0
+    c.linear_lu[] = nothing
     empty!(c.iterations)
     empty!(c.residuals)
     empty!(c.initial_residuals)
     empty!(c.converged)
     return nothing
+end
+
+"""
+    factorisations(cache::SpaceTimeGalerkinCache)
+    factorisations(int::GeometricIntegrator)
+
+The number of Jacobian LU factorisations computed by the direct linear solver since the last
+`reset!` of the cache.
+"""
+factorisations(c::SpaceTimeGalerkinCache) = c.factorisations[]
+function factorisations(int::GeometricIntegrator{
+        <:SpaceTimeGalerkin, <:LagrangianPDEProblem})
+    return factorisations(cache(int))
 end
 
 """
@@ -532,8 +577,9 @@ end
     integrate_step!(sol, history, params, int)
 
 One slab: the coupling fixes its datum, the initial guess fills the solver's vector, the
-ecosystem's Newton solver solves the slab, the cache records the solve, and the update writes the
-solution, the trace and the data the next slab starts from.
+ecosystem's Newton solver (or a single-factorisation LU solve when `method.linear_solver` is
+`true`) solves the slab, the cache records the solve, and the update writes the solution, the trace
+and the data the next slab starts from.
 """
 function integrate_step!(sol, history, params,
         int::GeometricIntegrator{<:SpaceTimeGalerkin, <:LagrangianPDEProblem})
@@ -541,6 +587,30 @@ function integrate_step!(sol, history, params,
     m = method(int)
     slab_bottom!(c, c.coupling, problem(int), ansatz(m), sol)
     initial_guess!(sol, history, params, int)
+    if m.linear_solver
+        x = nlsolution(int)
+        s = solver(int)
+        residual!(c.linear_rhs, x, sol, params, int)
+        r₀ = norm(c.linear_rhs)
+        lu_fac = c.linear_lu[]
+        if lu_fac === nothing
+            jacobian!(s, c.linear_zero, (sol, params, int))
+            lu_fac = lu(jacobianmatrix(s))
+            c.linear_lu[] = lu_fac
+            c.factorisations[] += 1
+        end
+        ldiv!(lu_fac, c.linear_rhs)
+        x .-= c.linear_rhs
+        residual!(c.linear_rhs, x, sol, params, int)
+        rfₐ = norm(c.linear_rhs)
+        push!(c.iterations, 1)
+        push!(c.residuals, convert(eltype(c.residuals), rfₐ))
+        push!(c.initial_residuals, convert(eltype(c.initial_residuals), r₀))
+        push!(c.converged,
+            step_converged(last(c.residuals), last(c.initial_residuals), config(s)))
+        update!(sol, params, x, int)
+        return nothing
+    end
     status = solve_with_status!(nlsolution(int), solver(int), solverstate(int),
         (sol, params, int))
     check_solver_status(status, int)
