@@ -49,9 +49,9 @@ end
 
 function SpaceTimeGalerkin(ansatz::A,
         coupling::C,
-        initial_guess::G) where {
+        initial_guess::G; linear_solver::Bool = false) where {
         A <: SpaceTimeAnsatz, C <: SlabCoupling, G <: SlabInitialGuess}
-    return SpaceTimeGalerkin{A, C, G}(ansatz, coupling, initial_guess, false)
+    return SpaceTimeGalerkin{A, C, G}(ansatz, coupling, initial_guess, linear_solver)
 end
 
 function SpaceTimeGalerkin(ansatz::SpaceTimeAnsatz,

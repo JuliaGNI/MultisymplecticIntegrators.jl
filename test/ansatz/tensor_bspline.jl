@@ -362,6 +362,10 @@ end
                 end
                 for cval in (zero(T), T(1e4))
                     ig = FitTo(TargetFunction((t, x, p) -> cval))
+                    @test SpaceTimeGalerkin(
+                        ansatz, coupling, ig; linear_solver = true).linear_solver === true
+                    @test SpaceTimeGalerkin(ansatz, coupling;
+                        initial_guess = ig, linear_solver = true).linear_solver === true
                     res_nl_ig = integrate(
                         prob1, SpaceTimeGalerkin(ansatz, coupling, ig; linear_solver = false))
                     res_lin_ig = integrate(
