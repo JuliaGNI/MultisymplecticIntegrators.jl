@@ -204,6 +204,8 @@ end
         reference = WAVE_GALERKIN_DIRICHLET_BSPLINE.u
         @test length(result.traces) == 5
         @test minimum(cache(int).iterations) ≥ 1
+        # The reference table uses nodal interpolation of the initial momentum, which
+        # differs from WeakInitialCondition's L² projection by 1.18e-7 on this grid.
         for n in 1:5
             @test maximum(abs.(result.solution.u[n] .- reference[n, :])) ≤
                   max(T(1.2e-7), reference_tolerance(T))
@@ -594,8 +596,12 @@ end
         for edge in (:left, :right), d in 1:D, i in 1:nμ
             push!(seen, M.multiplier_index(c2, edge, d, i))
         end
-        @test sort(seen) == collect((nfree + 1):length(c2.x))
+        @test seen == collect((nfree + 1):length(c2.x))
         @test_throws ArgumentError M.multiplier_index(c2, :bottom, 1, 1)
+        @test WeakInitialCondition(; basis = :lagrange) ==
+              WeakInitialCondition(; multiplier_basis = :lagrange)
+        @test WeakInitialAndBoundaryConditions(; basis = :lagrange) ==
+              WeakInitialAndBoundaryConditions(; multiplier_basis = :lagrange)
         sol = GeometricSolution(prob2)
         sstep = solutionstep(int2, sol[0])
         M.slab_bottom!(c2, c2.coupling, prob2, ansatz2, sstep)
@@ -604,7 +610,7 @@ end
         for d in 1:D
             vals = transpose(c2.coupling.multiplier_basis) *
                    c2.coupling.initial_multiplier[:, d]
-            expected_load[:, d] = xq2.value * (xq2.weight .* vals)
+            expected_load[:, d] = transpose(c2.ansatz.trace.value) * (xq2.weight .* vals)
         end
         @test maximum(abs.(c2.coupling.bottom_load .- expected_load)) ≤ 32 * eps(T)
         x2 = copy(c2.x)

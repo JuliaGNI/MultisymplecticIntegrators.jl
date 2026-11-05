@@ -138,6 +138,13 @@ function momentum_load!(load::AbstractMatrix{ST}, density, u::AbstractMatrix,
                 load[r, c] = d.v[c]
             end
         end
+    elseif D == 3
+        for r in axes(u, 1)
+            d = point_derivatives(density, u, v, w, r, params, Val(3))
+            for c in 1:3
+                load[r, c] = d.v[c]
+            end
+        end
     else
         for r in axes(u, 1)
             d = point_derivatives(density, u, v, w, r, params, Val(D))

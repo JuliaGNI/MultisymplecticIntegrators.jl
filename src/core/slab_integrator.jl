@@ -321,8 +321,8 @@ mutable struct SpaceTimeGalerkinCache{ST, AD, CD <: CouplingData} <: IntegratorC
     initial_residuals::Vector{ST}
     converged::Vector{Bool}
     steps::Int
-    factorisations::Base.RefValue{Int}
-    linear_lu::Base.RefValue{Union{Nothing, LU{ST, Matrix{ST}, Vector{Int}}}}
+    factorisations::Int
+    linear_lu::Union{Nothing, LU{ST, Matrix{ST}, Vector{Int}}}
     linear_rhs::Vector{ST}
     linear_zero::Vector{ST}
     ansatz::AD
@@ -357,8 +357,8 @@ function Cache{ST}(problem::LagrangianPDEProblem,
         ST[],
         Bool[],
         0,
-        Ref(0),
-        Ref{Union{Nothing, LU{ST, Matrix{ST}, Vector{Int}}}}(nothing),
+        0,
+        nothing,
         zeros(ST, nlin),
         zeros(ST, nlin),
         slab,
@@ -409,8 +409,8 @@ would hand that run's last top row to the new first slab as its bottom datum.
 """
 function reset!(c::SpaceTimeGalerkinCache)
     c.steps = 0
-    c.factorisations[] = 0
-    c.linear_lu[] = nothing
+    c.factorisations = 0
+    c.linear_lu = nothing
     empty!(c.iterations)
     empty!(c.residuals)
     empty!(c.initial_residuals)
@@ -425,7 +425,7 @@ end
 The number of Jacobian LU factorisations computed by the direct linear solver since the last
 `reset!` of the cache.
 """
-factorisations(c::SpaceTimeGalerkinCache) = c.factorisations[]
+factorisations(c::SpaceTimeGalerkinCache) = c.factorisations
 function factorisations(int::GeometricIntegrator{
         <:SpaceTimeGalerkin, <:LagrangianPDEProblem})
     return factorisations(cache(int))
@@ -592,15 +592,16 @@ function integrate_step!(sol, history, params,
         s = solver(int)
         residual!(c.linear_rhs, x, sol, params, int)
         r₀ = norm(c.linear_rhs)
-        lu_fac = c.linear_lu[]
+        lu_fac = c.linear_lu
         if lu_fac === nothing
             jacobian!(s, c.linear_zero, (sol, params, int))
             lu_fac = lu(jacobianmatrix(s))
-            c.linear_lu[] = lu_fac
-            c.factorisations[] += 1
+            c.linear_lu = lu_fac
+            c.factorisations += 1
         end
+        residual!(c.linear_rhs, c.linear_zero, sol, params, int)
         ldiv!(lu_fac, c.linear_rhs)
-        x .-= c.linear_rhs
+        x .= .-c.linear_rhs
         residual!(c.linear_rhs, x, sol, params, int)
         rfₐ = norm(c.linear_rhs)
         push!(c.iterations, 1)

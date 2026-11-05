@@ -140,6 +140,16 @@ function density_derivatives!(∂u::AbstractArray{ST, 3}, ∂v::AbstractArray{ST
                 ∂w[q, r, c] = d.w[c]
             end
         end
+    elseif D == 3
+        for r in axes(u, 2), q in axes(u, 1)
+
+            d = point_derivatives(density, u, v, w, q, r, params, Val(3))
+            for c in 1:3
+                ∂u[q, r, c] = d.u[c]
+                ∂v[q, r, c] = d.v[c]
+                ∂w[q, r, c] = d.w[c]
+            end
+        end
     else
         for r in axes(u, 2), q in axes(u, 1)
 

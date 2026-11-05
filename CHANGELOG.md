@@ -316,11 +316,12 @@ makes it worth keeping.
   factorisation on every later step (`factorisations(int) == 1`).
 - **One pointwise density-derivative path and a function barrier for the step loop.**
   `density_derivatives!`, `momentum_load!` and `flux_load!` each call `point_derivatives`,
-  `CoefficientRestriction` computes `p_bottom` once per step in `slab_bottom!`, and
-  `VectorWave.derivatives(::VectorDensity, …)` returns `NTuple{D, T}` tuples on the stack rather
-  than heap `Vector` comprehensions, so `residual!` allocates 0 bytes on `VectorWave` as well as
-  `Wave`, closing K19. `integrate` delegates its step loop to `integrate_steps!`, where the
-  solution, solution step, trace vector, integrator and cache have concrete types, closing K30.
+  `WeakInitialCondition` and `WeakInitialAndBoundaryConditions` compute `bottom_load` once per step
+  in `slab_bottom!`, and `VectorWave.derivatives(::VectorDensity, …)` returns `NTuple{D, T}` tuples
+  on the stack rather than heap `Vector` comprehensions, so `residual!` allocates 0 bytes on
+  `VectorWave` as well as `Wave`, closing K19. `integrate` delegates its step loop to
+  `integrate_steps!`, where the solution, solution step, trace vector, integrator and cache have
+  concrete types, closing K30.
 
 ### Changed
 

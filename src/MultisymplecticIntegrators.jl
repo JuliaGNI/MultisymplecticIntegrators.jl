@@ -4,7 +4,7 @@ using GeometricBase
 using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: Diagonal, I, LU, dot, ldiv!, lu, mul!, norm
+using LinearAlgebra: Diagonal, I, LU, dot, ldiv!, lu, norm
 using SimpleSplines
 using SimpleSolvers
 using SparseArrays

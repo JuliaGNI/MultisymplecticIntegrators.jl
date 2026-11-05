@@ -4,30 +4,34 @@ abstract type MultiplierBasis end
 struct BSplineMultiplier <: MultiplierBasis end
 """The multiplier basis in nodal functions at the spline nodes the coupling keeps."""
 struct LagrangeMultiplier <: MultiplierBasis end
-
 function _multiplier_basis(basis::Symbol)
     basis === :bspline && return BSplineMultiplier()
     basis === :lagrange && return LagrangeMultiplier()
     throw(ArgumentError("multiplier_basis must be :bspline or :lagrange, got :$basis"))
 end
-
 """Abstract type of a coupling that imposes the slab's data weakly with surface multipliers."""
 abstract type MultiplierCoupling <: SlabCoupling end
-"""    WeakInitialCondition(; multiplier_basis = :bspline) <: SlabCoupling — The initial condition of a slab, imposed weakly with `x_boundary = Dirichlet()`."""
+"""
+    WeakInitialCondition(; multiplier_basis = :bspline) <: SlabCoupling
+
+The initial condition of a slab, imposed weakly with `x_boundary = Dirichlet()`."""
 struct WeakInitialCondition{B <: MultiplierBasis} <: MultiplierCoupling
     multiplier_basis::B
 end
-function WeakInitialCondition(; multiplier_basis::Symbol = :bspline)
+function WeakInitialCondition(; basis::Symbol = :bspline, multiplier_basis::Symbol = basis)
     WeakInitialCondition(_multiplier_basis(multiplier_basis))
 end
-"""    WeakInitialAndBoundaryConditions(; multiplier_basis = :bspline) <: SlabCoupling — The initial condition and the space boundary conditions of a slab, imposed weakly with `x_boundary = Free()`."""
+"""
+    WeakInitialAndBoundaryConditions(; multiplier_basis = :bspline) <: SlabCoupling
+
+The initial condition and the space boundary conditions of a slab, imposed weakly with `x_boundary = Free()`."""
 struct WeakInitialAndBoundaryConditions{B <: MultiplierBasis} <: MultiplierCoupling
     multiplier_basis::B
 end
-function WeakInitialAndBoundaryConditions(; multiplier_basis::Symbol = :bspline)
+function WeakInitialAndBoundaryConditions(;
+        basis::Symbol = :bspline, multiplier_basis::Symbol = basis)
     WeakInitialAndBoundaryConditions(_multiplier_basis(multiplier_basis))
 end
-
 imposes_boundary_conditions(::WeakInitialCondition) = false
 imposes_boundary_conditions(::WeakInitialAndBoundaryConditions) = true
 function space_multiplier_indices(c::MultiplierCoupling, a::TensorBSplineAnsatz)
@@ -41,7 +45,6 @@ function multiplier_counts(c::MultiplierCoupling, a::TensorBSplineAnsatz)
     (length(space_multiplier_indices(c, a)), length(boundary_multiplier_indices(c, a)))
 end
 free_rows(::MultiplierCoupling, a::SpaceTimeAnsatz) = ntime_functions(a)
-
 const MultiplierTraces{ST} = @NamedTuple{
     bottom_test::Vector{ST}, top_test::Vector{ST}, left_space::Vector{ST}, right_space::Vector{ST},
     left_slope::Vector{ST}, right_slope::Vector{ST}, x_u::Matrix{ST}, x_v::Matrix{ST},
@@ -52,7 +55,6 @@ const MultiplierWork{ST} = @NamedTuple{
     left_coefficients::Matrix{ST}, right_coefficients::Matrix{ST}, left_slopes::Matrix{ST},
     right_slopes::Matrix{ST}, space_row::Vector{ST}, time_row::Vector{ST},
     space_work::Vector{ST}, time_work::Vector{ST}}
-
 """The block of a weak-multiplier coupling `C` in the slab cache."""
 struct MultiplierData{ST, C <: MultiplierCoupling} <: CouplingData
     coupling::C
@@ -68,7 +70,6 @@ struct MultiplierData{ST, C <: MultiplierCoupling} <: CouplingData
     traces::MultiplierTraces{ST}
     work::MultiplierWork{ST}
 end
-
 function coupling_data(c::MultiplierCoupling, a::TensorBSplineAnsatz{T},
         p::LagrangianPDEProblem, ::Type{ST}) where {T, ST}
     nt, nx, D = ntime_functions(a), nspace_functions(a), components(p)
@@ -223,15 +224,15 @@ end
 function coupling_unknowns!(data::MultiplierData{ST}, x::AbstractVector{ST}, D::Integer) where {ST}
     nλ, nμ = size(data.initial_multiplier, 1), size(data.boundary_basis, 1)
     nf = length(x) - multiplier_unknowns(data)
-    for d in 1:D
-        for p in 1:nλ
-            data.top_multiplier[p, d] = x[multiplier_index(nf, D, nλ, nμ, :top, d, p)]
-        end
-        for p in 1:nμ
-            data.boundary_multiplier[p, d] = x[multiplier_index(nf, D, nλ, nμ, :left, d, p)]
-            data.boundary_multiplier[nμ + p, d] = x[multiplier_index(
-                nf, D, nλ, nμ, :right, d, p)]
-        end
+    for d in 1:D, p in 1:nλ
+
+        data.top_multiplier[p, d] = x[multiplier_index(nf, D, nλ, nμ, :top, d, p)]
+    end
+    for d in 1:D, p in 1:nμ
+
+        data.boundary_multiplier[p, d] = x[multiplier_index(nf, D, nλ, nμ, :left, d, p)]
+        data.boundary_multiplier[nμ + p, d] = x[multiplier_index(
+            nf, D, nλ, nμ, :right, d, p)]
     end
     return nothing
 end
@@ -239,20 +240,17 @@ function coupling_update!(data::MultiplierData{ST}, x::AbstractVector{ST},
         ::SpaceTimeGalerkinCache{ST}, ::SpaceTimeAnsatz, ::LagrangianPDEProblem) where {ST}
     D, λb = size(data.top_multiplier, 2), data.multiplier_basis
     coupling_unknowns!(data, x, D)
-    for d in 1:D
-        for r in axes(λb, 2)
-            data.top_values[r, d] = row_dot(
-                transpose(λb), r, view(data.top_multiplier, :, d))
-        end
+    for d in 1:D, r in axes(λb, 2)
+
+        data.top_values[r, d] = row_dot(transpose(λb), r, view(data.top_multiplier, :, d))
     end
     return nothing
 end
 function project!(coeffs::AbstractMatrix{ST}, r₀::Integer, proj::AbstractMatrix{ST},
         vals::AbstractMatrix{ST}) where {ST}
-    for d in axes(vals, 2)
-        for p in axes(proj, 1)
-            coeffs[r₀ + p - 1, d] = row_dot(proj, p, view(vals, :, d))
-        end
+    for d in axes(vals, 2), p in axes(proj, 1)
+
+        coeffs[r₀ + p - 1, d] = row_dot(proj, p, view(vals, :, d))
     end
     return nothing
 end
@@ -296,9 +294,18 @@ function flux_load!(load::AbstractMatrix{ST}, density, u::AbstractMatrix,
         v::AbstractMatrix, w::AbstractMatrix, params) where {ST}
     D = size(u, 2)
     for r in axes(u, 1)
-        dw = point_derivatives(density, u, v, w, r, params, Val(D)).w
-        for c in 1:D
-            load[r, c] = dw[c]
+        if D == 1
+            load[r, 1] = point_derivatives(density, u, v, w, r, params, Val(1)).w[1]
+        elseif D == 2
+            load[r, 1], load[r, 2] = point_derivatives(density, u, v, w, r, params, Val(2)).w
+        elseif D == 3
+            dw = point_derivatives(density, u, v, w, r, params, Val(3)).w
+            load[r, 1], load[r, 2], load[r, 3] = dw[1], dw[2], dw[3]
+        else
+            dw = point_derivatives(density, u, v, w, r, params, Val(D)).w
+            for c in 1:D
+                load[r, c] = dw[c]
+            end
         end
     end
     return nothing
@@ -317,10 +324,9 @@ function coupling_guess!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST}
     scatter!(c.ansatz.coeffs, c.x, nothing, nt)
     top_values!(tr.x_u, tr.x_v, tr.x_w, c.ansatz, trace_evaluation(c.ansatz), h)
     project_momentum!(data.work.guess_multiplier, data, problem)
-    for d in 1:D
-        for p in 1:nλ
-            c.x[multiplier_index(nf, D, nλ, nμ, :top, d, p)] = data.work.guess_multiplier[p, d]
-        end
+    for d in 1:D, p in 1:nλ
+
+        c.x[multiplier_index(nf, D, nλ, nμ, :top, d, p)] = data.work.guess_multiplier[p, d]
     end
     nμ == 0 && return nothing
     end_coefficients!(data, c.ansatz.coeffs, nx, nt, D)
@@ -328,10 +334,9 @@ function coupling_guess!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST}
         edge_flux!(data, c, problem, eidx, h)
         r₀ = (eidx - 1) * nμ
         project!(data.boundary_multiplier, r₀ + 1, data.boundary_projection, tr.t_load)
-        for d in 1:D
-            for p in 1:nμ
-                c.x[multiplier_index(nf, D, nλ, nμ, esym, d, p)] = data.boundary_multiplier[r₀ + p, d]
-            end
+        for d in 1:D, p in 1:nμ
+
+            c.x[multiplier_index(nf, D, nλ, nμ, esym, d, p)] = data.boundary_multiplier[r₀ + p, d]
         end
     end
     return nothing
@@ -344,12 +349,11 @@ function slab_bottom!(c::SpaceTimeGalerkinCache{ST}, data::MultiplierData{ST},
         nodes = space_quadrature_nodes(ansatz)
         ics = problem.ics_function(collect(nodes), parameters(problem))
         qx, D = length(nodes), size(tr.x_u, 2)
-        for d in 1:D
-            for r in 1:qx
-                i = (d - 1) * qx + r
-                tr.x_u[r, d], tr.x_v[r, d], tr.x_w[r, d] = ST(ics.u[i]), ST(ics.v[i]),
-                ST(ics.w[i])
-            end
+        for d in 1:D, r in 1:qx
+
+            i = (d - 1) * qx + r
+            tr.x_u[r, d], tr.x_v[r, d], tr.x_w[r, d] = ST(ics.u[i]), ST(ics.v[i]),
+            ST(ics.w[i])
         end
         project_momentum!(data.initial_multiplier, data, problem)
     else
