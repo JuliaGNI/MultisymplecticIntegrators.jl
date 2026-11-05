@@ -116,7 +116,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - location: `test/couplings/weak_multipliers.jl:94-113`
 - evidence: `multiplier_momentum`, which A7a calls, drives a 50-step `VectorWave` run (β = 0.5)
   through `integrate!` and does not read `cache(int).converged`. The `integrate` run of the same
-  problem and method in A7a (`:501-504`) asserts `all(result.stats.converged)`, so a step that does
+  problem and method in A7a (`:503-506`) asserts `all(result.stats.converged)`, so a step that does
   not converge still fails A7a, but the run whose momenta A7a checks has no assertion of its own.
 - kind: missing test
 - found: 2026-11-01

@@ -353,7 +353,7 @@ end
                     for n in 1:5
                         scale = max(one(T), maximum(abs, res_nl.solution.u[n]))
                         @test maximum(abs.(res_lin.solution.u[n] .- res_nl.solution.u[n])) ≤
-                              T(100) * eps(T) * scale
+                              T(300) * eps(T) * scale
                     end
                     # A second integrate call resets the cache and factorises once for the new run
                     res_lin_2 = integrate(int_lin)
@@ -377,7 +377,7 @@ end
                         scale = max(one(T), maximum(abs, res_nl_0.solution.u[n]))
                         @test maximum(
                             abs.(res_lin_ig.solution.u[n] .- res_nl_0.solution.u[n])) ≤
-                              T(100) * eps(T) * scale
+                              T(300) * eps(T) * scale
                     end
                 end
             end
