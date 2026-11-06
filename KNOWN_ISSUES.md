@@ -121,18 +121,23 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: missing test
 - found: 2026-11-01
 
-### K32 · No check covers the dot-skip that keeps a killed writer's temporary out of `load_runs`.
+### K32 · No check covers the dot-skip in `load_runs` or the stem refusal in `store_run!` that pairs with it.
 
-- location: `scripts/archives.jl:154`
+- location: `scripts/archives.jl:131` and `scripts/archives.jl:156`
 - evidence: `is_written_archive(file) = endswith(file, ".jld2") && !startswith(file, ".")` is the
-  only guard that keeps the temporary of `atomic_write` out of `load_runs`, and no check and no test
-  reaches it: `grep -rn "is_written_archive\|load_runs\|startswith(file" test/` finds nothing, and
-  neither does the same over the spec's `checks/`. With the `&& !startswith(file, ".")` dropped, a
-  probe that archives `whole`, starts a second process whose `atomic_write` writes and then sleeps,
-  kills it with `SIGKILL` and calls `load_runs` reads
+  only guard that keeps the temporary of `atomic_write` out of `load_runs`, and the first line of
+  `store_run!` is the only refusal of a stem that `load_runs` would then not find: an empty stem,
+  one that starts with a dot and one that holds a path separator. No check and no test reaches
+  either: `grep -rn "is_written_archive\|load_runs\|startswith(file\|store_run" test/` finds nothing,
+  and neither does the same over the spec's `checks/`, apart from the one `store_run!` call of
+  `p2_runtime.jl` with a plain stem. With the `&& !startswith(file, ".")` dropped, a probe that
+  archives `whole`, starts a second process whose `atomic_write` writes and then sleeps, kills it
+  with `SIGKILL` and calls `load_runs` reads
   `(files = [".jl_G72HOLijkx.jld2", "whole.jld2"], loaded = ["whole"], unreadable = [".jl_G72HOLijkx.jld2"])`,
-  where the same probe against this branch reads `unreadable = String[]`; every kept check stays
-  green on the mutant.
+  where the same probe against this branch reads `unreadable = String[]`. With the refusal line
+  deleted, `store_run!` returns a path for each of `""`, `"a/b"` and `".hid"` and writes
+  `.jld2`, `a/b.jld2` and `.hid.jld2`, none of which `load_runs` returns, where the same probe
+  against this branch throws an `ArgumentError` for each.
 - kind: missing test
 - found: 2026-11-06
 
