@@ -167,7 +167,8 @@ include("../helpers/testsetup.jl")
         ics = (x, p) -> (u = zeros(length(x)), v = zeros(length(x)), w = zeros(length(x)))
         # `ics` returns a length-`length(x)` vector, which no problem accepts: it refuses a `D = 2`
         # problem at the initial data's size. `ics1` returns the `(length(x), 1)` matrices a `D = 1`
-        # problem accepts, so that each refusal below fails on its own guard.
+        # problem accepts, so that the refusals below are the constructor's own and not the initial
+        # data's size.
         ics1 = (x, p) -> (u = zeros(length(x), 1), v = zeros(length(x), 1),
             w = zeros(length(x), 1))
         bcs = (times, p) -> nothing
@@ -182,6 +183,9 @@ include("../helpers/testsetup.jl")
         @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics1,
             bcs_function = bcs, timespan = (Float16(0), Float16(1)), timestep = Float16(0.1),
             xspan = (Float16(0), Float16(1)), xstep = Float16(0.25))
+        @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics1,
+            bcs_function = bcs, timespan = (1.0, 0.0), timestep = 0.1, xspan = (0.0, 1.0),
+            xstep = 0.25)
         @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics1,
             bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.1, xspan = (1.0, 0.0),
             xstep = 0.25)
