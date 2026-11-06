@@ -93,12 +93,15 @@ end
             timestep = 1.0, xspan = (0.0, 1.0), xstep = 0.01)
 
 A [`LagrangianPDEProblem`](@ref) of the sine-Gordon equation. Throws `ArgumentError` where
-`c * velocity² ≥ 1`, because the kink solution needs a velocity below the wave speed.
+`c * velocity² ≥ 1`, because the kink solution needs a velocity below the wave speed. Every
+parameter is converted to `T`, so that the density and the energy of a `Float32` problem are
+evaluated in `Float32`.
 """
 function problem(; T::Type = Float64, D::Integer = 1, params = default_parameters(),
         timespan = (zero(T), T(10)), timestep = T(1.0), xspan = (zero(T), one(T)),
         xstep = T(0.01))
     lorentz_factor(params)
+    params = map(T, params)
     d = density(; params = params)
     tspan = (T(timespan[1]), T(timespan[2]))
     xsp = (T(xspan[1]), T(xspan[2]))

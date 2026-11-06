@@ -136,18 +136,3 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   them.
 - kind: missing test
 - found: #40
-
-### K35 · Three problem constructors keep `Float64` parameters in a `Float32` problem.
-
-- location: `src/problems/wave.jl`, `src/problems/sine_gordon.jl`,
-  `src/problems/linear_transport.jl`
-- evidence: `Wave.problem`, `SineGordon.problem` and `LinearTransport.problem` pass `params` to
-  `LagrangianPDEProblem` unconverted. With `T = Float32`, `typeof(problem.params)` is
-  `@NamedTuple{c::Float64, A1::Float64, A2::Float64, B1::Float64, B2::Float64, l::Float64}`,
-  `@NamedTuple{c::Float64, velocity::Float64}` and `@NamedTuple{c::Float64}`, and
-  `Base.return_types(MultisymplecticIntegrators.step_energy, …)` gives `Union{Float32, Float64}`
-  for each, because the density evaluates in `Float64` and the energy accumulator starts at
-  `zero(Float32)`. `VectorWave.problem` converts its parameters to `T`, and the same one line closes
-  the other three.
-- kind: defect
-- found: #40

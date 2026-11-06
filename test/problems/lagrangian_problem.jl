@@ -181,4 +181,21 @@ include("../helpers/testsetup.jl")
         @test ntime(problem) == 4
         @test problem.ics.u ≈ [phase * sin(π * xi / params.l) for xi in xgrid(problem)]
     end
+
+    @testset "a Float32 $(nameof(family)) problem evaluates its energy in Float32" for family in (
+        Wave, SineGordon)
+        T = Float32
+        problem = family.problem(
+            T = T, timespan = (zero(T), T(0.1)), timestep = T(0.05), xstep = T(0.25))
+        @test all(value -> typeof(value) === T, problem.params)
+        ansatz = TensorBSplineAnsatz(
+            degree = 2, ncells = (2, 4), xspan = (zero(T), one(T)), n = 3)
+        weights = MultisymplecticIntegrators.space_quadrature_weights(ansatz)
+        entries = problem.D * length(weights)
+        trace = (u = fill(T(0.3), entries), v = fill(T(0.7), entries),
+            w = fill(T(-0.2), entries))
+        energy = @inferred MultisymplecticIntegrators.step_energy(problem, weights, trace, 1)
+        @test energy isa T
+        @test energy != zero(T)
+    end
 end

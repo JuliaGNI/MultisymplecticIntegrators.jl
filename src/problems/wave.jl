@@ -103,11 +103,14 @@ end
 
 A [`LagrangianPDEProblem`](@ref) of the wave equation, with the massless density
 `L = ½v² − ½c²w²` of which the standing wave is the exact solution. A mass or a quartic coupling is
-a keyword of `density` only, because the exact solution holds for neither.
+a keyword of `density` only, because the exact solution holds for neither. Every parameter is
+converted to `T`, so that the density and the energy of a `Float32` problem are evaluated in
+`Float32`.
 """
 function problem(; T::Type = Float64, D::Integer = 1, params = default_parameters(),
         timespan = (zero(T), T(3)), timestep = T(0.3), xspan = (zero(T), one(T)),
         xstep = T(0.01))
+    params = map(T, params)
     d = density(; params = params)
     tspan = (T(timespan[1]), T(timespan[2]))
     xsp = (T(xspan[1]), T(xspan[2]))

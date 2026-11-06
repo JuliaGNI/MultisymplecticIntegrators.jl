@@ -75,11 +75,14 @@ end
             timestep = 1.0, xspan = (-0.5, 0.0), xstep = 0.01)
 
 A [`LagrangianPDEProblem`](@ref) of the linear transport equation. The default `xspan` is
-`(-0.5, 0.0)`, where the initial profile is smooth and nonzero over the whole slab.
+`(-0.5, 0.0)`, where the initial profile is smooth and nonzero over the whole slab. Every parameter
+is converted to `T`, so that the density and the energy of a `Float32` problem are evaluated in
+`Float32`.
 """
 function problem(; T::Type = Float64, D::Integer = 1, params = default_parameters(),
         timespan = (zero(T), T(10)), timestep = T(1.0), xspan = (T(-0.5), zero(T)),
         xstep = T(0.01))
+    params = map(T, params)
     d = density(; params = params)
     tspan = (T(timespan[1]), T(timespan[2]))
     xsp = (T(xspan[1]), T(xspan[2]))

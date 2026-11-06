@@ -51,4 +51,20 @@ include("../helpers/testsetup.jl")
         u₁ = [LinearTransport.exact_u(1.0, xi + params.c, params) for xi in x]
         @test u₀ ≈ u₁ rtol = 16 * eps(Float64)
     end
+
+    @testset "a Float32 problem evaluates its energy in Float32" begin
+        T = Float32
+        problem = LinearTransport.problem(
+            T = T, timespan = (zero(T), T(0.1)), timestep = T(0.05), xstep = T(0.125))
+        @test all(value -> typeof(value) === T, problem.params)
+        ansatz = TensorBSplineAnsatz(
+            degree = 2, ncells = (2, 4), xspan = xspan(problem), n = 3)
+        weights = MultisymplecticIntegrators.space_quadrature_weights(ansatz)
+        entries = problem.D * length(weights)
+        trace = (u = fill(T(0.3), entries), v = fill(T(0.7), entries),
+            w = fill(T(-0.2), entries))
+        energy = @inferred MultisymplecticIntegrators.step_energy(problem, weights, trace, 1)
+        @test energy isa T
+        @test energy != zero(T)
+    end
 end
