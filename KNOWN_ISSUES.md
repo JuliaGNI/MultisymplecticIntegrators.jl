@@ -120,3 +120,34 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   not converge still fails A7a, but the run whose momenta A7a checks has no assertion of its own.
 - kind: missing test
 - found: 2026-11-01
+
+### K34 · CI never evaluates the zero-allocation assertions of the point loops.
+
+- location: `test/ansatz/tensor_bspline.jl`
+- evidence: `.github/workflows/CI.yml` runs `julia-actions/julia-runtest@v1` without a
+  `check_bounds` input, and the action's `action.yml` gives `check_bounds` the default `yes`. Every
+  `@allocated` assertion of the testset "R2 single density_derivatives! and zero-allocation
+  VectorWave residual!" sits under `if Base.JLOptions().check_bounds != 1`: `residual!` of the
+  `D = 2` vector wave with the three couplings, `density_derivatives!`, `momentum_load!` and
+  `flux_load!` at `D = 3`, and `residual!` of `Wave.problem(D = D)` at `D = 4` and `5`, all at
+  0 B. The `D = 1` assertion of A1g in the same file and the `derivatives` assertion of S3b in
+  `test/couplings/coefficient_restriction.jl` sit under the same guard. A CI run passes these
+  testsets without evaluating the bounds, so only a local run under `--check-bounds=auto` checks
+  them.
+- kind: missing test
+- found: #40
+
+### K35 · Three problem constructors keep `Float64` parameters in a `Float32` problem.
+
+- location: `src/problems/wave.jl`, `src/problems/sine_gordon.jl`,
+  `src/problems/linear_transport.jl`
+- evidence: `Wave.problem`, `SineGordon.problem` and `LinearTransport.problem` pass `params` to
+  `LagrangianPDEProblem` unconverted. With `T = Float32`, `typeof(problem.params)` is
+  `@NamedTuple{c::Float64, A1::Float64, A2::Float64, B1::Float64, B2::Float64, l::Float64}`,
+  `@NamedTuple{c::Float64, velocity::Float64}` and `@NamedTuple{c::Float64}`, and
+  `Base.return_types(MultisymplecticIntegrators.step_energy, …)` gives `Union{Float32, Float64}`
+  for each, because the density evaluates in `Float64` and the energy accumulator starts at
+  `zero(Float32)`. `VectorWave.problem` converts its parameters to `T`, and the same one line closes
+  the other three.
+- kind: defect
+- found: #40
