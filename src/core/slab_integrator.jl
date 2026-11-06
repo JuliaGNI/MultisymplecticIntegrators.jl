@@ -23,9 +23,12 @@ the coupling's own unknowns behind them. A [`CoefficientRestriction`](@ref) fixe
 it leaves `(Nt - 1) * Nx * D` free coefficients; a weak-multiplier coupling imposes the initial
 condition with multipliers of its own, so all `Nt` rows are free and the multipliers follow them. A
 step is a nonlinear system of [`total_free_coefficients`](@ref)`(method, problem)` equations, which
-the ecosystem's Newton solver solves. The iterate count, the residual, the initial residual and the
-convergence of every step are recorded in the cache, and the trace `(u, v, w)` at the top of the
-slab, at the nodes of the space quadrature, is kept for the diagnostics.
+the ecosystem's Newton solver solves. With `linear_solver = true`, for an ansatz linear in its
+coefficients and a linear density, the system is affine with the same Jacobian on every slab: the
+first step factorises it once, and every step solves with that factorisation directly. The iterate
+count, the residual, the initial residual and the convergence of every step are recorded in the
+cache, and the trace `(u, v, w)` at the top of the slab, at the nodes of the space quadrature, is
+kept for the diagnostics.
 
 The roles of the ansatz, the coupling and the guess, and the functions through which the core
 reaches each of them, are on the page *The slab seam* of the manual.
@@ -34,7 +37,8 @@ reaches each of them, are on the page *The slab seam* of the manual.
 method = SpaceTimeGalerkin(
     TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0)),
     CoefficientRestriction();
-    initial_guess = Continuation())
+    initial_guess = Continuation(),
+    linear_solver = false)
 
 result = integrate(problem, method)
 ```
