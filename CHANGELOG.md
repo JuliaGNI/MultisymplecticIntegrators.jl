@@ -52,12 +52,13 @@ makes it worth keeping.
   resolves from `test/Project.toml`, so anyone relying on the pinned versions it recorded will get
   a fresh resolve instead.
 - **`test/Project.toml` carries no `[compat]` bound for a dependency of the root `Project.toml`.**
-  The six entries `BenchmarkTools`, `CairoMakie`, `GeometricIntegratorsBase`, `JLD2`, `Plots` and
-  `Revise` are removed, and its `[compat]` table keeps only `Aqua` and `ExplicitImports`, which the
-  root does not depend on. The test environment contains the package, so the resolver applies the
-  root's bounds to every shared dependency; a test bound could only narrow them, and tests that run
-  on narrower bounds than the package claims do not test what the package admits. This is the
-  tree-wide rule of the test-suite unification.
+  The entries `BenchmarkTools`, `GeometricIntegratorsBase`, `Plots` and `Revise` are removed, and
+  its `[compat]` table holds bounds only for the test-only dependencies `Aqua`, `CairoMakie`,
+  `ExplicitImports`, `ForwardDiff`, `JLD2` and `SafeTestsets`, none of which the root depends on.
+  The test environment contains the package, so the resolver applies the root's bounds to every
+  shared dependency; a test bound could only narrow them, and tests that run on narrower bounds
+  than the package claims do not test what the package admits. This is the tree-wide rule of the
+  test-suite unification.
 - **Code that nothing reached is deleted; it stays reachable at `294f023`.** The four files that
   no `include` loaded go: `src/integrator/NN_PDE_LSGD_int.jl`, an older copy of
   `NN_PDE_int.jl`; `src/utils/PINN_for_init.jl`, a prototype script;
