@@ -291,15 +291,15 @@ makes it worth keeping.
   package as a path source, so a script finds `JLD2` and `CairoMakie` where the package's own
   environment holds neither. `archives.jl` holds the two output directories, the option parser that
   refuses an unknown flag, and the writer and reader of the archive: one JLD2 file per run at
-  `runs/<stem>.jld2`, with a `"kind"` and a stem free of a leading dot that `store_run!` requires
-  and `load_runs()` reading the directory back, so a renderer needs no registry to know what an
-  archive is, and the schema itself is stated in `scripts/README.md`. `experiments.jl` is the
-  registry, which holds no family's entries and runs nothing on `include`; `run_family.jl` runs
-  the smallest entry of the family it is named, `figures.jl` is the only place a figure is saved,
-  and the energy scan, the phase-drift scan and the residual profile are carried against the
-  merged family: the quadrature check that was a script is a test of the energy diagnostic, and
-  the two scans and the profile are rewritten for the new constructors. `runs/` and `results/`
-  are anchored in `.gitignore`.
+  `runs/<stem>.jld2`, with a `"kind"` and a stem that `store_run!` requires to be non-empty, not to
+  start with a dot and to hold no path separator, and `load_runs()` reading the directory back, so
+  a renderer needs no registry to know what an archive is, and the schema itself is stated in
+  `scripts/README.md`. `experiments.jl` is the registry, which holds no family's entries and runs
+  nothing on `include`; `run_family.jl` runs the smallest entry of the family it is named,
+  `figures.jl` is the only place a figure is saved, and the energy scan, the phase-drift scan and
+  the residual profile are carried against the merged family: the quadrature check that was a
+  script is a test of the energy diagnostic, and the two scans and the profile are rewritten for
+  the new constructors. `runs/` and `results/` are anchored in `.gitignore`.
 - **The old `scripts/` are deleted (K6).** The drivers of the removed families stay reachable at
   `294f023`. The placeholder drivers of the network and symbolic families, which printed that the
   registry held no entry of their family and why, are deleted with them, so the registry holds

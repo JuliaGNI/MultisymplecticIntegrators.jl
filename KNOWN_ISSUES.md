@@ -123,7 +123,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K32 · No check covers the dot-skip in `load_runs` or the stem refusal in `store_run!` that pairs with it.
 
-- location: `scripts/archives.jl:131` and `scripts/archives.jl:156`
+- location: `scripts/archives.jl:131` and `scripts/archives.jl:157`
 - evidence: `is_written_archive(file) = endswith(file, ".jld2") && !startswith(file, ".")` is the
   only guard that keeps the temporary of `atomic_write` out of `load_runs`, and the first line of
   `store_run!` is the only refusal of a stem that `load_runs` would then not find: an empty stem,
