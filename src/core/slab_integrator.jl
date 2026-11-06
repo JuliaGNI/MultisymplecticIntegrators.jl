@@ -25,9 +25,9 @@ condition with multipliers of its own, so all `Nt` rows are free and the multipl
 step is a nonlinear system of [`total_free_coefficients`](@ref)`(method, problem)` equations, which
 the ecosystem's Newton solver solves. With `linear_solver = true`, for an ansatz linear in its
 coefficients and a linear density, the system is affine with the same Jacobian on every slab: the
-first step factorises it once, and every step solves with that factorisation directly. The iterate
-count, the residual, the initial residual and the convergence of every step are recorded in the
-cache, and the trace `(u, v, w)` at the top of the slab, at the nodes of the space quadrature, is
+first step factorises it once, and every step solves with that factorisation directly and then
+takes one step of iterative refinement with it, two solves in all. The iterate count, the residual,
+the initial residual and the convergence of every step are recorded in the cache, and the trace `(u, v, w)` at the top of the slab, at the nodes of the space quadrature, is
 kept for the diagnostics.
 
 The roles of the ansatz, the coupling and the guess, and the functions through which the core
@@ -303,7 +303,8 @@ coupling's own unknowns, in the layout of the coupling's block.
 `du`, `dv` and `dw` the density's derivatives there; `trace_u`, `trace_v` and `trace_w` hold the
 trace at the top of the last slab. `iterations`, `residuals`, `initial_residuals` and `converged`
 record the Newton solve of every step: its iterate count, its final residual `‖F(x)‖₂`, its initial
-residual `r₀ = ‖F(x₀)‖₂` and whether the step converged. `steps` counts the steps taken, which is
+residual `r₀ = ‖F(x₀)‖₂` and whether the step converged. The direct linear solve records its two
+solves, the first and the refinement step, as two iterates. `steps` counts the steps taken, which is
 what tells the coupling and the guess whether the slab is the run's first.
 
 `ansatz` is the ansatz's block, of type `AD`, which holds what the ansatz keeps of a slab, and
@@ -581,8 +582,9 @@ end
     integrate_step!(sol, history, params, int)
 
 One slab: the coupling fixes its datum, the initial guess fills the solver's vector, the
-ecosystem's Newton solver (or a single-factorisation LU solve when `method.linear_solver` is
-`true`) solves the slab, the cache records the solve, and the update writes the solution, the trace
+ecosystem's Newton solver (or, when `method.linear_solver` is `true`, one solve with the cached LU
+factorisation from zero and one step of iterative refinement) solves the slab, the cache records
+the solve, and the update writes the solution, the trace
 and the data the next slab starts from.
 """
 function integrate_step!(sol, history, params,
@@ -606,9 +608,13 @@ function integrate_step!(sol, history, params,
         residual!(c.linear_rhs, c.linear_zero, sol, params, int)
         ldiv!(lu_fac, c.linear_rhs)
         x .= .-c.linear_rhs
+        # one step of iterative refinement with the same factorisation
+        residual!(c.linear_rhs, x, sol, params, int)
+        ldiv!(lu_fac, c.linear_rhs)
+        x .-= c.linear_rhs
         residual!(c.linear_rhs, x, sol, params, int)
         rfₐ = norm(c.linear_rhs)
-        push!(c.iterations, 1)
+        push!(c.iterations, 2)
         push!(c.residuals, convert(eltype(c.residuals), rfₐ))
         push!(c.initial_residuals, convert(eltype(c.initial_residuals), r₀))
         push!(c.converged,

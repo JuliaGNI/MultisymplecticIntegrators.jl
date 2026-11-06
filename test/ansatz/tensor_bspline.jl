@@ -402,20 +402,19 @@ end
                     res_lin = integrate(int_lin)
                     @test M.factorisations(int_lin) == 1
                     @test M.factorisations(cache(int_lin)) == 1
-                    @test res_lin.stats.iterations == fill(1, 5)
+                    # one solve from zero and one step of iterative refinement
+                    @test res_lin.stats.iterations == fill(2, 5)
                     @test all(res_lin.stats.converged)
-                    # The LU path solves once for the whole slab vector from zero, where Newton
-                    # solves for corrections to the guess until its residual test passes, so the
-                    # LU path's round-off builds up over the slabs, about as n². Measured on Julia
-                    # 1.13: in Float32 the two paths differ by 6–13 eps(T) on slab 1 and 113–169
-                    # eps(T) on slab 5, and in Float64 by at most 51 eps(T), the same under
-                    # `--check-bounds=auto` and `yes`; against a Float64 run, Newton in Float32
-                    # stays within 11 eps(Float32) where the LU path reaches 166–232. The bound is
-                    # above the Float32 figures.
+                    # Without the refinement step the LU path's round-off builds up over the
+                    # slabs, to 169 eps(T) in Float32 on slab 5. With it, measured on Julia 1.13
+                    # by `scripts/linear_solver_accuracy.jl`, the same under `--check-bounds=auto`
+                    # and `yes`: the two paths differ by at most 9.5 eps(T) in Float32 and 13.9
+                    # eps(T) in Float64 over the five slabs, and against a Float64 run the LU path
+                    # in Float32 stays within 5.6 eps(Float32), Newton within 8.0.
                     for n in 1:5
                         scale = max(one(T), maximum(abs, res_nl.solution.u[n]))
                         @test maximum(abs.(res_lin.solution.u[n] .- res_nl.solution.u[n])) ≤
-                              T(300) * eps(T) * scale
+                              T(100) * eps(T) * scale
                     end
                     # A second integrate call resets the cache and factorises once for the new run
                     res_lin_2 = integrate(int_lin)
@@ -435,12 +434,11 @@ end
                     res_lin_ig = integrate(
                         prob1, SpaceTimeGalerkin(ansatz, coupling, ig; linear_solver = true))
                     @test res_lin_ig.solution.u == res_lin_0.solution.u
-                    # the bound of the comparison above, for the same reason
                     for n in 1:5
                         scale = max(one(T), maximum(abs, res_nl_0.solution.u[n]))
                         @test maximum(
                             abs.(res_lin_ig.solution.u[n] .- res_nl_0.solution.u[n])) ≤
-                              T(300) * eps(T) * scale
+                              T(100) * eps(T) * scale
                     end
                 end
             end
