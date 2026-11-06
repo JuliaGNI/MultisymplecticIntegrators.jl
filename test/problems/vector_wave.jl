@@ -74,9 +74,9 @@ include("../helpers/testsetup.jl")
                                                                                        eps(Float64)
         end
         got = VectorWave.derivatives(vector, u, v, w, params)
-        @test got.u ≈ @. -m^2 * u - β * r² * u
-        @test got.v ≈ v
-        @test got.w ≈ -params.c^2 .* w
+        @test collect(got.u) ≈ @. -m^2 * u - β * r² * u
+        @test collect(got.v) ≈ v
+        @test collect(got.w) ≈ -params.c^2 .* w
     end
 
     @testset "the angular momentum of the problem's exact solution" begin

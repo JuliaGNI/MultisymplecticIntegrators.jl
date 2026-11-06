@@ -57,9 +57,3 @@ function assert_no_upcast(x::NamedTuple, ::Type{T}) where {T}
 end
 
 assert_no_upcast(x, ::Type{T}) where {T} = @test typeof(x) === T
-
-function Base.isapprox(t::Tuple, v::AbstractVector; kwargs...)
-    return length(t) == length(v) && isapprox(collect(t), v; kwargs...)
-end
-
-Base.isapprox(v::AbstractVector, t::Tuple; kwargs...) = isapprox(t, v; kwargs...)
