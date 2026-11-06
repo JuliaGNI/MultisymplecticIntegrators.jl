@@ -279,7 +279,8 @@ end
 A [`LagrangianPDEProblem`](@ref) of `D = length(params.A1)` components, with zero Dirichlet data in
 space and the exact solution of the uncoupled case: component `i` is the standing wave of `Wave`
 with the parameters `component_parameters(params, i)`. The initial, boundary and exact data are
-stacked component-major.
+stacked component-major. Every parameter is converted to `T`, so that the density and the energy
+of a `Float32` problem are evaluated in `Float32`.
 """
 function problem(; T::Type = Float64, params = default_parameters(),
         timespan = (zero(T), T(3)), timestep = T(0.3), xspan = (zero(T), one(T)),
@@ -287,6 +288,8 @@ function problem(; T::Type = Float64, params = default_parameters(),
     D = length(params.A1)
     all(name -> length(getfield(params, name)) == D, (:A2, :B1, :B2)) ||
         throw(ArgumentError("A1, A2, B1 and B2 must hold one amplitude per component"))
+    # `T.(value)` converts a scalar and a tuple of amplitudes alike.
+    params = map(value -> T.(value), params)
     tspan = (T(timespan[1]), T(timespan[2]))
     xsp = (T(xspan[1]), T(xspan[2]))
     h = T(xstep)
