@@ -70,10 +70,17 @@ end
 is_linear_density(density::LagrangianDensity) = density.linear
 is_linear_density(::Any) = false
 
-"""The values of `params` in the order of the density's built functions."""
+"""
+The values of `params` in the order of the density's built functions.
+
+When the names of the default parameters are the density's `names`, in their order, the type of
+the defaults fixes that order for the compiler; otherwise each name is looked up in `params`.
+"""
 @inline function parameter_values(
-        ::LagrangianDensity{LT, UT, VT, WT, NT, PT}, params::NamedTuple) where {
+        density::LagrangianDensity{LT, UT, VT, WT, NT, PT}, params::NamedTuple) where {
         LT, UT, VT, WT, NT, PT <: NamedTuple}
+    density.names === fieldnames(PT) ||
+        return map(name -> getfield(params, name), density.names)
     return Tuple(NamedTuple{fieldnames(PT)}(params))
 end
 
