@@ -12,6 +12,7 @@ import GeometricIntegratorsBase: GeometricIntegrator, cache, copy_internal_varia
 
 include("../helpers/testsetup.jl")
 include("../helpers/reference_values.jl")
+include("../helpers/weak_initial_condition_reference.jl")
 
 const M = MultisymplecticIntegrators
 
@@ -201,14 +202,12 @@ end
 @testset "Weak multipliers" begin
     @testset "A1a the Dirichlet reference" for T in (Float64, Float32)
         _, _, int, result = wave_run(T)
-        reference = WAVE_GALERKIN_DIRICHLET_BSPLINE.u
+        reference = WAVE_WEAK_INITIAL_CONDITION.u
         @test length(result.traces) == 5
         @test minimum(cache(int).iterations) ≥ 1
-        # The reference table uses nodal interpolation of the initial momentum, which
-        # differs from WeakInitialCondition's L² projection by 1.18e-7 on this grid.
         for n in 1:5
             @test maximum(abs.(result.solution.u[n] .- reference[n, :])) ≤
-                  max(T(1.2e-7), reference_tolerance(T))
+                  reference_tolerance(T)
         end
         assert_no_upcast(result.solution.u, T)
     end
