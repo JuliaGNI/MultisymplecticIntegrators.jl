@@ -78,6 +78,17 @@ makes it worth keeping.
   under `show_status = true` and now prints whenever OGA selects an atom it already holds, on any
   run. The only live use of the keyword left in `scripts/` is in `scripts/reference_values.jl`,
   which records the integrators at `294f023` and runs only against that commit.
+- **A density that couples the components of the field receives `NTuple`s, not `AbstractVector`
+  views.** A custom density with its own `derivatives` method, such as `VectorWave.VectorDensity`,
+  gets `u`, `v` and `w` as `NTuple{D}`s from the slab through `density_derivatives!`, and from its
+  couplings through `momentum_load!` and `flux_load!`, which call `point_derivatives`; the slab
+  previously passed it `AbstractVector` views. `energy_error` still passes `Vector`s for `D > 1` and
+  scalars for `D = 1`. A `derivatives` method restricted to `AbstractVector` raises a `MethodError`
+  in every coupling, so it must be widened to any indexable collection of length `D`. The call
+  method is reached only by the energy diagnostics, with the same arguments. The docstrings of
+  `LagrangianPDEProblem`, `derivatives` and `VectorWave.VectorDensity` state this contract. The
+  derivative path that returns these tuples is described under the pointwise bullet in New
+  Features.
 
 ### New Features
 
@@ -237,8 +248,15 @@ makes it worth keeping.
   `Dirichlet()` for `WeakInitialCondition` and `Free()` for `WeakInitialAndBoundaryConditions`. The
   two `Galerkin_Bspline_Integrator` entries of the reference values are unconverged solves of a
   singular layout, so the coupling that imposes the boundary conditions is compared with closed
-  forms instead, and the one that imposes the initial condition alone keeps the
-  `WAVE_GALERKIN_DIRICHLET_BSPLINE` entry, which is a converged solve of its own discrete problem;
+  forms instead, and the one that imposes the initial condition alone is compared with a reference of
+  its own: `WAVE_WEAK_INITIAL_CONDITION` in `test/helpers/weak_initial_condition_reference.jl`, which
+  `scripts/weak_initial_condition_reference.jl` writes, with the commit, the Julia version, the
+  `--check-bounds` flag and the dependency versions in its header. It is not the
+  `WAVE_GALERKIN_DIRICHLET_BSPLINE` entry of `test/helpers/reference_values.jl`: that entry does not
+  use the quadrature-weighted `L²` projection above, so its `u` differs from this coupling's solution
+  by up to 1.18e-7 over the five steps and 21 grid nodes. The comparison keeps the bound
+  `800 eps(T)`, 100 times the Newton tolerance `8 eps(T)`, in `Float64` and `Float32`, and
+  `.JuliaFormatter.toml` ignores the generated file, as it does `reference_values.jl`;
   K21 and K22 record why the entries of the full-multiplier layout cannot serve as references.
 - **The energy diagnostics.** `energy_density(density, u, v, w, params)` is the Hamiltonian density
   `v ∂L/∂v − L` of a Lagrangian density, built from the density's own derivative and value, so every
