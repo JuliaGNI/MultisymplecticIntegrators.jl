@@ -36,7 +36,7 @@ function main(args)
         stem = get(data, "stem", "")
         # The extension picks the figure from the archive's kind; a kind it cannot draw is refused
         # there rather than drawn from the wrong keys. The stem names the file, and the figure is
-        # written through a sibling temporary so that a failed draw leaves the earlier one whole.
+        # written through a sibling temporary so that a failed save leaves the earlier one whole.
         drawn = try
             Diagnostics.figures(data)
         catch exception

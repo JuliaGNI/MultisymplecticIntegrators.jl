@@ -290,8 +290,8 @@ end
                               v = vcat(a * profile, (a / 2) * profile),
                               w = zeros(T, 2 * nq))
                           for a in (one(T), T(0.9), T(0.5), T(0.25), T(0.1))]
-                # `--check-bounds=yes` puts its checks inside the measured call; the clause's own
-                # check runs with `--check-bounds=auto`, and so does the reading here.
+                # `--check-bounds=yes` puts its checks inside the measured call, so the reading is
+                # skipped where a run forces `--check-bounds=yes` and taken under `auto`.
                 Base.JLOptions().check_bounds == 1 && continue
                 bytes = allocations(problem, method, traces)
                 @test bytes <= 512

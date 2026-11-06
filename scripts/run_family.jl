@@ -12,9 +12,9 @@
 # With no entry named it runs the cheapest entry of the family, which is what answers "does this
 # family run" in the least time. An archive is one JLD2 file per run, and `figures.jl` draws it.
 #
-# A run that throws is reported on **stderr** with its backtrace and archives nothing — the frame
-# that threw is what says where a family broke, and an archive of a failed run is worse than none —
-# and `main` then returns 1.
+# A run that throws is reported on **stderr** with its stem and its backtrace and archives nothing —
+# the stem says which of the selected entries failed, the frame that threw says where the family
+# broke, and an archive of a failed run is worse than none — and `main` then returns 1.
 #
 # The file is includable: `main` returns the exit code and `exit` runs only when this file is the
 # program, so a caller can register a family of its own and run the real driver over it.
@@ -56,7 +56,8 @@ function main(args)
             report_path("archive", path)
         catch exception
             failures += 1
-            println(stderr, sprint(showerror, exception, catch_backtrace()))
+            println(stderr, "$(entry.stem) FAILED: ",
+                sprint(showerror, exception, catch_backtrace()))
         end
     end
     return failures == 0 ? 0 : 1

@@ -128,9 +128,8 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   only guard that keeps the temporary of `atomic_write` out of `load_runs`, and the first line of
   `store_run!` is the only refusal of a stem that `load_runs` would then not find: an empty stem,
   one that starts with a dot and one that holds a path separator. No check and no test reaches
-  either: `grep -rn "is_written_archive\|load_runs\|startswith(file\|store_run" test/` finds nothing,
-  and neither does the same over the spec's `checks/`, apart from the one `store_run!` call of
-  `p2_runtime.jl` with a plain stem. With the `&& !startswith(file, ".")` dropped, a probe that
+  either: `grep -rn "is_written_archive\|load_runs\|startswith(file\|store_run" test/` finds
+  nothing. With the `&& !startswith(file, ".")` dropped, a probe that
   archives `whole`, starts a second process whose `atomic_write` writes and then sleeps, kills it
   with `SIGKILL` and calls `load_runs` reads
   `(files = [".jl_G72HOLijkx.jld2", "whole.jld2"], loaded = ["whole"], unreadable = [".jl_G72HOLijkx.jld2"])`,

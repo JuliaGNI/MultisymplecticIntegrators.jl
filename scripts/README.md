@@ -39,8 +39,8 @@ julia --project=scripts scripts/profile_residual.jl --steps 0.05,0.025
 
 With no stem named, the driver runs the cheapest entry of the family: the largest time step, which
 is what answers "does this family run at all" in the least time. A run that throws is reported on
-stderr with its backtrace, archives nothing, and makes the driver exit 1, so a failed family is
-distinguishable from a family that ran.
+stderr with its stem and its backtrace, archives nothing, and makes the driver exit 1, so a failed
+family is distinguishable from a family that ran.
 
 **The solves and the figures are separate stages, with `runs/` between them.** A figure can be
 restyled without paying for the solves again, and a missing figure stays distinguishable from a

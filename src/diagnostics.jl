@@ -134,8 +134,8 @@ end
 # values of one point and holds none of them, so a container per node is an allocation the
 # quadrature does not need. `D` arrives as a `Val` so that the tuple's length is the same constant
 # the caller was compiled for.
-@inline function node_values(values::AbstractVector{T}, j::Integer, nq::Integer,
-        ::Val{D}) where {T, D}
+@inline function node_values(values::AbstractVector, j::Integer, nq::Integer,
+        ::Val{D}) where {D}
     D === 1 && return values[j]
     return ntuple(d -> values[(d - 1) * nq + j], Val(D))
 end

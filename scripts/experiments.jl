@@ -1,12 +1,12 @@
 # The registry: what a driver turns into a run.
 #
-# An entry is plain data — the problem, its time step, its space grid and the ansatz resolution —
-# and no work happens at its top level, so a driver can `include` this and pay only the load. The
-# problem and the method are built from the entry by the family's own model file, which registers
-# the family here; this file holds neither an entry nor a constructor.
+# An entry is plain data and no work happens at this file's top level, so a driver can `include`
+# this and pay only the load. The problem and the method are built from the entry by the family's
+# own model file, which registers the family here; this file holds no family's entries and no
+# constructor, only the registry and the ladders of the spline scans.
 #
 # An entry is a named tuple with at least `stem`, which names its archive and its figure, and
-# `label`, which a report and a heading show.
+# `label`, which a report and a heading show; the rest of its fields are the family's own.
 
 # The registry itself: one record per family name. It is a `Dict` and not a constant per family,
 # because a constant is an edit to this file for every family that arrives.
