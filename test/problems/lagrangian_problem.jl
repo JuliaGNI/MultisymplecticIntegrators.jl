@@ -174,8 +174,7 @@ include("../helpers/testsetup.jl")
         @test_throws ArgumentError LagrangianPDEProblem(density; D = 2, ics_function = ics,
             bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0),
             xstep = 0.25)
-        # A grid of one point is refused by the grid's own guard, and not by the initial data's
-        # size.
+        # A step larger than the span leaves a grid of one point, which the constructor refuses.
         @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics1,
             bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0),
             xstep = 2.0)

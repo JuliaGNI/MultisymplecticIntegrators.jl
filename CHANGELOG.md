@@ -90,6 +90,11 @@ makes it worth keeping.
   `LagrangianPDEProblem`, `derivatives` and `VectorWave.VectorDensity` state this contract. The
   derivative path that returns these tuples is described under the pointwise bullet in New
   Features.
+- **`SineGordon` and `LinearTransport` no longer export `initial_data` or `boundary_data`.** A
+  problem's initial and side data come from its `solutions`, through `field_initial_data` and
+  `field_side_data`, so the two modules keep neither helper: `SineGordon.problem` and
+  `LinearTransport.problem` build their data from the closed forms they carry. `Wave` keeps
+  `initial_data` and its `boundary_data` is now `side_data`.
 
 ### New Features
 

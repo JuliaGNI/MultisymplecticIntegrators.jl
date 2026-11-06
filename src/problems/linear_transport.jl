@@ -100,7 +100,7 @@ function solution_w(t, x, params = default_parameters())
     return (w, zero(w))
 end
 
-"""The exact solution of the doubled field at time `t`, as [`field_solutions`](@ref) lifts it."""
+"""The exact solution of the doubled field of `D` components, as [`field_solutions`](@ref) lifts it."""
 function solutions(D::Integer = 2)
     return field_solutions(solution_u, solution_v, solution_w, D)
 end
