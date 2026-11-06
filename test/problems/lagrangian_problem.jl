@@ -194,7 +194,8 @@ include("../helpers/testsetup.jl")
         entries = problem.D * length(weights)
         trace = (u = fill(T(0.3), entries), v = fill(T(0.7), entries),
             w = fill(T(-0.2), entries))
-        energy = @inferred MultisymplecticIntegrators.step_energy(problem, weights, trace, 1)
+        energy = @inferred MultisymplecticIntegrators.step_energy(
+            problem.density, problem.params, weights, trace, 1, Val(problem.D))
         @test energy isa T
         @test energy != zero(T)
     end
