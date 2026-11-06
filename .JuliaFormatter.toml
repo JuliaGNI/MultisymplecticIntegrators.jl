@@ -1,3 +1,5 @@
 style = "sciml"
-# The reference values are generated, one `repr` line per constant, by scripts/reference_values.jl.
-ignore = ["test/helpers/reference_values.jl"]
+# The reference values are generated, one `repr` line per constant, by scripts/reference_values.jl
+# and scripts/weak_initial_condition_reference.jl.
+ignore = ["test/helpers/reference_values.jl",
+    "test/helpers/weak_initial_condition_reference.jl"]

@@ -114,29 +114,62 @@ end
 
 `∂L/∂u`, `∂L/∂v` and `∂L/∂w` at every point of the quadrature grid, from the sampled field.
 
-A `LagrangianDensity` takes one component at a time and is evaluated that way, without allocating.
-A density whose components couple — the vector density of `VectorWave` — takes all of them at once,
-and is given the `D` components of each point as a vector.
+Both a scalar `LagrangianDensity` and a density whose components couple — the vector density of
+`VectorWave` — are evaluated through `point_derivatives`, which returns the components of each point
+as `D`-tuples without allocating.
 """
 function density_derivatives!(∂u::AbstractArray{ST, 3}, ∂v::AbstractArray{ST, 3},
-        ∂w::AbstractArray{ST, 3}, density::LagrangianDensity, u::AbstractArray{ST, 3},
+        ∂w::AbstractArray{ST, 3}, density, u::AbstractArray{ST, 3},
         v::AbstractArray{ST, 3}, w::AbstractArray{ST, 3}, params) where {ST}
-    for d in axes(u, 3), r in axes(u, 2), q in axes(u, 1)
-        ∂u[q, r, d] = derivative_u(density, u[q, r, d], v[q, r, d], w[q, r, d], params)
-        ∂v[q, r, d] = derivative_v(density, u[q, r, d], v[q, r, d], w[q, r, d], params)
-        ∂w[q, r, d] = derivative_w(density, u[q, r, d], v[q, r, d], w[q, r, d], params)
+    D = size(u, 3)
+    if D == 1
+        for r in axes(u, 2), q in axes(u, 1)
+
+            d = point_derivatives(density, u, v, w, q, r, params, Val(1))
+            ∂u[q, r, 1] = d.u[1]
+            ∂v[q, r, 1] = d.v[1]
+            ∂w[q, r, 1] = d.w[1]
+        end
+    elseif D == 2
+        for r in axes(u, 2), q in axes(u, 1)
+
+            d = point_derivatives(density, u, v, w, q, r, params, Val(2))
+            for c in 1:2
+                ∂u[q, r, c] = d.u[c]
+                ∂v[q, r, c] = d.v[c]
+                ∂w[q, r, c] = d.w[c]
+            end
+        end
+    elseif D == 3
+        for r in axes(u, 2), q in axes(u, 1)
+
+            d = point_derivatives(density, u, v, w, q, r, params, Val(3))
+            for c in 1:3
+                ∂u[q, r, c] = d.u[c]
+                ∂v[q, r, c] = d.v[c]
+                ∂w[q, r, c] = d.w[c]
+            end
+        end
+    elseif density isa LagrangianDensity
+        # the components of a scalar density are independent: each is the case `D == 1`
+        for c in 1:D
+            density_derivatives!(view(∂u, :, :, c:c), view(∂v, :, :, c:c),
+                view(∂w, :, :, c:c), density, view(u, :, :, c:c), view(v, :, :, c:c),
+                view(w, :, :, c:c), params)
+        end
+    else
+        _density_derivatives!(∂u, ∂v, ∂w, density, u, v, w, params, Val(D))
     end
     return nothing
 end
 
-function density_derivatives!(∂u::AbstractArray{ST, 3}, ∂v::AbstractArray{ST, 3},
-        ∂w::AbstractArray{ST, 3}, density, u::AbstractArray{ST, 3},
-        v::AbstractArray{ST, 3}, w::AbstractArray{ST, 3}, params) where {ST}
+# The function barrier of `density_derivatives!` for a coupled density with `D > 3`: `Val(D)` is
+# built once per call and not at every point, so the point loop does not dispatch dynamically.
+function _density_derivatives!(∂u, ∂v, ∂w, density, u, v, w, params, ::Val{D}) where {D}
     for r in axes(u, 2), q in axes(u, 1)
 
-        d = derivatives(
-            density, view(u, q, r, :), view(v, q, r, :), view(w, q, r, :), params)
-        for c in axes(u, 3)
+        d = point_derivatives(density, u, v, w, q, r, params, Val(D))
+        for c in 1:D
             ∂u[q, r, c] = d.u[c]
             ∂v[q, r, c] = d.v[c]
             ∂w[q, r, c] = d.w[c]

@@ -103,11 +103,14 @@ end
 
 A [`LagrangianPDEProblem`](@ref) of the wave equation, with the massless density
 `L = ½v² − ½c²w²` of which the standing wave is the exact solution. A mass or a quartic coupling is
-a keyword of `density` only, because the exact solution holds for neither.
+a keyword of `density` only, because the exact solution holds for neither. Every parameter is
+converted to `T`, so that the density and the energy of a `Float32` problem are evaluated in
+`Float32`.
 """
 function problem(; T::Type = Float64, D::Integer = 1, params = default_parameters(),
         timespan = (zero(T), T(3)), timestep = T(0.3), xspan = (zero(T), one(T)),
         xstep = T(0.01))
+    params = map(T, params)
     d = density(; params = params)
     tspan = (T(timespan[1]), T(timespan[2]))
     xsp = (T(xspan[1]), T(xspan[2]))
@@ -182,22 +185,37 @@ end
 
 The density of a component-major vector field `u ∈ ℝᴰ`: the scalar `density` summed over the `D`
 components, minus the quartic coupling `¼β|u|⁴`. The scalar `density` carries no quartic term, so
-that the whole is invariant under a rotation of `(u, v, w)`. `u`, `v` and `w` are vectors of the
-`D` components' values at one point.
+that the whole is invariant under a rotation of `(u, v, w)`. `u`, `v` and `w` hold the `D`
+components' values at one point, in any indexable collection of length `D`: the couplings of the
+slab pass `NTuple{D}`s, and the energy diagnostics pass `Vector`s, or scalars where `D = 1`.
 """
-struct VectorDensity{DT, BT}
+struct VectorDensity{DT, BT, D}
     density::DT
     D::Int
     β::BT
 end
 
+function VectorDensity(density::DT, D::Integer, β::BT) where {DT, BT}
+    d = Int(D)
+    return VectorDensity{DT, BT, d}(density, d, β)
+end
+
+function VectorDensity{DT, BT}(density::DT, D::Integer, β::BT) where {DT, BT}
+    VectorDensity(density, D, β)
+end
+
 VectorDensity(density; D::Integer = 2, β = 0.0) = VectorDensity(density, Int(D), β)
 
-function (density::VectorDensity)(u, v, w, params)
-    length(u) == density.D ||
-        throw(ArgumentError("expected $(density.D) components, got $(length(u))"))
-    r² = sum(abs2, u)
-    return sum(density.density(u[i], v[i], w[i], params) for i in eachindex(u)) -
+function MultisymplecticIntegrators.is_linear_density(density::VectorDensity)
+    iszero(density.β) &&
+        MultisymplecticIntegrators.is_linear_density(density.density)
+end
+
+function (density::VectorDensity{DT, BT, D})(u, v, w, params) where {DT, BT, D}
+    length(u) == D ||
+        throw(ArgumentError("expected $(D) components, got $(length(u))"))
+    r² = sum(i -> abs2(u[i]), 1:D)
+    return sum(i -> density.density(u[i], v[i], w[i], params), 1:D) -
            oftype(r², density.β) * r²^2 / 4
 end
 
@@ -205,14 +223,22 @@ end
 The derivatives of a vector density, component by component: those of the scalar density, and
 `−β|u|²uᵢ` from the quartic coupling in `∂L/∂uᵢ`.
 """
-function derivatives(density::VectorDensity, u, v, w, params)
-    length(u) == density.D ||
-        throw(ArgumentError("expected $(density.D) components, got $(length(u))"))
-    r² = sum(abs2, u)
+function derivatives(density::VectorDensity{DT, BT, D}, u, v, w, params) where {DT, BT, D}
+    length(u) == D ||
+        throw(ArgumentError("expected $(D) components, got $(length(u))"))
+    r² = sum(i -> abs2(u[i]), 1:D)
     β = oftype(r², density.β)
-    each = [derivatives(density.density, u[i], v[i], w[i], params) for i in eachindex(u)]
-    return (u = [d.u - β * r² * uᵢ for (d, uᵢ) in zip(each, u)], v = [d.v for d in each],
-        w = [d.w for d in each])
+    T = typeof(r²)
+    return (
+        u = ntuple(
+            i -> T(derivative_u(density.density, u[i], v[i], w[i], params) - β * r² * u[i]),
+            Val(D)),
+        v = ntuple(
+            i -> T(derivative_v(density.density, u[i], v[i], w[i], params)),
+            Val(D)),
+        w = ntuple(
+            i -> T(derivative_w(density.density, u[i], v[i], w[i], params)),
+            Val(D)))
 end
 
 """
@@ -256,7 +282,8 @@ end
 A [`LagrangianPDEProblem`](@ref) of `D = length(params.A1)` components, with zero Dirichlet data in
 space and the exact solution of the uncoupled case: component `i` is the standing wave of `Wave`
 with the parameters `component_parameters(params, i)`. The initial, boundary and exact data are
-stacked component-major.
+stacked component-major. Every parameter is converted to `T`, so that the density and the energy
+of a `Float32` problem are evaluated in `Float32`.
 """
 function problem(; T::Type = Float64, params = default_parameters(),
         timespan = (zero(T), T(3)), timestep = T(0.3), xspan = (zero(T), one(T)),
@@ -264,6 +291,8 @@ function problem(; T::Type = Float64, params = default_parameters(),
     D = length(params.A1)
     all(name -> length(getfield(params, name)) == D, (:A2, :B1, :B2)) ||
         throw(ArgumentError("A1, A2, B1 and B2 must hold one amplitude per component"))
+    # `T.(value)` converts a scalar and a tuple of amplitudes alike.
+    params = map(value -> T.(value), params)
     tspan = (T(timespan[1]), T(timespan[2]))
     xsp = (T(xspan[1]), T(xspan[2]))
     h = T(xstep)

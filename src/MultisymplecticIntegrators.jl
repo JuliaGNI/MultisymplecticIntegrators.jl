@@ -4,7 +4,7 @@ using GeometricBase
 using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: Diagonal, I, dot
+using LinearAlgebra: Diagonal, I, LU, dot, ldiv!, lu, norm
 using SimpleSplines
 using SimpleSolvers
 using SparseArrays
@@ -15,7 +15,7 @@ import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrat
                       basis_values, degree, nbasis, ncells, quadrature_nodes,
                       quadrature_weights, l2_projection!, nodes as spline_nodes
 import SimpleSolvers: initial_residual, method, solve_with_status!, NonlinearSolverException
-import SimpleSolvers: config
+import SimpleSolvers: config, jacobian!, jacobianmatrix
 import GeometricBase: datatype, timetype, arrtype, equtype, timespan, timestep, parameters,
                       periodicity, ntime, initialstate, timesteps, integrate, update!,
                       nodes

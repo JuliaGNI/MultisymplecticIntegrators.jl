@@ -324,9 +324,8 @@ end
 
 The datum of the first slab, from the problem alone: the bottom row interpolates `u₀` at the spline
 nodes; the load is `F_jd = Σ_r ωₓ_r p₀(x_r) ψ_j(x_r)` with `p₀ = ∂L/∂v(u₀, v₀, w₀)`; the target is
-`u₀` at the space nodes; `λ₀` is `p₀` read into the multiplier basis — by the weighted `L²`
-projection where the coupling imposes the space boundary conditions, and by the unweighted fit at
-the nodes otherwise; and the side data are read at `t = timespan[1] + h t̂_q`.
+`u₀` at the space nodes; `λ₀` is `p₀` read into the multiplier basis by the weighted `L²`
+projection; and the side data are read at `t = timespan[1] + h t̂_q`.
 """
 function first_datum(o::ActionOracle{T}) where {T}
     params = parameters(o.problem)
@@ -340,11 +339,9 @@ function first_datum(o::ActionOracle{T}) where {T}
     load = transpose(o.ψ) * Diagonal(o.ωx) * p₀
     λ₀ = if restricted(o)
         zeros(T, 0, o.D)
-    elseif o.nμ > 0
+    else
         weighted = transpose(o.Λ) * Diagonal(o.ωx)
         (weighted * o.Λ) \ (weighted * p₀)
-    else
-        o.Λ \ p₀
     end
     start = timespan(o.problem)[1]
     ga, gb = side_values(o, start)

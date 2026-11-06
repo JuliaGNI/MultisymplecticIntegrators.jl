@@ -78,6 +78,17 @@ makes it worth keeping.
   under `show_status = true` and now prints whenever OGA selects an atom it already holds, on any
   run. The only live use of the keyword left in `scripts/` is in `scripts/reference_values.jl`,
   which records the integrators at `294f023` and runs only against that commit.
+- **A density that couples the components of the field receives `NTuple`s, not `AbstractVector`
+  views.** A custom density with its own `derivatives` method, such as `VectorWave.VectorDensity`,
+  gets `u`, `v` and `w` as `NTuple{D}`s from the slab through `density_derivatives!`, and from its
+  couplings through `momentum_load!` and `flux_load!`, which call `point_derivatives`; the slab
+  previously passed it `AbstractVector` views. `energy_error` still passes `Vector`s for `D > 1` and
+  scalars for `D = 1`. A `derivatives` method restricted to `AbstractVector` raises a `MethodError`
+  in every coupling, so it must be widened to any indexable collection of length `D`. The call
+  method is reached only by the energy diagnostics, with the same arguments. The docstrings of
+  `LagrangianPDEProblem`, `derivatives` and `VectorWave.VectorDensity` state this contract. The
+  derivative path that returns these tuples is described under the pointwise bullet in New
+  Features.
 
 ### New Features
 
@@ -105,7 +116,9 @@ makes it worth keeping.
   `β`, so `J` is conserved by the coupled equations too.
   `VectorWave` carries the angular momentum `J` as the conserved diagnostic of the vector case.
   `VectorWave.density` is the scalar density of one component and takes the mass `m` only;
-  `vector_density(; params, D, m, β)` carries the coupling.
+  `vector_density(; params, D, m, β)` carries the coupling. `Wave.problem`, `SineGordon.problem`
+  and `LinearTransport.problem` convert their parameters to `T`, as `VectorWave.problem` does, so a
+  problem of `Float32` evaluates its density and energy in `Float32`.
 - **The first integrator family returns: the space-time Galerkin slab core.**
   `SpaceTimeGalerkin{A, C, G} <: SpaceTimeMethod` holds a tensor B-spline ansatz, a coupling of
   consecutive slabs and an initial guess, and one step of it solves one slab.
@@ -228,19 +241,25 @@ makes it worth keeping.
   basis, or `:lagrange`, the nodal basis of the same space, and the second's bottom-surface
   multiplier set leaves out the two corner functions of the trace basis, where they would constrain
   the corners twice and leave the first slab rank deficient by two (§Audit 2.8). The first slab's
-  bottom multiplier is the initial momentum read into the multiplier set — by the
-  quadrature-weighted `L²` projection where the corner functions have left, by the nodal
-  least-squares fit where the whole trace basis is kept — factorised once per integrator
-  (§Audit 5.4), and the multipliers of a step are guessed in `initial_guess!` rather than inside a
-  residual evaluation (§Audit 2.2). The multiplier blocks of the `D > 1` case keep their components
-  apart (§Audit 1.3). Each coupling accepts one space boundary condition and refuses the rest,
-  naming the condition it needs and the one it got: `Dirichlet()` for `WeakInitialCondition` and
-  `Free()` for `WeakInitialAndBoundaryConditions`. The two `Galerkin_Bspline_Integrator` entries of
-  the reference values are unconverged solves of a singular layout, so the coupling that imposes
-  the boundary conditions is compared with closed forms instead, and the one that imposes the
-  initial condition alone keeps the `WAVE_GALERKIN_DIRICHLET_BSPLINE` entry, which is a converged
-  solve of its own discrete problem; K21 and K22 record why the entries of the full-multiplier
-  layout cannot serve as references.
+  bottom multiplier is the initial momentum read into the multiplier set by the
+  quadrature-weighted `L²` projection, factorised once per integrator (§Audit 5.4), its bottom load
+  vector is cached once per step in `slab_bottom!`, and the multipliers of a step are guessed in
+  `initial_guess!` rather than inside a residual evaluation (§Audit 2.2). The multiplier blocks of
+  the `D > 1` case keep their components apart (§Audit 1.3). Each coupling accepts one space
+  boundary condition and refuses the rest, naming the condition it needs and the one it got:
+  `Dirichlet()` for `WeakInitialCondition` and `Free()` for `WeakInitialAndBoundaryConditions`. The
+  two `Galerkin_Bspline_Integrator` entries of the reference values are unconverged solves of a
+  singular layout, so the coupling that imposes the boundary conditions is compared with closed
+  forms instead, and the one that imposes the initial condition alone is compared with a reference of
+  its own: `WAVE_WEAK_INITIAL_CONDITION` in `test/helpers/weak_initial_condition_reference.jl`, which
+  `scripts/weak_initial_condition_reference.jl` writes, with the commit, the Julia version, the
+  `--check-bounds` flag and the dependency versions in its header. It is not the
+  `WAVE_GALERKIN_DIRICHLET_BSPLINE` entry of `test/helpers/reference_values.jl`: that entry does not
+  use the quadrature-weighted `L²` projection above, so its `u` differs from this coupling's solution
+  by up to 1.18e-7 over the five steps and 21 grid nodes. The comparison keeps the bound
+  `800 eps(T)`, 100 times the Newton tolerance `8 eps(T)`, in `Float64` and `Float32`, and
+  `.JuliaFormatter.toml` ignores the generated file, as it does `reference_values.jl`;
+  K21 and K22 record why the entries of the full-multiplier layout cannot serve as references.
 - **The energy diagnostics.** `energy_density(density, u, v, w, params)` is the Hamiltonian density
   `v ∂L/∂v − L` of a Lagrangian density, built from the density's own derivative and value, so every
   problem the package integrates has a conserved quantity without a formula of its own. A density
@@ -307,6 +326,25 @@ makes it worth keeping.
   `--quick` and `--selfcheck` are its gate. The `scripts/` environment adds `BenchmarkTools`,
   `DifferentiationInterface`, `Enzyme`, `Mooncake`, `SimpleSolvers` and the packages of the two
   test helpers it includes.
+
+- **Direct single-factorisation solve for linear densities.** `SpaceTimeGalerkin` takes the keyword
+  `linear_solver = false`. When `linear_solver = true`, `check_method` verifies that the ansatz is
+  linear in its coefficients and that the problem's density is linear (`is_linear_density`, checked
+  symbolically when `LagrangianDensity` is built and true for `VectorWave.VectorDensity` when
+  `β == 0`), refusing a nonlinear ansatz or density with an `ArgumentError`. On the first step,
+  `integrate_step!` evaluates and LU-factorises the constant slab Jacobian once, and every step
+  then solves from zero with that factorisation and takes one step of iterative refinement with
+  it. The run factorises once (`factorisations(int) == 1`), and `stats.iterations` records 2 for
+  each step. Over five slabs the deviation of the solution from the Newton solve is at most
+  9.5 eps(T) in `Float32` and 13.9 eps(T) in `Float64`.
+- **One pointwise density-derivative path and a function barrier for the step loop.**
+  `density_derivatives!`, `momentum_load!` and `flux_load!` each call `point_derivatives`,
+  `WeakInitialCondition` and `WeakInitialAndBoundaryConditions` compute `bottom_load` once per step
+  in `slab_bottom!`, and `VectorWave.derivatives(::VectorDensity, …)` returns `NTuple{D, T}` tuples
+  on the stack rather than heap `Vector` comprehensions, so `residual!` allocates 0 bytes on
+  `VectorWave` as well as `Wave`, closing K19. `integrate` delegates its step loop to
+  `integrate_steps!`, where the solution, solution step, trace vector, integrator and cache have
+  concrete types, closing K30.
 
 ### Changed
 

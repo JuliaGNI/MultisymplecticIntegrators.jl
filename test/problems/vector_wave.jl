@@ -74,9 +74,9 @@ include("../helpers/testsetup.jl")
                                                                                        eps(Float64)
         end
         got = VectorWave.derivatives(vector, u, v, w, params)
-        @test got.u ≈ @. -m^2 * u - β * r² * u
-        @test got.v ≈ v
-        @test got.w ≈ -params.c^2 .* w
+        @test collect(got.u) ≈ @. -m^2 * u - β * r² * u
+        @test collect(got.v) ≈ v
+        @test collect(got.w) ≈ -params.c^2 .* w
     end
 
     @testset "the angular momentum of the problem's exact solution" begin
@@ -98,5 +98,23 @@ include("../helpers/testsetup.jl")
         @test momentum(0.0) ≈ j₀ rtol = 16 * eps(Float64)
         @test momentum(0.35) ≈ j₀ rtol = 16 * eps(Float64)
         @test momentum(1.25) ≈ j₀ rtol = 16 * eps(Float64)
+    end
+
+    @testset "a Float32 problem evaluates its energy in Float32" begin
+        T = Float32
+        problem = VectorWave.problem(
+            T = T, timespan = (zero(T), T(0.1)), timestep = T(0.05),
+            xstep = T(0.25))
+        @test all(value -> eltype(value) === T, problem.params)
+        ansatz = TensorBSplineAnsatz(
+            degree = 2, ncells = (2, 4), xspan = (zero(T), one(T)),
+            n = 3)
+        weights = MultisymplecticIntegrators.space_quadrature_weights(ansatz)
+        entries = problem.D * length(weights)
+        trace = (u = fill(T(0.3), entries), v = fill(T(0.7), entries),
+            w = fill(T(-0.2), entries))
+        energy = @inferred MultisymplecticIntegrators.step_energy(problem, weights, trace, 1)
+        @test energy isa T
+        @test energy > zero(T)
     end
 end

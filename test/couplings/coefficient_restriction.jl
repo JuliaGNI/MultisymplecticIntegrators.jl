@@ -173,6 +173,7 @@ end
     end
 
     @testset "S3b the vector density's derivatives carry the quartic term" for T in (Float64, Float32)
+        @test length(methods(M.momentum_load!)) == 1
         β = T(0.5)
         params = VectorWave.default_parameters()
         scalar = VectorWave.density()
@@ -181,6 +182,19 @@ end
         v = T[T(0.11), T(0.42)]
         w = T[T(-0.25), T(0.19)]
         dvec = M.derivatives(vector, u, v, w, params)
+        u_pt = (T(0.3), T(-0.7))
+        v_pt = (T(0.11), T(0.42))
+        w_pt = (T(-0.25), T(0.19))
+        dvec_pt = M.derivatives(vector, u_pt, v_pt, w_pt, params)
+        @test dvec_pt.u isa NTuple{2, T}
+        @test dvec_pt.v isa NTuple{2, T}
+        @test dvec_pt.w isa NTuple{2, T}
+        @test dvec_pt == dvec
+        if Base.JLOptions().check_bounds != 1
+            alloc_pt(vd, up, vp, wp, pr) = (M.derivatives(vd, up, vp, wp, pr);
+                @allocated M.derivatives(vd, up, vp, wp, pr))
+            @test alloc_pt(vector, u_pt, v_pt, w_pt, params) == 0
+        end
         r² = sum(abs2, u)
         @test r² > zero(T)
         for i in 1:2

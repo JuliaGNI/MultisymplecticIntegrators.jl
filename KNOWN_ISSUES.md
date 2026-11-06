@@ -47,19 +47,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
-### K19 · The coupled density's derivatives allocate at every quadrature point.
-
-- location: `src/problems/wave.jl`
-- evidence: `derivatives(::VectorWave.VectorDensity, …)` builds three heap vectors and an array of
-  named tuples per point, so the slab core's `residual!` on a `D = 2` problem allocates 184 320 B
-  per call — 360 quadrature points at 512 B each — where the scalar path allocates 0. Measured by
-  the slab core's pre-pull-request verification pass as the minimum of `@allocated` over 20 warm
-  calls in a fresh process under `--check-bounds=auto`; `derivatives(vd, u, v, w, params)` alone
-  allocates 1056 B and is unchanged when given `view` arguments. No clause of the part binds this
-  path, and the fix belongs in `src/problems/wave.jl`.
-- kind: defect
-- found: 2026-10-27
-
 ### K20 · `output_grid` is exported and tested, and nothing in `src` calls it.
 
 - location: `src/ansatz/tensor_bspline.jl`
@@ -124,26 +111,28 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-11-01
 
-### K30 · The step loop of `integrate` dispatches dynamically, because `GeometricSolution(problem)` does not infer a concrete type.
-
-- location: `src/core/integrate.jl:77`
-- evidence: on a `Wave` problem (`Float64`), `Base.return_types(GeometricSolution, (typeof(p),))`
-  gives a `UnionAll` (`TimeSeries{Float64, _A, …}`, `NamedTuple{names, T}`, `_A1 <: OffsetVector`).
-  In `code_warntype` of the keyword body of `integrate`, `steps::Any` and `n::Any`, and `solution`
-  and `solstep` are not concrete. So `reset!`, `integrate!`, `copy!` and the per-step convergence
-  check (`solve_stats`, `on_failure`) dispatch at run time. `record`, `traces`, `c` and the `stats`
-  of the result are concrete. `residual!`, `update!`, `integrate_step!` and the seam functions have
-  no dynamic call (`code_typed`). One dispatch per step costs little next to one Newton solve. A
-  function barrier around the step loop fixes the loop and the convergence check together.
-- kind: defect
-- found: 2026-11-01
-
 ### K31 · A7a's `integrate!` run does not assert convergence.
 
 - location: `test/couplings/weak_multipliers.jl:94-113`
 - evidence: `multiplier_momentum`, which A7a calls, drives a 50-step `VectorWave` run (β = 0.5)
   through `integrate!` and does not read `cache(int).converged`. The `integrate` run of the same
-  problem and method in A7a (`:501-504`) asserts `all(result.stats.converged)`, so a step that does
+  problem and method in A7a (`:503-506`) asserts `all(result.stats.converged)`, so a step that does
   not converge still fails A7a, but the run whose momenta A7a checks has no assertion of its own.
 - kind: missing test
 - found: 2026-11-01
+
+### K34 · CI never evaluates the zero-allocation assertions of the point loops.
+
+- location: `test/ansatz/tensor_bspline.jl`
+- evidence: `.github/workflows/CI.yml` runs `julia-actions/julia-runtest@v1` without a
+  `check_bounds` input, and the action's `action.yml` gives `check_bounds` the default `yes`. Every
+  `@allocated` assertion of the testset "R2 single density_derivatives! and zero-allocation
+  VectorWave residual!" sits under `if Base.JLOptions().check_bounds != 1`: `residual!` of the
+  `D = 2` vector wave with the three couplings, `density_derivatives!`, `momentum_load!` and
+  `flux_load!` at `D = 3`, and `residual!` of `Wave.problem(D = D)` at `D = 4` and `5`, all at
+  0 B. The `D = 1` assertion of A1g in the same file and the `derivatives` assertion of S3b in
+  `test/couplings/coefficient_restriction.jl` sit under the same guard. A CI run passes these
+  testsets without evaluating the bounds, so only a local run under `--check-bounds=auto` checks
+  them.
+- kind: missing test
+- found: #40

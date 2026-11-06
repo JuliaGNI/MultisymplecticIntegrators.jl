@@ -372,4 +372,26 @@ end
         # an ansatz is no `GeometricMethod`, so the integrator refuses it at construction
         @test_throws MethodError GeometricIntegrator(problem, ansatz)
     end
+
+    @testset "R2 integrate_steps! is type-stable for D = 1 and D = 2, $T" for T in (
+        Float64, Float32)
+        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 4),
+            xspan = (zero(T), one(T)), n = 3)
+        method = SpaceTimeGalerkin(ansatz, CoefficientRestriction())
+        p1 = Wave.problem(T = T, timespan = (zero(T), T(0.1)), timestep = T(0.05),
+            xstep = T(0.25))
+        p2 = VectorWave.problem(T = T, timespan = (zero(T), T(0.1)), timestep = T(0.05),
+            xstep = T(0.25))
+        for prob in (p1, p2)
+            int = GeometricIntegrator(prob, method)
+            c = cache(int)
+            sol = GeometricSolution(prob)
+            sstep = solutionstep(int, sol[0])
+            t₀ = MultisymplecticIntegrators.top_trace(c)
+            tr = Vector{typeof(t₀)}()
+            @inferred MultisymplecticIntegrators.integrate_steps!(
+                sol, sstep, tr, int, c, :warn)
+            @test length(tr) == 2
+        end
+    end
 end
