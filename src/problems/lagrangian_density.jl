@@ -107,7 +107,13 @@ function derivative_w(density::LagrangianDensity, u, v, w, params = density.para
     density.∂w(u, v, w, parameter_values(density, params)...)
 end
 
-"""The three derivatives of a density at `(u, v, w)`, as a named tuple."""
+"""
+The three derivatives of a density at `(u, v, w)`, as a named tuple.
+
+A density that couples the `D` components of the field defines its own method. The couplings of
+the slab call it with `NTuple{D}`s for `u`, `v` and `w`, so a method restricted to
+`AbstractVector` does not apply; see [`LagrangianPDEProblem`](@ref).
+"""
 function derivatives(density::LagrangianDensity, u, v, w, params = density.params)
     return (u = derivative_u(density, u, v, w, params),
         v = derivative_v(density, u, v, w, params),
