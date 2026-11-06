@@ -165,10 +165,9 @@ include("../helpers/testsetup.jl")
     @testset "the decided edges" begin
         density = Wave.density()
         ics = (x, p) -> (u = zeros(length(x)), v = zeros(length(x)), w = zeros(length(x)))
-        # `ics` returns a length-`length(x)` vector, which no problem accepts: it refuses a `D = 2`
-        # problem at the initial data's size. `ics1` returns the `(length(x), 1)` matrices a `D = 1`
-        # problem accepts, so that the refusals below are the constructor's own and not the initial
-        # data's size.
+        # `ics` returns a length-`length(x)` vector, which no problem accepts: it refuses the
+        # `D = 2` problem below at the initial data's size. `ics1` returns the matrices a
+        # `D = 1` problem accepts, so that each `D = 1` refusal below reaches its own guard.
         ics1 = (x, p) -> (u = zeros(length(x), 1), v = zeros(length(x), 1),
             w = zeros(length(x), 1))
         bcs = (times, p) -> nothing
