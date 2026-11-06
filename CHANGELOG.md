@@ -220,10 +220,11 @@ makes it worth keeping.
   that it admits. The library is split over two pages, the package module and its submodules, so
   that each page stays below Documenter's size threshold.
 - **`test/runtests.jl` runs each test file in its own `@safetestset`.** Empty `ARGS` runs the `core`
-  and `slow` groups. The `core` group holds fourteen files: the Aqua, explicit-imports and sources
+  and `slow` groups. The `core` group holds fifteen files: the Aqua, explicit-imports and sources
   quality checks, the Lagrangian density and Lagrangian problem tests, the linear transport and
   vector wave tests, the tensor B-spline ansatz, coefficient restriction, coupling seam and
-  initial-guess tests, the integrator shell test, and the diagnostics and plotting tests. The
+  initial-guess tests, the integrator shell and archive tests, and the diagnostics and
+  plotting tests. The
   `slow` group holds the weak-multiplier test and the six property files of the entry below.
 - **Reference values of the integrators at `294f023`.** `scripts/reference_values.jl` runs every
   integrator family on short `Wave` and `SineGordon` cases and writes
@@ -299,7 +300,9 @@ makes it worth keeping.
   `figures.jl` is the only place a figure is saved, and the energy scan, the phase-drift scan and
   the residual profile are carried against the merged family: the quadrature check that was a
   script is a test of the energy diagnostic, and the two scans and the profile are rewritten for
-  the new constructors. `runs/` and `results/` are anchored in `.gitignore`.
+  the new constructors. `runs/` and `results/` are anchored in `.gitignore`. The archive test,
+  `test/integration/archives.jl`, checks `atomic_write`, the stem refusal of `store_run!` and the
+  dot-skip of `load_runs`; this closes the known issue K32.
 - **The old `scripts/` are deleted (K6).** The drivers of the removed families stay reachable at
   `294f023`. The placeholder drivers of the network and symbolic families, which printed that the
   registry held no entry of their family and why, are deleted with them, so the registry holds
@@ -337,8 +340,10 @@ makes it worth keeping.
   "Implemented in the … extension" stub docstrings are gone, so each name has the one docstring of
   its declaration in `src/plots.jl`, and `draw_solution` no longer shadows Makie's `heatmap` with a
   local of that name. `title = nothing` takes the archive's heading and `title = ""` draws none, in
-  the declarations of `plot_solution` and `plot_energy_error` and in their methods, and
-  `plot_energy_error` adds a `Legend` only when it drew a series, so an all-zero error figure is
+  the declarations of `plot_solution` and `plot_energy_error` and in their methods.
+  `animate_solution` takes `title = nothing` as its default too, where `nothing` and `""` draw no
+  heading before the time, and a given title is drawn before it. `plot_energy_error` adds a
+  `Legend` only when it drew a series, so an all-zero error figure is
   drawn without one instead of throwing. In `src/diagnostics.jl` a node's `D` values are a static
   tuple rather than a heap `Vector`, so the energy of a vector trace builds no container per node,
   and `scripts/Project.toml` gains a `[compat]` entry for each of its remaining ten unbounded
