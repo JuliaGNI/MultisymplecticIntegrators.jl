@@ -110,8 +110,8 @@ end
     return energy
 end
 
-# A density that takes the `D` components of one point at once gets the vectors of them, and its own
-# derivative with respect to `v` is the vector that closes the inner product.
+# A density that takes the `D` components of one point at once gets them as a tuple, and its own
+# derivative with respect to `v` is the tuple that closes the inner product.
 @inline function node_energy_density(density, trace, j::Integer, nq::Integer, D::Integer,
         params)
     return energy_density(density,
@@ -121,11 +121,13 @@ end
 end
 
 # One component's value at node `j`: the entry itself for a scalar field, and the `D` components of
-# that node for a vector one.
+# that node for a vector one, as a tuple rather than a heap `Vector` — the density reads the `D`
+# values of one point and holds none of them, so a container per node is an allocation the
+# quadrature does not need.
 @inline function node_values(values::AbstractVector{T}, j::Integer, nq::Integer,
         D::Integer) where {T}
     D === 1 && return values[j]
-    return T[values[(d - 1) * nq + j] for d in 1:D]
+    return ntuple(d -> values[(d - 1) * nq + j], D)
 end
 
 """
