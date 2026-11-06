@@ -408,17 +408,21 @@ makes it worth keeping.
   component 1 the transported field `u` and component 2 the adjoint field `ψ` of zero data: `ψ`'s
   rows carry the transport equation for `u` and `u`'s rows the adjoint equation for `ψ`, where
   `L = ½u(v + c w)` was a total divergence whose first slab's Jacobian was the zero matrix (K16).
-  The Legendre map is degenerate all the same (`p_u = ψ`, `p_ψ = 0`), so the slab step is measured
-  rather than assumed: at `cells ∈ (5, 10, 20)` with `timestep = 2/cells` and `xstep = 0.5/cells`
-  under `CoefficientRestriction`, every step converges in one Newton iteration and the first slab's
-  Jacobian at 20 cells is non-singular (132 unknowns, `max |J| = 0.00573`, smallest singular value
-  `2.54e-4`). The error against the exact travelling wave is `1.81e-3`, `6.08e-4` and `7.90e-4` on
-  the three meshes, orders `1.58` and `-0.38`, and `8.93e-4` at 40 cells: it is a stalled defect at
-  the inflow end `x = -0.5`, where `CoefficientRestriction` imposes no side datum, and it decays
-  towards the outflow end. The same meshes under `WeakInitialAndBoundaryConditions` give `2.15e-6`,
-  `3.96e-7` and `5.44e-8`, orders `2.44` and `2.86`. `LinearTransport.problem` builds `D = 2` and
-  takes no `D` keyword, and its `solution_u`, `solution_v` and `solution_w` return the pair
-  `(value, 0)`. K16 stays open with the measurement.
+  The Legendre map is degenerate all the same (`p_u = ψ`, `p_ψ = 0`), and the slab step is both
+  solvable and measured: at `cells ∈ (5, 10, 20)` with `timestep = 2/cells` and
+  `xstep = 0.5/cells`, every step converges in one Newton iteration under both couplings, and the
+  first 20-cell slab of `CoefficientRestriction` is non-singular — 132 unknowns, rank 132, smallest
+  singular value `2.54e-4` against `1.54e-2`, a ratio of `1.65e-2`. The whole-grid error under
+  `CoefficientRestriction` is largest at the free inflow end `x = -0.5`, where that coupling imposes
+  no side datum, so the order is read on the grid the initial data alone determine,
+  `x ≥ xspan[1] + c t_end`, where the error is `1.29e-7`, `7.16e-8` and `1.07e-8`, orders `0.85` and
+  `2.74`. `WeakInitialAndBoundaryConditions` imposes the inflow value as well, and on the whole grid
+  its error is `2.15e-6`, `3.96e-7` and `5.44e-8`, orders `2.44` and `2.86`.
+  `LinearTransport.problem` builds `D = 2` and takes no `D` keyword, and its `solution_u`,
+  `solution_v` and `solution_w` return the pair `(value, 0)`. K16 is closed, and
+  `test/problems/linear_transport.jl` asserts the measurement: both couplings at those three meshes,
+  at most two Newton iterations per step, the 20-cell Jacobian at full rank with
+  `σ_min/σ_max ≥ 1e-3`, and the masked and whole-grid orders at least `1.9` from 10 to 20 cells.
 - **CI coverage and cache.** CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of
   `Julia min`, and a test job saves the Julia cache only when it succeeds.
 - **Test floors for the merged downgrade check.** CI's Downgrade job resolves `Project.toml` and

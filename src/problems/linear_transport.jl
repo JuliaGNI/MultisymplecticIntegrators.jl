@@ -19,6 +19,10 @@ u(t, x) = \\frac{1}{2\\sqrt{\\pi}} \\exp\\!\\big(-(x + 2 - ct)^2\\big),
 
 with `v = ∂ₜu` and `w = ∂ₓu` its derivatives, and the adjoint field's exact value is zero.
 
+The transport equation needs its inflow value at `x = -0.5`, which
+`WeakInitialAndBoundaryConditions` imposes and `CoefficientRestriction` does not, so under the
+restriction the error is largest at that end and the converged order is read on `x ≥ -0.5 + c t`.
+
 ```julia
 problem = LinearTransport.problem(timespan = (0.0, 10.0), timestep = 1.0, xstep = 0.01)
 ```

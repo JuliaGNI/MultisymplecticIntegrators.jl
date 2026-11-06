@@ -25,29 +25,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
-### K16 · The transport problem is not a convergence test under `CoefficientRestriction`.
-
-- location: `src/problems/linear_transport.jl`
-- evidence: the doubled density `L = ψ (v₁ + c w₁)` on `D = 2` gives the transport equation its
-  dynamics, where the earlier `L = ½u(v + c w)` was a total divergence whose first slab's Jacobian
-  was the zero matrix, and the slab step is solvable: at `cells ∈ (5, 10, 20)`, `timestep =
-  2/cells` and `xstep = 0.5/cells` under `CoefficientRestriction` with `Free()`, every step
-  converges in one Newton iteration (`iterations = [1, 1, 1, 1, 1]` at 5 cells), and the first slab
-  of the 20-cell mesh has `unknowns = 132`, `max |J| = 0.005729166666666671`, `max |r| =
-  0.019482247127516304` and smallest singular value `2.542e-04`. The error against the exact
-  travelling wave is `0.0018147688809483087`, `0.0006076761601466196` and `0.0007901578011501459`
-  on the three meshes — orders `1.578` and `-0.379` — and `8.927e-04` at 40 cells. Its maximum sits
-  at the inflow end `x = -0.5`, which `CoefficientRestriction` leaves free: the coupling imposes the
-  bottom row and no side datum, and a hyperbolic problem's inflow end is fixed by the side datum
-  alone. The error decays towards the outflow end, to `1.07e-08` at the seventeenth of the 21
-  points of the 20-cell mesh. The same three meshes under `WeakInitialAndBoundaryConditions`, which
-  imposes both side data, give `2.15e-06`, `3.96e-07` and `5.44e-08`, orders `2.44` and `2.86`.
-  The problem therefore measures the density, not an order, under the restriction: a convergence
-  test of the transport equation takes the multiplier coupling, and the first-order form of U11
-  takes the problem over.
-- kind: defect
-- found: 2026-10-26; restated 2026-11-06
-
 ### K21 · The `WAVE_GALERKIN_BSPLINE` record is an unconverged solve of a singular layout.
 
 - location: `test/helpers/reference_values.jl:45`
