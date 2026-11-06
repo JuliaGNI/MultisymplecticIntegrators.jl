@@ -184,7 +184,7 @@ The density of a component-major vector field `u ∈ ℝᴰ`: the scalar `densit
 components, minus the quartic coupling `¼β|u|⁴`. The scalar `density` carries no quartic term, so
 that the whole is invariant under a rotation of `(u, v, w)`. `u`, `v` and `w` hold the `D`
 components' values at one point, in any indexable collection of length `D`: the couplings of the
-slab pass `NTuple{D}`s, and the energy diagnostics pass `Vector`s.
+slab pass `NTuple{D}`s, and the energy diagnostics pass `Vector`s, or scalars where `D = 1`.
 """
 struct VectorDensity{DT, BT, D}
     density::DT

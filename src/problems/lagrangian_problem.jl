@@ -23,8 +23,8 @@ returning its three partial derivatives `∂L/∂u`, `∂L/∂v` and `∂L/∂w`
 components of the field, such as the vector density that `VectorWave.vector_density` builds,
 supplies them for the `D` components of one point at once. Such a density receives the `D` values
 of `u`, `v` and `w` at a point as an indexable collection: the couplings of the slab pass
-`NTuple{D}`s to `derivatives`, and [`energy_error`](@ref) passes `Vector`s to `derivatives` and
-to the density itself. Write its methods for any collection of length `D`, not for
+`NTuple{D}`s to `derivatives`, and [`energy_error`](@ref) passes `Vector`s, or scalars where
+`D = 1`, to `derivatives` and to the density itself. Write its methods for any collection of length `D`, not for
 `AbstractVector` alone; `derivatives` returns the named tuple `(u = …, v = …, w = …)` of the `D`
 values of each partial derivative. The problem's parameters are the
 density's own `params` field where it has one, and the `params` keyword otherwise.
