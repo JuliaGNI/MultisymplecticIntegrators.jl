@@ -39,7 +39,7 @@ export LagrangianDensity, derivative_u, derivative_v, derivative_w, derivatives
 
 include("problems/lagrangian_problem.jl")
 export LagrangianEquation, LagrangianPDEProblem, xspan, xstep, xgrid, components,
-       field_initial_data, field_side_data, field_exact, convert_parameters
+       field_initial_data, field_side_data, field_exact, field_solutions, convert_parameters
 
 include("problems/wave.jl")
 export Wave, VectorWave

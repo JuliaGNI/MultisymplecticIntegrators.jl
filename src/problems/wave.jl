@@ -87,10 +87,9 @@ function initial_data(x::AbstractVector, params = default_parameters(), D::Integ
     field_initial_data(solutions(D), x, params, D, t)
 end
 
-"""The exact solution of the wave of `D` components, as [`field_exact`](@ref) lifts it."""
+"""The exact solution of the wave of `D` components, as [`field_solutions`](@ref) lifts it."""
 function solutions(D::Integer = 1)
-    return (u = field_exact(solution_u, D), v = field_exact(solution_v, D),
-        w = field_exact(solution_w, D))
+    return field_solutions(solution_u, solution_v, solution_w, D)
 end
 
 """
@@ -284,9 +283,10 @@ end
 
 A [`LagrangianPDEProblem`](@ref) of `D = length(params.A1)` components, with zero Dirichlet data in
 space and the exact solution of the uncoupled case: component `i` is the standing wave of `Wave`
-with the parameters `component_parameters(params, i)`. The initial, boundary and exact data are
-stacked component-major. Every parameter is converted to `T`, so that the density and the energy
-of a `Float32` problem are evaluated in `Float32`.
+with the parameters `component_parameters(params, i)`. Component `i` is column `i` of the initial
+data, entry `i` of the side data, and the `i`-th stretch of the component-major exact solution.
+Every parameter is converted to `T`, so that the density and the energy of a `Float32` problem are
+evaluated in `Float32`.
 """
 function problem(; T::Type = Float64, params = default_parameters(),
         timespan = (zero(T), T(3)), timestep = T(0.3), xspan = (zero(T), one(T)),

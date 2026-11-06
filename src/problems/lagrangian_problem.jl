@@ -153,6 +153,16 @@ function field_exact(f, D::Integer)
 end
 
 """
+    field_solutions(u, v, w, D)
+
+The exact solution of `D` components as `(u = …, v = …, w = …)`, each entry the closed form of one
+field lifted by [`field_exact`](@ref).
+"""
+function field_solutions(u, v, w, D::Integer)
+    return (u = field_exact(u, D), v = field_exact(v, D), w = field_exact(w, D))
+end
+
+"""
     field_side_data(solutions, t, params, D, xspan)
 
 The side data of a slab at the one time `t`: `left` and `right`, each `(u = …, v = …, w = …)` of `D`

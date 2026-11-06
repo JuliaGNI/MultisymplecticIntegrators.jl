@@ -29,9 +29,7 @@ problem = LinearTransport.problem(timespan = (0.0, 10.0), timestep = 1.0, xstep 
 """
 module LinearTransport
 
-export default_parameters, density, problem, solution_u, solution_v, solution_w,
-       initial_data,
-       side_data
+export default_parameters, density, problem, solution_u, solution_v, solution_w
 
 using Symbolics
 using MultisymplecticIntegrators
@@ -102,25 +100,9 @@ function solution_w(t, x, params = default_parameters())
     return (w, zero(w))
 end
 
-"""The exact solution of the doubled field at time `t`, as [`field_exact`](@ref) lifts it."""
+"""The exact solution of the doubled field at time `t`, as [`field_solutions`](@ref) lifts it."""
 function solutions(D::Integer = 2)
-    return (u = field_exact(solution_u, D), v = field_exact(solution_v, D),
-        w = field_exact(solution_w, D))
-end
-
-"""
-    initial_data(x::AbstractVector, params, D = 2, t = 0.0)
-
-The initial data `(u = …, v = …, w = …)` at time `t`, one `(length(x), D)` matrix per entry, of
-which the adjoint field's column is zero.
-"""
-function initial_data(x::AbstractVector, params = default_parameters(), D::Integer = 2, t = 0.0)
-    field_initial_data(solutions(D), x, params, D, t)
-end
-
-"""The side data of the slab at the one time `t`, as [`field_side_data`](@ref) gives it."""
-function side_data(t, xspan, params = default_parameters(), D::Integer = 2)
-    field_side_data(solutions(D), t, params, D, xspan)
+    return field_solutions(solution_u, solution_v, solution_w, D)
 end
 
 """

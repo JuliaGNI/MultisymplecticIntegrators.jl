@@ -166,8 +166,8 @@ function generate_problem(::Type{T}, rng::AbstractRNG, density, i::Integer, kind
     a = uniform(rng, T, -0.6, 0.4)
     m = rand(rng, 8:12)
     b = a + uniform(rng, T, 0.6, 1.3)
-    # a step of `m` cells: the output grid is the range `xspan[1]` to `xspan[2]` in `m + 1` points,
-    # so a step that divides the span is no longer refused
+    # a step of `m` cells: the output grid is the range from `xspan[1]` to `xspan[2]` in `m + 1`
+    # points, so it ends on the span's end whatever the step's remainder
     xstep = (b - a) / m
     # the time grid: three steps of a random timestep, from zero or from a random time
     h = uniform(rng, T, 0.02, 0.09)

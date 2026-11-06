@@ -20,8 +20,7 @@ problem = SineGordon.problem(timespan = (0.0, 10.0), timestep = 1.0, xstep = 0.0
 module SineGordon
 
 export default_parameters, density, problem, solution_u, solution_v, solution_w,
-       initial_data,
-       side_data, lorentz_factor
+       lorentz_factor
 
 using Symbolics
 using MultisymplecticIntegrators
@@ -79,20 +78,9 @@ function solution_w(t, x, params = default_parameters())
     return 4 * γ * exp(ξ) / (1 + exp(ξ)^2)
 end
 
-"""The initial data `(u = …, v = …, w = …)` at time `t`, one `(length(x), D)` matrix per entry."""
-function initial_data(x::AbstractVector, params = default_parameters(), D::Integer = 1, t = 0.0)
-    field_initial_data(solutions(D), x, params, D, t)
-end
-
-"""The exact solution of the kink of `D` components, as [`field_exact`](@ref) lifts it."""
+"""The exact solution of the kink of `D` components, as [`field_solutions`](@ref) lifts it."""
 function solutions(D::Integer = 1)
-    return (u = field_exact(solution_u, D), v = field_exact(solution_v, D),
-        w = field_exact(solution_w, D))
-end
-
-"""The side data of the slab at the one time `t`, as [`field_side_data`](@ref) gives it."""
-function side_data(t, xspan, params = default_parameters(), D::Integer = 1)
-    field_side_data(solutions(D), t, params, D, xspan)
+    return field_solutions(solution_u, solution_v, solution_w, D)
 end
 
 """

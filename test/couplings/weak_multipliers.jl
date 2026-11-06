@@ -564,7 +564,9 @@ end
         M.slab_bottom!(c, c.coupling, problem, ansatz, solstep)
         tq, target = c.ansatz.tabulation.time, c.coupling.work.boundary_target
         qt, h, params = length(tq.node), timestep(problem), problem.params
-        t₀ = M.slab_start(problem, solstep)
+        # The first slab ends at the initial time, so it starts one step before it: the time comes
+        # from the problem, and not from the start-time function this test does not check.
+        t₀ = timespan(problem)[1] - h
         for rt in 1:qt
             t = t₀ + h * tq.node[rt]
             for d in 1:2

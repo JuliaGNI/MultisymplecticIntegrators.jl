@@ -21,22 +21,21 @@ include("../helpers/testsetup.jl")
               5
     end
 
-    @testset "the exact solution is a vector at both call shapes" begin
-        problem = Wave.problem(timespan = (0.0, 1.0), timestep = 0.1, xstep = 0.25)
-        # The wrapper returns a `Vector` at a scalar point and at a grid, so its return type is no
-        # union of a scalar and a vector (`Base.return_types`, because `D` is a runtime value).
-        @test Base.return_types(problem.solutions.u,
-            Tuple{Float64, Float64, typeof(problem.params)}) == Any[Vector{Float64}]
-        @test problem.solutions.u(0.1, 0.3, problem.params) isa Vector{Float64}
-        @test length(problem.solutions.u(0.1, 0.3, problem.params)) == 1
-        @test length(problem.solutions.u(0.1, collect(xgrid(problem)), problem.params)) ==
-              length(xgrid(problem))
-        for P in (Wave.problem(), SineGordon.problem(), VectorWave.problem(),
-            LinearTransport.problem())
-            @test P.solutions !== nothing
+    @testset "the exact solution is a vector at both call shapes" for T in (Float64, Float32)
+        # The wrapper returns a `Vector` at a scalar point and at a grid for every problem, so its
+        # return type is no union of a scalar and a vector (`Base.return_types`, because `D` is a
+        # runtime value).
+        for problem in (Wave.problem(T = T), SineGordon.problem(T = T),
+            VectorWave.problem(T = T), LinearTransport.problem(T = T))
+            @test problem.solutions !== nothing
+            @test Base.return_types(problem.solutions.u,
+                Tuple{T, T, typeof(problem.params)}) == Any[Vector{T}]
+            scalar = problem.solutions.u(T(0.1), T(0.3), problem.params)
+            @test scalar isa Vector{T}
+            @test length(scalar) == components(problem)
+            grid = problem.solutions.u(T(0.1), collect(xgrid(problem)), problem.params)
+            @test length(grid) == components(problem) * length(xgrid(problem))
         end
-        @test VectorWave.problem().solutions.u(0.5, 0.3, VectorWave.default_parameters()) isa
-              Vector
     end
 
     @testset "the spans have the element type" begin
@@ -166,29 +165,32 @@ include("../helpers/testsetup.jl")
     @testset "the decided edges" begin
         density = Wave.density()
         ics = (x, p) -> (u = zeros(length(x)), v = zeros(length(x)), w = zeros(length(x)))
-        # A grid of one point is refused by the grid's own guard, and not by the initial data's
-        # size: this `ics_function` returns the matrix a one-point grid would need.
+        # `ics` returns a length-`length(x)` vector, which no problem accepts: it refuses a `D = 2`
+        # problem at the initial data's size. `ics1` returns the `(length(x), 1)` matrices a `D = 1`
+        # problem accepts, so that each refusal below fails on its own guard.
         ics1 = (x, p) -> (u = zeros(length(x), 1), v = zeros(length(x), 1),
             w = zeros(length(x), 1))
         bcs = (times, p) -> nothing
         @test_throws ArgumentError LagrangianPDEProblem(density; D = 2, ics_function = ics,
             bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0),
             xstep = 0.25)
-        @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics,
-            bcs_function = bcs, timespan = (Float16(0), Float16(1)), timestep = Float16(0.1),
-            xspan = (Float16(0), Float16(1)), xstep = Float16(0.25))
-        @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics,
-            bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.1, xspan = (1.0, 0.0),
-            xstep = 0.25)
-        @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics,
-            bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.0, xspan = (0.0, 1.0),
-            xstep = 0.25)
-        @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics,
-            bcs_function = bcs, timespan = (0.0, Inf), timestep = 0.1, xspan = (0.0, 1.0),
-            xstep = 0.25)
+        # A grid of one point is refused by the grid's own guard, and not by the initial data's
+        # size.
         @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics1,
             bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0),
             xstep = 2.0)
+        @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics1,
+            bcs_function = bcs, timespan = (Float16(0), Float16(1)), timestep = Float16(0.1),
+            xspan = (Float16(0), Float16(1)), xstep = Float16(0.25))
+        @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics1,
+            bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.1, xspan = (1.0, 0.0),
+            xstep = 0.25)
+        @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics1,
+            bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.0, xspan = (0.0, 1.0),
+            xstep = 0.25)
+        @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics1,
+            bcs_function = bcs, timespan = (0.0, Inf), timestep = 0.1, xspan = (0.0, 1.0),
+            xstep = 0.25)
 
         # A Float32 range that ends at zero stops a rounding error past it, which a relative
         # comparison with zero rejects.
@@ -208,7 +210,10 @@ include("../helpers/testsetup.jl")
     end
 
     @testset "the grid of a mesh" for T in (Float64, Float32)
-        for (span, step, n) in (((zero(T), one(T)), T(0.3), 4), ((zero(T), T(3)), T(1), 4))
+        # `n = round(Int, Δx / xstep) + 1`: the last mesh divides the span 27 times but for a
+        # rounding error, so it holds 28 points, where a floor holds 27.
+        for (span, step, n) in (((zero(T), one(T)), T(0.3), 4), ((zero(T), T(3)), T(1), 4),
+            ((T(0.1), T(0.7)), T(0.6) / 27, 28))
             problem = Wave.problem(T = T, timespan = (zero(T), T(1)), timestep = T(0.5),
                 xspan = span, xstep = step)
             grid = xgrid(problem)
