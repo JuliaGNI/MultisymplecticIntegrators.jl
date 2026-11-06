@@ -78,7 +78,8 @@ The cheapest entry of a family: the largest time step, and among equals the coar
 
 This is what a driver runs when it is given no entry name, because it is the one that answers "does
 this family run at all" in the least time. An entry that names neither a time step nor a space step
-is as cheap as an entry can be, which is the right answer for the one-entry family of a test.
+gives `0.0` for each of them, which is what a family of one entry — the probe family of a test —
+needs: the entry it holds is the one selected.
 """
 function smallest_entry(entries)
     isempty(entries) && throw(ArgumentError("the registry holds no entry of this family"))
