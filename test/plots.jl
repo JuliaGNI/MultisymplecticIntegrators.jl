@@ -108,15 +108,22 @@ end
                 "stem" => "wave-spline-h0.05",
                 "label" => "spline, h = 0.05",
                 "problem_label" => "Wave",
+                "timestep" => 0.05,
                 "t" => [result.solution.t[n] for n in 0:steps],
                 "x" => collect(MultisymplecticIntegrators.xgrid(problem)),
                 "u" => [[result.solution.u[n][j]
-                         for n in 0:steps, j in 1:nx]],
-                "dimension" => 1)
+                         for n in 0:steps, j in 1:nx]])
             path = joinpath(directory, "archive-solution.pdf")
             figure = Diagnostics.plot_solution(archive; path = path)
             @test figure isa Figure
             @test isfile(path) && filesize(path) > 0
+            # No `title` keyword, so the heading is the archive's own and names the run: this is
+            # the one title rule, and an empty string is what draws none.
+            headings = filter(x -> x isa Label, figure.content)
+            @test length(headings) == 1
+            @test occursin(archive["label"], only(headings).text[])
+            @test isempty(filter(x -> x isa Label,
+                Diagnostics.plot_solution(archive; title = "").content))
 
             energy_archive = Dict{String, Any}(
                 "kind" => "energy",
@@ -146,32 +153,37 @@ end
                 "kind" => "energy", "stem" => "wave-spline-energy",
                 "t" => times, "labels" => ["h = 0.05"], "errors" => [err])
 
-            solution_drawn = only(Diagnostics.figures(archive))
-            @test first(solution_drawn) == "wave-spline-h0.05"
-            @test last(solution_drawn) isa Figure
+            solution_drawn = Diagnostics.figures(archive)
+            @test solution_drawn isa Figure
             # a space-time figure: no logarithmic axis anywhere in it
-            @test !any(ax -> ax isa Axis && ax.yscale[] === log10, last(solution_drawn).content)
+            @test !any(ax -> ax isa Axis && ax.yscale[] === log10, solution_drawn.content)
 
-            energy_drawn = only(Diagnostics.figures(energy_archive))
-            @test first(energy_drawn) == "wave-spline-energy"
-            @test last(energy_drawn) isa Figure
+            energy_drawn = Diagnostics.figures(energy_archive)
+            @test energy_drawn isa Figure
             # the energy figure's one axis is logarithmic, which is what distinguishes it
-            @test any(ax -> ax isa Axis && ax.yscale[] === log10, last(energy_drawn).content)
+            @test any(ax -> ax isa Axis && ax.yscale[] === log10, energy_drawn.content)
 
             @test_throws ArgumentError Diagnostics.figures(
                 Dict{String, Any}("kind" => "phase-portrait", "stem" => "x"))
             @test_throws ArgumentError Diagnostics.figures(Dict{String, Any}("stem" => "x"))
-            @test_throws ArgumentError Diagnostics.figures(Dict{String, Any}("kind" => "solution"))
+            @test_throws ArgumentError Diagnostics.figures(Dict{String, Any}())
         end
 
         @testset "P1 a series with nothing to draw" begin
             # The first energy error is zero and a logarithmic axis cannot take it, so the point is
             # dropped from the time vector too; a series of nothing but zeros is left out rather
-            # than drawn empty.
+            # than drawn empty, and the legend names the series the axis carries and no other.
             figure = Diagnostics.plot_energy_error(times, [err, zeros(length(err))];
                 labels = ["a", "zero"])
             axes = filter(x -> x isa Axis, figure.content)
             @test length(axes[1].scene.plots) == 1
+            @test length(filter(x -> x isa Legend, figure.content)) == 1
+
+            nothing_drawn = Diagnostics.plot_energy_error(times, [zeros(length(err))];
+                labels = ["zero"])
+            @test isempty(filter(x -> x isa Axis, nothing_drawn.content)[1].scene.plots)
+            @test isempty(filter(x -> x isa Legend, nothing_drawn.content))
+
             @test_throws ArgumentError Diagnostics.plot_energy_error(times, [err];
                 labels = ["one", "two"])
         end
