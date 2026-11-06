@@ -22,6 +22,10 @@ The registry is append-only. A family is registered once, by the model file that
 second registration of the same name is refused with an `ArgumentError` naming it: two model files
 that claim one name are a mistake to report, not a claim to resolve in favour of the later one.
 
+A stem names one archive under `runs/` for every family, so a stem that `entries` repeats, or that
+a registered family already holds, is refused with an `ArgumentError` naming it: the later run would
+replace the earlier archive.
+
 `run(entry)` returns the entry's archive as a `Dict{String, Any}` whose `"kind"` says what shape of
 figure it draws; `store_run!` adds the `"stem"`.
 """
@@ -29,6 +33,13 @@ function register_family!(name::Symbol, entries; run::Function)
     haskey(FAMILIES, name) &&
         throw(ArgumentError("the family `$(name)` is already registered; a family is " *
                             "registered once, by its model file"))
+    taken = Set(entry.stem for family in values(FAMILIES) for entry in family.entries)
+    for entry in entries
+        entry.stem in taken &&
+            throw(ArgumentError("the stem `$(entry.stem)` names two entries; a stem names one " *
+                                "archive under `runs/`"))
+        push!(taken, entry.stem)
+    end
     FAMILIES[name] = (entries = entries, run = run)
     return name
 end

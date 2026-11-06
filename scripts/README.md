@@ -89,7 +89,8 @@ An entry is a named tuple with at least `stem`, which names its archive and its 
 which a report and a heading show; `smallest_entry` reads `timestep` and `xstep` where an entry
 carries them. `run(entry)` returns the archive as a `Dict{String, Any}` with a `"kind"`, and
 `store_run!` adds the `"stem"` and writes the file. Nothing else needs an edit: the driver includes
-every model file, and the registry refuses a second family of the same name.
+every model file, and the registry refuses a second family of the same name and a stem that an
+earlier entry of any family holds.
 
 ## No figure code lives here
 

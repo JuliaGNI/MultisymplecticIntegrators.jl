@@ -303,7 +303,9 @@ makes it worth keeping.
   script is a test of the energy diagnostic, and the two scans and the profile are rewritten for
   the new constructors. `runs/` and `results/` are anchored in `.gitignore`. The archive test,
   `test/integration/archives.jl`, checks `atomic_write`, the stem refusal of `store_run!` and the
-  dot-skip of `load_runs`; this closes the known issue K32.
+  dot-skip of `load_runs`; this closes the known issue K32. The registry test,
+  `test/integration/registry.jl`, checks that a family registers once and that a stem names one
+  entry across the registry.
 - **The old `scripts/` are deleted (K6).** The drivers of the removed families stay reachable at
   `294f023`. The placeholder drivers of the network and symbolic families, which printed that the
   registry held no entry of their family and why, are deleted with them, so the registry holds
@@ -314,7 +316,9 @@ makes it worth keeping.
   `run` that turns one of them into an archive live in its own `scripts/<family>_model.jl`, and
   `spline_model.jl` registers `:spline`. A name already registered and a name the registry does not
   hold each raise an `ArgumentError` naming the family, so two model files that claim one name are
-  reported rather than settled in favour of the later one. `scripts/run_family.jl` replaces
+  reported rather than settled in favour of the later one. A stem that an entry of any registered
+  family already holds raises an `ArgumentError` naming it, because a stem names one archive under
+  `runs/` and a second run would replace the first. `scripts/run_family.jl` replaces
   `run_spline.jl`, `run_network.jl` and `run_symbolic.jl`, which are deleted: it includes every
   `*_model.jl` beside it in sorted order, takes the family name and then the stems of its entries,
   and returns 0 when every selected entry was archived and 1 when one failed. A run that throws is
