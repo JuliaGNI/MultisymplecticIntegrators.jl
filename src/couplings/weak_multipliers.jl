@@ -12,9 +12,39 @@ end
 """Abstract type of a coupling that imposes the slab's data weakly with surface multipliers."""
 abstract type MultiplierCoupling <: SlabCoupling end
 """
+    WeakInitialCondition() <: SlabCoupling
     WeakInitialCondition(; multiplier_basis = :bspline) <: SlabCoupling
 
-The initial condition of a slab, imposed weakly with `x_boundary = Dirichlet()`."""
+The initial condition of a slab, imposed weakly.
+
+The bottom row of the coefficient array is free, so all `Nt` rows of the slab are unknowns, and the
+slab is closed by one row per multiplier function `ψ_p`,
+
+```math
+\\int \\bigl( u_0(x) - u(0, x) \\bigr) \\, \\psi_p(x) \\, dx ,
+```
+
+where `u₀` is the problem's initial condition on the first slab and the previous slab's top trace on
+every later one. The multiplier at the bottom surface enters the momentum balance as the momentum
+that enters the slab: on the first slab, the quadrature-weighted `L²` projection of
+`∂L/∂v(u₀, v₀, w₀)` at the nodes of the space rule onto the multiplier functions, and the previous
+slab's top multiplier afterwards.
+
+`multiplier_basis` names the basis of `ψ_p`: `:bspline`, the ansatz's own trace basis, or
+`:lagrange`, the nodal basis of that same set of functions. `basis` is an alias of the keyword.
+
+The coupling imposes no space boundary condition, so the ends of `xspan` are left to the space
+basis: the ansatz must take `x_boundary = Dirichlet()`, and every other value throws an
+`ArgumentError` that names the condition the coupling needs and the one it got. A `Free()` basis
+leaves the ends unconstrained, and the remaining conditions constrain them in a way the interior
+weak form does not carry.
+
+```julia
+method = SpaceTimeGalerkin(
+    TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (0, 1)),
+    WeakInitialCondition())
+```
+"""
 struct WeakInitialCondition{B <: MultiplierBasis} <: MultiplierCoupling
     multiplier_basis::B
 end
@@ -24,7 +54,35 @@ end
 """
     WeakInitialAndBoundaryConditions(; multiplier_basis = :bspline) <: SlabCoupling
 
-The initial condition and the space boundary conditions of a slab, imposed weakly with `x_boundary = Free()`."""
+The initial condition and the space boundary conditions of a slab, imposed weakly.
+
+The initial condition is imposed as [`WeakInitialCondition`](@ref) imposes it. The multipliers at
+`x = a` and at `x = b` are unknowns of the step as well, and their rows are
+
+```math
+\\int \\bigl( g_a(t) - u(t, a) \\bigr) \\, \\chi_p(t) \\, dt ,
+\\qquad
+\\int \\bigl( g_b(t) - u(t, b) \\bigr) \\, \\chi_p(t) \\, dt ,
+```
+
+where `g_a` and `g_b` are the problem's side traces, evaluated at each node of the time rule, so
+that inhomogeneous data is imposed as it stands. The multiplier basis is the ansatz's own trace
+basis, or the nodal basis of that same set of functions, as `multiplier_basis` (alias `basis`)
+names it, so that a slab with `Nt` time functions and `Nx` space functions has `Nx - 2`
+multipliers at the bottom surface, without its two corner functions, and `Nt` at each end of
+`xspan`.
+
+The boundary rows carry an unknown, so the ansatz must take `x_boundary = Free()`; every other value
+throws an `ArgumentError` naming the condition the coupling needs and the one it got. A `Dirichlet()`
+basis in particular makes the trace vanish at each end of `xspan`, which would leave the rows empty.
+
+```julia
+method = SpaceTimeGalerkin(
+    TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (0, 1),
+        x_boundary = Free()),
+    WeakInitialAndBoundaryConditions())
+```
+"""
 struct WeakInitialAndBoundaryConditions{B <: MultiplierBasis} <: MultiplierCoupling
     multiplier_basis::B
 end
