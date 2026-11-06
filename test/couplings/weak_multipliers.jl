@@ -547,6 +547,36 @@ end
         end
     end
 
+    @testset "the side data of every component reaches the slab" for T in (Float64, Float32)
+        # Entry `[rt, d]` of the boundary target is component `d`'s value at the left end at the
+        # node's time, and `[qt + rt, d]` its value at the right end. The span leaves out the two
+        # ends of `sin(πx/l)`, and the two components of `VectorWave` differ, so a target filled
+        # from component 1 for every component is not the closed form.
+        a, b = T(0.2), T(0.8)
+        problem = VectorWave.problem(T = T, timespan = (zero(T), T(0.1)),
+            timestep = T(0.05), xspan = (a, b), xstep = (b - a) / 8)
+        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 4), xspan = (a, b), n = 3,
+            x_boundary = Free())
+        int = GeometricIntegrator(problem,
+            SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions()))
+        c = cache(int)
+        solstep = solutionstep(int, GeometricSolution(problem)[0])
+        M.slab_bottom!(c, c.coupling, problem, ansatz, solstep)
+        tq, target = c.ansatz.tabulation.time, c.coupling.work.boundary_target
+        qt, h, params = length(tq.node), timestep(problem), problem.params
+        t₀ = M.slab_start(problem, solstep)
+        for rt in 1:qt
+            t = t₀ + h * tq.node[rt]
+            for d in 1:2
+                @test target[rt, d] ≈ Wave.solution_u(t, a,
+                    VectorWave.component_parameters(params, d))
+                @test target[qt + rt, d] ≈ Wave.solution_u(t, b,
+                    VectorWave.component_parameters(params, d))
+            end
+        end
+        @test target[1, 1] != target[1, 2]
+    end
+
     @testset "R2 multiplier structure, projection, and index bijection" for T in (Float64, Float32)
         @test fieldcount(M.MultiplierData) ≤ 12
         @test length(methods(M.flux_load!)) == 1

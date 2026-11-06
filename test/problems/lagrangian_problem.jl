@@ -166,6 +166,10 @@ include("../helpers/testsetup.jl")
     @testset "the decided edges" begin
         density = Wave.density()
         ics = (x, p) -> (u = zeros(length(x)), v = zeros(length(x)), w = zeros(length(x)))
+        # A grid of one point is refused by the grid's own guard, and not by the initial data's
+        # size: this `ics_function` returns the matrix a one-point grid would need.
+        ics1 = (x, p) -> (u = zeros(length(x), 1), v = zeros(length(x), 1),
+            w = zeros(length(x), 1))
         bcs = (times, p) -> nothing
         @test_throws ArgumentError LagrangianPDEProblem(density; D = 2, ics_function = ics,
             bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0),
@@ -182,7 +186,7 @@ include("../helpers/testsetup.jl")
         @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics,
             bcs_function = bcs, timespan = (0.0, Inf), timestep = 0.1, xspan = (0.0, 1.0),
             xstep = 0.25)
-        @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics,
+        @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics1,
             bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0),
             xstep = 2.0)
 
