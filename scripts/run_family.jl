@@ -42,14 +42,14 @@ function main(args)
     entries = family_entries(name)
     selected = isempty(stems) ? (smallest_entry(entries),) :
                Tuple(entry_by_stem(entries, stem) for stem in stems)
-    run = family_run(name)
+    runner = family_run(name)
 
     banner("$(name): $(length(selected)) run(s) into $(RUNS_DIR[])")
     failures = 0
     for entry in selected
         try
             started = time_ns()
-            data = run(entry)
+            data = runner(entry)
             seconds = (time_ns() - started) / 1.0e9
             path = store_run!(entry.stem, data)
             report(entry.label, "$(round(seconds; digits = 2)) s")

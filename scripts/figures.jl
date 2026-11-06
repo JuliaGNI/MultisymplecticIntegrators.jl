@@ -1,5 +1,5 @@
 # The renderer: glob `runs/`, draw every archive as the kind it declares, and write the figure under
-# `results/`. This is the only place a figure is saved.
+# `results/<stem>.pdf`. This is the only place a figure is saved.
 #
 #   julia --project=scripts scripts/figures.jl                    # every archive
 #   julia --project=scripts scripts/figures.jl wave-spline-h0.2   # one archive
@@ -34,8 +34,9 @@ function main(args)
     banner("figures: $(length(runs)) archive(s) into $(RESULTS_DIR[])")
     for data in runs
         stem = get(data, "stem", "")
-        # The extension picks the figure from the archive's kind and names it from its stem; a kind
-        # it cannot draw is refused there rather than drawn from the wrong keys.
+        # The extension picks the figure from the archive's kind; a kind it cannot draw is refused
+        # there rather than drawn from the wrong keys. The stem names the file, and the figure is
+        # written through a sibling temporary so that a failed draw leaves the earlier one whole.
         drawn = try
             Diagnostics.figures(data)
         catch exception
@@ -43,11 +44,11 @@ function main(args)
             report(stem, "FAILED: $(failure_message(exception))")
             continue
         end
-        for (name, figure) in drawn
-            path = joinpath(RESULTS_DIR[], name * ".pdf")
-            save(path, figure)
-            report_path("figure", path)
+        path = joinpath(RESULTS_DIR[], stem * ".pdf")
+        atomic_write(path) do temporary
+            save(temporary, drawn)
         end
+        report_path("figure", path)
     end
     return failures == 0 ? 0 : 1
 end

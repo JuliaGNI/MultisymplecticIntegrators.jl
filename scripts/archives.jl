@@ -1,9 +1,9 @@
-# The shared layer under every driver in this directory: where output goes, how a run is archived,
-# how arguments are parsed, and how progress is printed.
+# The shared layer under the driver and every other script in this directory: where output goes,
+# how a run is archived, how arguments are parsed, and how progress is printed.
 #
-# No *work* happens at top level, so a driver can `include` this and pay only the load. The two
+# No *work* happens at top level, so a script can `include` this and pay only the load. The two
 # output-directory `Ref`s do execute, so including it twice in one session — a REPL that loads two
-# drivers — resets a `--runs-dir` already set. Each driver includes it once.
+# scripts — resets a `--runs-dir` already set. Each script includes it once.
 #
 # It depends on `JLD2` and `Printf` and on nothing else, which is what lets a renderer that needs no
 # solver load it cheaply: `figures.jl` draws archives of plain vectors and never touches an
@@ -70,29 +70,41 @@ end
 
 # ---- archives ----------------------------------------------------------------
 #
-# One JLD2 file per run, under `runs/`. The keys are flat and named for what they hold rather than
-# for the variable that happened to hold it, so a reader needs no per-run knowledge to know what an
-# archive contains.
-#
-# Two keys carry the schema itself:
-#
-#   "kind"    what shape of figure this run draws
-#   "stem"    the figure's name, so that a renderer can glob `runs/` and needs no registry to know
-#             what it is looking at or what to call the output
-#
-# Everything else is per kind, and `figures.jl` is what reads it back. Stored for a `"solution"`
-# run:
-#
-#   "label", "problem_label"      the run's identity
-#   "timestep", "final_time", "dimension"
-#   "t", "x", "u"                 the step times, the output grid, and one `length(t) × length(x)`
-#                                 matrix of the field per component
-#   "energy_t", "energy_error"    the relative energy error over the stored steps
-#
-# and for an `"energy"` run: "title", "labels", "t" and "errors", with one time vector and one error
-# vector per series.
+# One JLD2 file per run, under `runs/`, named after its stem. The archive's keys are the schema
+# documented in `scripts/README.md`: `"kind"` says what shape of figure the run draws and `"stem"`
+# names the archive and its figure, and a reader globs the directory and needs no registry to know
+# what it is looking at.
 
 archive_path(stem) = joinpath(RUNS_DIR[], stem * ".jld2")
+
+"""
+    atomic_write(write::Function, path::AbstractString)
+
+Write one file through a temporary beside it and rename that over the destination, and return
+`path`.
+
+The temporary is a sibling, so `rename` is a rename within one file system, and it carries the
+destination's extension, so a writer that picks its format from the file name — a PDF, say — writes
+the format the destination asks for. A writer that throws leaves the destination as it was and its
+temporary is removed, so a failed write cannot truncate an earlier result into half a file. The
+writer's exception is rethrown, because the caller is what decides whether a failed write is fatal.
+
+    atomic_write(path) do temporary
+        save(temporary, figure)
+    end
+"""
+function atomic_write(write::Function, path::AbstractString)
+    directory = dirname(abspath(path))
+    mkpath(directory)
+    temporary = tempname(directory; cleanup = false) * splitext(path)[2]
+    try
+        write(temporary)
+        Base.Filesystem.rename(temporary, path)
+    finally
+        rm(temporary; force = true)
+    end
+    return path
+end
 
 """
     store_run!(stem, data) -> String
@@ -100,7 +112,8 @@ archive_path(stem) = joinpath(RUNS_DIR[], stem * ".jld2")
 Write one run's archive and return its path.
 
 A data set without a `"kind"` is refused: a renderer globbing `runs/` cannot tell what shape of
-figure it draws, and a figure guessed at is worse than none.
+figure it draws, and a figure guessed at is worse than none. The `"stem"` is the argument's, so
+that the archive and its figure are named in one place.
 
 `jldopen` with explicit writes rather than `jldsave(path; data...)`: splatting a `Dict{String, Any}`
 into keyword arguments requires `Symbol` keys, and these keys are deliberately strings — they are
@@ -110,23 +123,16 @@ function store_run!(stem::String, data::Dict{String, Any})
     haskey(data, "kind") ||
         throw(ArgumentError("the archive for `$(stem)` has no \"kind\"; a renderer globbing " *
                             "`runs/` cannot tell what shape of figure it draws."))
-    mkpath(RUNS_DIR[])
     data["stem"] = stem
     path = archive_path(stem)
-    # Written to a file of its own beside the archive and renamed over it, so that an interrupted
-    # write leaves the earlier archive whole and two writers of one stem never share a file;
-    # `load_runs` reads only `.jld2` files and skips the temporary one. `rename` replaces the
-    # destination in one step, where `mv(...; force = true)` removes it first on Julia 1.11.
-    temporary = tempname(RUNS_DIR[]; cleanup = false)
-    try
+    # Written through a sibling temporary so that an interrupted write leaves the earlier archive
+    # whole; `load_runs` reads only `.jld2` files and skips the temporary one.
+    atomic_write(path) do temporary
         jldopen(temporary, "w") do file
             for (key, value) in data
                 file[key] = value
             end
         end
-        Base.Filesystem.rename(temporary, path)
-    finally
-        rm(temporary; force = true)
     end
     return path
 end
