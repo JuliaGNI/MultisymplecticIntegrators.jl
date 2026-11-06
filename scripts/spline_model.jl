@@ -123,7 +123,7 @@ function phase_drift(problem, result)
                             "returns an empty `traces` for a run that took no step"))
     x = collect(xgrid(problem))
     exact = problem.exact_u(solution.t[k], x, problem.params)
-    return maximum(abs.(solution.u[k] .- exact)) / maximum(abs.(exact))
+    return maximum(abs, solution.u[k] .- exact) / maximum(abs, exact)
 end
 
 register_family!(:spline, SPLINE; run = spline_run)
