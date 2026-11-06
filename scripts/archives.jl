@@ -85,9 +85,12 @@ Write one file through a temporary beside it and rename that over the destinatio
 
 The temporary is a sibling, so `rename` is a rename within one file system, and it carries the
 destination's extension, so a writer that picks its format from the file name — a PDF, say — writes
-the format the destination asks for. A writer that throws leaves the destination as it was and its
-temporary is removed, so a failed write cannot truncate an earlier result into half a file. The
-writer's exception is rethrown, because the caller is what decides whether a failed write is fatal.
+the format the destination asks for. Its name starts with a dot, so a reader that takes every file
+of that extension for a finished result — `load_runs` for the archives — skips it, and a
+temporary left behind by a writer that was killed is not mistaken for one. A writer that throws
+leaves the destination as it was and its temporary is removed, so a failed write cannot truncate an
+earlier result into half a file. The writer's exception is rethrown, because the caller is what
+decides whether a failed write is fatal.
 
     atomic_write(path) do temporary
         save(temporary, figure)
@@ -96,7 +99,7 @@ writer's exception is rethrown, because the caller is what decides whether a fai
 function atomic_write(write::Function, path::AbstractString)
     directory = dirname(abspath(path))
     mkpath(directory)
-    temporary = tempname(directory; cleanup = false) * splitext(path)[2]
+    temporary = joinpath(directory, "." * basename(tempname(directory)) * splitext(path)[2])
     try
         write(temporary)
         Base.Filesystem.rename(temporary, path)
@@ -126,7 +129,7 @@ function store_run!(stem::String, data::Dict{String, Any})
     data["stem"] = stem
     path = archive_path(stem)
     # Written through a sibling temporary so that an interrupted write leaves the earlier archive
-    # whole; `load_runs` reads only `.jld2` files and skips the temporary one.
+    # whole; `atomic_write` names that temporary with a leading dot, which `load_runs` skips.
     atomic_write(path) do temporary
         jldopen(temporary, "w") do file
             for (key, value) in data
@@ -139,6 +142,10 @@ end
 
 load_run(stem::String) = load(archive_path(stem))
 
+# A file `store_run!` has finished writing: an archive whose name does not start with a dot, which
+# is how `atomic_write` names its temporary.
+is_written_archive(file) = endswith(file, ".jld2") && !startswith(file, ".")
+
 """
     load_runs() -> (runs::Vector{Dict}, unreadable::Vector{String})
 
@@ -148,12 +155,14 @@ Read from the directory rather than enumerated from a registry: the directory is
 exists, and a registry that has drifted from the stem a driver wrote produces a figure that silently
 is not drawn. A file that fails to load is reported with a warning and left out of `runs`, so one
 corrupt archive does not stop the figures of the others; the caller counts `unreadable` as failures.
+A name that starts with a dot is skipped: `atomic_write` names its temporary that way, so a
+temporary whose writer was killed is not read as a corrupt archive.
 """
 function load_runs()
     runs = Dict{String, Any}[]
     unreadable = String[]
     isdir(RUNS_DIR[]) || return runs, unreadable
-    for file in sort(filter(endswith(".jld2"), readdir(RUNS_DIR[])))
+    for file in sort(filter(is_written_archive, readdir(RUNS_DIR[])))
         data = try
             load(joinpath(RUNS_DIR[], file))
         catch exception

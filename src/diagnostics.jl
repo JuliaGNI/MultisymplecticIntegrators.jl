@@ -58,24 +58,35 @@ function energy_error(problem::LagrangianPDEProblem{T}, ansatz::TensorBSplineAns
                             "an empty `traces` for a run that took no step"))
     weights = space_quadrature_weights(ansatz)
     energies = Vector{T}(undef, length(traces))
-    for (n, trace) in enumerate(traces)
-        energies[n] = step_energy(problem, weights, trace, n)
-    end
+    # `Val(problem.D)` is built once for the run and carried into the quadrature behind one function
+    # barrier, so the `D` values of a node are a tuple whose length is a compile-time constant. The
+    # barrier is given the density and the parameters rather than the problem: a call whose `Val` is
+    # built from a runtime `Int` is dynamic, and boxing the problem in it costs more than it saves.
+    step_energies!(
+        energies, problem.density, problem.params, weights, traces, Val(problem.D))
     reference = first(energies)
     return iszero(reference) ? abs.(energies .- reference) :
            abs.((energies .- reference) ./ reference)
+end
+
+# The energy of every trace of a run, one `step_energy` each.
+function step_energies!(energies::AbstractVector, density, params, weights::AbstractVector,
+        traces, ::Val{D}) where {D}
+    for (n, trace) in enumerate(traces)
+        energies[n] = step_energy(density, params, weights, trace, n, Val(D))
+    end
+    return energies
 end
 
 # The energy of one trace, as the quadrature sum of the energy density at its nodes. A trace with
 # `D` components is component-major, one block of `nq` entries per component, and the same number of
 # entries in `u`, `v` and `w`: a trace of another shape is refused before it is read, because a
 # floored node count would drop the surplus entries in silence.
-function step_energy(problem::LagrangianPDEProblem{T}, weights::AbstractVector,
-        trace, n::Integer) where {T}
+function step_energy(density, params, weights::AbstractVector, trace, n::Integer,
+        ::Val{D}) where {D}
     trace === nothing &&
         throw(ArgumentError("the run stored no trace at step $n; the energy of a step needs " *
                             "the trace `(u, v, w)` at the nodes of the space quadrature"))
-    D = problem.D
     entries = length(trace.u)
     entries == length(trace.v) == length(trace.w) ||
         throw(ArgumentError("the trace of step $n holds $(entries), $(length(trace.v)) and " *
@@ -88,11 +99,9 @@ function step_energy(problem::LagrangianPDEProblem{T}, weights::AbstractVector,
     length(weights) == nq ||
         throw(ArgumentError("the trace holds $(nq) nodes per component and the quadrature " *
                             "$(length(weights))"))
-    density = problem.density
-    params = problem.params
-    energy = zero(T)
+    energy = zero(eltype(trace.u))
     for j in 1:nq
-        energy += weights[j] * node_energy_density(density, trace, j, nq, D, params)
+        energy += weights[j] * node_energy_density(density, trace, j, nq, Val(D), params)
     end
     return energy
 end
@@ -101,7 +110,7 @@ end
 # the slab's own residual makes between a `LagrangianDensity` and a density that couples the
 # components of the field.
 @inline function node_energy_density(density::LagrangianDensity, trace, j::Integer,
-        nq::Integer, D::Integer, params)
+        nq::Integer, ::Val{D}, params) where {D}
     energy = zero(eltype(trace.u))
     for d in 1:D
         i = (d - 1) * nq + j
@@ -112,22 +121,23 @@ end
 
 # A density that takes the `D` components of one point at once gets them as a tuple, and its own
 # derivative with respect to `v` is the tuple that closes the inner product.
-@inline function node_energy_density(density, trace, j::Integer, nq::Integer, D::Integer,
-        params)
+@inline function node_energy_density(density, trace, j::Integer, nq::Integer, ::Val{D},
+        params) where {D}
     return energy_density(density,
-        node_values(trace.u, j, nq, D),
-        node_values(trace.v, j, nq, D),
-        node_values(trace.w, j, nq, D), params)
+        node_values(trace.u, j, nq, Val(D)),
+        node_values(trace.v, j, nq, Val(D)),
+        node_values(trace.w, j, nq, Val(D)), params)
 end
 
 # One component's value at node `j`: the entry itself for a scalar field, and the `D` components of
 # that node for a vector one, as a tuple rather than a heap `Vector` — the density reads the `D`
 # values of one point and holds none of them, so a container per node is an allocation the
-# quadrature does not need.
+# quadrature does not need. `D` arrives as a `Val` so that the tuple's length is the same constant
+# the caller was compiled for.
 @inline function node_values(values::AbstractVector{T}, j::Integer, nq::Integer,
-        D::Integer) where {T}
+        ::Val{D}) where {T, D}
     D === 1 && return values[j]
-    return ntuple(d -> values[(d - 1) * nq + j], D)
+    return ntuple(d -> values[(d - 1) * nq + j], Val(D))
 end
 
 """

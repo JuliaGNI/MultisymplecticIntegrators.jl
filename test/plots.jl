@@ -136,6 +136,11 @@ end
             drawn = Diagnostics.plot_energy_error(energy_archive; path = energy_path)
             @test drawn isa Figure
             @test isfile(energy_path) && filesize(energy_path) > 0
+
+            # `title = ""` draws no heading in the archive form as well: the archive's own title is
+            # used only where no title is given.
+            @test isempty(filter(x -> x isa Label,
+                Diagnostics.plot_energy_error(energy_archive; title = "").content))
         end
 
         @testset "P1 the archive's kind picks the figure" begin
@@ -166,7 +171,9 @@ end
             @test_throws ArgumentError Diagnostics.figures(
                 Dict{String, Any}("kind" => "phase-portrait", "stem" => "x"))
             @test_throws ArgumentError Diagnostics.figures(Dict{String, Any}("stem" => "x"))
-            @test_throws ArgumentError Diagnostics.figures(Dict{String, Any}())
+            # A kind this module draws, in an archive that holds none of its data: the figure is
+            # refused by the key it lacks rather than drawn from nothing.
+            @test_throws KeyError Diagnostics.figures(Dict{String, Any}("kind" => "solution"))
         end
 
         @testset "P1 a series with nothing to draw" begin

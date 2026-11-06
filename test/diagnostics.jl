@@ -1,5 +1,5 @@
 using MultisymplecticIntegrators
-using MultisymplecticIntegrators: space_quadrature_nodes
+using MultisymplecticIntegrators: space_quadrature_nodes, space_quadrature_weights
 using Test
 
 include("helpers/testsetup.jl")
@@ -12,6 +12,32 @@ function five_step_wave(::Type{T}) where {T}
         n = 3)
     method = SpaceTimeGalerkin(ansatz, CoefficientRestriction())
     return problem, method, integrate(problem, method)
+end
+
+# The problem whose density couples the two components (`VectorWave.vector_density`) over the data
+# of `VectorWave.problem`: the same initial, boundary and exact data, the same spans and step, so
+# that the two problems solve the same field through two densities.
+function coupled_problem(::Type{T}; timespan = (zero(T), T(0.5)), timestep = T(0.1),
+        xstep = T(0.05)) where {T}
+    base = VectorWave.problem(T = T, timespan = timespan, timestep = timestep, xstep = xstep)
+    return LagrangianPDEProblem(VectorWave.vector_density(; params = base.params, D = 2);
+        D = 2, ics_function = base.ics_function, bcs_function = base.bcs_function,
+        exact_u = base.exact_u, exact_v = base.exact_v, exact_w = base.exact_w,
+        timespan = base.timespan, timestep = base.timestep, xspan = base.xspan,
+        xstep = base.xstep, params = base.params)
+end
+
+# A density of the test's own type, of one component: a density that is not a `LagrangianDensity`
+# is handed the entry of a node rather than a container, and its own `derivatives` is what closes
+# the inner product of `energy_density`.
+struct QuadraticDensity{T}
+    k::T
+end
+
+(density::QuadraticDensity)(u, v, w, params) = density.k * v^2 / 2
+
+function MultisymplecticIntegrators.derivatives(density::QuadraticDensity, u, v, w, params)
+    (u = zero(u), v = density.k * v, w = zero(w))
 end
 
 @testset "Diagnostics" begin
@@ -224,23 +250,103 @@ end
         # (`VectorWave.vector_density`). Uncoupled it is the sum of the scalar densities, so the
         # energy error on the same traces must equal the one the scalar density gives — an oracle
         # by construction, and the only path that reads a trace node as a vector of components.
-        params = VectorWave.default_parameters()
-        problem = VectorWave.problem(
-            params = params, timespan = (0.0, 0.1), timestep = 0.05, xstep = 0.05)
-        coupled = LagrangianPDEProblem(VectorWave.vector_density(; params = params, D = 2);
-            D = 2, ics_function = problem.ics_function, bcs_function = problem.bcs_function,
-            exact_u = problem.exact_u, exact_v = problem.exact_v, exact_w = problem.exact_w,
-            timespan = problem.timespan, timestep = problem.timestep,
-            xspan = problem.xspan, xstep = problem.xstep, params = params)
+        problem = VectorWave.problem(timespan = (0.0, 0.1), timestep = 0.05, xstep = 0.05)
+        coupled = coupled_problem(Float64; timespan = (0.0, 0.1), timestep = 0.05, xstep = 0.05)
         ansatz2 = TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0), n = 3)
         nq = length(space_quadrature_nodes(ansatz2))
-        moving(v1, v2) = (u = zeros(2 * nq), v = vcat(fill(v1, nq), fill(v2, nq)),
-            w = zeros(2 * nq))
-        # ½(1 + 0.25) = 5/8, then ½(1 + 0.0625) = 17/32, so the deviation is 3/20
-        traces = [moving(1.0, 0.5), moving(1.0, 0.25)]
+        # The profile varies from node to node, so a node read at the wrong index is a different
+        # value, and the two traces carry profiles of different shape rather than one profile at
+        # two amplitudes, so that a wrong index does not rescale both energies alike and cancel in
+        # their ratio. `v` is the only non-zero part of these traces.
+        profile = [1.0 + 0.5 * (j - 1) / (nq - 1) for j in 1:nq]
+        moving(v1, v2) = (u = zeros(2 * nq), v = vcat(v1, v2), w = zeros(2 * nq))
+        traces = [moving(profile, 0.5 .* profile), moving(profile .^ 2, 0.25 .* profile)]
         err = energy_error(coupled, ansatz2, traces)
         @test err ≈ energy_error(problem, ansatz2, traces)
-        @test err[2] ≈ 0.15
+        # The first trace's energy is ½(1 + 0.25) ∫profile², the second's ½ ∫(profile⁴ +
+        # 0.0625 profile²), each over the ansatz's own space quadrature.
+        weights = space_quadrature_weights(ansatz2)
+        first_energy = 0.625 * sum(weights .* profile .^ 2)
+        second_energy = 0.5 * sum(weights .* (profile .^ 4 .+ 0.0625 .* profile .^ 2))
+        @test err[2] ≈ abs(second_energy - first_energy) / abs(first_energy)
+    end
+
+    @testset "S2a the energy of a vector trace allocates no per-node container" begin
+        # A density that couples the components of a point is handed them as a tuple whose length
+        # is the problem's `D` at compile time; a container built per node escapes the call and
+        # grows with the node count. The reading is taken after one warm-up call inside a function
+        # of fixed arity, so that what is measured is the call and not its first dispatch.
+        allocations(problem, method, traces) = (energy_error(problem, method, traces);
+            @allocated energy_error(problem, method, traces))
+        for T in (Float64, Float32)
+            problem = coupled_problem(T)
+            for ncells in ((4, 12), (4, 40))
+                ansatz = TensorBSplineAnsatz(degree = 3, ncells = ncells,
+                    xspan = (zero(T), one(T)), n = 5)
+                method = SpaceTimeGalerkin(ansatz)
+                nq = length(space_quadrature_nodes(ansatz))
+                profile = [one(T) + T(0.5) * (j - 1) / (nq - 1) for j in 1:nq]
+                traces = [(u = zeros(T, 2 * nq),
+                              v = vcat(a * profile, (a / 2) * profile),
+                              w = zeros(T, 2 * nq))
+                          for a in (one(T), T(0.9), T(0.5), T(0.25), T(0.1))]
+                # `--check-bounds=yes` puts its checks inside the measured call; the clause's own
+                # check runs with `--check-bounds=auto`, and so does the reading here.
+                Base.JLOptions().check_bounds == 1 && continue
+                bytes = allocations(problem, method, traces)
+                @test bytes <= 512
+            end
+        end
+    end
+
+    @testset "S2a a scalar density of another type reads one value per node" begin
+        # `node_values` hands a density that is not a `LagrangianDensity` the entry itself at
+        # `D = 1` and a tuple of all `D` components above it. A density of a type of the test's own
+        # therefore sees scalars, and its energy is the quadrature of its own density: for
+        # `L = ½kv²` the energy density is `½kv²`, so `v = 2` against `v = 1` deviates by `3`.
+        for T in (Float64, Float32)
+            problem = LagrangianPDEProblem(QuadraticDensity(T(2)); D = 1,
+                ics_function = (x, p) -> (u = zeros(T, length(x)), v = zeros(T, length(x)),
+                    w = zeros(T, length(x))),
+                bcs_function = (times, p) -> nothing,
+                timespan = (zero(T), one(T)), timestep = T(0.1),
+                xspan = (zero(T), one(T)), xstep = T(0.1))
+            ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
+                xspan = (zero(T), one(T)), n = 3)
+            nq = length(space_quadrature_nodes(ansatz))
+            traces = [(u = zeros(T, nq), v = fill(one(T), nq), w = zeros(T, nq)),
+                (u = zeros(T, nq), v = fill(T(2), nq), w = zeros(T, nq))]
+            err = energy_error(problem, SpaceTimeGalerkin(ansatz), traces)
+            @test eltype(err) === T
+            @test err ≈ T[0, 3]
+        end
+    end
+
+    @testset "S2a a per-component density sums the components of a node" begin
+        # `VectorWave.problem` carries a `LagrangianDensity`, which `node_energy_density` applies to
+        # each component of a node in turn. The energy of a `D = 2` trace is the sum of the two
+        # components' own quadratures, read here through the density's own `energy_density`.
+        for T in (Float64, Float32)
+            problem = VectorWave.problem(T = T, timespan = (zero(T), T(0.1)),
+                timestep = T(0.05), xstep = T(0.05))
+            ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
+                xspan = (zero(T), one(T)), n = 3)
+            nq = length(space_quadrature_nodes(ansatz))
+            weights = space_quadrature_weights(ansatz)
+            profile = [one(T) + T(0.5) * (j - 1) / (nq - 1) for j in 1:nq]
+            trace = (u = vcat(fill(one(T), nq), fill(T(2), nq)),
+                v = vcat(profile, T(2) .* profile), w = vcat(T(0.5) .* profile, profile))
+            density, params = problem.density, problem.params
+            energy_of(t) = sum(sum(weights[j] *
+                                   energy_density(density, t.u[(d - 1) * nq + j],
+                                       t.v[(d - 1) * nq + j], t.w[(d - 1) * nq + j], params)
+                               for j in 1:nq)
+            for d in 1:2)
+            traces = [trace, merge(trace, (v = T(2) .* trace.v,))]
+            first_energy, second_energy = energy_of(traces[1]), energy_of(traces[2])
+            err = energy_error(problem, SpaceTimeGalerkin(ansatz), traces)
+            @test err ≈ [zero(T), abs(second_energy - first_energy) / abs(first_energy)]
+        end
     end
 
     @testset "S2a a run in reduced precision" begin

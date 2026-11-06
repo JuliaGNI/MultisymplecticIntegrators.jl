@@ -129,9 +129,10 @@ it rather than archived, because it is a diagnostic of the run and a stored copy
 with it.
 
 Every file the scripts write under `--runs-dir` and `--results-dir` is written through
-`atomic_write`: a sibling temporary carrying the destination's extension, renamed over it. A writer
-that throws leaves the earlier file whole and removes its temporary, so a failed write is never read
-as a result.
+`atomic_write`: a sibling temporary carrying the destination's extension, renamed over it. Its name
+starts with a dot, which the archive reader skips, so a temporary that a killed writer leaves behind
+is never read as a result. A writer that throws leaves the earlier file whole and removes its
+temporary, so a failed write is never read as a result either.
 
 ### Naming
 
