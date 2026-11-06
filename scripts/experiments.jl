@@ -33,6 +33,8 @@ function register_family!(name::Symbol, entries; run::Function)
     haskey(FAMILIES, name) &&
         throw(ArgumentError("the family `$(name)` is already registered; a family is " *
                             "registered once, by its model file"))
+    # A tuple, so that no entry arrives after the check.
+    entries = Tuple(entries)
     taken = Set(entry.stem for family in values(FAMILIES) for entry in family.entries)
     for entry in entries
         entry.stem in taken &&

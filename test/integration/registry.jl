@@ -28,5 +28,12 @@ include(joinpath(@__DIR__, "..", "..", "scripts", "experiments.jl"))
         @test !haskey(FAMILIES, :clash)
         @test register_family!(:second, ((stem = "c", label = "c"),); run = archive) ===
               :second
+
+        # The registry keeps its own tuple, so an entry added to the caller's vector later
+        # bypasses no check.
+        later = [(stem = "d", label = "d")]
+        register_family!(:third, later; run = archive)
+        push!(later, (stem = "c", label = "another c"))
+        @test family_entries(:third) == ((stem = "d", label = "d"),)
     end
 end
