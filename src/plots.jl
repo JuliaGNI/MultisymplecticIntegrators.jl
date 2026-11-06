@@ -83,7 +83,7 @@ The dictionary form reads an archive whose `"kind"` is `"energy"`.
 function plot_energy_error end
 
 """
-    animate_solution(problem, result; path, framerate = 15, title = "", figsize = nothing)
+    animate_solution(problem, result; path, framerate = 15, title = nothing, figsize = nothing)
 
 An animation of the field `u(t, ·)` over the stored steps of one run, written to `path`.
 
@@ -92,6 +92,10 @@ Only the first component of the field is animated, whatever the problem's dimens
 `result` is what `integrate` returns and `problem` the problem it was integrated with. The frame at
 step `n` is the field on the problem's output grid, at the time of that step, so the animation shows
 the solution of the discrete problem and nothing interpolated between the steps.
+
+Each frame's axis title shows the time of its step. `title = nothing` draws no heading before that
+time, as [`plot_solution`](@ref) draws none without an archive, and an empty string draws none
+either; a title is drawn before the time.
 """
 function animate_solution end
 

@@ -165,19 +165,19 @@ end
 # ---- the animation -----------------------------------------------------------
 
 function Diagnostics.animate_solution(problem::M.LagrangianPDEProblem, result; path,
-        framerate = 15, title = "", figsize = nothing)
+        framerate = 15, title = nothing, figsize = nothing)
     fields = solution_fields(problem, result)
+    heading = title === nothing ? "" : title
     figure = with_theme(PLOT_THEME) do
         u = fields.u[1]
         fig = Figure(size = _figsize(figsize, 1))
-        ax = Axis(fig[1, 1]; xlabel = "x", ylabel = "u",
-            title = isempty(title) ? "" : title)
+        ax = Axis(fig[1, 1]; xlabel = "x", ylabel = "u", title = heading)
         profile = Observable(collect(view(u, 1, :)))
         lines!(ax, fields.x, profile)
         record(fig, path, axes(u, 1); framerate = framerate) do n
             profile[] = collect(view(u, n, :))
-            ax.title = isempty(title) ? "t = $(fields.t[n])" :
-                       "$(title), t = $(fields.t[n])"
+            ax.title = isempty(heading) ? "t = $(fields.t[n])" :
+                       "$(heading), t = $(fields.t[n])"
             return nothing
         end
         fig

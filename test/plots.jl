@@ -143,6 +143,25 @@ end
                 Diagnostics.plot_energy_error(energy_archive; title = "").content))
         end
 
+        @testset "P1 the animation's title" begin
+            # `title = nothing` is the default, as in `plot_solution` and `plot_energy_error`, and
+            # draws no heading before the time of a frame; an empty string draws none either. After
+            # `record` returns, the axis title is the last frame's.
+            last_time = "t = $(result.solution.t[ntime(result.solution)])"
+            frame_title(animation) = only(filter(x -> x isa Axis, animation.content)).title[]
+            path = joinpath(directory, "titled.mp4")
+
+            untitled = [Diagnostics.animate_solution(problem, result; path = path),
+                Diagnostics.animate_solution(problem, result; path = path, title = nothing),
+                Diagnostics.animate_solution(problem, result; path = path, title = "")]
+            @test all(animation -> frame_title(animation) == last_time, untitled)
+
+            titled = Diagnostics.animate_solution(problem, result; path = path, title = "Wave")
+            @test frame_title(titled) == "Wave, $(last_time)"
+            @test all(animation -> isempty(filter(x -> x isa Label, animation.content)),
+                [untitled; titled])
+        end
+
         @testset "P1 the archive's kind picks the figure" begin
             # The renderer's one decision: which figure an archive earns. A kind this module cannot
             # draw is refused rather than drawn from the keys of another kind, because a figure
