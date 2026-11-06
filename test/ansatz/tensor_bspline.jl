@@ -299,10 +299,63 @@ end
             dd3(a) = M.density_derivatives!(du3, dv3, dw3, vw3_density, a, v3, w3, params)
             ml_fn(a) = M.momentum_load!(ml3, vw3_density, a, v2, w2, params)
             fl_fn(a) = M.flux_load!(fl3, vw3_density, a, v2, w2, params)
+            # the branches run on every check-bounds setting; at u = v = w = 1 each component
+            # is the scalar density's derivative, and ∂L/∂uᵢ also carries −β|u|²uᵢ = −3β
+            dd3(u3)
+            ml_fn(u2)
+            fl_fn(u2)
+            scalar = vw3_density.density
+            ∂u1 = T(M.derivative_u(scalar, one(T), one(T), one(T), params)) - T(3 * 0.5)
+            ∂v1 = T(M.derivative_v(scalar, one(T), one(T), one(T), params))
+            ∂w1 = T(M.derivative_w(scalar, one(T), one(T), one(T), params))
+            @test all(x -> isapprox(x, ∂u1; rtol = 8 * eps(T)), du3)
+            @test all(x -> isapprox(x, ∂v1; rtol = 8 * eps(T)), dv3)
+            @test all(x -> isapprox(x, ∂w1; rtol = 8 * eps(T)), dw3)
+            @test all(x -> isapprox(x, ∂v1; rtol = 8 * eps(T)), ml3)
+            @test all(x -> isapprox(x, ∂w1; rtol = 8 * eps(T)), fl3)
             if Base.JLOptions().check_bounds != 1
                 @test allocations(dd3, u3) == 0
                 @test allocations(ml_fn, u2) == 0
                 @test allocations(fl_fn, u2) == 0
+            end
+            # D > 3: a scalar density goes component by component, and agrees with the point
+            # loop behind the function barrier, which every other density takes
+            sd = Wave.density(; m = 1.0, β = 0.5)
+            sp = sd.params
+            u4 = T.(reshape(1:16, 2, 2, 4)) ./ 16
+            v4, w4 = 2 .* u4, 3 .* u4
+            a4 = [zeros(T, 2, 2, 4) for _ in 1:6]
+            M.density_derivatives!(a4[1], a4[2], a4[3], sd, u4, v4, w4, sp)
+            M._density_derivatives!(a4[4], a4[5], a4[6], sd, u4, v4, w4, sp, Val(4))
+            for k in 1:3
+                @test !iszero(a4[k])
+                @test isapprox(a4[k], a4[k + 3]; rtol = 8 * eps(T))
+            end
+            u4m, v4m, w4m = u4[1, :, :], v4[1, :, :], w4[1, :, :]
+            l4 = [zeros(T, 2, 4) for _ in 1:4]
+            M.momentum_load!(l4[1], sd, u4m, v4m, w4m, sp)
+            M._momentum_load!(l4[2], sd, u4m, v4m, w4m, sp, Val(4))
+            M.flux_load!(l4[3], sd, u4m, v4m, w4m, sp)
+            M._flux_load!(l4[4], sd, u4m, v4m, w4m, sp, Val(4))
+            @test !iszero(l4[1]) && isapprox(l4[1], l4[2]; rtol = 8 * eps(T))
+            @test !iszero(l4[3]) && isapprox(l4[3], l4[4]; rtol = 8 * eps(T))
+            # D > 3 allocates nothing in the residual
+            for D in (4, 5),
+                (coupling, xb) in ((CoefficientRestriction(), Dirichlet()),
+                    (WeakInitialAndBoundaryConditions(), Free()))
+
+                prob = Wave.problem(T = T, D = D, timespan = (zero(T), T(0.05)),
+                    timestep = T(0.05), xstep = T(0.25))
+                ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 4),
+                    xspan = (zero(T), one(T)), n = 3, x_boundary = xb)
+                int = GeometricIntegrator(prob, SpaceTimeGalerkin(ansatz, coupling))
+                c = cache(int)
+                b = similar(c.x)
+                p = parameters(prob)
+                res(y) = M.residual!(b, y, nothing, p, int)
+                if Base.JLOptions().check_bounds != 1
+                    @test allocations(res, copy(c.x)) == 0
+                end
             end
         end
     end

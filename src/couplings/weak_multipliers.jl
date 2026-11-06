@@ -294,6 +294,16 @@ end
 function flux_load!(load::AbstractMatrix{ST}, density, u::AbstractMatrix,
         v::AbstractMatrix, w::AbstractMatrix, params) where {ST}
     D = size(u, 2)
+    if D > 3
+        density isa LagrangianDensity ||
+            return _flux_load!(load, density, u, v, w, params, Val(D))
+        # the components of a scalar density are independent: each is the case `D == 1`
+        for c in 1:D
+            flux_load!(view(load, :, c:c), density, view(u, :, c:c), view(v, :, c:c),
+                view(w, :, c:c), params)
+        end
+        return nothing
+    end
     for r in axes(u, 1)
         if D == 1
             load[r, 1] = point_derivatives(density, u, v, w, r, params, Val(1)).w[1]
@@ -302,11 +312,17 @@ function flux_load!(load::AbstractMatrix{ST}, density, u::AbstractMatrix,
         elseif D == 3
             dw = point_derivatives(density, u, v, w, r, params, Val(3)).w
             load[r, 1], load[r, 2], load[r, 3] = dw[1], dw[2], dw[3]
-        else
-            dw = point_derivatives(density, u, v, w, r, params, Val(D)).w
-            for c in 1:D
-                load[r, c] = dw[c]
-            end
+        end
+    end
+    return nothing
+end
+# The function barrier of `flux_load!` for a coupled density with `D > 3`, as
+# `_density_derivatives!` is.
+function _flux_load!(load, density, u, v, w, params, ::Val{D}) where {D}
+    for r in axes(u, 1)
+        dw = point_derivatives(density, u, v, w, r, params, Val(D)).w
+        for c in 1:D
+            load[r, c] = dw[c]
         end
     end
     return nothing

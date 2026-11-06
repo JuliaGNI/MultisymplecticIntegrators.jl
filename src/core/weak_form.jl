@@ -150,15 +150,29 @@ function density_derivatives!(∂u::AbstractArray{ST, 3}, ∂v::AbstractArray{ST
                 ∂w[q, r, c] = d.w[c]
             end
         end
+    elseif density isa LagrangianDensity
+        # the components of a scalar density are independent: each is the case `D == 1`
+        for c in 1:D
+            density_derivatives!(view(∂u, :, :, c:c), view(∂v, :, :, c:c),
+                view(∂w, :, :, c:c), density, view(u, :, :, c:c), view(v, :, :, c:c),
+                view(w, :, :, c:c), params)
+        end
     else
-        for r in axes(u, 2), q in axes(u, 1)
+        _density_derivatives!(∂u, ∂v, ∂w, density, u, v, w, params, Val(D))
+    end
+    return nothing
+end
 
-            d = point_derivatives(density, u, v, w, q, r, params, Val(D))
-            for c in 1:D
-                ∂u[q, r, c] = d.u[c]
-                ∂v[q, r, c] = d.v[c]
-                ∂w[q, r, c] = d.w[c]
-            end
+# The function barrier of `density_derivatives!` for a coupled density with `D > 3`: `Val(D)` is
+# built once per call and not at every point, so the point loop does not dispatch dynamically.
+function _density_derivatives!(∂u, ∂v, ∂w, density, u, v, w, params, ::Val{D}) where {D}
+    for r in axes(u, 2), q in axes(u, 1)
+
+        d = point_derivatives(density, u, v, w, q, r, params, Val(D))
+        for c in 1:D
+            ∂u[q, r, c] = d.u[c]
+            ∂v[q, r, c] = d.v[c]
+            ∂w[q, r, c] = d.w[c]
         end
     end
     return nothing

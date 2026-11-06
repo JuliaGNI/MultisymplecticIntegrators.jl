@@ -145,12 +145,25 @@ function momentum_load!(load::AbstractMatrix{ST}, density, u::AbstractMatrix,
                 load[r, c] = d.v[c]
             end
         end
+    elseif density isa LagrangianDensity
+        # the components of a scalar density are independent: each is the case `D == 1`
+        for c in 1:D
+            momentum_load!(view(load, :, c:c), density, view(u, :, c:c), view(v, :, c:c),
+                view(w, :, c:c), params)
+        end
     else
-        for r in axes(u, 1)
-            d = point_derivatives(density, u, v, w, r, params, Val(D))
-            for c in 1:D
-                load[r, c] = d.v[c]
-            end
+        _momentum_load!(load, density, u, v, w, params, Val(D))
+    end
+    return nothing
+end
+
+# The function barrier of `momentum_load!` for a coupled density with `D > 3`, as
+# `_density_derivatives!` is.
+function _momentum_load!(load, density, u, v, w, params, ::Val{D}) where {D}
+    for r in axes(u, 1)
+        d = point_derivatives(density, u, v, w, r, params, Val(D))
+        for c in 1:D
+            load[r, c] = d.v[c]
         end
     end
     return nothing
