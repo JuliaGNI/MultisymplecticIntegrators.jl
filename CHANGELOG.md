@@ -116,7 +116,9 @@ makes it worth keeping.
   `β`, so `J` is conserved by the coupled equations too.
   `VectorWave` carries the angular momentum `J` as the conserved diagnostic of the vector case.
   `VectorWave.density` is the scalar density of one component and takes the mass `m` only;
-  `vector_density(; params, D, m, β)` carries the coupling.
+  `vector_density(; params, D, m, β)` carries the coupling. `Wave.problem`, `SineGordon.problem`
+  and `LinearTransport.problem` convert their parameters to `T`, as `VectorWave.problem` does, so a
+  problem of `Float32` evaluates its density and energy in `Float32`.
 - **The first integrator family returns: the space-time Galerkin slab core.**
   `SpaceTimeGalerkin{A, C, G} <: SpaceTimeMethod` holds a tensor B-spline ansatz, a coupling of
   consecutive slabs and an initial guess, and one step of it solves one slab.
@@ -330,8 +332,11 @@ makes it worth keeping.
   linear in its coefficients and that the problem's density is linear (`is_linear_density`, checked
   symbolically when `LagrangianDensity` is built and true for `VectorWave.VectorDensity` when
   `β == 0`), refusing a nonlinear ansatz or density with an `ArgumentError`. On the first step,
-  `integrate_step!` evaluates and LU-factorises the constant slab Jacobian once and reuses that
-  factorisation on every later step (`factorisations(int) == 1`).
+  `integrate_step!` evaluates and LU-factorises the constant slab Jacobian once, and every step
+  then solves from zero with that factorisation and takes one step of iterative refinement with
+  it. The run factorises once (`factorisations(int) == 1`), and `stats.iterations` records 2 for
+  each step. Over five slabs the deviation of the solution from the Newton solve is at most
+  9.5 eps(T) in `Float32` and 13.9 eps(T) in `Float64`.
 - **One pointwise density-derivative path and a function barrier for the step loop.**
   `density_derivatives!`, `momentum_load!` and `flux_load!` each call `point_derivatives`,
   `WeakInitialCondition` and `WeakInitialAndBoundaryConditions` compute `bottom_load` once per step
