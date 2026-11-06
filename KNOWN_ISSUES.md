@@ -121,9 +121,9 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: missing test
 - found: 2026-11-01
 
-### K34 · CI never evaluates the zero-allocation assertions of the point loops.
+### K34 · CI never evaluates the allocation assertions that a bounds check would change.
 
-- location: `test/ansatz/tensor_bspline.jl`
+- location: `test/ansatz/tensor_bspline.jl`, `test/diagnostics.jl`
 - evidence: `.github/workflows/CI.yml` runs `julia-actions/julia-runtest@v1` without a
   `check_bounds` input, and the action's `action.yml` gives `check_bounds` the default `yes`. Every
   `@allocated` assertion of the testset "R2 single density_derivatives! and zero-allocation
@@ -131,7 +131,9 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `D = 2` vector wave with the three couplings, `density_derivatives!`, `momentum_load!` and
   `flux_load!` at `D = 3`, and `residual!` of `Wave.problem(D = D)` at `D = 4` and `5`, all at
   0 B. The `D = 1` assertion of A1g in the same file and the `derivatives` assertion of S3b in
-  `test/couplings/coefficient_restriction.jl` sit under the same guard. A CI run passes these
+  `test/couplings/coefficient_restriction.jl` sit under the same guard, and the 512 B bound on
+  `energy_error` of a coupled density in `test/diagnostics.jl` is skipped under
+  `Base.JLOptions().check_bounds == 1`. A CI run passes these
   testsets without evaluating the bounds, so only a local run under `--check-bounds=auto` checks
   them.
 - kind: missing test

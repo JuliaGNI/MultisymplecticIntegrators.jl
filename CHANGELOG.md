@@ -52,12 +52,13 @@ makes it worth keeping.
   resolves from `test/Project.toml`, so anyone relying on the pinned versions it recorded will get
   a fresh resolve instead.
 - **`test/Project.toml` carries no `[compat]` bound for a dependency of the root `Project.toml`.**
-  The six entries `BenchmarkTools`, `CairoMakie`, `GeometricIntegratorsBase`, `JLD2`, `Plots` and
-  `Revise` are removed, and its `[compat]` table keeps only `Aqua` and `ExplicitImports`, which the
-  root does not depend on. The test environment contains the package, so the resolver applies the
-  root's bounds to every shared dependency; a test bound could only narrow them, and tests that run
-  on narrower bounds than the package claims do not test what the package admits. This is the
-  tree-wide rule of the test-suite unification.
+  The entries `BenchmarkTools`, `GeometricIntegratorsBase`, `Plots` and `Revise` are removed, and
+  its `[compat]` table holds bounds only for the test-only dependencies `Aqua`, `CairoMakie`,
+  `ExplicitImports`, `ForwardDiff`, `JLD2` and `SafeTestsets`, none of which the root depends on.
+  The test environment contains the package, so the resolver applies the root's bounds to every
+  shared dependency; a test bound could only narrow them, and tests that run on narrower bounds
+  than the package claims do not test what the package admits. This is the tree-wide rule of the
+  test-suite unification.
 - **Code that nothing reached is deleted; it stays reachable at `294f023`.** The four files that
   no `include` loaded go: `src/integrator/NN_PDE_LSGD_int.jl`, an older copy of
   `NN_PDE_int.jl`; `src/utils/PINN_for_init.jl`, a prototype script;
@@ -220,10 +221,11 @@ makes it worth keeping.
   that it admits. The library is split over two pages, the package module and its submodules, so
   that each page stays below Documenter's size threshold.
 - **`test/runtests.jl` runs each test file in its own `@safetestset`.** Empty `ARGS` runs the `core`
-  and `slow` groups. The `core` group holds fourteen files: the Aqua, explicit-imports and sources
+  and `slow` groups. The `core` group holds fifteen files: the Aqua, explicit-imports and sources
   quality checks, the Lagrangian density and Lagrangian problem tests, the linear transport and
   vector wave tests, the tensor B-spline ansatz, coefficient restriction, coupling seam and
-  initial-guess tests, the integrator shell test, and the diagnostics and plotting tests. The
+  initial-guess tests, the integrator shell and archive tests, and the diagnostics and
+  plotting tests. The
   `slow` group holds the weak-multiplier test and the six property files of the entry below.
 - **Reference values of the integrators at `294f023`.** `scripts/reference_values.jl` runs every
   integrator family on short `Wave` and `SineGordon` cases and writes
@@ -287,21 +289,70 @@ makes it worth keeping.
   palette Makie provides. The dependency is the weak dependency `Makie = "0.24"` with
   `[extensions] MultisymplecticIntegratorsPlots = "Makie"`, so a caller who loads no backend pays
   nothing for the layer.
-- **`scripts/` is a project of its own.** It declares the packages its drivers use, with this
-  package as a path source, so a driver finds `JLD2` and `CairoMakie` where the package's own
+- **`scripts/` is a project of its own.** It declares the packages its scripts use, with this
+  package as a path source, so a script finds `JLD2` and `CairoMakie` where the package's own
   environment holds neither. `archives.jl` holds the two output directories, the option parser that
-  refuses an unknown flag, and the archive schema: one JLD2 file per run at `runs/<stem>.jld2`, with
-  a `"kind"` that `store_run!` requires and `load_runs()` reading the directory back, so a renderer
-  needs no registry to know what an archive is. `experiments.jl` holds the merged families as plain
-  data — the problem, its time step and grid, the ansatz resolution, the coupling — and runs nothing
-  on `include`. `run_spline.jl` runs its smallest entry by default, `figures.jl` is the only place a
-  figure is saved, and the energy scan, the phase-drift scan and the residual profile are carried
-  against the merged family: the quadrature check that was a script is a test of the energy
-  diagnostic, and the two scans and the profile are rewritten for the new constructors. `runs/` and
-  `results/` are anchored in `.gitignore`.
+  refuses an unknown flag, and the writer and reader of the archive: one JLD2 file per run at
+  `runs/<stem>.jld2`, with a `"kind"` and a stem that `store_run!` requires to be non-empty, not to
+  start with a dot and to hold no path separator, and `load_runs()` reading the directory back, so
+  a renderer needs no registry to know what an archive is, and the schema itself is stated in
+  `scripts/README.md`. `experiments.jl` is the registry, which holds no family's entries and runs
+  nothing on `include`; `run_family.jl` runs the smallest entry of the family it is named,
+  `figures.jl` is the only place a figure is saved, and the energy scan, the phase-drift scan and
+  the residual profile are carried against the merged family: the quadrature check that was a
+  script is a test of the energy diagnostic, and the two scans and the profile are rewritten for
+  the new constructors. `runs/` and `results/` are anchored in `.gitignore`. The archive test,
+  `test/integration/archives.jl`, checks `atomic_write`, the stem refusal of `store_run!` and the
+  dot-skip of `load_runs`; this closes the known issue K32. The registry test,
+  `test/integration/registry.jl`, checks that a family registers once and that a stem names one
+  entry across the registry.
 - **The old `scripts/` are deleted (K6).** The drivers of the removed families stay reachable at
-  `294f023`. `run_network.jl` and `run_symbolic.jl` ship with an empty registry and say so, naming
-  the ansatz that their entries come with, rather than carrying a constructor that does not exist.
+  `294f023`. The placeholder drivers of the network and symbolic families, which printed that the
+  registry held no entry of their family and why, are deleted with them, so the registry holds
+  `:spline` alone and a family without a model file is refused by name rather than driven.
+- **The scripts are one append-only registry and one driver, and the plotting layer returns what it
+  draws.** `scripts/experiments.jl` is the registry — `register_family!(name, entries; run)`,
+  `family_entries` and `family_run` — and holds no family's entries: each family's entries and the
+  `run` that turns one of them into an archive live in its own `scripts/<family>_model.jl`, and
+  `spline_model.jl` registers `:spline`. A name already registered and a name the registry does not
+  hold each raise an `ArgumentError` naming the family, so two model files that claim one name are
+  reported rather than settled in favour of the later one. A stem that an entry of any registered
+  family already holds raises an `ArgumentError` naming it, because a stem names one archive under
+  `runs/` and a second run would replace the first. `scripts/run_family.jl` replaces
+  `run_spline.jl`, `run_network.jl` and `run_symbolic.jl`, which are deleted: it includes every
+  `*_model.jl` beside it in sorted order, takes the family name and then the stems of its entries,
+  and returns 0 when every selected entry was archived and 1 when one failed. A run that throws is
+  reported on stderr with its full backtrace, archives nothing, and makes the driver exit 1, so a
+  failed family is distinguishable from one that ran. The file is includable — `exit(main(ARGS))`
+  runs only under `PROGRAM_FILE` — so a caller can register a family of its own and run the real
+  driver over it, which is what makes a new family a new file and no edit to the registry or the
+  driver. Every file the scripts write goes through `atomic_write(write, path)`: a sibling temporary
+  carrying the destination's extension — a rename within one file system, in the format a writer
+  takes from the file name — renamed over the destination, and removed with the writer's exception
+  rethrown when the writer fails, so `store_run!` and `figures.jl` leave an earlier file whole
+  rather than truncated. The `"solution"` archive drops the four keys nothing read — `final_time`,
+  `dimension`, `energy_t` and `energy_error` — and holds `kind`, `stem`, `label`, `problem_label`,
+  `timestep`, `t`, `x` and `u`, whose row of the schema table in `scripts/README.md` is now the one
+  statement of it; a run prints its own maximum energy error from its own series instead of
+  archiving a copy that could only disagree with it. Two silent mistakes of the spline family now
+  say what is wrong: `spline_method` raises an `ArgumentError` naming an unknown coupling symbol
+  instead of silently running `:restriction`, and `phase_drift` measures at the last stored trace,
+  `solution.t[length(result.traces)]`, raising an `ArgumentError` for a run that stored nothing, so
+  a run that stopped early no longer reports a drift of 1.0.
+  `Diagnostics.figures(data)` returns the `Figure` itself — one figure per archive, and a
+  `D`-component solution as one figure of `D` panels — and names nothing, so `figures.jl` writes
+  `results/<stem>.pdf` through `atomic_write`. `SolutionFields` and the extension's four
+  "Implemented in the … extension" stub docstrings are gone, so each name has the one docstring of
+  its declaration in `src/plots.jl`, and `draw_solution` no longer shadows Makie's `heatmap` with a
+  local of that name. `title = nothing` takes the archive's heading and `title = ""` draws none, in
+  the declarations of `plot_solution` and `plot_energy_error` and in their methods.
+  `animate_solution` takes `title = nothing` as its default too, where `nothing` and `""` draw no
+  heading before the time, and a given title is drawn before it. `plot_energy_error` adds a
+  `Legend` only when it drew a series, so an all-zero error figure is
+  drawn without one instead of throwing. In `src/diagnostics.jl` a node's `D` values are a static
+  tuple rather than a heap `Vector`, so the energy of a vector trace builds no container per node,
+  and `scripts/Project.toml` gains a `[compat]` entry for each of its remaining ten unbounded
+  dependencies, so no package of the scripts' environment is unbounded.
 - **A property suite over seeded generated problems** checks the slab core against an oracle that
   shares none of its code. `test/helpers/problem_generator.jl` draws 24 problems from a keyword
   RNG alone: `D = 1` and `D = 2`, potentials of degree 2, 3 and 4 with random coefficients, the

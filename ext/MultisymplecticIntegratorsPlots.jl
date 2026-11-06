@@ -49,16 +49,9 @@ const PANEL_HEIGHT = 300
 # the field per component. The run of `integrate` and the archive `scripts/archives.jl` writes both
 # reduce to that, which is what keeps the drawing below free of problems and solution objects.
 
-struct SolutionFields{T}
-    t::Vector{T}
-    x::Vector{T}
-    u::Vector{Matrix{T}}
-    title::String
-end
-
 function solution_fields(problem::M.LagrangianPDEProblem, result)
     t, x, u = M.solution_data(problem, result)
-    return SolutionFields{eltype(t)}(t, x, u, "")
+    return (t = t, x = x, u = u, heading = "")
 end
 
 function solution_fields(data::AbstractDict)
@@ -66,13 +59,12 @@ function solution_fields(data::AbstractDict)
     x = collect(data["x"])
     T = promote_type(eltype(t), eltype(x))
     u = [convert(Matrix{T}, component) for component in data["u"]]
-    title = get(data, "title", "")
-    isempty(title) && (title = _solution_title(data))
-    return SolutionFields{T}(convert(Vector{T}, t), convert(Vector{T}, x), u, title)
+    return (t = convert(Vector{T}, t), x = convert(Vector{T}, x), u = u,
+        heading = _solution_heading(data))
 end
 
 # A heading naming the run, for a figure taken out of the directory it was drawn in.
-function _solution_title(data)
+function _solution_heading(data)
     name = get(data, "stem", "")
     label = get(data, "label", "")
     problem = get(data, "problem_label", "")
@@ -88,16 +80,6 @@ end
 
 # ---- the space-time plot -----------------------------------------------------
 
-"""
-    plot_solution(problem, result; kwargs...)
-    plot_solution(data::AbstractDict; kwargs...)
-
-A space-time plot of one run: one heatmap panel per component of the field, the time axis running
-up the page and the problem's output grid across it.
-
-Implemented in the `MultisymplecticIntegratorsPlots` extension; the arguments and the keywords are
-documented at the declaration in `src/plots.jl`.
-"""
 function Diagnostics.plot_solution(problem::M.LagrangianPDEProblem, result; path = nothing,
         title = nothing, figsize = nothing)
     return draw_solution(solution_fields(problem, result); path = path, title = title,
@@ -109,9 +91,8 @@ function Diagnostics.plot_solution(data::AbstractDict; path = nothing, title = n
     return draw_solution(solution_fields(data); path = path, title = title, figsize = figsize)
 end
 
-function draw_solution(fields::SolutionFields; path = nothing, title = nothing,
-        figsize = nothing)
-    heading = title === nothing ? fields.title : title
+function draw_solution(fields; path = nothing, title = nothing, figsize = nothing)
+    heading = title === nothing ? fields.heading : title
     figure = with_theme(PLOT_THEME) do
         D = length(fields.u)
         fig = Figure(size = _figsize(figsize, D))
@@ -124,10 +105,10 @@ function draw_solution(fields::SolutionFields; path = nothing, title = nothing,
             # cells, which is what a vector format such as PDF can place. Makie lays the first
             # dimension of the matrix along the first interval, so the `nt × nx` field is
             # transposed to put space across and time up.
-            heatmap = heatmap!(
+            shading = heatmap!(
                 ax, fields.x[1] .. fields.x[end], fields.t[1] .. fields.t[end],
                 permutedims(fields.u[d]))
-            Colorbar(fig[d, 2], heatmap; label = "u")
+            Colorbar(fig[d, 2], shading; label = "u")
         end
         fig
     end
@@ -137,23 +118,16 @@ end
 
 # ---- the energy error over time ---------------------------------------------
 
-"""
-    plot_energy_error(times, errors; kwargs...)
-    plot_energy_error(data::AbstractDict; kwargs...)
-
-The relative energy error of several runs against time, on a logarithmic axis.
-
-Implemented in the `MultisymplecticIntegratorsPlots` extension; the arguments and the keywords are
-documented at the declaration in `src/plots.jl`.
-"""
 function Diagnostics.plot_energy_error(times, errors; labels = nothing, path = nothing,
-        title = "", figsize = nothing)
+        title = nothing, figsize = nothing)
     length(errors) == length(labels === nothing ? errors : labels) ||
         throw(ArgumentError("$(length(errors)) error series against $(length(labels)) labels"))
+    heading = title === nothing ? "" : title
     figure = with_theme(PLOT_THEME) do
         fig = Figure(size = _figsize(figsize, 1))
-        isempty(title) || Label(fig[0, 1], title; tellwidth = false)
+        isempty(heading) || Label(fig[0, 1], heading; tellwidth = false)
         ax = Axis(fig[1, 1]; xlabel = "t", ylabel = "|ΔH / H₀|", yscale = log10)
+        drawn = 0
         for (i, series) in enumerate(errors)
             t = collect(eltype(times) <: AbstractVector ? times[i] : times)
             e = collect(series)
@@ -166,8 +140,12 @@ function Diagnostics.plot_energy_error(times, errors; labels = nothing, path = n
             isempty(keep) && continue
             lines!(ax, t[keep], e[keep];
                 label = labels === nothing ? "run $i" : labels[i])
+            drawn += 1
         end
-        isempty(errors) || Legend(fig[1, 2], ax; framevisible = false)
+        # A legend names the series the axis carries, so it is drawn only when there is one: over an
+        # empty axis Makie refuses it, and a figure of nothing is a failed draw rather than a
+        # comparison.
+        iszero(drawn) || Legend(fig[1, 2], ax; framevisible = false)
         fig
     end
     path === nothing || save(path, figure)
@@ -186,28 +164,20 @@ end
 
 # ---- the animation -----------------------------------------------------------
 
-"""
-    animate_solution(problem, result; path, kwargs...)
-
-An animation of the field `u(t, ·)` over the stored steps of one run.
-
-Implemented in the `MultisymplecticIntegratorsPlots` extension; the arguments and the keywords are
-documented at the declaration in `src/plots.jl`.
-"""
 function Diagnostics.animate_solution(problem::M.LagrangianPDEProblem, result; path,
-        framerate = 15, title = "", figsize = nothing)
+        framerate = 15, title = nothing, figsize = nothing)
     fields = solution_fields(problem, result)
+    heading = title === nothing ? "" : title
     figure = with_theme(PLOT_THEME) do
         u = fields.u[1]
         fig = Figure(size = _figsize(figsize, 1))
-        ax = Axis(fig[1, 1]; xlabel = "x", ylabel = "u",
-            title = isempty(title) ? "" : title)
+        ax = Axis(fig[1, 1]; xlabel = "x", ylabel = "u", title = heading)
         profile = Observable(collect(view(u, 1, :)))
         lines!(ax, fields.x, profile)
         record(fig, path, axes(u, 1); framerate = framerate) do n
             profile[] = collect(view(u, n, :))
-            ax.title = isempty(title) ? "t = $(fields.t[n])" :
-                       "$(title), t = $(fields.t[n])"
+            ax.title = isempty(heading) ? "t = $(fields.t[n])" :
+                       "$(heading), t = $(fields.t[n])"
             return nothing
         end
         fig
@@ -217,32 +187,22 @@ end
 
 # ---- figures from an archive --------------------------------------------------
 #
-# The layer above the three figures: given one archive, draw the figure its kind asks for and name
-# it as its stem does. The archive is a plain dictionary of flat keys — see the schema in
-# `scripts/archives.jl` — so this knows nothing about how a run was stored or which study made it.
+# The layer above the three figures: given one archive, draw the figure its kind asks for. The
+# archive is a plain dictionary of flat keys — see the schema in `scripts/README.md` — so this knows
+# nothing about how a run was stored or which study made it, and nothing about where the figure is
+# saved.
 
-"""
-    figures(data) -> Vector{Pair{String, Figure}}
-
-Every figure one archive earns, each paired with the name it belongs under.
-
-Implemented in the `MultisymplecticIntegratorsPlots` extension; the argument and the schema are
-documented at the declaration in `src/plots.jl` and in `scripts/archives.jl`.
-"""
 function Diagnostics.figures(data::AbstractDict)
     haskey(data, "kind") ||
         throw(ArgumentError("the archive has no \"kind\"; cannot tell what to draw"))
-    haskey(data, "stem") ||
-        throw(ArgumentError("the archive has no \"stem\"; cannot tell what to call the figure"))
     kind = data["kind"]
-    stem = data["stem"]
     if kind == "solution"
-        return [stem => Diagnostics.plot_solution(data)]
+        return Diagnostics.plot_solution(data)
     elseif kind == "energy"
-        return [stem => Diagnostics.plot_energy_error(data)]
+        return Diagnostics.plot_energy_error(data)
     end
-    throw(ArgumentError("the archive `$(stem)` has kind \"$(kind)\", and this module draws " *
-                        "\"solution\" and \"energy\""))
+    throw(ArgumentError("the archive has kind \"$(kind)\", and this module draws \"solution\" " *
+                        "and \"energy\""))
 end
 
 end

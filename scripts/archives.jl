@@ -1,9 +1,9 @@
-# The shared layer under every driver in this directory: where output goes, how a run is archived,
-# how arguments are parsed, and how progress is printed.
+# The shared layer under the driver and every other script in this directory: where output goes,
+# how a run is archived, how arguments are parsed, and how progress is printed.
 #
-# No *work* happens at top level, so a driver can `include` this and pay only the load. The two
+# No *work* happens at top level, so a script can `include` this and pay only the load. The two
 # output-directory `Ref`s do execute, so including it twice in one session — a REPL that loads two
-# drivers — resets a `--runs-dir` already set. Each driver includes it once.
+# scripts — resets a `--runs-dir` already set. Each script includes it once.
 #
 # It depends on `JLD2` and `Printf` and on nothing else, which is what lets a renderer that needs no
 # solver load it cheaply: `figures.jl` draws archives of plain vectors and never touches an
@@ -70,60 +70,38 @@ end
 
 # ---- archives ----------------------------------------------------------------
 #
-# One JLD2 file per run, under `runs/`. The keys are flat and named for what they hold rather than
-# for the variable that happened to hold it, so a reader needs no per-run knowledge to know what an
-# archive contains.
-#
-# Two keys carry the schema itself:
-#
-#   "kind"    what shape of figure this run draws
-#   "stem"    the figure's name, so that a renderer can glob `runs/` and needs no registry to know
-#             what it is looking at or what to call the output
-#
-# Everything else is per kind, and `figures.jl` is what reads it back. Stored for a `"solution"`
-# run:
-#
-#   "label", "problem_label"      the run's identity
-#   "timestep", "final_time", "dimension"
-#   "t", "x", "u"                 the step times, the output grid, and one `length(t) × length(x)`
-#                                 matrix of the field per component
-#   "energy_t", "energy_error"    the relative energy error over the stored steps
-#
-# and for an `"energy"` run: "title", "labels", "t" and "errors", with one time vector and one error
-# vector per series.
+# One JLD2 file per run, under `runs/`, named after its stem. The archive's keys are the schema
+# documented in `scripts/README.md`: `"kind"` says what shape of figure the run draws and `"stem"`
+# names the archive and its figure, and a reader globs the directory and needs no registry to know
+# what it is looking at.
 
 archive_path(stem) = joinpath(RUNS_DIR[], stem * ".jld2")
 
 """
-    store_run!(stem, data) -> String
+    atomic_write(write::Function, path::AbstractString)
 
-Write one run's archive and return its path.
+Write one file through a temporary beside it and rename that over the destination, and return
+`path`.
 
-A data set without a `"kind"` is refused: a renderer globbing `runs/` cannot tell what shape of
-figure it draws, and a figure guessed at is worse than none.
+The temporary is a sibling, so `rename` is a rename within one file system, and it carries the
+destination's extension, so a writer that picks its format from the file name — a PDF, say — writes
+the format the destination asks for. Its name starts with a dot, so a reader that takes every file
+of that extension for a finished result — `load_runs` for the archives — skips it, and a
+temporary left behind by a writer that was killed is not mistaken for one. A writer that throws
+leaves the destination as it was and its temporary is removed, so a failed write cannot truncate an
+earlier result into half a file. The writer's exception is rethrown, because the caller is what
+decides whether a failed write is fatal.
 
-`jldopen` with explicit writes rather than `jldsave(path; data...)`: splatting a `Dict{String, Any}`
-into keyword arguments requires `Symbol` keys, and these keys are deliberately strings — they are
-data, read back by name, not identifiers.
+    atomic_write(path) do temporary
+        save(temporary, figure)
+    end
 """
-function store_run!(stem::String, data::Dict{String, Any})
-    haskey(data, "kind") ||
-        throw(ArgumentError("the archive for `$(stem)` has no \"kind\"; a renderer globbing " *
-                            "`runs/` cannot tell what shape of figure it draws."))
-    mkpath(RUNS_DIR[])
-    data["stem"] = stem
-    path = archive_path(stem)
-    # Written to a file of its own beside the archive and renamed over it, so that an interrupted
-    # write leaves the earlier archive whole and two writers of one stem never share a file;
-    # `load_runs` reads only `.jld2` files and skips the temporary one. `rename` replaces the
-    # destination in one step, where `mv(...; force = true)` removes it first on Julia 1.11.
-    temporary = tempname(RUNS_DIR[]; cleanup = false)
+function atomic_write(write::Function, path::AbstractString)
+    directory = dirname(abspath(path))
+    mkpath(directory)
+    temporary = joinpath(directory, "." * basename(tempname(directory)) * splitext(path)[2])
     try
-        jldopen(temporary, "w") do file
-            for (key, value) in data
-                file[key] = value
-            end
-        end
+        write(temporary)
         Base.Filesystem.rename(temporary, path)
     finally
         rm(temporary; force = true)
@@ -131,7 +109,52 @@ function store_run!(stem::String, data::Dict{String, Any})
     return path
 end
 
+"""
+    store_run!(stem, data) -> String
+
+Write one run's archive and return its path.
+
+A data set without a `"kind"` is refused: a renderer globbing `runs/` cannot tell what shape of
+figure it draws, and a figure guessed at is worse than none. The `"stem"` is the argument's, so
+that the archive and its figure are named in one place.
+
+A stem that `load_runs` would not find is refused: an empty one, which names `.jld2`; one that starts
+with a dot, which `load_runs` skips as the mark of an `atomic_write` temporary; and one that holds a
+path separator, which names a file below `runs/`, where `load_runs` does not look. An archive stored
+under any of them would be written and never drawn.
+
+`jldopen` with explicit writes rather than `jldsave(path; data...)`: splatting a `Dict{String, Any}`
+into keyword arguments requires `Symbol` keys, and these keys are deliberately strings — they are
+data, read back by name, not identifiers.
+"""
+function store_run!(stem::String, data::Dict{String, Any})
+    (isempty(stem) || startswith(stem, ".") || basename(stem) != stem) &&
+        throw(ArgumentError(
+            "the stem `$(stem)` must be a file name that does not start with a dot: `load_runs` reads " *
+            "the files directly under `runs/` and skips a dotted name as a temporary, so this archive " *
+            "would be written and never drawn."))
+    haskey(data, "kind") ||
+        throw(ArgumentError("the archive for `$(stem)` has no \"kind\"; a renderer globbing " *
+                            "`runs/` cannot tell what shape of figure it draws."))
+    data["stem"] = stem
+    path = archive_path(stem)
+    # Written through a sibling temporary so that an interrupted write leaves the earlier archive
+    # whole; `atomic_write` names that temporary with a leading dot, which `load_runs` skips.
+    atomic_write(path) do temporary
+        jldopen(temporary, "w") do file
+            for (key, value) in data
+                file[key] = value
+            end
+        end
+    end
+    return path
+end
+
 load_run(stem::String) = load(archive_path(stem))
+
+# A file `store_run!` has finished writing: an archive whose name does not start with a dot, which
+# is how `atomic_write` names its temporary.
+is_written_archive(file) = endswith(file, ".jld2") && !startswith(file, ".")
 
 """
     load_runs() -> (runs::Vector{Dict}, unreadable::Vector{String})
@@ -142,12 +165,14 @@ Read from the directory rather than enumerated from a registry: the directory is
 exists, and a registry that has drifted from the stem a driver wrote produces a figure that silently
 is not drawn. A file that fails to load is reported with a warning and left out of `runs`, so one
 corrupt archive does not stop the figures of the others; the caller counts `unreadable` as failures.
+A name that starts with a dot is skipped: `atomic_write` names its temporary that way, so a
+temporary whose writer was killed is not read as a corrupt archive.
 """
 function load_runs()
     runs = Dict{String, Any}[]
     unreadable = String[]
     isdir(RUNS_DIR[]) || return runs, unreadable
-    for file in sort(filter(endswith(".jld2"), readdir(RUNS_DIR[])))
+    for file in sort(filter(is_written_archive, readdir(RUNS_DIR[])))
         data = try
             load(joinpath(RUNS_DIR[], file))
         catch exception
