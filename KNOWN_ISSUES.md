@@ -123,7 +123,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K32 · No check covers the dot-skip that keeps a killed writer's temporary out of `load_runs`.
 
-- location: `scripts/archives.jl:147`
+- location: `scripts/archives.jl:154`
 - evidence: `is_written_archive(file) = endswith(file, ".jld2") && !startswith(file, ".")` is the
   only guard that keeps the temporary of `atomic_write` out of `load_runs`, and no check and no test
   reaches it: `grep -rn "is_written_archive\|load_runs\|startswith(file" test/` finds nothing, and
@@ -134,19 +134,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   where the same probe against this branch reads `unreadable = String[]`; every kept check stays
   green on the mutant.
 - kind: missing test
-- found: 2026-11-06
-
-### K33 · A stem that starts with a dot is archived and then skipped in silence.
-
-- location: `scripts/archives.jl:147`
-- evidence: `store_run!(".dotted", …)` writes `runs/.dotted.jld2`, and `is_written_archive` skips
-  every name that starts with a dot, so `load_runs` returns
-  `(files = [".dotted.jld2", "plain.jld2"], loaded = ["plain"], unreadable = String[])`: the
-  archive is never drawn, nothing is printed and the renderer counts no failure. The leading dot is
-  how `atomic_write` marks its temporary, so a stem that carries one is indistinguishable from a
-  temporary and no reader can tell the two apart. A marker that a stem cannot carry, or an
-  `ArgumentError` from `store_run!` for a stem that starts with a dot, would separate them.
-- kind: found late
 - found: 2026-11-06
 
 ### K34 · CI never evaluates the zero-allocation assertions of the point loops.

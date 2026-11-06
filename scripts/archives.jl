@@ -118,11 +118,18 @@ A data set without a `"kind"` is refused: a renderer globbing `runs/` cannot tel
 figure it draws, and a figure guessed at is worse than none. The `"stem"` is the argument's, so
 that the archive and its figure are named in one place.
 
+A stem that starts with a dot is refused: `atomic_write` marks its temporary with a leading dot
+and `load_runs` skips such a name, so an archive stored under that stem would be written and never
+drawn.
+
 `jldopen` with explicit writes rather than `jldsave(path; data...)`: splatting a `Dict{String, Any}`
 into keyword arguments requires `Symbol` keys, and these keys are deliberately strings — they are
 data, read back by name, not identifiers.
 """
 function store_run!(stem::String, data::Dict{String, Any})
+    startswith(stem, ".") && throw(ArgumentError(
+        "the stem `$(stem)` starts with a dot, which `atomic_write` writes before its temporary; " *
+        "`load_runs` skips such a name, so this archive would be written and never drawn."))
     haskey(data, "kind") ||
         throw(ArgumentError("the archive for `$(stem)` has no \"kind\"; a renderer globbing " *
                             "`runs/` cannot tell what shape of figure it draws."))

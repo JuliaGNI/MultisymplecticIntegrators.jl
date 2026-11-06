@@ -115,8 +115,9 @@ keyword overrides that.
 ## The archive schema
 
 One JLD2 file per run, `runs/<stem>.jld2`. `"kind"` says what shape of figure the run draws and
-`"stem"` names the archive and its figure; `store_run!` refuses a data set without a `"kind"`, and
-`figures.jl` refuses a kind it cannot draw — a figure guessed at would be drawn from the wrong keys.
+`"stem"` names the archive and its figure; `store_run!` refuses a data set without a `"kind"` and
+a stem that starts with a dot, which is the mark of a temporary, and `figures.jl` refuses a kind it
+cannot draw — a figure guessed at would be drawn from the wrong keys.
 
 | kind | keys |
 |:--|:--|
