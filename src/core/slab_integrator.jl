@@ -27,8 +27,9 @@ the ecosystem's Newton solver solves. With `linear_solver = true`, for an ansatz
 coefficients and a linear density, the system is affine with the same Jacobian on every slab: the
 first step factorises it once, and every step solves with that factorisation directly and then
 takes one step of iterative refinement with it, two solves in all. The iterate count, the residual,
-the initial residual and the convergence of every step are recorded in the cache, and the trace `(u, v, w)` at the top of the slab, at the nodes of the space quadrature, is
-kept for the diagnostics.
+the initial residual and the convergence of every step are recorded in the cache, and the trace
+`(u, v, w)` at the top of the slab, at the nodes of the space quadrature, is kept for the
+diagnostics.
 
 The roles of the ansatz, the coupling and the guess, and the functions through which the core
 reaches each of them, are on the page *The slab seam* of the manual.
@@ -584,8 +585,7 @@ end
 One slab: the coupling fixes its datum, the initial guess fills the solver's vector, the
 ecosystem's Newton solver (or, when `method.linear_solver` is `true`, one solve with the cached LU
 factorisation from zero and one step of iterative refinement) solves the slab, the cache records
-the solve, and the update writes the solution, the trace
-and the data the next slab starts from.
+the solve, and the update writes the solution, the trace and the data the next slab starts from.
 """
 function integrate_step!(sol, history, params,
         int::GeometricIntegrator{<:SpaceTimeGalerkin, <:LagrangianPDEProblem})
