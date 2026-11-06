@@ -13,8 +13,25 @@ include("../helpers/testsetup.jl")
         @test xgrid(problem) ≈ collect(-0.5:0.125:0.0)
         @test xspan(problem)[1] == -0.5 && xspan(problem)[2] == 0.0
         @test ntime(problem) == 4
-        @test problem.D == 1
-        @test length(problem.ics.u) == length(xgrid(problem))
+        @test problem.D == 2
+        @test size(problem.ics.u) == (length(xgrid(problem)), 2)
+        @test all(iszero, problem.ics.u[:, 2])
+    end
+
+    @testset "the doubled density and its derivatives" begin
+        params = (c = 0.2,)
+        density = LinearTransport.density(; params = params)
+        # The field `(u, ψ)`, and its derivatives, at one point.
+        u = [0.3, 1.1]
+        v = [0.7, 0.4]
+        w = [-0.2, 0.6]
+        # The closed form `L = ψ (v₁ + c w₁)` and its three partials, written here.
+        @test density(u, v, w, params) ≈ 1.1 * (0.7 + params.c * -0.2)
+        @test collect(derivatives(density, u, v, w, params).u) ≈
+              [0.0, 0.7 + params.c * -0.2]
+        @test collect(derivatives(density, u, v, w, params).v) ≈ [1.1, 0.0]
+        @test collect(derivatives(density, u, v, w, params).w) ≈ [params.c * 1.1, 0.0]
+        @test density.params == params
     end
 
     @testset "the exact solution is the travelling profile" begin
@@ -22,13 +39,16 @@ include("../helpers/testsetup.jl")
         for t in (0.0, 0.5, 1.0), x in (-0.5, -0.25, 0.0)
 
             ξ = x + 2 - params.c * t
-            @test LinearTransport.exact_u(t, x, params) ≈ 0.5 * exp(-ξ^2) / sqrt(π)
-            @test LinearTransport.exact_v(t, x, params) ≈
-                  params.c * ξ * exp(-ξ^2) / sqrt(π)
-            @test LinearTransport.exact_w(t, x, params) ≈ -ξ * exp(-ξ^2) / sqrt(π)
-            # The constraint `v = −c w` that carries the transport equation.
-            @test LinearTransport.exact_v(t, x, params) ≈
-                  -params.c * LinearTransport.exact_w(t, x, params)
+            u = LinearTransport.solution_u(t, x, params)
+            v = LinearTransport.solution_v(t, x, params)
+            w = LinearTransport.solution_w(t, x, params)
+            # component 1 is the transported field, component 2 the adjoint field's zero data
+            @test u[1] ≈ 0.5 * exp(-ξ^2) / sqrt(π)
+            @test v[1] ≈ params.c * ξ * exp(-ξ^2) / sqrt(π)
+            @test w[1] ≈ -ξ * exp(-ξ^2) / sqrt(π)
+            @test iszero(u[2]) && iszero(v[2]) && iszero(w[2])
+            # `v` and `w` are the derivatives of the profile, so `v = −c w` on it.
+            @test v[1] ≈ -params.c * w[1]
         end
     end
 
@@ -37,18 +57,19 @@ include("../helpers/testsetup.jl")
             timestep = 0.5, xstep = 0.25)
         slow = LinearTransport.problem(params = (c = 0.2,), timespan = (0.0, 1.0),
             timestep = 0.5, xstep = 0.25)
-        @test fast.bcs_function((0.0, 0.4), fast.params).top.u !=
-              slow.bcs_function((0.0, 0.4), slow.params).top.u
-        @test fast.exact_u(0.4, -0.25, fast.params) != slow.exact_u(0.4, -0.25, slow.params)
-        @test fast.exact_u(0.4, -0.25, fast.params) ≈
-              LinearTransport.exact_u(0.4, -0.25, (c = 0.5,))
+        @test fast.bcs_function(0.4, fast.params).left.u !=
+              slow.bcs_function(0.4, slow.params).left.u
+        @test fast.solutions.u(0.4, -0.25, fast.params) !=
+              slow.solutions.u(0.4, -0.25, slow.params)
+        @test fast.solutions.u(0.4, -0.25, fast.params)[1] ≈
+              LinearTransport.solution_u(0.4, -0.25, (c = 0.5,))[1]
     end
 
     @testset "the solution shifts by the speed" begin
         params = (c = 0.2,)
         x = collect(xgrid(LinearTransport.problem()))
-        u₀ = [LinearTransport.exact_u(0.0, xi, params) for xi in x]
-        u₁ = [LinearTransport.exact_u(1.0, xi + params.c, params) for xi in x]
+        u₀ = [LinearTransport.solution_u(0.0, xi, params)[1] for xi in x]
+        u₁ = [LinearTransport.solution_u(1.0, xi + params.c, params)[1] for xi in x]
         @test u₀ ≈ u₁ rtol = 16 * eps(Float64)
     end
 

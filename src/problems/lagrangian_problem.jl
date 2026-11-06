@@ -12,7 +12,7 @@ struct LagrangianEquation{P} <: GeometricEquation{NullInvariants, P, NullPeriodi
 periodicity(::LagrangianEquation) = NullPeriodicity()
 
 """
-    LagrangianPDEProblem(density; D = 1, ics_function, bcs_function, exact_u, exact_v, exact_w,
+    LagrangianPDEProblem(density; D = 1, ics_function, bcs_function, solutions = nothing,
                          timespan, timestep, xspan, xstep, params = density.params)
 
 A Lagrangian field theory in one space dimension on a space-time slab, with a generic element type.
@@ -28,14 +28,14 @@ of `u`, `v` and `w` at a point as an indexable collection: the couplings of the 
 `AbstractVector` alone; `derivatives` returns the named tuple `(u = …, v = …, w = …)` of the `D`
 values of each partial derivative. The problem's parameters are the
 density's own `params` field where it has one, and the `params` keyword otherwise.
-`ics_function(x, params)` returns the named tuple
-`(u = …, v = …, w = …)` of the initial data on the vector `x` of grid points; each entry is a
-vector of length `D * length(x)`, laid out component-major, `θ = [θ¹; θ²; …]`, so that one scalar
-ansatz serves every component. `bcs_function(times, params)` returns the boundary data of the slab
-whose two times are `times = (t₀, t₁)`: the exact values on the bottom and top traces, at the
-grid points of `xspan` and `xstep`, and at the two ends of `xspan`, at both times. `exact_u`,
-`exact_v` and `exact_w` are `(t, x, params)` functions, or `nothing` where the problem has no
-exact solution.
+
+`ics_function(x, params)` returns the named tuple `(u = …, v = …, w = …)` of the initial data on the
+vector `x` of grid points, each entry a `length(x) × D` matrix whose column `d` holds component `d`.
+`bcs_function(t, params)` returns the side data of the slab at the one time `t`: `left` and `right`,
+each `(u = …, v = …, w = …)` of `D` vectors, entry `d` component `d`'s value at that end.
+`solutions` is `nothing` where the problem has no exact solution, and otherwise the named tuple
+`(u = …, v = …, w = …)` of `(t, x, params)` functions that return the `D` components' values at a
+point and the component-major vector of length `D * length(x)` at a grid.
 
 `timespan`, `timestep`, `xspan` and `xstep` are converted to the element type `T` of `timespan`.
 The functions of the problem take its parameters, never a module-level default.
@@ -43,20 +43,18 @@ The functions of the problem take its parameters, never a module-level default.
 ```julia
 problem = LagrangianPDEProblem(density;
     ics_function = (x, p) -> (u = …, v = …, w = …),
-    bcs_function = (times, p) -> …,
+    bcs_function = (t, p) -> …,
     timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0), xstep = 0.01)
 ```
 """
-struct LagrangianPDEProblem{T, PT, LDT, ICT, BCT, EUT, EVT, EWT, ICST} <:
+struct LagrangianPDEProblem{T, PT, LDT, ICT, BCT, SOT, ICST} <:
        GeometricProblem{LagrangianEquation{PT}, T, T}
     density::LDT
     params::PT
     D::Int
     ics_function::ICT
     bcs_function::BCT
-    exact_u::EUT
-    exact_v::EVT
-    exact_w::EWT
+    solutions::SOT
     ics::ICST
     timespan::NTuple{2, T}
     timestep::T
@@ -68,9 +66,7 @@ function LagrangianPDEProblem(density;
         D::Integer = 1,
         ics_function,
         bcs_function,
-        exact_u = nothing,
-        exact_v = nothing,
-        exact_w = nothing,
+        solutions = nothing,
         timespan,
         timestep,
         xspan,
@@ -86,29 +82,19 @@ function LagrangianPDEProblem(density;
     xh = convert(T, xstep)
     h > zero(T) || throw(ArgumentError("timestep must be positive, got $h"))
     xh > zero(T) || throw(ArgumentError("xstep must be positive, got $xh"))
-    xgrid = collect(xsp[1]:xh:xsp[2])
-    length(xgrid) ≥ 2 ||
-        throw(ArgumentError("xspan with xstep holds $(length(xgrid)) points; two are needed"))
-    # The grid's last point carries the rounding of the range, which is relative to the span's
-    # magnitude and is not small relative to an end at zero. The tolerance stays below a quarter
-    # cell, so that a step that does not divide the span is rejected on a long span too.
-    abs(last(xgrid) - xsp[2]) ≤
-    min(sqrt(eps(T)) * max(xh, abs(xsp[1]), abs(xsp[2])), xh / 4) ||
-        throw(ArgumentError("xstep $xh does not reach the end of xspan $xsp: the grid stops at " *
-                            "$(last(xgrid))"))
-    ics = ics_function(xgrid, params)
+    grid = _xgrid(xsp, xh)
+    ics = ics_function(collect(grid), params)
     for name in (:u, :v, :w)
         haskey(ics, name) ||
             throw(ArgumentError("ics_function must return the entries u, v and w, got $(keys(ics))"))
-        length(getfield(ics, name)) == D * length(xgrid) ||
-            throw(ArgumentError("ics.$name has length $(length(getfield(ics, name))); " *
-                                "D = $D and $(length(xgrid)) grid points need $(D * length(xgrid))"))
+        size(getfield(ics, name)) == (length(grid), D) ||
+            throw(ArgumentError("ics.$name is of size $(size(getfield(ics, name))); " *
+                                "D = $D and $(length(grid)) grid points need " *
+                                "($(length(grid)), $D)"))
     end
     return LagrangianPDEProblem{T, typeof(params), typeof(density), typeof(ics_function),
-        typeof(bcs_function), typeof(exact_u), typeof(exact_v),
-        typeof(exact_w), typeof(ics)}(
-        density, params, Int(D), ics_function, bcs_function, exact_u, exact_v, exact_w, ics,
-        tspan, h, xsp, xh)
+        typeof(bcs_function), typeof(solutions), typeof(ics)}(
+        density, params, Int(D), ics_function, bcs_function, solutions, ics, tspan, h, xsp, xh)
 end
 
 """
@@ -127,16 +113,21 @@ function _interval(::Type{T}, span, name::Symbol) where {T}
 end
 
 """
-    field_initial_data(exact_u, exact_v, exact_w, x, params, D, t)
+    field_initial_data(solutions, x, params, D, t)
 
-The initial data `(u = …, v = …, w = …)` of `D` components at time `t`, each entry a vector of
-length `D * length(x)` in component-major order.
+The initial data `(u = …, v = …, w = …)` of `D` components at time `t`: three
+`(length(x), D)` matrices, entry `[r, d]` the value of component `d` at the `r`-th point of `x`.
 """
-function field_initial_data(exact_u, exact_v, exact_w, x::AbstractVector, params,
-        D::Integer, t)
-    across(f) = vec([f(t, xi, params) for xi in x, _ in 1:D])
-    return (u = across(exact_u), v = across(exact_v), w = across(exact_w))
+function field_initial_data(solutions, x::AbstractVector, params, D::Integer, t)
+    (; u, v, w) = solutions
+    across(f) = [_field_component(f(t, xi, params), d) for xi in x, d in 1:D]
+    return (u = across(u), v = across(v), w = across(w))
 end
+
+# One component of a closed form's value at a point: a number serves every component, and a vector
+# holds one entry per component.
+_field_component(value::Number, ::Integer) = value
+_field_component(value, d::Integer) = value[d]
 
 """
     convert_parameters(::Type{T}, params)
@@ -149,45 +140,30 @@ convert_parameters(::Type{T}, params) where {T} = map(value -> convert(T, value)
 """
     field_exact(f, D)
 
-The exact function of `D` components: `f(t, x, params)` evaluated on the points of `x`, stacked
-component-major for `D > 1` and returned elementwise for `D = 1`.
+The exact function of `D` components, `(t, x, params)` returning a `Vector`: the `D` components'
+values at a scalar point `x`, and the component-major vector of length `D * length(x)` at a grid.
+A closed form that returns a number gives every component that number; one that returns a vector
+supplies the components' values.
 """
 function field_exact(f, D::Integer)
     return function (t, x, params)
-        D == 1 && !(x isa AbstractVector) && return f(t, x, params)
         points = x isa AbstractVector ? x : (x,)
-        return vec([f(t, xi, params) for xi in points, _ in 1:D])
+        return vec([_field_component(f(t, xi, params), d) for xi in points, d in 1:D])
     end
 end
 
 """
-    field_boundary_data(exact_u, exact_v, exact_w, times, xbreaks, params, D)
+    field_side_data(solutions, t, params, D, xspan)
 
-The boundary data of a slab whose two times are `times = (t₀, t₁)`:
-
-- `bottom`: the exact values over the points `xbreaks` at `t₀`;
-- `top`: the same at `t₁`;
-- `left` and `right`: the exact values at the two ends of `xbreaks`, at both times.
-
-Every entry is a vector of length `D * length(xbreaks)`, or `2 * D` for the two side traces, in
-component-major order.
+The side data of a slab at the one time `t`: `left` and `right`, each `(u = …, v = …, w = …)` of `D`
+vectors, entry `d` the exact value of component `d` at that end of `xspan`.
 """
-function field_boundary_data(
-        exact_u, exact_v, exact_w, times, xbreaks::AbstractVector, params,
-        D::Integer = 1)
-    length(times) == 2 ||
-        throw(ArgumentError("times must be the two times (t₀, t₁) of the slab, got $times"))
-    t₀, t₁ = times
-    across(f, t) = vec([f(t, xi, params) for xi in xbreaks, _ in 1:D])
-    at(f, x) = vec([f(t, x, params) for t in (t₀, t₁), _ in 1:D])
-    return (
-        bottom = (u = across(exact_u, t₀), v = across(exact_v, t₀),
-            w = across(exact_w, t₀)),
-        top = (u = across(exact_u, t₁), v = across(exact_v, t₁), w = across(exact_w, t₁)),
-        left = (u = at(exact_u, first(xbreaks)), v = at(exact_v, first(xbreaks)),
-            w = at(exact_w, first(xbreaks))),
-        right = (u = at(exact_u, last(xbreaks)), v = at(exact_v, last(xbreaks)),
-            w = at(exact_w, last(xbreaks))))
+function field_side_data(solutions, t, params, D::Integer, xspan)
+    (; u, v, w) = solutions
+    side(f, x) = [_field_component(f(t, x, params), d) for d in 1:D]
+    left, right = first(xspan), last(xspan)
+    return (left = (u = side(u, left), v = side(v, left), w = side(w, left)),
+        right = (u = side(u, right), v = side(v, right), w = side(w, right)))
 end
 
 datatype(::LagrangianPDEProblem{T}) where {T} = T
@@ -199,14 +175,18 @@ equtype(::LagrangianPDEProblem{<:Any, PT}) where {PT} = LagrangianEquation{PT}
 timespan(problem::LagrangianPDEProblem) = problem.timespan
 timestep(problem::LagrangianPDEProblem) = problem.timestep
 parameters(problem::LagrangianPDEProblem) = problem.params
+# The state is component-major, as `GeometricSolution` carries it, so the initial state is the
+# initial data's columns one after the other.
 function initialstate(problem::LagrangianPDEProblem)
-    State(problem.timespan[1], map(AlgebraicVariable, problem.ics))
+    State(problem.timespan[1], map(ics -> AlgebraicVariable(vec(ics)), problem.ics))
 end
 function periodicity(problem::LagrangianPDEProblem)
     map(_ -> NullPeriodicity(), problem.ics)
 end
+
+"""The number of steps a run of the problem takes, which is the number of steps the solution holds."""
 function ntime(problem::LagrangianPDEProblem)
-    Int(abs(div(problem.timespan[end] - problem.timespan[1], problem.timestep, RoundUp)))
+    return length(problem.timespan[1]:problem.timestep:problem.timespan[2]) - 1
 end
 
 xspan(problem::LagrangianPDEProblem) = problem.xspan
@@ -215,9 +195,29 @@ xstep(problem::LagrangianPDEProblem) = problem.xstep
 """The number of components of the field."""
 components(problem::LagrangianPDEProblem) = problem.D
 
-"""The vector of grid points in space."""
-function xgrid(problem::LagrangianPDEProblem)
-    return collect(problem.xspan[1]:problem.xstep:problem.xspan[2])
+"""
+    xgrid(problem)
+
+The output grid of the problem: `n = round(Int, Δx / xstep) + 1` equally spaced points from
+`xspan[1]` to `xspan[2]`, as a range that ends on the end of the span.
+"""
+xgrid(problem::LagrangianPDEProblem) = _xgrid(problem.xspan, problem.xstep)
+
+function _xgrid(xsp::NTuple{2, T}, xh::T) where {T}
+    n = round(Int, (xsp[2] - xsp[1]) / xh) + 1
+    n ≥ 2 || throw(ArgumentError("xstep $xh is too large for xspan $xsp"))
+    return range(xsp[1], xsp[2]; length = n)
+end
+
+"""
+    slab_start(problem, sol)
+
+The start time of the slab that `sol` ends: the solution step's time less one timestep. A solution
+step holds its time either as a scalar or as a `GeometricBase.TimeVariable`, whose single entry is
+the scalar.
+"""
+function slab_start(problem::LagrangianPDEProblem, sol)
+    return first(sol.t) - timestep(problem)
 end
 
 """The initial conditions of the problem, merged with its initial time."""

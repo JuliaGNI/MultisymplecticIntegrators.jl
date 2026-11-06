@@ -421,15 +421,10 @@ function slab_bottom!(c::SpaceTimeGalerkinCache{ST}, data::MultiplierData{ST},
     tr, w = data.traces, data.work
     if c.steps == 0
         w.target .= initial_condition_sample(ST, problem, ansatz)
-        nodes = space_quadrature_nodes(ansatz)
-        ics = problem.ics_function(collect(nodes), parameters(problem))
-        qx, D = length(nodes), size(tr.x_u, 2)
-        for d in 1:D, r in 1:qx
-
-            i = (d - 1) * qx + r
-            tr.x_u[r, d], tr.x_v[r, d], tr.x_w[r, d] = ST(ics.u[i]), ST(ics.v[i]),
-            ST(ics.w[i])
-        end
+        ics = problem.ics_function(collect(space_quadrature_nodes(ansatz)), parameters(problem))
+        tr.x_u .= ics.u
+        tr.x_v .= ics.v
+        tr.x_w .= ics.w
         project_momentum!(data.initial_multiplier, data, problem)
     else
         w.target .= c.trace_u
@@ -442,12 +437,12 @@ function slab_bottom!(c::SpaceTimeGalerkinCache{ST}, data::MultiplierData{ST},
     end
     size(data.boundary_basis, 1) == 0 && return nothing
     tq, h = c.ansatz.tabulation.time, timestep(problem)
-    qt, D, t₀ = nquadrature(tq), size(w.boundary_target, 2), first(sol.t) - h
+    qt, D, t₀ = nquadrature(tq), size(w.boundary_target, 2), slab_start(problem, sol)
     for rt in 1:qt
-        bcs = problem.bcs_function((t₀ + h * tq.node[rt], t₀ + h * tq.node[rt]), parameters(problem))
+        bcs = problem.bcs_function(t₀ + h * tq.node[rt], parameters(problem))
         for d in 1:D
-            w.boundary_target[rt, d] = ST(bcs.left.u[2 * (d - 1) + 1])
-            w.boundary_target[qt + rt, d] = ST(bcs.right.u[2 * (d - 1) + 1])
+            w.boundary_target[rt, d] = ST(bcs.left.u[d])
+            w.boundary_target[qt + rt, d] = ST(bcs.right.u[d])
         end
     end
     return nothing

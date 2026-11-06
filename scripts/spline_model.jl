@@ -122,7 +122,7 @@ function phase_drift(problem, result)
         throw(ArgumentError("the run stored no trace, so it has no drift to measure; `integrate` " *
                             "returns an empty `traces` for a run that took no step"))
     x = collect(xgrid(problem))
-    exact = problem.exact_u(solution.t[k], x, problem.params)
+    exact = problem.solutions.u(solution.t[k], x, problem.params)
     return maximum(abs, solution.u[k] .- exact) / maximum(abs, exact)
 end
 

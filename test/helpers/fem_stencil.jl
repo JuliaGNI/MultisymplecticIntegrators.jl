@@ -39,14 +39,14 @@ function fem_stencil(problem; steps::Integer)
             push!(weights, (b - a) / 2)
         end
     end
-    velocity = problem.ics_function(nodes, problem.params).v
+    velocity = vec(problem.ics_function(nodes, problem.params).v)
     load = zeros(T, N)
     for (r, node) in enumerate(nodes), j in interior
 
         φ = max(zero(T), one(T) - abs((node - grid[j]) / Δx))
         load[j] += weights[r] * velocity[r] * φ
     end
-    initial = copy(problem.ics_function(grid, problem.params).u)
+    initial = vec(problem.ics_function(grid, problem.params).u)
     s = h^2 * c^2 / 6
     lhs = M + s * K
     factor = lu(lhs[interior, interior])

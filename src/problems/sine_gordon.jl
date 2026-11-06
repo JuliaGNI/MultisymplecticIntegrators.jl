@@ -19,8 +19,9 @@ problem = SineGordon.problem(timespan = (0.0, 10.0), timestep = 1.0, xstep = 0.0
 """
 module SineGordon
 
-export default_parameters, density, problem, exact_u, exact_v, exact_w, initial_data,
-       boundary_data, lorentz_factor
+export default_parameters, density, problem, solution_u, solution_v, solution_w,
+       initial_data,
+       side_data, lorentz_factor
 
 using Symbolics
 using MultisymplecticIntegrators
@@ -55,14 +56,14 @@ function density(; params = default_parameters())
     return LagrangianDensity(L, u, v, w; params = (c = params.c,))
 end
 
-function exact_u(t, x, params = default_parameters())
+function solution_u(t, x, params = default_parameters())
     T = promote_type(typeof(t), typeof(x))
     p = convert_parameters(T, params)
     γ = T(lorentz_factor(params))
     return 4 * atan(exp(γ * (x - p.velocity * t)))
 end
 
-function exact_v(t, x, params = default_parameters())
+function solution_v(t, x, params = default_parameters())
     T = promote_type(typeof(t), typeof(x))
     p = convert_parameters(T, params)
     γ = T(lorentz_factor(params))
@@ -70,7 +71,7 @@ function exact_v(t, x, params = default_parameters())
     return -4 * γ * p.velocity * exp(ξ) / (1 + exp(ξ)^2)
 end
 
-function exact_w(t, x, params = default_parameters())
+function solution_w(t, x, params = default_parameters())
     T = promote_type(typeof(t), typeof(x))
     p = convert_parameters(T, params)
     γ = T(lorentz_factor(params))
@@ -78,14 +79,20 @@ function exact_w(t, x, params = default_parameters())
     return 4 * γ * exp(ξ) / (1 + exp(ξ)^2)
 end
 
-"""The initial data `(u = …, v = …, w = …)` at time `t`, component-major."""
+"""The initial data `(u = …, v = …, w = …)` at time `t`, one `(length(x), D)` matrix per entry."""
 function initial_data(x::AbstractVector, params = default_parameters(), D::Integer = 1, t = 0.0)
-    field_initial_data(exact_u, exact_v, exact_w, x, params, D, t)
+    field_initial_data(solutions(D), x, params, D, t)
 end
 
-"""The boundary data of the slab whose two times are `times = (t₀, t₁)`."""
-function boundary_data(times, xbreaks::AbstractVector, params = default_parameters(), D::Integer = 1)
-    field_boundary_data(exact_u, exact_v, exact_w, times, xbreaks, params, D)
+"""The exact solution of the kink of `D` components, as [`field_exact`](@ref) lifts it."""
+function solutions(D::Integer = 1)
+    return (u = field_exact(solution_u, D), v = field_exact(solution_v, D),
+        w = field_exact(solution_w, D))
+end
+
+"""The side data of the slab at the one time `t`, as [`field_side_data`](@ref) gives it."""
+function side_data(t, xspan, params = default_parameters(), D::Integer = 1)
+    field_side_data(solutions(D), t, params, D, xspan)
 end
 
 """
@@ -105,20 +112,18 @@ function problem(; T::Type = Float64, D::Integer = 1, params = default_parameter
     d = density(; params = params)
     tspan = (T(timespan[1]), T(timespan[2]))
     xsp = (T(xspan[1]), T(xspan[2]))
-    h = T(xstep)
-    ics = (x, p) -> initial_data(x, p, D, tspan[1])
-    bcs = (times, p) -> boundary_data(times, collect(xsp[1]:h:xsp[2]), p, D)
+    s = solutions(D)
+    ics = (x, p) -> field_initial_data(s, x, p, D, tspan[1])
+    bcs = (t, p) -> field_side_data(s, t, p, D, xsp)
     return LagrangianPDEProblem(d;
         D = D,
         ics_function = ics,
         bcs_function = bcs,
-        exact_u = field_exact(exact_u, D),
-        exact_v = field_exact(exact_v, D),
-        exact_w = field_exact(exact_w, D),
+        solutions = s,
         timespan = tspan,
         timestep = T(timestep),
         xspan = xsp,
-        xstep = h,
+        xstep = T(xstep),
         params = params)
 end
 

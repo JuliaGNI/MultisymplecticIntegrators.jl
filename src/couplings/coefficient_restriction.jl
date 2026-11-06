@@ -109,13 +109,13 @@ function initial_trace!(data::RestrictionData{ST}, c::SpaceTimeGalerkinCache{ST}
     values = problem.ics_function(nodes, parameters(problem))
     interpolation = [evaluate(xb, j, x) for x in nodes, j in 1:nx]
     for d in 1:D
-        data.bottom[:, d] .= interpolation \ view(values.u, ((d - 1) * nx + 1):(d * nx))
+        data.bottom[:, d] .= interpolation \ view(values.u, :, d)
     end
     xq = collect(space_quadrature_nodes(ansatz))
     sampled = problem.ics_function(xq, parameters(problem))
-    u0 = [sampled.u[(d - 1) * length(xq) + r] for r in eachindex(xq), d in 1:D]
-    v0 = [sampled.v[(d - 1) * length(xq) + r] for r in eachindex(xq), d in 1:D]
-    w0 = [sampled.w[(d - 1) * length(xq) + r] for r in eachindex(xq), d in 1:D]
+    u0 = [sampled.u[r, d] for r in eachindex(xq), d in 1:D]
+    v0 = [sampled.v[r, d] for r in eachindex(xq), d in 1:D]
+    w0 = [sampled.w[r, d] for r in eachindex(xq), d in 1:D]
     momentum = similar(u0, ST)
     momentum_load!(momentum, problem.density, u0, v0, w0, parameters(problem))
     boundary_form!(data.flux, momentum, c.ansatz.tabulation)

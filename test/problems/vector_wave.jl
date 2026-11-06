@@ -12,26 +12,28 @@ include("../helpers/testsetup.jl")
         ω = π * params.c / params.l
         phase(i, t) = params.A1[i] * cos(ω * t) + params.B1[i] * sin(ω * t + π / 6)
         @test problem.D == 2
-        @test length(problem.ics.u) == 2 * n
+        @test size(problem.ics.u) == (n, 2)
         for i in 1:2
-            block = ((i - 1) * n + 1):(i * n)
-            @test problem.ics.u[block] ≈
+            @test problem.ics.u[:, i] ≈
                   [phase(i, 0.0) * sin(π * xi / params.l) for xi in x]
-            @test problem.ics.v[block] ≈
+            @test problem.ics.v[:, i] ≈
                   [params.B1[i] * ω * cos(π / 6) * sin(π * xi / params.l) for xi in x]
         end
-        @test !(problem.ics.u[1:n] ≈ problem.ics.u[(n + 1):end])
+        @test !(problem.ics.u[:, 1] ≈ problem.ics.u[:, 2])
 
-        times = (0.0, 0.3)
-        data = problem.bcs_function(times, params)
-        @test data.bottom.u ≈ problem.ics.u
-        @test data.top.u ≈
-              [phase(i, times[2]) * sin(π * xi / params.l) for i in 1:2 for xi in x]
-        @test data.left.w ≈ [phase(i, t) * π / params.l for i in 1:2 for t in times]
-        @test data.right.w ≈ [-phase(i, t) * π / params.l for i in 1:2 for t in times]
+        a, b = xspan(problem)
+        for t in (0.0, 0.3)
+            data = problem.bcs_function(t, params)
+            @test data.left.u ≈ [phase(i, t) * sin(π * a / params.l) for i in 1:2]
+            @test data.right.u ≈ [phase(i, t) * sin(π * b / params.l) for i in 1:2]
+            @test data.left.w ≈
+                  [phase(i, t) * π / params.l * cos(π * a / params.l) for i in 1:2]
+            @test data.right.w ≈
+                  [phase(i, t) * π / params.l * cos(π * b / params.l) for i in 1:2]
+        end
 
-        @test problem.exact_u(0.0, x, params) ≈ problem.ics.u
-        @test problem.exact_u(0.2, 0.3, params) ≈
+        @test problem.solutions.u(0.0, x, params) ≈ vec(problem.ics.u)
+        @test problem.solutions.u(0.2, 0.3, params) ≈
               [phase(i, 0.2) * sin(π * 0.3 / params.l) for i in 1:2]
         @test_throws ArgumentError VectorWave.problem(params = merge(params, (B2 = (0.0,),)))
     end
@@ -85,8 +87,8 @@ include("../helpers/testsetup.jl")
         x = xgrid(problem)
         n = length(x)
         momentum(t) = begin
-            u = problem.exact_u(t, x, params)
-            v = problem.exact_v(t, x, params)
+            u = problem.solutions.u(t, x, params)
+            v = problem.solutions.v(t, x, params)
             VectorWave.angular_momentum(u[1:n], u[(n + 1):end], v[1:n], v[(n + 1):end], x)
         end
         # Each component is `aᵢ(t) sin(πx/l)`, so `J = (a₁a₂′ − a₂a₁′) l/2`; at `t = 0`,

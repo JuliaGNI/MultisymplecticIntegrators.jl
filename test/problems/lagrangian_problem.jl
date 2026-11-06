@@ -1,11 +1,44 @@
 using GeometricBase
 using GeometricEquations
+using GeometricSolutions: GeometricSolution
 using MultisymplecticIntegrators
 using Test
 
 include("../helpers/testsetup.jl")
 
 @testset "Lagrangian problem" begin
+    @testset "the step count of a problem" begin
+        # The step count is the one a `GeometricSolution` of the problem holds, and not a rounded
+        # division: at `(0.0, 0.38)` with `0.076` the division rounds up to 6 where the solution
+        # takes 5.
+        for (T, span, h) in ((Float64, (0.0, 0.38), 0.076), (Float64, (0.0, 1.0), 0.1),
+            (Float64, (0.0, 3.0), 0.3), (Float64, (0.0, 0.15), 0.05),
+            (Float32, (0.0f0, 0.38f0), 0.076f0))
+            problem = Wave.problem(T = T, timespan = span, timestep = h, xstep = T(0.25))
+            @test ntime(problem) == ntime(GeometricSolution(problem))
+        end
+        @test ntime(Wave.problem(timespan = (0.0, 0.38), timestep = 0.076, xstep = 0.25)) ==
+              5
+    end
+
+    @testset "the exact solution is a vector at both call shapes" begin
+        problem = Wave.problem(timespan = (0.0, 1.0), timestep = 0.1, xstep = 0.25)
+        # The wrapper returns a `Vector` at a scalar point and at a grid, so its return type is no
+        # union of a scalar and a vector (`Base.return_types`, because `D` is a runtime value).
+        @test Base.return_types(problem.solutions.u,
+            Tuple{Float64, Float64, typeof(problem.params)}) == Any[Vector{Float64}]
+        @test problem.solutions.u(0.1, 0.3, problem.params) isa Vector{Float64}
+        @test length(problem.solutions.u(0.1, 0.3, problem.params)) == 1
+        @test length(problem.solutions.u(0.1, collect(xgrid(problem)), problem.params)) ==
+              length(xgrid(problem))
+        for P in (Wave.problem(), SineGordon.problem(), VectorWave.problem(),
+            LinearTransport.problem())
+            @test P.solutions !== nothing
+        end
+        @test VectorWave.problem().solutions.u(0.5, 0.3, VectorWave.default_parameters()) isa
+              Vector
+    end
+
     @testset "the spans have the element type" begin
         for T in (Float32, Float64)
             problem = Wave.problem(T = T, timespan = (zero(T), T(1)), timestep = T(0.1),
@@ -29,11 +62,12 @@ include("../helpers/testsetup.jl")
         x = xgrid(problem)
         ω = π * params.c / params.l
         phase = params.A1 * cos(0.0) + params.B1 * sin(π / 6)
-        @test problem.ics.u ≈ [phase * sin(π * xi / params.l) for xi in x]
-        @test problem.ics.v ≈
+        @test vec(problem.ics.u) ≈ [phase * sin(π * xi / params.l) for xi in x]
+        @test vec(problem.ics.v) ≈
               [params.B1 * ω * cos(π / 6) * sin(π * xi / params.l) for xi in x]
-        @test problem.ics.w ≈ [phase * π / params.l * cos(π * xi / params.l) for xi in x]
-        @test problem.exact_u(0.3, 0.7, params) ≈
+        @test vec(problem.ics.w) ≈
+              [phase * π / params.l * cos(π * xi / params.l) for xi in x]
+        @test only(problem.solutions.u(0.3, 0.7, params)) ≈
               (params.A1 * cos(ω * 0.3) + params.B1 * sin(ω * 0.3 + π / 6)) *
               sin(π * 0.7 / params.l)
         @test parameters(problem) === params
@@ -46,8 +80,8 @@ include("../helpers/testsetup.jl")
             xstep = 0.25)
         γ = 1 / sqrt(1 - params.c * params.velocity^2)
         x = xgrid(problem)
-        @test problem.ics.u ≈ [4 * atan(exp(γ * xi)) for xi in x]
-        @test problem.exact_u(0.5, 0.3, params) ≈
+        @test vec(problem.ics.u) ≈ [4 * atan(exp(γ * xi)) for xi in x]
+        @test only(problem.solutions.u(0.5, 0.3, params)) ≈
               4 * atan(exp(γ * (0.3 - params.velocity * 0.5)))
         @test parameters(problem) === params
         @test_throws ArgumentError SineGordon.problem(params = (c = 4.0, velocity = 0.75))
@@ -58,9 +92,11 @@ include("../helpers/testsetup.jl")
         problem = LinearTransport.problem(params = params, timespan = (0.0, 2.0),
             timestep = 0.5, xstep = 0.25)
         x = xgrid(problem)
-        @test problem.ics.u ≈ [0.5 * exp(-(xi + 2)^2) / sqrt(π) for xi in x]
-        @test problem.exact_u(1.0, -0.25, params) ≈
+        @test vec(problem.ics.u[:, 1]) ≈ [0.5 * exp(-(xi + 2)^2) / sqrt(π) for xi in x]
+        @test all(iszero, problem.ics.u[:, 2])
+        @test problem.solutions.u(1.0, -0.25, params)[1] ≈
               0.5 * exp(-(−0.250 + 2 - params.c * 1.0)^2) / sqrt(π)
+        @test iszero(problem.solutions.u(1.0, -0.25, params)[2])
         @test parameters(problem) === params
     end
 
@@ -69,62 +105,54 @@ include("../helpers/testsetup.jl")
             params = (c = 0.5, A1 = 0.8, A2 = 0.0, B1 = 0.4, B2 = 0.0,
                 l = 1.0),
             timespan = (0.0, 1.0), timestep = 0.1, xstep = 0.25)
-        x = xgrid(problem)
-        times = (0.0, 1.0)
-        data = problem.bcs_function(times, problem.params)
-        @test keys(data) == (:bottom, :top, :left, :right)
-        @test length(data.bottom.u) == length(x)
-        @test length(data.left.u) == length(times)
-        @test data.bottom.u != data.top.u
+        data = problem.bcs_function(0.0, problem.params)
+        @test keys(data) == (:left, :right)
+        @test length(data.left.u) == 1
         @test data.left.u[1] == 0.0
-        @test data.right.w[1] != data.left.w[1]
+        @test data.left.w[1] != data.right.w[1]
+        later = problem.bcs_function(0.4, problem.params)
+        @test later.left.w != data.left.w
     end
 
     @testset "the boundary data sees the problem's parameters" begin
         params = (c = 0.9, A1 = 1.0, A2 = 0.0, B1 = 0.5, B2 = 0.0, l = 2.0)
         problem = Wave.problem(params = params, timespan = (0.0, 1.0), timestep = 0.1,
             xspan = (0.0, 2.0), xstep = 0.5)
-        times = (0.3, 0.7)
         ω = π * params.c / params.l
         phase(t) = params.A1 * cos(ω * t) + params.B1 * sin(ω * t + π / 6)
-        data = problem.bcs_function(times, params)
-        x = xgrid(problem)
-        @test data.bottom.u ≈ [phase(times[1]) * sin(π * xi / params.l) for xi in x]
-        @test data.top.u ≈ [phase(times[2]) * sin(π * xi / params.l) for xi in x]
-        @test data.left.w ≈ [phase(t) * π / params.l for t in times]
-        @test data.right.w ≈ [-phase(t) * π / params.l for t in times]
+        a, b = xspan(problem)
+        for t in (0.3, 0.7)
+            data = problem.bcs_function(t, params)
+            @test data.left.u ≈ [phase(t) * sin(π * a / params.l)]
+            @test data.right.u ≈ [phase(t) * sin(π * b / params.l)]
+            @test data.left.w ≈ [phase(t) * π / params.l * cos(π * a / params.l)]
+            @test data.right.w ≈ [phase(t) * π / params.l * cos(π * b / params.l)]
+        end
 
         kink = (c = 4.0, velocity = 0.1)
         nonlinear = SineGordon.problem(
             params = kink, timespan = (0.0, 2.0), timestep = 1.0,
             xstep = 0.25)
         γ = 1 / sqrt(1 - kink.c * kink.velocity^2)
-        kink_data = nonlinear.bcs_function(times, kink)
-        kx = xgrid(nonlinear)
-        @test kink_data.bottom.u ≈ [4 * atan(exp(γ * (xi - kink.velocity * times[1])))
-               for xi in kx]
-        @test kink_data.top.u ≈ [4 * atan(exp(γ * (xi - kink.velocity * times[2])))
-               for xi in kx]
-        @test kink_data.left.u ≈ [4 * atan(exp(γ * (-kink.velocity * t))) for t in times]
+        ka, kb = xspan(nonlinear)
+        for t in (0.3, 0.7)
+            kink_data = nonlinear.bcs_function(t, kink)
+            @test kink_data.left.u ≈ [4 * atan(exp(γ * (ka - kink.velocity * t)))]
+            @test kink_data.right.u ≈ [4 * atan(exp(γ * (kb - kink.velocity * t)))]
+        end
 
         vector = Wave.problem(
             D = 2, params = params, timespan = (0.0, 1.0), timestep = 0.1,
             xspan = (0.0, 2.0), xstep = 0.5)
-        vector_data = vector.bcs_function(times, params)
-        @test length(vector_data.bottom.u) == 2 * length(x)
-        @test length(vector_data.left.u) == 2 * length(times)
+        vector_data = vector.bcs_function(0.3, params)
+        @test length(vector_data.left.u) == 2
+        @test length(vector_data.left.w) == 2
         for component in 1:2
-            span = ((component - 1) * length(x) + 1):(component * length(x))
-            ends = ((component - 1) * length(times) + 1):(component * length(times))
-            @test vector_data.bottom.u[span] ≈
-                  [phase(times[1]) * sin(π * xi / params.l) for xi in x]
-            @test vector_data.top.u[span] ≈
-                  [phase(times[2]) * sin(π * xi / params.l) for xi in x]
-            @test vector_data.left.w[ends] ≈ [phase(t) * π / params.l for t in times]
-            @test vector_data.right.w[ends] ≈ [-phase(t) * π / params.l for t in times]
+            @test vector_data.left.u[component] ≈ phase(0.3) * sin(π * a / params.l)
+            @test vector_data.right.u[component] ≈ phase(0.3) * sin(π * b / params.l)
+            @test vector_data.left.w[component] ≈
+                  phase(0.3) * π / params.l * cos(π * a / params.l)
         end
-
-        @test_throws ArgumentError problem.bcs_function(0.3, params)
     end
 
     @testset "initial conditions merge the initial time" begin
@@ -156,7 +184,7 @@ include("../helpers/testsetup.jl")
             xstep = 0.25)
         @test_throws ArgumentError LagrangianPDEProblem(density; ics_function = ics,
             bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0),
-            xstep = 0.3)
+            xstep = 2.0)
 
         # A Float32 range that ends at zero stops a rounding error past it, which a relative
         # comparison with zero rejects.
@@ -165,12 +193,26 @@ include("../helpers/testsetup.jl")
         @test length(xgrid(ending_at_zero)) == 16
         @test abs(last(xgrid(ending_at_zero))) ≤ eps(Float32)
 
-        # On a long span the rounding tolerance would exceed a cell; a step that stops a third
-        # of a cell short of the end is still rejected.
-        @test_throws ArgumentError LinearTransport.problem(T = Float32,
-            xspan = (-1000.0f0, 0.0f0), xstep = 0.3f0)
+        # The grid holds `n = round(Int, Δx / xstep) + 1` points and ends on the span's end, so a
+        # step that divides the span builds on a long span too.
+        spanning = LinearTransport.problem(T = Float32, xspan = (-1000.0f0, 0.0f0),
+            xstep = 0.3f0)
+        @test length(xgrid(spanning)) == 3334
+        @test last(xgrid(spanning)) == 0.0f0
         @test length(xgrid(LinearTransport.problem(T = Float32, xspan = (-1000.0f0, 0.0f0),
             xstep = 0.25f0))) == 4001
+    end
+
+    @testset "the grid of a mesh" for T in (Float64, Float32)
+        for (span, step, n) in (((zero(T), one(T)), T(0.3), 4), ((zero(T), T(3)), T(1), 4))
+            problem = Wave.problem(T = T, timespan = (zero(T), T(1)), timestep = T(0.5),
+                xspan = span, xstep = step)
+            grid = xgrid(problem)
+            @test length(grid) == n
+            @test grid isa AbstractRange
+            @test abs(last(grid) - span[2]) ≤ 16 * eps(T)
+            @test first(grid) == span[1]
+        end
     end
 
     @testset "a run that starts at a non-zero time" begin
@@ -179,7 +221,7 @@ include("../helpers/testsetup.jl")
         ω = π * params.c / params.l
         phase = params.A1 * cos(ω) + params.B1 * sin(ω + π / 6)
         @test ntime(problem) == 4
-        @test problem.ics.u ≈ [phase * sin(π * xi / params.l) for xi in xgrid(problem)]
+        @test vec(problem.ics.u) ≈ [phase * sin(π * xi / params.l) for xi in xgrid(problem)]
     end
 
     @testset "a Float32 $(nameof(family)) problem evaluates its energy in Float32" for family in (

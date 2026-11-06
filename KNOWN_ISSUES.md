@@ -14,16 +14,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
-### K11 · `field_exact` infers a small union on a scalar call.
-
-- location: `src/problems/lagrangian_problem.jl`
-- evidence: `Base.return_types(problem.exact_u, Tuple{Float64, Float64, typeof(problem.params)})`
-  gives `Union{Float64, Vector{Float64}}`, because `D` is a runtime value: a scalar `x` returns a
-  scalar for `D = 1` and a vector of `D` values otherwise. `Wave.exact_u` itself infers `Float64`.
-  Closing it needs `D` in the type of the wrapper, or one wrapper per case.
-- kind: defect
-- found: 2026-10-26
-
 ### K14 · `∂L/∂u` of the wave density is a literal zero of type `Int`.
 
 - location: `src/problems/lagrangian_density.jl`
@@ -35,31 +25,28 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
-### K16 · The transport density is a null Lagrangian.
+### K16 · The transport problem is not a convergence test under `CoefficientRestriction`.
 
 - location: `src/problems/linear_transport.jl`
-- evidence: `L = ½u(v + c w)` is a total divergence: its Euler–Lagrange expression is
-  `(v + c w)/2 − ∂ₜu/2 − c ∂ₓu/2 ≡ 0`, so the density alone carries no dynamics. The transport
-  equation enters through the constraint `v = −c w`, which the ansatz of the family that integrates
-  this problem imposes; this package ships no integrator, so nothing here uses it. A density with a
-  non-zero Euler–Lagrange equation, such as a potential formulation with an auxiliary field, is a
-  design question for the part that integrates the symbolic and network families.
+- evidence: the doubled density `L = ψ (v₁ + c w₁)` on `D = 2` gives the transport equation its
+  dynamics, where the earlier `L = ½u(v + c w)` was a total divergence whose first slab's Jacobian
+  was the zero matrix, and the slab step is solvable: at `cells ∈ (5, 10, 20)`, `timestep =
+  2/cells` and `xstep = 0.5/cells` under `CoefficientRestriction` with `Free()`, every step
+  converges in one Newton iteration (`iterations = [1, 1, 1, 1, 1]` at 5 cells), and the first slab
+  of the 20-cell mesh has `unknowns = 132`, `max |J| = 0.005729166666666671`, `max |r| =
+  0.019482247127516304` and smallest singular value `2.542e-04`. The error against the exact
+  travelling wave is `0.0018147688809483087`, `0.0006076761601466196` and `0.0007901578011501459`
+  on the three meshes — orders `1.578` and `-0.379` — and `8.927e-04` at 40 cells. Its maximum sits
+  at the inflow end `x = -0.5`, which `CoefficientRestriction` leaves free: the coupling imposes the
+  bottom row and no side datum, and a hyperbolic problem's inflow end is fixed by the side datum
+  alone. The error decays towards the outflow end, to `1.07e-08` at the seventeenth of the 21
+  points of the 20-cell mesh. The same three meshes under `WeakInitialAndBoundaryConditions`, which
+  imposes both side data, give `2.15e-06`, `3.96e-07` and `5.44e-08`, orders `2.44` and `2.86`.
+  The problem therefore measures the density, not an order, under the restriction: a convergence
+  test of the transport equation takes the multiplier coupling, and the first-order form of U11
+  takes the problem over.
 - kind: defect
-- found: 2026-10-26
-
-### K20 · `output_grid` is exported and tested, and nothing in `src` calls it.
-
-- location: `src/ansatz/tensor_bspline.jl`
-- evidence: `grep -rn 'output_grid' src/` finds the definition and the export only. The slab
-  integrator reports its solution on `xgrid(problem)`, and the ansatz's `TensorBSplineSlab`
-  tabulates the space basis there, so `output_grid` is a public helper that the integrator does not
-  call yet. It holds
-  a deferred `InexactError`: `output_grid(ansatz, 1e-30)` passes the positive-finite check and then
-  fails in `round(Int, Δx / step)` with `InexactError: Int64(9.999999999999999e29)`, where the
-  documented refusal is an `ArgumentError`. Kept rather than deleted or wired into the ansatz's
-  block.
-- kind: dead code
-- found: 2026-10-27
+- found: 2026-10-26; restated 2026-11-06
 
 ### K21 · The `WAVE_GALERKIN_BSPLINE` record is an unconverged solve of a singular layout.
 
@@ -88,28 +75,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   sine-Gordon's order at the head is measured against its exact solution instead.
 - kind: defect
 - found: 2026-10-28; one issue with K21
-
-### K28 · `ntime(problem)` counts one step more than the solution on some timesteps.
-
-- location: `src/problems/lagrangian_problem.jl:203`
-- evidence: `ntime(problem)` is `div(t₁ − t₀, h, RoundUp)`, and in `Float64`
-  `div(0.38 - 0.0, 0.076, RoundUp)` is `6.0` where `(0.38 - 0.0) / 0.076` is `5.0`, so a problem with
-  `timespan = (0, 0.38)` and `timestep = 0.076` reports 6 steps where `GeometricSolution(problem)`
-  and `integrate` take 5. The property suite counts the steps of a run with `ntime(solution)` for
-  that reason.
-- kind: defect
-- found: 2026-10-31
-
-### K29 · `LagrangianPDEProblem` refuses an `xstep` that divides the span exactly in real numbers.
-
-- location: `src/problems/lagrangian_problem.jl:84-93`
-- evidence: the output grid is the range `xspan[1]:xstep:xspan[2]`, and for `xstep = (b − a)/m`
-  the range can stop one point short of `b`, and the constructor raises: on the span
-  `(-0.2907370896924628, 0.9623679443952706)` with `m = 9`, `Wave.problem` throws
-  `ArgumentError: xstep 0.13923389267641484 does not reach the end of xspan (…): the grid stops at 0.8231340517188559`.
-  The property suite's generator lowers `xstep` with `prevfloat` until the range reaches `b`.
-- kind: defect
-- found: 2026-11-01
 
 ### K31 · A7a's `integrate!` run does not assert convergence.
 

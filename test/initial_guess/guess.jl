@@ -39,7 +39,7 @@ end
     @testset "A4a every option converges to the same solution" for T in (Float64, Float32)
         options = [Continuation(), FitTo(InitialCondition()), FitTo(PreviousSlab()),
             FitTo(ExactSolution()),
-            FitTo(TargetFunction((t, x, p) -> Wave.exact_u(t, x, p)))]
+            FitTo(TargetFunction((t, x, p) -> Wave.solution_u(t, x, p)))]
         solutions = Vector{Vector{T}}()
         initial_residuals = Vector{Vector{T}}()
         for option in options
@@ -153,11 +153,11 @@ end
             ics_function = plain.ics_function, bcs_function = plain.bcs_function,
             timespan = plain.timespan, timestep = plain.timestep, xspan = plain.xspan,
             xstep = plain.xstep, params = plain.params)
-        @test without_exact.exact_u === nothing
+        @test without_exact.solutions === nothing
         ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
             xspan = (zero(T), one(T)), n = 3)
         exact_message = "FitTo(ExactSolution()) needs a problem with an exact solution; " *
-                        "this problem has exact_u = nothing"
+                        "this problem has solutions = nothing"
         @test_throws ArgumentError(exact_message) GeometricIntegrator(without_exact,
             SpaceTimeGalerkin(ansatz, CoefficientRestriction();
                 initial_guess = FitTo(ExactSolution())))
@@ -183,7 +183,7 @@ end
         # a target that returns another element type gives the problem's element type
         small = Float32
         int, result = guess_run(small,
-            FitTo(TargetFunction((t, x, p) -> Float64(Wave.exact_u(Float64(t), Float64(x), p))));
+            FitTo(TargetFunction((t, x, p) -> Float64(Wave.solution_u(Float64(t), Float64(x), p))));
             timestep = small(0.05), xstep = small(0.05))
         @test eltype(cache(int).x) === small
         assert_no_upcast(cache(int).ansatz.coeffs, small)

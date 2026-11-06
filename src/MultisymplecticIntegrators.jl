@@ -39,7 +39,7 @@ export LagrangianDensity, derivative_u, derivative_v, derivative_w, derivatives
 
 include("problems/lagrangian_problem.jl")
 export LagrangianEquation, LagrangianPDEProblem, xspan, xstep, xgrid, components,
-       field_initial_data, field_boundary_data, field_exact, convert_parameters
+       field_initial_data, field_side_data, field_exact, convert_parameters
 
 include("problems/wave.jl")
 export Wave, VectorWave
@@ -55,7 +55,7 @@ include("core/weak_form.jl")
 
 # the ansatz
 include("ansatz/tensor_bspline.jl")
-export TensorBSplineAnsatz, degree, ncells, output_grid, quadrature,
+export TensorBSplineAnsatz, degree, ncells, quadrature,
        is_linear_in_coefficients,
        space_quadrature_nodes
 

@@ -39,9 +39,7 @@ function vector_density_problem(::Type{T}; β = 0.5, timespan = (zero(T), T(0.25
         D = 2,
         ics_function = template.ics_function,
         bcs_function = template.bcs_function,
-        exact_u = template.exact_u,
-        exact_v = template.exact_v,
-        exact_w = template.exact_w,
+        solutions = template.solutions,
         timespan = template.timespan,
         timestep = template.timestep,
         xspan = template.xspan,
@@ -164,8 +162,8 @@ end
             timestep = T(0.05), xstep = T(0.05))
         density = Wave.density()
         inherited = LagrangianPDEProblem(density; D = 2,
-            ics_function = (x, p) -> (u = zeros(T, 2 * length(x)),
-                v = zeros(T, 2 * length(x)), w = zeros(T, 2 * length(x))),
+            ics_function = (x, p) -> (u = zeros(T, length(x), 2),
+                v = zeros(T, length(x), 2), w = zeros(T, length(x), 2)),
             bcs_function = template.bcs_function,
             timespan = template.timespan, timestep = template.timestep,
             xspan = template.xspan, xstep = template.xstep)

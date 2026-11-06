@@ -37,8 +37,7 @@ function fingerprint(entry::GeneratedProblem)
     return (entry.kind, entry.potential, entry.degree, entry.ncells, entry.n,
         typeof(entry.x_boundary), components(p), parameters(p), timespan(p), timestep(p),
         xspan(p), xstep(p), p.ics_function(x, parameters(p)),
-        p.bcs_function((t, t), parameters(p)), L isa VectorWave.VectorDensity ? L.β :
-                                               nothing)
+        p.bcs_function(t, parameters(p)), L isa VectorWave.VectorDensity ? L.β : nothing)
 end
 
 # the total node counts of the time and the space rule of an entry
@@ -47,15 +46,14 @@ rule_lengths(e::GeneratedProblem) = (e.n[1] * e.ncells[1], e.n[2] * e.ncells[2])
 # the initial data of component `d` on the points `x`
 function component(entry::GeneratedProblem, x, d)
     values = entry.problem.ics_function(x, parameters(entry.problem))
-    n = length(x)
-    pick(f) = f[((d - 1) * n + 1):(d * n)]
+    pick(f) = view(f, :, d)
     return pick(values.u), pick(values.v), pick(values.w)
 end
 
 # the side data of component `d` at time `t`, `(g_a, g_b)`
 function sides(entry::GeneratedProblem, t, d)
-    values = entry.problem.bcs_function((t, t), parameters(entry.problem))
-    return values.left.u[2 * (d - 1) + 1], values.right.u[2 * (d - 1) + 1]
+    values = entry.problem.bcs_function(t, parameters(entry.problem))
+    return values.left.u[d], values.right.u[d]
 end
 
 dyadic(x) = isinteger(x * 2^12)
@@ -110,7 +108,7 @@ end
         assert_no_upcast(xspan(e.problem)[1], T)
         assert_no_upcast(e.problem.ics_function(xgrid(e.problem), p), T)
         t = timespan(e.problem)[1]
-        assert_no_upcast(e.problem.bcs_function((t, t), p).left.u, T)
+        assert_no_upcast(e.problem.bcs_function(t, p).left.u, T)
         # a timestep that is not one, and spans whose ends are not dyadic
         @test timestep(e.problem) != one(T)
         @test !dyadic(timestep(e.problem))
