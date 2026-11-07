@@ -440,8 +440,8 @@ makes it worth keeping.
   traces)` give the diagnostics that a spline run reports. `scripts/symbolic_model.jl` registers
   the `:symbolic` family with the standing wave of `Wave`, converted to the slab's normalised time
   by `t = timestep · t̂` and integrated at the wave's period, 4, on a trace basis of degree 2 and
-  four cells per direction. Its discrete solve has a phase error, so the entry does not return the
-  exact parameters. Starting at `[0.8, 0.8, 0, 0, 1, 0.5]`, it returns
+  four cells per direction. The ansatz can represent the exact solution, but the discrete solve has
+  a phase error, so the entry does not return the exact parameters. Starting at `[0.8, 0.8, 0, 0, 1, 0.5]`, it returns
   `[0.7997258, 0.8005483, 0, 0, 1, 0.5]`. The sum `A₁ + B₁/2`, which is all the field shows at a
   whole period, is exact, and the split between the cosine and the sine amplitude is off by
   `5.5e-4`. In `Float32` both steps stagnate and report `converged = false`.
