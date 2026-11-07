@@ -152,8 +152,7 @@ function initial_condition_sample(::Type{ST}, problem::LagrangianPDEProblem,
     xq = collect(space_quadrature_nodes(ansatz))
     qx = length(xq)
     values = problem.ics_function(xq, parameters(problem))
-    return ST[convert(ST, values.u[(d - 1) * qx + r])
-              for r in 1:qx, d in 1:components(problem)]
+    return ST[convert(ST, values.u[r, d]) for r in 1:qx, d in 1:components(problem)]
 end
 
 """
@@ -231,7 +230,7 @@ function target_values!(sample::AbstractArray{ST, 3}, f, tabulation::SlabTabulat
         ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
     t = tabulation.time
     x = tabulation.space
-    t0 = sol.t - timestep(problem)
+    t0 = slab_start(problem, sol)
     h = timestep(problem)
     for q in 1:nquadrature(t), r in 1:nquadrature(x)
 
@@ -254,5 +253,5 @@ function evaluate!(sample::AbstractArray{ST, 3}, ::ExactSolution,
         c::SpaceTimeGalerkinCache, ansatz::TensorBSplineAnsatz,
         problem::LagrangianPDEProblem, sol) where {ST}
     return target_values!(
-        sample, problem.exact_u, c.ansatz.tabulation, ansatz, problem, sol)
+        sample, problem.solutions.u, c.ansatz.tabulation, ansatz, problem, sol)
 end

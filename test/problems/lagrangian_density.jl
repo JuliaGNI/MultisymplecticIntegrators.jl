@@ -42,10 +42,20 @@ include("../helpers/testsetup.jl")
     end
 
     @testset "the transport density" begin
-        density = LinearTransport.density()
-        @test density(2.0, 1.0, 3.0) ≈ 2.0 * (1.0 + 0.2 * 3.0) / 2
-        @test derivative_u(density, 2.0, 1.0, 3.0) ≈ (1.0 + 0.2 * 3.0) / 2
-        @test derivative_v(density, 2.0, 1.0, 3.0) ≈ 1.0
-        @test derivative_w(density, 2.0, 1.0, 3.0) ≈ 0.2
+        # The doubled field's density, `L = ψ (v₁ + c w₁)`: component 1 is the transported field,
+        # whose velocity and slope enter it, and component 2 the adjoint field, whose value does.
+        points = ((0.3, 1.1, 0.7, -0.2), (-1.0, 0.4, 2.0, 0.5), (0.0, 2.5, 0.0, 1.0))
+        for T in (Float32, Float64), (u₁, u₂, v₁, w₁) in points
+
+            c = T(0.2)
+            density = LinearTransport.density(; params = (c = c,))
+            u, v, w = T[u₁, u₂], T[v₁, 0.6], T[w₁, -0.25]
+            @test density(u, v, w) ≈ T(u₂) * (T(v₁) + c * T(w₁)) rtol = tolerance(T)
+            partials = derivatives(density, u, v, w)
+            @test collect(partials.u) ≈ [zero(T), T(v₁) + c * T(w₁)] atol = tolerance(T)
+            @test collect(partials.v) ≈ [T(u₂), zero(T)] atol = tolerance(T)
+            @test collect(partials.w) ≈ [c * T(u₂), zero(T)] atol = tolerance(T)
+            @test typeof(density(u, v, w)) === T
+        end
     end
 end

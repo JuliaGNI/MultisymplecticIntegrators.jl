@@ -19,8 +19,8 @@ problem = Wave.problem(timespan = (0.0, 3.0), timestep = 0.3, xstep = 0.01)
 """
 module Wave
 
-export default_parameters, density, problem, exact_u, exact_v, exact_w, initial_data,
-       boundary_data
+export default_parameters, density, problem, solution_u, solution_v, solution_w,
+       initial_data, side_data
 
 using Symbolics
 using MultisymplecticIntegrators
@@ -47,8 +47,8 @@ function density(; params = default_parameters(), m = 0.0, β = 0.0)
     return LagrangianDensity(L, u, v, w; params = (c = params.c,))
 end
 
-function exact_u(t, x, params = default_parameters())
-    T = promote_type(typeof(t), typeof(x))
+function solution_u(t, x, params = default_parameters())
+    T = float(promote_type(typeof(t), typeof(x)))
     p = convert_parameters(T, params)
     ω₁ = T(π) * p.c / p.l
     return (p.A1 * cos(ω₁ * t) + p.B1 * sin(ω₁ * t + T(π) / 6)) * sin(T(π) * x / p.l) +
@@ -56,8 +56,8 @@ function exact_u(t, x, params = default_parameters())
            sin(2 * T(π) * x / p.l)
 end
 
-function exact_v(t, x, params = default_parameters())
-    T = promote_type(typeof(t), typeof(x))
+function solution_v(t, x, params = default_parameters())
+    T = float(promote_type(typeof(t), typeof(x)))
     p = convert_parameters(T, params)
     ω₁ = T(π) * p.c / p.l
     return (-p.A1 * ω₁ * sin(ω₁ * t) + p.B1 * ω₁ * cos(ω₁ * t + T(π) / 6)) *
@@ -66,8 +66,8 @@ function exact_v(t, x, params = default_parameters())
            sin(2 * T(π) * x / p.l)
 end
 
-function exact_w(t, x, params = default_parameters())
-    T = promote_type(typeof(t), typeof(x))
+function solution_w(t, x, params = default_parameters())
+    T = float(promote_type(typeof(t), typeof(x)))
     p = convert_parameters(T, params)
     return (p.A1 * cos(T(π) * p.c * t / p.l) +
             p.B1 * sin(T(π) * p.c * t / p.l + T(π) / 6)) * T(π) / p.l *
@@ -80,21 +80,25 @@ end
 """
     initial_data(x::AbstractVector, params, D = 1, t = 0.0)
 
-The initial data `(u = …, v = …, w = …)` at time `t`, each entry of length `D * length(x)` and
-laid out component-major.
+The initial data `(u = …, v = …, w = …)` at time `t`, each entry a `length(x) × D` matrix.
 """
 function initial_data(x::AbstractVector, params = default_parameters(), D::Integer = 1, t = 0.0)
-    field_initial_data(exact_u, exact_v, exact_w, x, params, D, t)
+    field_initial_data(solutions(D), x, params, D, t)
+end
+
+"""The exact solution of the wave of `D` components, as [`field_exact`](@ref) lifts it."""
+function solutions(D::Integer = 1)
+    return (u = field_exact(solution_u, D), v = field_exact(solution_v, D),
+        w = field_exact(solution_w, D))
 end
 
 """
-    boundary_data(times, xbreaks, params, D = 1)
+    side_data(t, xspan, params, D = 1)
 
-The boundary data of the slab whose two times are `times = (t₀, t₁)`, as
-[`field_boundary_data`](@ref) gives it.
+The side data of the slab at the one time `t`, as [`field_side_data`](@ref) gives it.
 """
-function boundary_data(times, xbreaks::AbstractVector, params = default_parameters(), D::Integer = 1)
-    field_boundary_data(exact_u, exact_v, exact_w, times, xbreaks, params, D)
+function side_data(t, xspan, params = default_parameters(), D::Integer = 1)
+    field_side_data(solutions(D), t, params, D, xspan)
 end
 
 """
@@ -114,20 +118,18 @@ function problem(; T::Type = Float64, D::Integer = 1, params = default_parameter
     d = density(; params = params)
     tspan = (T(timespan[1]), T(timespan[2]))
     xsp = (T(xspan[1]), T(xspan[2]))
-    h = T(xstep)
-    ics = (x, p) -> initial_data(x, p, D, tspan[1])
-    bcs = (times, p) -> boundary_data(times, collect(xsp[1]:h:xsp[2]), p, D)
+    s = solutions(D)
+    ics = (x, p) -> field_initial_data(s, x, p, D, tspan[1])
+    bcs = (t, p) -> field_side_data(s, t, p, D, xsp)
     return LagrangianPDEProblem(d;
         D = D,
         ics_function = ics,
         bcs_function = bcs,
-        exact_u = field_exact(exact_u, D),
-        exact_v = field_exact(exact_v, D),
-        exact_w = field_exact(exact_w, D),
+        solutions = s,
         timespan = tspan,
         timestep = T(timestep),
         xspan = xsp,
-        xstep = h,
+        xstep = T(xstep),
         params = params)
 end
 
@@ -281,9 +283,10 @@ end
 
 A [`LagrangianPDEProblem`](@ref) of `D = length(params.A1)` components, with zero Dirichlet data in
 space and the exact solution of the uncoupled case: component `i` is the standing wave of `Wave`
-with the parameters `component_parameters(params, i)`. The initial, boundary and exact data are
-stacked component-major. Every parameter is converted to `T`, so that the density and the energy
-of a `Float32` problem are evaluated in `Float32`.
+with the parameters `component_parameters(params, i)`. Component `i` is column `i` of the initial
+data, entry `i` of the side data, and the `i`-th stretch of the component-major exact solution.
+Every parameter is converted to `T`, so that the density and the energy of a `Float32` problem are
+evaluated in `Float32`.
 """
 function problem(; T::Type = Float64, params = default_parameters(),
         timespan = (zero(T), T(3)), timestep = T(0.3), xspan = (zero(T), one(T)),
@@ -295,25 +298,25 @@ function problem(; T::Type = Float64, params = default_parameters(),
     params = map(value -> T.(value), params)
     tspan = (T(timespan[1]), T(timespan[2]))
     xsp = (T(xspan[1]), T(xspan[2]))
-    h = T(xstep)
-    grid = collect(xsp[1]:h:xsp[2])
-    # `map(vcat, …)` over the components' named tuples stacks each entry component-major.
-    ics = (x, p) -> map(vcat,
+    # `map(hcat, …)` over the components' named tuples lays each entry's column side by side, and
+    # `map(vcat, …)` the side data's `D`-vectors.
+    ics = (x, p) -> map(hcat,
         (Wave.initial_data(x, component_parameters(p, i), 1, tspan[1]) for i in 1:D)...)
-    bcs = (times, p) -> map((sides...) -> map(vcat, sides...),
-        (Wave.boundary_data(times, grid, component_parameters(p, i)) for i in 1:D)...)
+    bcs = (t, p) -> map((sides...) -> map(vcat, sides...),
+        (Wave.side_data(t, xsp, component_parameters(p, i), 1) for i in 1:D)...)
     exact(f) = (t, x, p) -> mapreduce(i -> f(t, x, component_parameters(p, i)), vcat, 1:D)
+    s = (u = exact(field_exact(Wave.solution_u, 1)),
+        v = exact(field_exact(Wave.solution_v, 1)),
+        w = exact(field_exact(Wave.solution_w, 1)))
     return LagrangianPDEProblem(density(; params = params);
         D = D,
         ics_function = ics,
         bcs_function = bcs,
-        exact_u = exact(field_exact(Wave.exact_u, 1)),
-        exact_v = exact(field_exact(Wave.exact_v, 1)),
-        exact_w = exact(field_exact(Wave.exact_w, 1)),
+        solutions = s,
         timespan = tspan,
         timestep = T(timestep),
         xspan = xsp,
-        xstep = h,
+        xstep = T(xstep),
         params = params)
 end
 

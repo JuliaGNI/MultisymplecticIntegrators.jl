@@ -105,9 +105,9 @@ function check_method(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin)
     end
     guess = initial_guess(method)
     if guess isa FitTo
-        if needs_exact_solution(guess.target) && problem.exact_u === nothing
+        if needs_exact_solution(guess.target) && problem.solutions === nothing
             throw(ArgumentError("FitTo(ExactSolution()) needs a problem with an exact solution; " *
-                                "this problem has exact_u = nothing"))
+                                "this problem has solutions = nothing"))
         end
         if fit_method(guess, ansatz(method)) isa Projection &&
            !is_linear_in_coefficients(ansatz(method))

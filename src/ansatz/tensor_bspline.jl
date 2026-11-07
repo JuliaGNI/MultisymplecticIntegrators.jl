@@ -128,33 +128,6 @@ function space_quadrature_nodes(ansatz::TensorBSplineAnsatz{T}) where {T}
     return quadrature_nodes(quadratures(quadrature(ansatz))[2])
 end
 
-"""
-    output_grid(ansatz::TensorBSplineAnsatz, xstep)
-    output_grid(ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem)
-
-A grid of `xspan` in `n` equally spaced points, with `n = round(Int, Δx / xstep) + 1`. It is a
-public helper that the integrator does not call: the solution is reported on `xgrid(problem)`.
-
-A `xstep` that does not divide `xspan` therefore still ends on the end of the span, and the grid is
-built as a `range` rather than as a stepped `:`, which stops short of the end when the step does not
-divide the span. A `xstep` that is not a positive finite number raises `ArgumentError` before the
-division, and one that leaves fewer than two points raises `ArgumentError` as well.
-"""
-function output_grid(ansatz::TensorBSplineAnsatz, xstep)
-    T = eltype(ansatz.xspan)
-    Δx = ansatz.xspan[2] - ansatz.xspan[1]
-    step = convert(T, xstep)
-    (isfinite(step) && step > zero(T)) ||
-        throw(ArgumentError("output_grid needs a positive finite xstep, got $step"))
-    n = round(Int, Δx / step) + 1
-    n ≥ 2 || throw(ArgumentError("xstep $xstep is too large for xspan $(ansatz.xspan)"))
-    return range(ansatz.xspan[1], ansatz.xspan[2]; length = n)
-end
-
-function output_grid(ansatz::TensorBSplineAnsatz, problem::LagrangianPDEProblem)
-    output_grid(ansatz, xstep(problem))
-end
-
 # A tensor B-spline ansatz is linear in its coefficients, so a `Projection()` fits it.
 is_linear_in_coefficients(::TensorBSplineAnsatz) = true
 

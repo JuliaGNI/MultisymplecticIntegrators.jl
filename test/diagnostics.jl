@@ -22,7 +22,7 @@ function coupled_problem(::Type{T}; timespan = (zero(T), T(0.5)), timestep = T(0
     base = VectorWave.problem(T = T, timespan = timespan, timestep = timestep, xstep = xstep)
     return LagrangianPDEProblem(VectorWave.vector_density(; params = base.params, D = 2);
         D = 2, ics_function = base.ics_function, bcs_function = base.bcs_function,
-        exact_u = base.exact_u, exact_v = base.exact_v, exact_w = base.exact_w,
+        solutions = base.solutions,
         timespan = base.timespan, timestep = base.timestep, xspan = base.xspan,
         xstep = base.xstep, params = base.params)
 end
@@ -132,9 +132,9 @@ end
         @test sum(weights) ≈ problem.xspan[2] - problem.xspan[1]
 
         for t in (0.0, 0.3)
-            u = Wave.exact_u.(t, nodes, Ref(p))
-            v = Wave.exact_v.(t, nodes, Ref(p))
-            w = Wave.exact_w.(t, nodes, Ref(p))
+            u = Wave.solution_u.(t, nodes, Ref(p))
+            v = Wave.solution_v.(t, nodes, Ref(p))
+            w = Wave.solution_w.(t, nodes, Ref(p))
             # the two coefficients of the standing wave at this time, and the two closed forms
             A = -p.A1 * sin(ω * t) + p.B1 * cos(ω * t + π / 6)
             B = p.A1 * cos(ω * t) + p.B1 * sin(ω * t + π / 6)
@@ -176,7 +176,7 @@ end
         @test length(x) == length(MultisymplecticIntegrators.xgrid(problem))
         @test length(u) == 2
         @test size(u[1]) == (3, length(x))
-        exact2 = Wave.exact_u.(0.0, x, Ref(VectorWave.component_parameters(params, 2)))
+        exact2 = Wave.solution_u.(0.0, x, Ref(VectorWave.component_parameters(params, 2)))
         @test maximum(abs.(u[2][1, :] .- exact2)) ≤ 16 * eps(Float64) * maximum(abs, exact2)
     end
 
@@ -306,9 +306,9 @@ end
         # `L = ½kv²` the energy density is `½kv²`, so `v = 2` against `v = 1` deviates by `3`.
         for T in (Float64, Float32)
             problem = LagrangianPDEProblem(QuadraticDensity(T(2)); D = 1,
-                ics_function = (x, p) -> (u = zeros(T, length(x)), v = zeros(T, length(x)),
-                    w = zeros(T, length(x))),
-                bcs_function = (times, p) -> nothing,
+                ics_function = (x, p) -> (u = zeros(T, length(x), 1),
+                    v = zeros(T, length(x), 1), w = zeros(T, length(x), 1)),
+                bcs_function = (t, p) -> nothing,
                 timespan = (zero(T), one(T)), timestep = T(0.1),
                 xspan = (zero(T), one(T)), xstep = T(0.1))
             ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
@@ -359,8 +359,8 @@ end
         ics = problem.ics_function(nodes, problem.params)
         # Two traces of a Float32 run: the initial data, and the initial data with a perturbed
         # velocity, which is a non-zero energy error of that precision's own scale.
-        traces = [(u = ics.u, v = ics.v, w = ics.w),
-            (u = ics.u, v = ics.v .+ 0.5f0, w = ics.w)]
+        traces = [(u = vec(ics.u), v = vec(ics.v), w = vec(ics.w)),
+            (u = vec(ics.u), v = vec(ics.v) .+ 0.5f0, w = vec(ics.w))]
         err = energy_error(problem, ansatz32, traces)
         @test eltype(err) === Float32
         @test length(err) == 2

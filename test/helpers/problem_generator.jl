@@ -109,19 +109,19 @@ side_value(g::SideData, t) = g.α + g.β * sin(g.ω * t + g.φ)
     data_functions(fields, left, right, xspan)
 
 The problem's `ics_function` and `bcs_function` from the initial data of each component and the side
-data of each end and component, in the layouts `LagrangianPDEProblem` documents: each initial datum
-component-major, and the side trace of component `d` at time `t₀` in entry `2(d − 1) + 1`.
+data of each end and component, in the layout `LagrangianPDEProblem` documents: entry `[r, d]` of an
+initial datum is component `d` at the `r`-th point, and entry `d` of a side datum is component `d`.
 """
 function data_functions(fields::Vector{FieldData{T}}, left::Vector{SideData{T}},
         right::Vector{SideData{T}}, xspan::NTuple{2, T}) where {T}
     a, b = xspan
     function ics(x, params)
         values = [field_values(f, xi, a, b) for xi in x, f in fields]
-        return (u = vec(map(first, values)), v = vec(map(v -> v[2], values)),
-            w = vec(map(last, values)))
+        return (u = map(first, values), v = map(v -> v[2], values),
+            w = map(last, values))
     end
-    function bcs(times, params)
-        side(g) = vec([side_value(gd, t) for t in times, gd in g])
+    function bcs(t, params)
+        side(g) = [side_value(gd, t) for gd in g]
         return (left = (u = side(left),), right = (u = side(right),))
     end
     return ics, bcs
@@ -166,12 +166,9 @@ function generate_problem(::Type{T}, rng::AbstractRNG, density, i::Integer, kind
     a = uniform(rng, T, -0.6, 0.4)
     m = rand(rng, 8:12)
     b = a + uniform(rng, T, 0.6, 1.3)
-    # a step of `m` cells whose range `a:xstep:b`, the problem's output grid, reaches `b`: a step
-    # that rounds up stops the range one point short, and `LagrangianPDEProblem` refuses it (K29)
+    # a step of `m` cells: the output grid is the range from `xspan[1]` to `xspan[2]` in `m + 1`
+    # points, so it ends on the span's end whatever the step's remainder
     xstep = (b - a) / m
-    while abs(last(a:xstep:b) - b) > xstep / 4
-        xstep = prevfloat(xstep)
-    end
     # the time grid: three steps of a random timestep, from zero or from a random time
     h = uniform(rng, T, 0.02, 0.09)
     t₀ = isodd(i) ? uniform(rng, T, -0.7, 0.9) : zero(T)

@@ -90,11 +90,11 @@ end
 
     @testset "the solution carries the problem's state" begin
         @test keys(result.solution.dataser) == (:t, :u, :v, :w)
-        @test result.solution.u[0] ≈ problem.ics.u
+        @test result.solution.u[0] ≈ vec(problem.ics.u)
         for n in 1:ntime(result.solution)
-            @test result.solution.u[n] ≈ problem.ics.u .+ n
+            @test result.solution.u[n] ≈ vec(problem.ics.u) .+ n
         end
-        @test result.solution.v[ntime(result.solution)] ≈ problem.ics.v
+        @test result.solution.v[ntime(result.solution)] ≈ vec(problem.ics.v)
     end
 
     @testset "the history states hold the initial data" begin
@@ -102,9 +102,9 @@ end
         solstep = solutionstep(GeometricIntegrator(problem, method),
             GeometricSolution(problem)[0])
         for state in history(solstep)
-            @test collect(state.u) == problem.ics.u
-            @test collect(state.v) == problem.ics.v
-            @test collect(state.w) == problem.ics.w
+            @test collect(state.u) == vec(problem.ics.u)
+            @test collect(state.v) == vec(problem.ics.v)
+            @test collect(state.w) == vec(problem.ics.w)
         end
     end
 
@@ -114,7 +114,7 @@ end
         @test length(stopped.traces) == 2
         @test stopped.stats === nothing
         @test isnan(stopped.solution.u[2][1])
-        @test stopped.solution.u[1] ≈ problem.ics.u .+ 1
+        @test stopped.solution.u[1] ≈ vec(problem.ics.u) .+ 1
     end
 
     @testset "a failed nonlinear solve stops the run, $T" for T in (Float64, Float32)
@@ -123,7 +123,7 @@ end
         short = Wave.problem(T = T, timespan = (zero(T), T(0.15)), timestep = T(0.05),
             xstep = T(0.05))
         guess = FitTo(TargetFunction((t, x, p) -> t > T(0.05) ? T(NaN) :
-                                                  Wave.exact_u(t, x, p)))
+                                                  Wave.solution_u(t, x, p)))
         slab = SpaceTimeGalerkin(
             TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (zero(T), one(T)), n = 3);
             initial_guess = guess)
@@ -252,7 +252,7 @@ end
         short = Wave.problem(T = T, timespan = (zero(T), T(0.15)), timestep = T(0.05),
             xstep = T(0.05))
         guess = FitTo(TargetFunction((t, x, p) -> t > T(0.05) ? T(NaN) :
-                                                  Wave.exact_u(t, x, p)))
+                                                  Wave.solution_u(t, x, p)))
         slab = SpaceTimeGalerkin(
             TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (zero(T), one(T)), n = 3);
             initial_guess = guess)
@@ -274,7 +274,7 @@ end
             xstep = T(0.05))
         big = T === Float64 ? T(1e200) : T(1e30)
         guess = FitTo(TargetFunction((t, x, p) -> t > T(0.05) ? big :
-                                                  Wave.exact_u(t, x, p)))
+                                                  Wave.solution_u(t, x, p)))
         slab = SpaceTimeGalerkin(
             TensorBSplineAnsatz(degree = 2, ncells = (2, 20), xspan = (zero(T), one(T)), n = 3);
             initial_guess = guess)
@@ -308,8 +308,8 @@ end
         @test [steps.solution.t[n] for n in 1:4] ≈ [1.1, 1.2, 1.3, 1.4]
         @test length(steps.traces) == 4
         @test steps.traces[1] !== nothing
-        @test steps.solution.u[1] ≈ late.ics.u .+ 1
-        @test steps.solution.u[0] ≈ late.ics.u
+        @test steps.solution.u[1] ≈ vec(late.ics.u) .+ 1
+        @test steps.solution.u[0] ≈ vec(late.ics.u)
     end
 
     @testset "no silent upcast" begin

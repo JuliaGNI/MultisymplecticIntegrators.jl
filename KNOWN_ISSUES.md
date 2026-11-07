@@ -14,16 +14,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
-### K11 · `field_exact` infers a small union on a scalar call.
-
-- location: `src/problems/lagrangian_problem.jl`
-- evidence: `Base.return_types(problem.exact_u, Tuple{Float64, Float64, typeof(problem.params)})`
-  gives `Union{Float64, Vector{Float64}}`, because `D` is a runtime value: a scalar `x` returns a
-  scalar for `D = 1` and a vector of `D` values otherwise. `Wave.exact_u` itself infers `Float64`.
-  Closing it needs `D` in the type of the wrapper, or one wrapper per case.
-- kind: defect
-- found: 2026-10-26
-
 ### K14 · `∂L/∂u` of the wave density is a literal zero of type `Int`.
 
 - location: `src/problems/lagrangian_density.jl`
@@ -34,32 +24,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   identically zero.
 - kind: defect
 - found: 2026-10-26
-
-### K16 · The transport density is a null Lagrangian.
-
-- location: `src/problems/linear_transport.jl`
-- evidence: `L = ½u(v + c w)` is a total divergence: its Euler–Lagrange expression is
-  `(v + c w)/2 − ∂ₜu/2 − c ∂ₓu/2 ≡ 0`, so the density alone carries no dynamics. The transport
-  equation enters through the constraint `v = −c w`, which the ansatz of the family that integrates
-  this problem imposes; this package ships no integrator, so nothing here uses it. A density with a
-  non-zero Euler–Lagrange equation, such as a potential formulation with an auxiliary field, is a
-  design question for the part that integrates the symbolic and network families.
-- kind: defect
-- found: 2026-10-26
-
-### K20 · `output_grid` is exported and tested, and nothing in `src` calls it.
-
-- location: `src/ansatz/tensor_bspline.jl`
-- evidence: `grep -rn 'output_grid' src/` finds the definition and the export only. The slab
-  integrator reports its solution on `xgrid(problem)`, and the ansatz's `TensorBSplineSlab`
-  tabulates the space basis there, so `output_grid` is a public helper that the integrator does not
-  call yet. It holds
-  a deferred `InexactError`: `output_grid(ansatz, 1e-30)` passes the positive-finite check and then
-  fails in `round(Int, Δx / step)` with `InexactError: Int64(9.999999999999999e29)`, where the
-  documented refusal is an `ArgumentError`. Kept rather than deleted or wired into the ansatz's
-  block.
-- kind: dead code
-- found: 2026-10-27
 
 ### K21 · The `WAVE_GALERKIN_BSPLINE` record is an unconverged solve of a singular layout.
 
@@ -89,34 +53,12 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-28; one issue with K21
 
-### K28 · `ntime(problem)` counts one step more than the solution on some timesteps.
-
-- location: `src/problems/lagrangian_problem.jl:203`
-- evidence: `ntime(problem)` is `div(t₁ − t₀, h, RoundUp)`, and in `Float64`
-  `div(0.38 - 0.0, 0.076, RoundUp)` is `6.0` where `(0.38 - 0.0) / 0.076` is `5.0`, so a problem with
-  `timespan = (0, 0.38)` and `timestep = 0.076` reports 6 steps where `GeometricSolution(problem)`
-  and `integrate` take 5. The property suite counts the steps of a run with `ntime(solution)` for
-  that reason.
-- kind: defect
-- found: 2026-10-31
-
-### K29 · `LagrangianPDEProblem` refuses an `xstep` that divides the span exactly in real numbers.
-
-- location: `src/problems/lagrangian_problem.jl:84-93`
-- evidence: the output grid is the range `xspan[1]:xstep:xspan[2]`, and for `xstep = (b − a)/m`
-  the range can stop one point short of `b`, and the constructor raises: on the span
-  `(-0.2907370896924628, 0.9623679443952706)` with `m = 9`, `Wave.problem` throws
-  `ArgumentError: xstep 0.13923389267641484 does not reach the end of xspan (…): the grid stops at 0.8231340517188559`.
-  The property suite's generator lowers `xstep` with `prevfloat` until the range reaches `b`.
-- kind: defect
-- found: 2026-11-01
-
 ### K31 · A7a's `integrate!` run does not assert convergence.
 
 - location: `test/couplings/weak_multipliers.jl:94-113`
 - evidence: `multiplier_momentum`, which A7a calls, drives a 50-step `VectorWave` run (β = 0.5)
   through `integrate!` and does not read `cache(int).converged`. The `integrate` run of the same
-  problem and method in A7a (`:503-506`) asserts `all(result.stats.converged)`, so a step that does
+  problem and method in A7a (`:498-501`) asserts `all(result.stats.converged)`, so a step that does
   not converge still fails A7a, but the run whose momenta A7a checks has no assertion of its own.
 - kind: missing test
 - found: 2026-11-01
@@ -138,3 +80,36 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   them.
 - kind: missing test
 - found: #40
+
+### K35 · The side-data testset's symmetric span cannot see `left` and `right` swapped.
+
+- location: `test/couplings/weak_multipliers.jl:548`
+- evidence: the testset "the side data of every component reaches the slab" builds its problem on
+  `xspan = (0.2, 0.8)`, and `Wave`'s closed form is `sin(πx/l)` in space, whose two ends carry the
+  same value: `Wave.solution_u(0.0, 0.2, Wave.default_parameters())` is `0.7053423027509678` and
+  the same call at `0.8` is `0.7053423027509679`. A target filled with `bcs.right.u[d]` at the left
+  end and `bcs.left.u[d]` at the right passes all 25 assertions of each precision. The mutant that
+  swaps them is caught by A6a of the same file, whose travelling wave differs at its two ends.
+- kind: missing test
+- found: 2026-11-07
+
+### K36 · No test passes a zero or a negative `xstep` to a problem constructor.
+
+- location: `src/problems/lagrangian_problem.jl:84`
+- evidence: `grep -rn 'xstep = 0[,)]\|xstep = zero\|xstep = -' test/` finds nothing, so every test
+  problem passes a positive step and the guard `xh > zero(T) || throw(ArgumentError("xstep must be
+  positive, got $xh"))` is unasserted: the mutant that deletes the line survived the round-2 run of
+  `test/problems/lagrangian_problem.jl` (`E7: a non-positive xstep is accepted`). Without the guard,
+  `xstep = 0.0` reaches `round(Int, (xsp[2] - xsp[1]) / xh)` and throws `InexactError`.
+- kind: missing test
+- found: 2026-11-07
+
+### K37 · A `xstep` at the smallest positive `Float64` throws `InexactError`, not `ArgumentError`.
+
+- location: `src/problems/lagrangian_problem.jl:210`
+- evidence: `Wave.problem(xstep = nextfloat(0.0))` passes the positive-step guard and throws
+  `InexactError: Int64(Inf)` from `round(Int, (xsp[2] - xsp[1]) / xh)`, where the constructor's
+  refusals are `ArgumentError`s. A stepped range of that step fails alike:
+  `collect(0.0:nextfloat(0.0):1.0)` throws `InexactError: Int64(Inf)`.
+- kind: defect
+- found: 2026-11-07

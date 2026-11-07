@@ -73,9 +73,7 @@ function vector_density_problem(::Type{T}; β = 0.5, timespan = (zero(T), T(0.25
         D = 2,
         ics_function = template.ics_function,
         bcs_function = template.bcs_function,
-        exact_u = template.exact_u,
-        exact_v = template.exact_v,
-        exact_w = template.exact_w,
+        solutions = template.solutions,
         timespan = template.timespan,
         timestep = template.timestep,
         xspan = template.xspan,
@@ -155,15 +153,14 @@ function travelling_wave(::Type{T}; timespan = (zero(T), T(0.25)), timestep = T(
     exact_u(t, x, p) = profile(x - speed(p) * t)
     exact_v(t, x, p) = -speed(p) * slope(x - speed(p) * t)
     exact_w(t, x, p) = slope(x - speed(p) * t)
-    grid = collect(zero(T):xstep:one(T))
-    ics = (x, p) -> field_initial_data(exact_u, exact_v, exact_w, x, p, 1, timespan[1])
-    bcs = (times, p) -> field_boundary_data(exact_u, exact_v, exact_w, times, grid, p, 1)
+    s = (u = field_exact(exact_u, 1), v = field_exact(exact_v, 1),
+        w = field_exact(exact_w, 1))
+    ics = (x, p) -> field_initial_data(s, x, p, 1, timespan[1])
+    bcs = (t, p) -> field_side_data(s, t, p, 1, (zero(T), one(T)))
     return LagrangianPDEProblem(Wave.density(; params = params); D = 1,
         ics_function = ics,
         bcs_function = bcs,
-        exact_u = exact_u,
-        exact_v = exact_v,
-        exact_w = exact_w,
+        solutions = s,
         timespan = timespan,
         timestep = timestep,
         xspan = (zero(T), one(T)),
@@ -183,15 +180,14 @@ function plane_wave(::Type{T}; timespan = (zero(T), T(0.25)), timestep = T(0.05)
     exact_u(t, x, p) = x - speed * t
     exact_v(t, x, p) = zero(x) + zero(t) - speed
     exact_w(t, x, p) = one(x) + zero(t)
-    grid = collect(zero(T):xstep:one(T))
-    ics = (x, p) -> field_initial_data(exact_u, exact_v, exact_w, x, p, 1, timespan[1])
-    bcs = (times, p) -> field_boundary_data(exact_u, exact_v, exact_w, times, grid, p, 1)
+    s = (u = field_exact(exact_u, 1), v = field_exact(exact_v, 1),
+        w = field_exact(exact_w, 1))
+    ics = (x, p) -> field_initial_data(s, x, p, 1, timespan[1])
+    bcs = (t, p) -> field_side_data(s, t, p, 1, (zero(T), one(T)))
     return LagrangianPDEProblem(Wave.density(; params = params); D = 1,
         ics_function = ics,
         bcs_function = bcs,
-        exact_u = exact_u,
-        exact_v = exact_v,
-        exact_w = exact_w,
+        solutions = s,
         timespan = timespan,
         timestep = timestep,
         xspan = (zero(T), one(T)),
@@ -320,7 +316,7 @@ end
             timespan = template.timespan, timestep = template.timestep,
             xspan = template.xspan, xstep = template.xstep,
             params = parameters(template))
-        @test bare.exact_u === nothing
+        @test bare.solutions === nothing
         method = SpaceTimeGalerkin(wave_ansatz(T), WeakInitialCondition())
         with_solution = integrate(template, method)
         without = integrate(bare, method)
@@ -346,8 +342,8 @@ end
             @test all(result.stats.converged)
             @test result.stats.residuals == c.residuals
             assert_no_upcast(result.solution.u, T)
-            exact = [SineGordon.exact_u(problem.timespan[2], x, parameters(problem))
-                     for x in xgrid(problem)]
+            exact = problem.solutions.u(problem.timespan[2], collect(xgrid(problem)),
+                parameters(problem))
             push!(errors, maximum(abs.(result.solution.u[end] .- exact)))
         end
         orders = [log2(errors[i] / errors[i + 1]) for i in 1:2]
@@ -366,8 +362,8 @@ end
         @test length(result.traces) == 5
         @test all(result.stats.converged)
         for n in 1:5
-            exact = [problem.exact_u(timesteps(result.solution)[n], x, p)
-                     for x in xgrid(problem)]
+            exact = problem.solutions.u(timesteps(result.solution)[n],
+                collect(xgrid(problem)), p)
             @test maximum(abs.(result.solution.u[n] .- exact)) ≤ reference_tolerance(T)
         end
         assert_no_upcast(result.solution.u, T)
@@ -427,8 +423,8 @@ end
                         coupling))
                 result = integrate(int)
                 @test all(result.stats.converged)
-                exact = [Wave.exact_u(problem.timespan[2], x, parameters(problem))
-                         for x in xgrid(problem)]
+                exact = problem.solutions.u(problem.timespan[2], collect(xgrid(problem)),
+                    parameters(problem))
                 push!(errors[basis], maximum(abs.(result.solution.u[end] .- exact)))
                 # the run's own solution and the table it was assembled in; the finest one stays
                 solutions[basis] = copy(result.solution.u[end])
@@ -481,8 +477,8 @@ end
                 SpaceTimeGalerkin(wave_ansatz(T; ncells = (2, cells), x_boundary = Free()),
                     WeakInitialAndBoundaryConditions()))
             @test all(result.stats.converged)
-            exact = [problem.exact_u(problem.timespan[2], x, parameters(problem))
-                     for x in xgrid(problem)]
+            exact = problem.solutions.u(problem.timespan[2], collect(xgrid(problem)),
+                parameters(problem))
             push!(errors, maximum(abs.(result.solution.u[end] .- exact)))
             assert_no_upcast(result.solution.u, T)
         end
@@ -547,6 +543,38 @@ end
             @test all(>(0), c.iterations)
             @test any(x -> !iszero(x), c.coupling.top_values)
         end
+    end
+
+    @testset "the side data of every component reaches the slab" for T in (Float64, Float32)
+        # Entry `[rt, d]` of the boundary target is component `d`'s value at the left end at the
+        # node's time, and `[qt + rt, d]` its value at the right end. The span leaves out the two
+        # ends of `sin(πx/l)`, and the two components of `VectorWave` differ, so a target filled
+        # from component 1 for every component is not the closed form.
+        a, b = T(0.2), T(0.8)
+        problem = VectorWave.problem(T = T, timespan = (zero(T), T(0.1)),
+            timestep = T(0.05), xspan = (a, b), xstep = (b - a) / 8)
+        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 4), xspan = (a, b), n = 3,
+            x_boundary = Free())
+        int = GeometricIntegrator(problem,
+            SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions()))
+        c = cache(int)
+        solstep = solutionstep(int, GeometricSolution(problem)[0])
+        M.slab_bottom!(c, c.coupling, problem, ansatz, solstep)
+        tq, target = c.ansatz.tabulation.time, c.coupling.work.boundary_target
+        qt, h, params = length(tq.node), timestep(problem), problem.params
+        # The first slab ends at the initial time, so it starts one step before it: the time comes
+        # from the problem, and not from the start-time function this test does not check.
+        t₀ = timespan(problem)[1] - h
+        for rt in 1:qt
+            t = t₀ + h * tq.node[rt]
+            for d in 1:2
+                @test target[rt, d] ≈ Wave.solution_u(t, a,
+                    VectorWave.component_parameters(params, d))
+                @test target[qt + rt, d] ≈ Wave.solution_u(t, b,
+                    VectorWave.component_parameters(params, d))
+            end
+        end
+        @test target[1, 1] != target[1, 2]
     end
 
     @testset "R2 multiplier structure, projection, and index bijection" for T in (Float64, Float32)

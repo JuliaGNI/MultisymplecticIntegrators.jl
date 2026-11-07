@@ -297,23 +297,20 @@ end
 # The initial data at the points `x`, as three `(length(x), D)` matrices.
 function initial_values(o::ActionOracle{T}, x::AbstractVector) where {T}
     values = o.problem.ics_function(collect(x), parameters(o.problem))
-    n = length(x)
-    sample(f) = T[f[(d - 1) * n + r] for r in 1:n, d in 1:o.D]
-    return sample(values.u), sample(values.v), sample(values.w)
+    return (u = T.(values.u), v = T.(values.v), w = T.(values.w))
 end
 
-# The side data at the nodes of the time rule of the slab that starts at `start`: component `d` of
-# a side trace at the slab's first time is its entry `2(d − 1) + 1`.
+# The side data at the nodes of the time rule of the slab that starts at `start`: entry `d` of a
+# side datum is component `d`'s value at that end.
 function side_values(o::ActionOracle{T}, start::T) where {T}
     ga = zeros(T, length(o.t̂), o.D)
     gb = zeros(T, length(o.t̂), o.D)
     o.nμ == 0 && return ga, gb
     for q in eachindex(o.t̂)
-        t = start + o.h * o.t̂[q]
-        values = o.problem.bcs_function((t, t), parameters(o.problem))
+        values = o.problem.bcs_function(start + o.h * o.t̂[q], parameters(o.problem))
         for d in 1:o.D
-            ga[q, d] = values.left.u[2 * (d - 1) + 1]
-            gb[q, d] = values.right.u[2 * (d - 1) + 1]
+            ga[q, d] = values.left.u[d]
+            gb[q, d] = values.right.u[d]
         end
     end
     return ga, gb

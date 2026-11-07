@@ -65,23 +65,7 @@ end
         end
     end
 
-    @testset "A2b a mesh whose xstep does not divide the span" for T in (Float64, Float32)
-        for (span, step, n) in (((zero(T), one(T)), T(0.3), 4), ((zero(T), T(3)), T(1), 4))
-            ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 4), xspan = span)
-            grid = output_grid(ansatz, step)
-            @test length(grid) == n
-            @test grid isa AbstractRange
-            @test abs(last(grid) - span[2]) ≤ 16 * eps(T)
-            @test first(grid) == span[1]
-        end
-    end
-
-    @testset "A2c the refusals of the grid and the degree" for T in (Float64, Float32)
-        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 4), xspan = (zero(T), one(T)))
-        for step in (zero(T), T(NaN), -T(0.05))
-            @test_throws ArgumentError("output_grid needs a positive finite xstep, got $step") output_grid(
-                ansatz, step)
-        end
+    @testset "A2c the refusals of the degree" for T in (Float64, Float32)
         @test_throws ArgumentError("degree must be ≥ 1 in the time direction, got (0, 2)") TensorBSplineAnsatz(
             degree = (0, 2), ncells = (2, 4), xspan = (zero(T), one(T)))
         @test_throws ArgumentError("degree must be ≥ 1 in the space direction, got (2, 0)") TensorBSplineAnsatz(
@@ -132,7 +116,7 @@ end
             result = integrate(problem, SpaceTimeGalerkin(ansatz, CoefficientRestriction()))
             @test all(result.stats.converged)
             grid = collect(xgrid(problem))
-            exact = [Wave.exact_u(t, x, rest) for x in grid]
+            exact = [Wave.solution_u(t, x, rest) for x in grid]
             @test maximum(abs.(result.solution.u[end] .- exact)) ≤ T(45_000) * eps(T)
         end
         # at the default parameters the same setting is the FEM stencil of the same settings
@@ -158,7 +142,7 @@ end
                     xstep = T(0.025), timespan = (zero(T), one(T)))
                 grid = collect(xgrid(problem))
                 push!(e, maximum(abs.(result.solution.u[end] .-
-                                      [Wave.exact_u(one(T), x) for x in grid])))
+                                      [Wave.solution_u(one(T), x) for x in grid])))
             end
             return e
         end
@@ -230,7 +214,7 @@ end
         assert_no_upcast(result.solution.u, T)
         grid = collect(xgrid(problem))
         for n in 1:3
-            exact = [SineGordon.exact_u(n * T(0.05), x, problem.params) for x in grid]
+            exact = [SineGordon.solution_u(n * T(0.05), x, problem.params) for x in grid]
             @test maximum(abs.(result.solution.u[n][3:(end - 2)] .-
                                exact[3:(end - 2)])) ≤ T(0.01)
             # the free boundary's error travels inward from both ends at 1/√c, so by the last
@@ -256,7 +240,7 @@ end
         # the run meets the exact solution on the output grid to a discretisation bound, which is
         # the same number in both precisions and not an `eps` multiple
         grid = collect(xgrid(problem))
-        exact = [Wave.exact_u(T(0.25), x) for x in grid]
+        exact = [Wave.solution_u(T(0.25), x) for x in grid]
         @test maximum(abs.(result.solution.u[end] .- exact)) ≤ T(2.0e-3)
     end
 
