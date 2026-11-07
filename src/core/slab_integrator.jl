@@ -245,6 +245,19 @@ works in.
 copy_coupling_data!(::NoCouplingData, ::NoCouplingData) = nothing
 
 """
+    copy_ansatz_data!(cache_data, data)
+
+Copy what the ansatz block keeps outside the solver's vector — the parameters it holds fixed — from
+the cache of the problem's element type into the cache the solver works in, where the solver
+evaluates at another element type.
+
+An ansatz whose every unknown is a row of the solver's vector keeps nothing here and says so; a
+network in `:last_layer` mode frees its output weights alone and leaves its hidden layer in the
+block, which the block of another element type does not inherit.
+"""
+copy_ansatz_data!(cache_data, data) = nothing
+
+"""
     bottom_datum(data)
 
 The bottom row of the coefficient array that the coupling fixes, of size `(Nx, D)`, or `nothing`
@@ -490,6 +503,7 @@ function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol, params,
     data = cache(int)
     c = cache(int, ST)
     copy_coupling_data!(c.coupling, data.coupling)
+    copy_ansatz_data!(c.ansatz, data.ansatz)
     a = ansatz(method(int))
     p = problem(int)
     nf = free_rows(coupling(c.coupling), a)

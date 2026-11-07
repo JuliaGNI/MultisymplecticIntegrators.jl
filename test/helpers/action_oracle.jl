@@ -618,9 +618,9 @@ function NetworkActionOracle(problem, method)
     a = ansatz(method)
     c = coupling(method)
     M = MultisymplecticIntegrators
-    nfree(a) == nparameters(a) || throw(ArgumentError(
+    M.nfree(a) == M.nparameters(a) || throw(ArgumentError(
         "the action oracle of a network reads every parameter; a :last_layer method frees " *
-        "$(nfree(a)) of $(nparameters(a))"))
+        "$(M.nfree(a)) of $(M.nparameters(a))"))
     own = SimpleSplines.quadratures(M.quadrature(a))
     tr = M.trace_basis(a)
     trace = SimpleSplines.quadratures(M.quadrature(tr))
@@ -656,12 +656,12 @@ mutable struct NetworkDatum{T}
 end
 
 # The side data at the nodes of the trace basis' time rule of the slab that starts at `start`.
-function network_side_values(o::NetworkActionOracle{T}) where {T}
+function network_side_values(o::NetworkActionOracle{T}, start) where {T}
     ga = zeros(T, length(o.tt), o.D)
     gb = zeros(T, length(o.tt), o.D)
     o.nμ == 0 && return ga, gb
     for q in eachindex(o.tt)
-        values = o.problem.bcs_function(o.start + o.h * o.tt[q], parameters(o.problem))
+        values = o.problem.bcs_function(start + o.h * o.tt[q], parameters(o.problem))
         for d in 1:o.D
             ga[q, d] = values.left.u[d]
             gb[q, d] = values.right.u[d]
@@ -688,9 +688,9 @@ function first_datum(o::NetworkActionOracle{T}) where {T}
     end
     weighted = transpose(o.Λ) * Diagonal(o.ωxt)
     λ₀ = (weighted * o.Λ) \ (weighted * p₀)
-    o.start = timespan(o.problem)[1]
-    ga, gb = network_side_values(o)
-    return NetworkDatum{T}(o.start, u, λ₀, ga, gb)
+    start = timespan(o.problem)[1]
+    ga, gb = network_side_values(o, start)
+    return NetworkDatum{T}(start, u, λ₀, ga, gb)
 end
 
 """
@@ -708,7 +708,7 @@ function next_datum(o::NetworkActionOracle{T}, datum::NetworkDatum{T},
     end
     datum.λ₀ .= reshape(θ[(o.np + 1):(o.np + o.nλ * o.D)], o.nλ, o.D)
     datum.start += o.h
-    datum.ga, datum.gb = network_side_values(o)
+    datum.ga, datum.gb = network_side_values(o, datum.start)
     return datum
 end
 

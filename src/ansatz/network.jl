@@ -668,6 +668,28 @@ function set_parameters!(s::NetworkSlab, w::AbstractVector)
 end
 
 """
+    copy_ansatz_data!(cache_data, data)
+
+Copy the parameters the solver does not free from the cache of the problem's element type into the
+cache the solver works in.
+
+A `:last_layer` step frees the output weights alone and leaves the hidden layer where the fit put
+it, so the field of such a step and its Jacobian read the fixed parameters. A block of another
+element type holds its parameters at zero, and a Jacobian evaluated there would be zero with them.
+The free parameters come from the solver's vector on every evaluation, so they are not copied.
+"""
+function copy_ansatz_data!(c::NetworkSlab{ST}, d::NetworkSlab) where {ST}
+    a = d.ansatz
+    lo = a.first_free
+    hi = lo + a.nfree - 1
+    for i in eachindex(c.params)
+        (lo ≤ i ≤ hi) && continue
+        c.params[i] = convert(ST, d.params[i])
+    end
+    return nothing
+end
+
+"""
     nunknowns(ansatz::NetworkAnsatz, coupling, problem)
 
 The number of a network's own unknowns of one slab: its free parameters, which neither the coupling

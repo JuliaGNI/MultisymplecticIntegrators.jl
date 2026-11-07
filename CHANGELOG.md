@@ -452,6 +452,58 @@ makes it worth keeping.
   wave over five slabs, from the exact parameters and from two starts off them, the two-component
   field of `VectorWave`, the side data of each end, and the registry entry's solved parameters in
   both precisions, its run and its archive.
+- **The network family returns: a `NetworkAnsatz` whose field is a two-layer network, with the
+  orthogonal-greedy fit that seeds it.** `NetworkAnsatz(; S, activation = tanh, mode = :all, xspan,
+  ncells, degree, quadrature_order = nothing, D = 1)` is a `SpaceTimeAnsatz` of one slab whose input
+  is the slab's normalised time `t̂ ∈ [0, 1]` and the physical space coordinate `x`, and whose output
+  is the `D` components of the field: `Chain(Dense(2, S, σ), Dense(S, D, identity;
+  use_bias = false))`, whose parameters are the hidden weights, the hidden biases and the output
+  weights, in the order `L1.W`, `L1.b`, `L2.W` of `NeuralNetworkParameters`. `:all` frees every
+  parameter; `:last_layer` frees the output weights alone and leaves the hidden layer where the fit
+  put it, so a step is affine in its unknowns and reaches its tolerance in two Newton iterations.
+  The parameters live in the ansatz's block in the slab cache and never in the ansatz object, so two
+  integrators that share one ansatz give identical results. The constructor refuses, each with an
+  `ArgumentError` that names the values it compared, an `xspan` that does not hold two increasing
+  values, an `S` or a `D` that is not positive, and a `mode` that is neither `:all` nor
+  `:last_layer`; at the building of the cache it refuses another element type, another `xspan` and a
+  network whose output dimension is not the problem's `D`. An activation that
+  `SymbolicNeuralNetworks` cannot differentiate raises that package's own error, which is not
+  caught. The network carries a `TensorBSplineAnsatz` as `trace_basis(ansatz)`: its functions are
+  the multipliers of `WeakInitialAndBoundaryConditions`, and its rule is the one the coupling's
+  tables and its surface rows are built on, while the field itself is evaluated on a rule of the
+  ansatz's own, one node per cell more than the trace basis'. The residual is the Euler–Lagrange
+  residual of the slab weighted by the derivative of the field with respect to each free parameter,
+  the four surface rows included, and it equals the gradient of the discrete action of
+  `test/helpers/action_oracle.jl`; the solver's Jacobian equals central differences of it to `2.7e-10`
+  of its scale in `Float64` and `7.9e-7` in `Float32`. The two `NN_PDE_Integrator` modes take
+  `iterations = [71, 102, 98, 53, 97]` and `[3, 4, 4, 3, 3]` at `S = 10` and reach no tolerance, and
+  their sup-norm deviations from the §A entries are `0.7553` and `580.6`; the affine control at
+  `S = 20` converges in two iterations to `8.3e-6` of its initial residual in `Float64` and `6.7e-4`
+  in `Float32`. The runs are recorded as K38–K40 rather than asserted against a tolerance (U13,
+  U24).
+- **The cache of another element type inherits the ansatz's fixed parameters.**
+  `copy_ansatz_data!` copies what an ansatz keeps outside the solver's vector — the parameters it
+  holds fixed — from the cache of the problem's element type into the one the solver evaluates at,
+  and `residual!` calls it beside `copy_coupling_data!`. A `:last_layer` step frees the output
+  weights alone, so its field and its Jacobian are the hidden layer's, which the fit writes into the
+  block; that block's counterpart at the solver's element type was built with its parameters at
+  zero, which left the Jacobian identically zero (`max|J| = 0` against `17.17` of central
+  differences) and the step without a descent direction. The defect is why K39's earlier reading —
+  a rank deficiency alone — was wrong.
+- **`OrthogonalGreedy` fits a network to a slab target.** `OrthogonalGreedy(; bias_interval = (-π,
+  π), Nw = 50, Nb = 50)` is the fit a network takes by default: a dictionary of `Nw + 1` directions
+  of equal angle on the half-open circle `[0, 2π)`, crossed with `Nb + 1` biases over
+  `bias_interval`, tabulated once at the nodes of the slab's own rule, from which the fit selects
+  `S` atoms by the modulus of their projection on the target and refits the output weights of every
+  component by least squares after each selection. An atom whose remaining direction is shorter than
+  `√eps` of its own length adds no rank and is passed over, so no atom is selected twice. The fit is
+  linear in the output weights alone, so the hidden weights and the biases stay where the dictionary
+  put them; it allocates nothing after its first call and its workspace stays under the `100 MB` the
+  family allows. On the §A case's own target it reaches a relative `L²` error of `1.5e-2` at `S = 8`,
+  and on `sin(2πx) cos(πt)` over `[0, 1] × [0, 0.05]` `9.2e-2`, where G1's bound is `5e-2` (K41).
+  `AbstractNeuralNetworks` (compat `0.9.1`), `SymbolicNeuralNetworks` (compat `0.9`) and
+  `NeuralNetworkParameters` (compat `0.5`) join `[deps]`, and `test/ansatz/network.jl` and
+  `test/initial_guess/orthogonal_greedy.jl` join the `core` group.
 
 ### Changed
 

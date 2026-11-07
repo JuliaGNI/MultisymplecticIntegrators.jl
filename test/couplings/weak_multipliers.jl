@@ -3,16 +3,19 @@ using GeometricIntegratorsBase
 using GeometricSolutions
 using LinearAlgebra: rank, svdvals
 using MultisymplecticIntegrators
+using Random
 using SimpleSplines
 using Test
 
 import GeometricEquations: problem
 import GeometricIntegratorsBase: GeometricIntegrator, cache, copy_internal_variables!,
-                                 integrate!, internal, solutionstep
+                                 current, integrate!, internal, nlsolution, reset!,
+                                 solutionstep
 
 include("../helpers/testsetup.jl")
 include("../helpers/reference_values.jl")
 include("../helpers/weak_initial_condition_reference.jl")
+include("../helpers/action_oracle.jl")
 
 const M = MultisymplecticIntegrators
 
@@ -669,14 +672,21 @@ end
         @test all(isfinite, c.trace_u)
         # the network's own rule is not the trace basis' rule
         @test M.quadrature_points(c.ansatz)[1] != c.ansatz.trace_tabulation.time.node
+        # the residual of the first slab, on a fresh integrator, whose datum is the first one
+        fresh = GeometricIntegrator(problem, method)
+        solution = GeometricSolution(problem)
+        solstep = solutionstep(fresh, solution[0])
+        reset!(solstep, timesteps(solution)[1])
+        cf = cache(fresh)
+        M.slab_bottom!(cf, cf.coupling, problem, ansatz, current(solstep))
+        M.initial_guess!(solstep, nothing, parameters(problem), fresh)
         oracle = ActionOracle(problem, method)
-        datum = first_datum(oracle)
         N = unknown_count(oracle)
-        @test N == length(nlsolution(int))
+        @test N == length(nlsolution(fresh))
         θ = 2 .* rand(Xoshiro(20261107), T, N) .- 1
         b = zeros(T, N)
-        M.residual!(b, θ, nothing, parameters(problem), int)
-        ∇S = oracle_residual(oracle, datum, θ)
+        M.residual!(b, θ, nothing, parameters(problem), fresh)
+        ∇S = oracle_residual(oracle, first_datum(oracle), θ)
         @test maximum(abs, ∇S) ≥ T(1 // 100)
         @test maximum(abs, b - ∇S) ≤ 100 * eps(T) * maximum(abs, ∇S)
     end

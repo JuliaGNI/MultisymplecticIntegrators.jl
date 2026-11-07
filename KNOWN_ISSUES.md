@@ -116,7 +116,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K38 · The `WAVE_NN_FULLY` run is an unconverged iterate.
 
-- location: `test/helpers/reference_values.jl:45`, `src/ansatz/network.jl`
+- location: `test/helpers/reference_values.jl:55`, `src/ansatz/network.jl`
 - evidence: the §A case of the entry — `Wave` at `h = 0.05`, `xspan = (0, 1)`, `S = 10`, `tanh`,
   `Nw = Nb = 50`, the exact solution as the guess with `OrthogonalGreedy()` — run with
   `NetworkAnsatz(; mode = :all)` and `WeakInitialAndBoundaryConditions()` takes
@@ -129,17 +129,20 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-11-07
 
-### K39 · The `WAVE_NN_PARTIALLY` run takes two iterations and moves no residual.
+### K39 · The `WAVE_NN_PARTIALLY` run takes three to five iterations and reaches no tolerance.
 
-- location: `test/helpers/reference_values.jl:46`, `src/ansatz/network.jl`
-- evidence: the same §A case with `mode = :last_layer` takes `iterations = [2, 2, 2, 2, 2]` and
-  leaves each step's residual at its initial value, `[3.89, 3.58, 0.445, 0.131, 0.201]`, with
-  `converged = false`: the coupling's `6` bottom and `2 × 4` side constraint rows reach only the
-  `S = 10` output weights, so the step's system is rank deficient by `4` and the minimum-norm step
-  of `LapackPivotedQR` carries no descent. The run completes and records its stats, and its
-  sup-norm deviation from the §A entry is `580.4`, the entry being a diverged iterate whose own `u`
-  reaches `1.3e2` against this run's `0.7`. `S = 20` frees enough weights to meet the rows and still
-  takes two iterations without reaching the tolerance.
+- location: `test/helpers/reference_values.jl:57`, `src/ansatz/network.jl`
+- evidence: the same §A case with `mode = :last_layer` takes `iterations = [3, 4, 4, 3, 3]` at
+  `residual = [7.52e-4, 6.06e-4, 7.02e-4, 7.93e-4, 8.80e-4]`, each from an initial residual of
+  `[0.879, 9.27, 11.2, 13.4, 15.7]`, and `converged = false` at every step, in `Float64`: the
+  coupling's `14` constraint rows reach only the `10` output weights, so the step's system is rank
+  deficient by `4` and no tolerance is reachable at that size. The run completes and records its
+  stats, and its sup-norm deviation from the §A entry is `580.6` in `Float64` and `580.5` in
+  `Float32`, the entry being a diverged iterate whose own `u` reaches `1.3e2` against this run's
+  `0.7`; the deviation records that entry and not the accuracy of this run. The affine control at
+  `S = 20`, where the freed output weights carry every row, converges in two iterations to `8.3e-6`
+  of its initial residual in `Float64` and `6.7e-4` in `Float32`, which is what the family's
+  `network_f_reltol` records.
 - kind: defect
 - found: 2026-11-07
 
@@ -152,3 +155,22 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   not a reference.
 - kind: defect
 - found: 2026-11-07
+
+### K41 · The greedy fit reaches `9.2e-2` where G1's bound is `5e-2`.
+
+- location: `test/initial_guess/orthogonal_greedy.jl:14`, `src/initial_guess/orthogonal_greedy.jl`
+- evidence: the fit of `OrthogonalGreedy()` at `S = 8` on the target `sin(2πx) cos(πt)` over
+  `[0, 1] × [0, 0.05]`, at the default `Nw = Nb = 50` dictionary on the slab quadrature of a
+  `NetworkAnsatz`, leaves a relative `L²` error of `9.17e-2` in `Float64` and `9.17e-2` in
+  `Float32`, against the `5e-2` G1 states. No selection of eight atoms of that dictionary passes it:
+  a coordinate descent over the atoms' weights and biases reaches `5.35e-2`, and a search by single
+  atom swap over the discrete grid reaches `5.72e-2` from the best-correlated eight. The dictionary
+  is not at fault in itself: the same fit reaches `1.46e-2` on the §A case's own target (`Wave`'s
+  exact solution at the slab's physical time) at the same size, and `1.54e-2` on `sin(2πx) cos(πt)`
+  if the directions are scaled by three — the scale at which the `(-π, π)` bias interval is used
+  across a slab. Its directions are of unit length, so a ridge spans at most one radian across
+  `[0, 1]` and eight of them hold a fundamental and not the second mode that `sin(2πx)` is. The
+  bound, the dictionary's shape and the target are the spec's clauses; which of them gives way is a
+  decision of the plan's owner, and the test keeps the bound as stated.
+- kind: defect
+- found: 2026-11-08

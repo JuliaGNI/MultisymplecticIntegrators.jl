@@ -3,6 +3,7 @@ using LinearAlgebra: norm
 using MultisymplecticIntegrators
 using Test
 
+import GeometricBase: timestep, timespan
 import GeometricIntegratorsBase: GeometricIntegrator, cache
 
 include("../helpers/testsetup.jl")
@@ -12,9 +13,13 @@ const M = MultisymplecticIntegrators
 
 """
 The relative `L²` bound of the greedy fit on the slab — `5e-2`, the bound a local fit's own error is
-allowed — with the value this tree measures beside it: `1.7e-2` at `S = 8` on the target
-`sin(2πx) cos(πt)` over `[0, 1] × [0, 0.05]`, in `Float64`. `Float32` keeps the same bound, whose
-square is far above its round-off.
+allowed — with the value this tree measures beside it: `9.2e-2` at `S = 8` on the target
+`sin(2πx) cos(πt)` over `[0, 1] × [0, 0.05]`, in both precisions, and `1.5e-2` on the §A case's own
+target at the same size. The two differ because the dictionary's directions are of unit length, so a
+ridge spans at most one radian across `[0, 1]`: eight of them hold the fundamental of the §A case,
+and not the second mode that `sin(2πx)` is. The best eight atoms of that dictionary, found by a
+search over its own grid, reach `5.4e-2` on this target, so no selection passes the bound here.
+`Float32` keeps the same bound, whose square is far above its round-off.
 """
 const GREEDY_L2_BOUND = 5.0e-2
 
@@ -33,16 +38,28 @@ function greedy_slab(::Type{T}; S = 8, D = 1, quadrature_order = 4) where {T}
     ansatz = NetworkAnsatz(S = S, D = D, xspan = (zero(T), one(T)), ncells = (2, 5),
         degree = 3, quadrature_order = quadrature_order)
     method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions())
-    return ansatz, cache(GeometricIntegrator(problem, method))
+    return ansatz, cache(GeometricIntegrator(problem, method)), problem
 end
 
-"""The sample of a target `f(t, x)` at the nodes of a network slab's own rule, weighted."""
-function greedy_sample(::Type{T}, c, f) where {T}
+"""
+The sample of a target `f(t, x)` at the points of a network slab's own rule, weighted.
+
+The nodes of that rule are the slab's normalised time and its physical space coordinate, while a
+target is a function of the physical time, as `network_target_values!` reads it: the point of node
+`q` is `slab start + timestep * t̂[q]`.
+"""
+function greedy_sample(::Type{T}, c, problem, f) where {T}
     tnodes, xnodes = M.quadrature_points(c.ansatz)
-    sample = Array{T, 3}(undef, length(tnodes), length(xnodes), 1)
+    h = T(timestep(problem))
+    t0 = T(first(timespan(problem)))
+    D = M.noutputs(c.ansatz.ansatz)
+    sample = Array{T, 3}(undef, length(tnodes), length(xnodes), D)
     for q in eachindex(tnodes), r in eachindex(xnodes)
 
-        sample[q, r, 1] = T(f(T(tnodes[q]), T(xnodes[r])))
+        value = T(f(t0 + h * T(tnodes[q]), T(xnodes[r])))
+        for d in 1:D
+            sample[q, r, d] = value
+        end
     end
     weights = [T(c.ansatz.tabulation.time.weight[q]) *
                T(c.ansatz.tabulation.space.weight[r])
@@ -82,8 +99,9 @@ end
 
 @testset "Orthogonal greedy" begin
     @testset "G1 the fit reproduces the seed on the §A case" for T in (Float64, Float32)
-        ansatz, c = greedy_slab(T)
-        sample, weights = greedy_sample(T, c, (t, x) -> sin(2 * π * x) * cos(π * t))
+        ansatz, c, problem = greedy_slab(T)
+        sample, weights = greedy_sample(T, c, problem,
+            (t, x) -> sin(2 * π * x) * cos(π * t))
         w = zeros(T, ansatz.np)
         M.fit!(w, OrthogonalGreedy(), ansatz, sample, c)
         error = greedy_error(T, c, w, sample, weights)
@@ -113,8 +131,8 @@ end
     end
 
     @testset "G3 one greedy fit per component, and the memory bound" for T in (Float64, Float32)
-        ansatz, c = greedy_slab(T; D = 2)
-        sample, _ = greedy_sample(T, c, (t, x) -> sin(2 * π * x) * cos(π * t))
+        ansatz, c, problem = greedy_slab(T; D = 2)
+        sample, _ = greedy_sample(T, c, problem, (t, x) -> sin(2 * π * x) * cos(π * t))
         sample[:, :, 2] .= T(0)
         w = zeros(T, ansatz.np)
         M.fit!(w, OrthogonalGreedy(), ansatz, sample, c)
@@ -123,7 +141,7 @@ end
         @test weights1 != weights2
         @test norm(weights2) ≤ sqrt(eps(T)) * max(norm(weights1), one(T))
         # the workspace of the default dictionary, measured on a fit of a fresh slab
-        _, c2 = greedy_slab(T; D = 2)
+        _, c2, _ = greedy_slab(T; D = 2)
         w2 = zeros(T, ansatz.np)
         allocations = fit_allocations(w2, ansatz, sample, c2)
         @test allocations < 100_000_000
