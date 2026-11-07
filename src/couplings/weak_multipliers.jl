@@ -472,3 +472,182 @@ function copy_coupling_data!(c::MultiplierData, data::MultiplierData)
     c.work.boundary_target .= data.work.boundary_target
     return nothing
 end
+
+# ---- the symbolic ansatz ---------------------------------------------------
+#
+# A symbolic ansatz fixes no bottom row and holds no coefficient array: its slab carries the
+# parameter vector itself, and its field is a closed-form expression. The block's tables, its
+# targets and its multipliers are the trace basis's, so every function that builds or reads them
+# delegates to the ansatz's trace basis. The residual terms and the guesses read the field at the
+# slab's nodes and at its four boundary sets, which the ansatz's block evaluates.
+
+"""The free rows of a symbolic slab are its parameters."""
+free_rows(::MultiplierCoupling, a::SymbolicAnsatz) = a.num_params
+
+function coupling_data(c::MultiplierCoupling, a::SymbolicAnsatz,
+        p::LagrangianPDEProblem, ::Type{ST}) where {ST}
+    return coupling_data(c, a.trace, p, ST)
+end
+
+function coupling_data_type(c::MultiplierCoupling, a::SymbolicAnsatz,
+        p::LagrangianPDEProblem, ::Type{ST}) where {ST}
+    return coupling_data_type(c, a.trace, p, ST)
+end
+
+function coupling_unknowns(c::MultiplierCoupling, a::SymbolicAnsatz,
+        p::LagrangianPDEProblem)
+    return coupling_unknowns(c, a.trace, p)
+end
+
+function check_coupling(problem::LagrangianPDEProblem, c::MultiplierCoupling,
+        a::SymbolicAnsatz)
+    return check_coupling(problem, c, a.trace)
+end
+
+# A symbolic ansatz has no bottom coefficient row, so a coupling that fixes one has nothing to
+# fix and the interior weak form alone is not the gradient of the slab's action.
+function check_coupling(::LagrangianPDEProblem, ::CoefficientRestriction,
+        ::SymbolicAnsatz)
+    throw(ArgumentError("CoefficientRestriction cannot pair with a SymbolicAnsatz; a " *
+                        "SymbolicAnsatz takes WeakInitialAndBoundaryConditions"))
+end
+
+# The field is free at both ends of `xspan`, so a coupling that imposes the initial condition
+# alone leaves those ends unconstrained.
+function check_coupling(::LagrangianPDEProblem, ::WeakInitialCondition,
+        ::SymbolicAnsatz)
+    throw(ArgumentError("WeakInitialCondition cannot pair with a SymbolicAnsatz; a " *
+                        "SymbolicAnsatz takes WeakInitialAndBoundaryConditions"))
+end
+
+function coupling_internal(c::MultiplierCoupling, a::SymbolicAnsatz,
+        p::LagrangianPDEProblem)
+    return coupling_internal(c, a.trace, p)
+end
+
+function slab_bottom!(c::SpaceTimeGalerkinCache{ST}, data::MultiplierData{ST},
+        problem::LagrangianPDEProblem, ansatz::SymbolicAnsatz, sol) where {ST}
+    return slab_bottom!(c, data, problem, ansatz.trace, sol)
+end
+
+# The multiplier's value at each node of a rule, from its coefficients in the coupling's basis.
+function multiplier_values!(value::AbstractMatrix{ST}, coefficients::AbstractMatrix{ST},
+        basis::AbstractMatrix{ST}) where {ST}
+    fill!(value, zero(ST))
+    for d in axes(value, 2), p in axes(coefficients, 1), r in axes(value, 1)
+        value[r, d] += coefficients[p, d] * basis[p, r]
+    end
+    return nothing
+end
+
+function coupling_term!(
+        b::AbstractVector{ST}, x::AbstractVector{ST}, data::MultiplierData{ST},
+        c::SpaceTimeGalerkinCache{ST}, ansatz::SymbolicAnsatz,
+        problem::LagrangianPDEProblem) where {ST}
+    s = c.ansatz
+    np, D = ansatz.num_params, length(ansatz.expr)
+    nλ, nμ = size(data.initial_multiplier, 1), size(data.boundary_basis, 1)
+    tq, xq = s.tabulation.time, s.tabulation.space
+    qt, qx = nquadrature(tq), nquadrature(xq)
+    hh = convert(ST, timestep(problem))
+    coupling_unknowns!(data, x, D)
+    multiplier_values!(s.lambda_bottom, data.initial_multiplier, data.multiplier_basis)
+    multiplier_values!(s.lambda_top, data.top_multiplier, data.multiplier_basis)
+    if nμ > 0
+        multiplier_values!(s.mu_left, view(data.boundary_multiplier, 1:nμ, :),
+            data.boundary_basis)
+        multiplier_values!(
+            s.mu_right, view(data.boundary_multiplier, (nμ + 1):(2 * nμ), :),
+            data.boundary_basis)
+    end
+    # the four boundary loads on the parameter rows
+    for i in 1:np
+        total = zero(ST)
+        for r in 1:qx, d in 1:D
+
+            total += xq.weight[r] * (s.lambda_bottom[r, d] * s.bottom_J[r, d, i] -
+                      s.lambda_top[r, d] * s.top_J[r, d, i])
+        end
+        if nμ > 0
+            for q in 1:qt, d in 1:D
+
+                total += hh * tq.weight[q] *
+                         (s.mu_left[q, d] * s.left_J[q, d, i] -
+                          s.mu_right[q, d] * s.right_J[q, d, i])
+            end
+        end
+        b[i] += total
+    end
+    # the bottom constraint, whose multiplier is the coupling's carried unknown
+    for d in 1:D, p in 1:nλ
+
+        value = zero(ST)
+        for r in 1:qx
+            value += xq.weight[r] * data.multiplier_basis[p, r] *
+                     (s.bottom_u[r, d] - data.work.target[r, d])
+        end
+        b[multiplier_index(np, D, nλ, nμ, :top, d, p)] = -value
+    end
+    nμ == 0 && return nothing
+    # the two side constraints
+    for d in 1:D, p in 1:nμ
+
+        left = zero(ST)
+        right = zero(ST)
+        for q in 1:qt
+            ω = hh * tq.weight[q] * data.boundary_basis[p, q]
+            left += ω * (s.left_u[q, d] - data.work.boundary_target[q, d])
+            right += ω * (s.right_u[q, d] - data.work.boundary_target[qt + q, d])
+        end
+        b[multiplier_index(np, D, nλ, nμ, :left, d, p)] = -left
+        b[multiplier_index(np, D, nλ, nμ, :right, d, p)] = -right
+    end
+    return nothing
+end
+
+function coupling_guess!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST},
+        ansatz::SymbolicAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
+    s = c.ansatz
+    np, D = ansatz.num_params, length(ansatz.expr)
+    nλ, nμ = size(data.initial_multiplier, 1), size(data.boundary_basis, 1)
+    hh, tr = convert(ST, timestep(problem)), data.traces
+    for i in 1:np
+        s.params[i] = c.x[i]
+    end
+    xq = s.tabulation.space
+    for r in 1:nquadrature(xq)
+        evaluate_at!(s, one(ST), xq.node[r])
+        for d in 1:D
+            tr.x_u[r, d] = s.ubuf[d]
+            tr.x_v[r, d] = s.utbuf[d] / hh
+            tr.x_w[r, d] = s.uxbuf[d]
+        end
+    end
+    project_momentum!(data.work.guess_multiplier, data, problem)
+    for d in 1:D, p in 1:nλ
+
+        c.x[multiplier_index(np, D, nλ, nμ, :top, d, p)] = data.work.guess_multiplier[p, d]
+    end
+    nμ == 0 && return nothing
+    tq = s.tabulation.time
+    for (eidx, edge, end_of_span) in ((1, :left, xspan(ansatz)[1]),
+        (2, :right, xspan(ansatz)[2]))
+        for q in 1:nquadrature(tq)
+            evaluate_at!(s, tq.node[q], convert(ST, end_of_span))
+            for d in 1:D
+                tr.t_u[q, d] = s.ubuf[d]
+                tr.t_v[q, d] = s.utbuf[d] / hh
+                tr.t_w[q, d] = s.uxbuf[d]
+            end
+        end
+        flux_load!(tr.t_load, problem.density, tr.t_u, tr.t_v, tr.t_w,
+            parameters(problem))
+        offset = (eidx - 1) * nμ
+        project!(data.boundary_multiplier, offset + 1, data.boundary_projection, tr.t_load)
+        for d in 1:D, p in 1:nμ
+
+            c.x[multiplier_index(np, D, nλ, nμ, edge, d, p)] = data.boundary_multiplier[offset + p, d]
+        end
+    end
+    return nothing
+end

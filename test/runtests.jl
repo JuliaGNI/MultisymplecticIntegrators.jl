@@ -11,6 +11,7 @@ if "core" in GROUPS
     @safetestset "Linear transport" include("problems/linear_transport.jl")
     @safetestset "Vector wave" include("problems/vector_wave.jl")
     @safetestset "Tensor B-spline ansatz" include("ansatz/tensor_bspline.jl")
+    @safetestset "Symbolic ansatz" include("ansatz/symbolic.jl")
     @safetestset "Coefficient restriction" include("couplings/coefficient_restriction.jl")
     @safetestset "Coupling seam" include("core/slab_integrator.jl")
     @safetestset "Initial guess" include("initial_guess/guess.jl")

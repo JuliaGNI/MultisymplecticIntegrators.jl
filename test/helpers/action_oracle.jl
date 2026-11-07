@@ -364,3 +364,203 @@ function next_datum(o::ActionOracle{T}, datum::SlabDatum{T}, θ::AbstractVector{
     ga, gb = side_values(o, start)
     return SlabDatum{T}(start, bottom, load, target, restricted(o) ? datum.λ₀ : λ, ga, gb)
 end
+
+# ---- the symbolic ansatz ---------------------------------------------------
+#
+# The oracle of a symbolic slab reads the field from a hand-written map of the test's own, and
+# differentiates its action with ForwardDiff. The map is
+#
+#     field(t̂, x, p) -> (u = …, ut = …, ux = …)
+#
+# a named tuple whose three entries are the `D` components of the field, of its derivative in the
+# normalised time and of its derivative in space. The tables are the trace basis' rule and the
+# multiplier basis of the coupling, which the oracle builds for itself.
+
+"""
+    SymbolicActionOracle(problem, ansatz, field)
+
+The tables of the discrete action of one symbolic slab.
+
+`field` is a hand-written field map `field(t̂, x, p) -> (u = …, ut = …, ux = …)`. The action is
+
+    S = Σ_q Σ_r ωₜ_q ωₓ_r h L(u, uₜ / h, u_x)
+      + Σ_r ωₓ_r [λ₀(x_r)·(u(0, x_r) − target(x_r)) − λ(x_r)·u(1, x_r)]
+      + Σ_q h ωₜ_q [μ_a(t̂_q)·(u(a, t̂_q) − g_a(t̂_q)) − μ_b(t̂_q)·(u(b, t̂_q) − g_b(t̂_q))],
+
+where `λ`, `μ_a` and `μ_b` are the slab's multipliers and `λ₀` the incoming one of the datum. The
+datum is fixed by [`symbolic_first_datum!`](@ref) and carried to the next slab by
+[`symbolic_next_datum!`](@ref).
+"""
+mutable struct SymbolicActionOracle{T, P, A, F}
+    problem::P
+    ansatz::A
+    field::F
+    D::Int
+    np::Int
+    nλ::Int
+    nμ::Int
+    h::T
+    ωt::Vector{T}
+    t̂::Vector{T}
+    ωx::Vector{T}
+    x::Vector{T}
+    Λ::Matrix{T}
+    χ::Matrix{T}
+    start::T
+    target::Matrix{T}
+    λ₀::Matrix{T}
+    ga::Matrix{T}
+    gb::Matrix{T}
+end
+
+function SymbolicActionOracle(problem, ansatz, field)
+    T = eltype(timespan(problem))
+    trace = ansatz.trace
+    tb, xb = SimpleSplines.bases(SimpleSplines.basis(trace))
+    qt, qx = SimpleSplines.quadratures(MultisymplecticIntegrators.quadrature(trace))
+    t̂ = collect(T, SimpleSplines.quadrature_nodes(qt))
+    x = collect(T, SimpleSplines.quadrature_nodes(qx))
+    nx, nt = SimpleSplines.nbasis(xb), SimpleSplines.nbasis(tb)
+    nλ, nμ = nx - 2, nt
+    Λ = T[SimpleSplines.evaluate(xb, j, p) for p in x, j in 2:(nx - 1)]
+    χ = T[SimpleSplines.evaluate(tb, j, p) for p in t̂, j in 1:nt]
+    D = length(ansatz.expr)
+    qxs, qts = length(x), length(t̂)
+    zeros2 = zeros(T, qxs, D)
+    return SymbolicActionOracle{T, typeof(problem), typeof(ansatz), typeof(field)}(
+        problem, ansatz, field, D, ansatz.num_params, nλ, nμ, T(timestep(problem)),
+        collect(T, SimpleSplines.quadrature_weights(qt)), t̂,
+        collect(T, SimpleSplines.quadrature_weights(qx)), x,
+        Λ, χ,
+        timespan(problem)[1], zeros2, zeros(T, nλ, D), zeros(T, qts, D), zeros(T, qts, D))
+end
+
+# The side data at the nodes of the time rule of the slab that starts at `start`.
+function symbolic_side_values!(o::SymbolicActionOracle{T}) where {T}
+    for q in eachindex(o.t̂)
+        t = o.start + o.h * o.t̂[q]
+        values = o.problem.bcs_function((t, t), parameters(o.problem))
+        for d in 1:o.D
+            o.ga[q, d] = values.left.u[2 * (d - 1) + 1]
+            o.gb[q, d] = values.right.u[2 * (d - 1) + 1]
+        end
+    end
+    return nothing
+end
+
+"""
+    symbolic_first_datum!(o)
+
+The datum of the first slab, from the problem alone: the target is `u₀` at the space nodes, `λ₀` is
+`∂L/∂v(u₀, v₀, w₀)` at those nodes read into the multiplier basis by the weighted `L²` projection,
+and the side data are read at `t = timespan[1] + h t̂_q`.
+"""
+function symbolic_first_datum!(o::SymbolicActionOracle{T}) where {T}
+    params = parameters(o.problem)
+    values = o.problem.ics_function(collect(o.x), params)
+    qx, D = length(o.x), o.D
+    u = [T(values.u[(d - 1) * qx + r]) for r in 1:qx, d in 1:D]
+    v = [T(values.v[(d - 1) * qx + r]) for r in 1:qx, d in 1:D]
+    w = [T(values.w[(d - 1) * qx + r]) for r in 1:qx, d in 1:D]
+    o.target .= u
+    p₀ = zeros(T, qx, D)
+    for r in 1:qx
+        p₀[r, :] = node_momentum(o.problem.density, u[r, :], v[r, :], w[r, :], params)
+    end
+    weighted = transpose(o.Λ) * Diagonal(o.ωx)
+    o.λ₀ .= (weighted * o.Λ) \ (weighted * p₀)
+    o.start = timespan(o.problem)[1]
+    symbolic_side_values!(o)
+    return nothing
+end
+
+"""
+    symbolic_next_datum!(o, θ)
+
+The datum of the slab after the one whose solved vector is `θ`: the top trace of that slab at the
+space nodes, its top multiplier, and the side data at the new slab's times.
+"""
+function symbolic_next_datum!(o::SymbolicActionOracle{T}, θ::AbstractVector) where {T}
+    np, D, nλ = o.np, o.D, o.nλ
+    p = θ[1:np]
+    for r in eachindex(o.x), d in 1:D
+
+        o.target[r, d] = o.field(one(T), o.x[r], p).u[d]
+    end
+    o.λ₀ .= reshape(θ[(np + 1):(np + nλ * D)], nλ, D)
+    o.start += o.h
+    symbolic_side_values!(o)
+    return nothing
+end
+
+"""
+    symbolic_action(o, z)
+
+The total discrete action of the oracle's slab at `z = (p, λ₀, λ, μ_a, μ_b)`, each block in the
+solver's layout.
+"""
+function symbolic_action(o::SymbolicActionOracle{T}, z::AbstractVector) where {T}
+    np, D, nλ, nμ = o.np, o.D, o.nλ, o.nμ
+    p = z[1:np]
+    i = np
+    λ₀ = reshape(z[(i + 1):(i + nλ * D)], nλ, D)
+    i += nλ * D
+    λ = reshape(z[(i + 1):(i + nλ * D)], nλ, D)
+    i += nλ * D
+    μa = reshape(z[(i + 1):(i + nμ * D)], nμ, D)
+    i += nμ * D
+    μb = reshape(z[(i + 1):(i + nμ * D)], nμ, D)
+    params = parameters(o.problem)
+    action = zero(T)
+    for q in eachindex(o.t̂), r in eachindex(o.x)
+
+        values = o.field(o.t̂[q], o.x[r], p)
+        v = map(s -> s / o.h, values.ut)
+        action += o.ωt[q] * o.ωx[r] * o.h *
+                  node_lagrangian(o.problem.density, values.u, v, values.ux, params)
+    end
+    xa, xb = xspan(o.problem)
+    for d in 1:D
+        for r in eachindex(o.x)
+            bottom = o.field(zero(T), o.x[r], p).u[d]
+            top = o.field(one(T), o.x[r], p).u[d]
+            incoming = sum(λ₀[p, d] * o.Λ[r, p] for p in 1:nλ; init = zero(T))
+            outgoing = sum(λ[p, d] * o.Λ[r, p] for p in 1:nλ; init = zero(T))
+            action += o.ωx[r] *
+                      (incoming * (bottom - o.target[r, d]) - outgoing * top)
+        end
+        for q in eachindex(o.t̂)
+            left = o.field(o.t̂[q], xa, p).u[d]
+            right = o.field(o.t̂[q], xb, p).u[d]
+            ma = sum(μa[p, d] * o.χ[q, p] for p in 1:nμ; init = zero(T))
+            mb = sum(μb[p, d] * o.χ[q, p] for p in 1:nμ; init = zero(T))
+            action += o.h * o.ωt[q] *
+                      (ma * (left - o.ga[q, d]) - mb * (right - o.gb[q, d]))
+        end
+    end
+    return action
+end
+
+"""
+    symbolic_gradient(o, θ)
+
+The residual of the oracle's slab at the solver's vector `θ = (p, λ, μ_a, μ_b)`, from the gradient
+of [`symbolic_action`](@ref): `∂S/∂p` on the parameter rows, `−∂S/∂λ₀` on the rows of the top
+multiplier, and `−∂S/∂μ_a` and `+∂S/∂μ_b` on the rows of the two ends.
+"""
+function symbolic_gradient(o::SymbolicActionOracle{T}, θ::AbstractVector{T}) where {T}
+    np, D, nλ, nμ = o.np, o.D, o.nλ, o.nμ
+    z = vcat(θ[1:np], vec(o.λ₀), θ[(np + 1):end])
+    g = action_gradient(w -> symbolic_action(o, w), z)
+    R = zeros(T, length(θ))
+    R[1:np] .= g[1:np]
+    # `z` is `(p, λ₀, λ, μ_a, μ_b)`, and `θ` is `(p, λ, μ_a, μ_b)`: the rows of the slab's
+    # multiplier are the derivative of the action in the datum's incoming one.
+    base = np + nλ * D
+    R[(np + 1):base] .= -g[(np + 1):base]
+    offset = np + 2 * nλ * D
+    R[(base + 1):(base + nμ * D)] .= -g[(offset + 1):(offset + nμ * D)]
+    offset += nμ * D
+    R[(base + nμ * D + 1):(base + 2 * nμ * D)] .= g[(offset + 1):(offset + nμ * D)]
+    return R
+end

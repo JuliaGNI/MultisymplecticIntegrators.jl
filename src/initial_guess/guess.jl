@@ -256,3 +256,19 @@ function evaluate!(sample::AbstractArray{ST, 3}, ::ExactSolution,
     return target_values!(
         sample, problem.exact_u, c.ansatz.tabulation, ansatz, problem, sol)
 end
+
+# A symbolic ansatz has no coefficient array: its slab is the parameter vector, which the first
+# slab takes from the ansatz's start and every later slab from the previous slab's solution.
+function apply_guess!(c::SpaceTimeGalerkinCache{ST}, ::Continuation,
+        ansatz::SymbolicAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
+    if c.steps == 0
+        for i in 1:ansatz.num_params
+            c.x[i] = convert(ST, ansatz.start[i])
+        end
+    else
+        for i in 1:ansatz.num_params
+            c.x[i] = c.ansatz.params[i]
+        end
+    end
+    return nothing
+end
