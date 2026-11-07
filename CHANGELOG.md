@@ -416,7 +416,8 @@ makes it worth keeping.
   guess of the parameter vector on the first slab. The constructor builds six in-place functions
   with `Symbolics.build_function(…; expression = Val(false))` — the field, its derivatives `∂u/∂t̂`
   and `∂u/∂x`, and the parameter Jacobian of each — and holds them in concrete fields, so a step
-  contains no `Vector{Any}` and compiles nothing at run time. It refuses, each with an
+  contains no `Vector{Any}` and runs no `eval` of generated code: each of the six functions
+  compiles once, at its first call. It refuses, each with an
   `ArgumentError` that names the offending value, an expression with a free symbol other than `t`,
   `x` and the entries of `p`, an empty parameter vector, a `start` of another length than `p`, a
   non-increasing `xspan`, and, at the construction of the integrator, an expression count that is
