@@ -114,7 +114,7 @@ makes it worth keeping.
   an `xstep` that leaves fewer than two points. The grid is the problem's alone: the package has no
   second grid helper beside it, so the integrator and its callers report on the one grid (K20).
   `ntime(problem)` is the number of steps a `GeometricSolution` of the problem holds (K28), and
-  `slab_start(problem, sol) = sol.t - timestep(problem)` is the one spelling of a slab's start
+  `slab_start(problem, sol) = first(sol.t) - timestep(problem)` is the one spelling of a slab's start
   time.
 - **`Wave`, `VectorWave`, `SineGordon` and `LinearTransport`.** The scalar and vector wave
   equations, the sine-Gordon kink and the transport of a Gaussian, each with its closed-form exact

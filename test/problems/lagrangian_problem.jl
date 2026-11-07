@@ -204,12 +204,11 @@ include("../helpers/testsetup.jl")
             bcs_function = bcs, timespan = (0.0, Inf), timestep = 0.1, xspan = (0.0, 1.0),
             xstep = 0.25)
 
-        # A Float32 range that ends at zero stops a rounding error past it, which a relative
-        # comparison with zero rejects.
+        # The grid ends on the span's end exactly, also where that end is zero.
         ending_at_zero = LinearTransport.problem(T = Float32, xspan = (-0.3f0, 0.0f0),
             xstep = 0.3f0 / 15)
         @test length(xgrid(ending_at_zero)) == 16
-        @test abs(last(xgrid(ending_at_zero))) ≤ eps(Float32)
+        @test last(xgrid(ending_at_zero)) == 0.0f0
 
         # The grid holds `n = round(Int, Δx / xstep) + 1` points and ends on the span's end, so a
         # step that divides the span builds on a long span too.

@@ -65,7 +65,7 @@ end
         end
     end
 
-    @testset "A2c the refusals of the grid and the degree" for T in (Float64, Float32)
+    @testset "A2c the refusals of the degree" for T in (Float64, Float32)
         @test_throws ArgumentError("degree must be ≥ 1 in the time direction, got (0, 2)") TensorBSplineAnsatz(
             degree = (0, 2), ncells = (2, 4), xspan = (zero(T), one(T)))
         @test_throws ArgumentError("degree must be ≥ 1 in the space direction, got (2, 0)") TensorBSplineAnsatz(

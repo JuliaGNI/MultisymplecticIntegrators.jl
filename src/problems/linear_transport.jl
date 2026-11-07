@@ -31,7 +31,6 @@ module LinearTransport
 
 export default_parameters, density, problem, solution_u, solution_v, solution_w
 
-using Symbolics
 using MultisymplecticIntegrators
 import MultisymplecticIntegrators: derivatives
 
@@ -100,10 +99,10 @@ function solution_w(t, x, params = default_parameters())
     return (w, zero(w))
 end
 
-"""The exact solution of the doubled field of `D` components, as [`field_exact`](@ref) lifts it."""
-function solutions(D::Integer = 2)
-    return (u = field_exact(solution_u, D), v = field_exact(solution_v, D),
-        w = field_exact(solution_w, D))
+"""The exact solution of the doubled field's two components, as [`field_exact`](@ref) lifts it."""
+function solutions()
+    return (u = field_exact(solution_u, 2), v = field_exact(solution_v, 2),
+        w = field_exact(solution_w, 2))
 end
 
 """
@@ -122,7 +121,7 @@ function problem(; T::Type = Float64, params = default_parameters(),
     D = 2
     tspan = (T(timespan[1]), T(timespan[2]))
     xsp = (T(xspan[1]), T(xspan[2]))
-    s = solutions(D)
+    s = solutions()
     ics = (x, p) -> field_initial_data(s, x, p, D, tspan[1])
     bcs = (t, p) -> field_side_data(s, t, p, D, xsp)
     return LagrangianPDEProblem(density(; params = params);

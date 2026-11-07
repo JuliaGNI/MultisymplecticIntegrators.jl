@@ -153,11 +153,10 @@ function travelling_wave(::Type{T}; timespan = (zero(T), T(0.25)), timestep = T(
     exact_u(t, x, p) = profile(x - speed(p) * t)
     exact_v(t, x, p) = -speed(p) * slope(x - speed(p) * t)
     exact_w(t, x, p) = slope(x - speed(p) * t)
-    grid = collect(zero(T):xstep:one(T))
     s = (u = field_exact(exact_u, 1), v = field_exact(exact_v, 1),
         w = field_exact(exact_w, 1))
     ics = (x, p) -> field_initial_data(s, x, p, 1, timespan[1])
-    bcs = (t, p) -> field_side_data(s, t, p, 1, (first(grid), last(grid)))
+    bcs = (t, p) -> field_side_data(s, t, p, 1, (zero(T), one(T)))
     return LagrangianPDEProblem(Wave.density(; params = params); D = 1,
         ics_function = ics,
         bcs_function = bcs,
@@ -181,11 +180,10 @@ function plane_wave(::Type{T}; timespan = (zero(T), T(0.25)), timestep = T(0.05)
     exact_u(t, x, p) = x - speed * t
     exact_v(t, x, p) = zero(x) + zero(t) - speed
     exact_w(t, x, p) = one(x) + zero(t)
-    grid = collect(zero(T):xstep:one(T))
     s = (u = field_exact(exact_u, 1), v = field_exact(exact_v, 1),
         w = field_exact(exact_w, 1))
     ics = (x, p) -> field_initial_data(s, x, p, 1, timespan[1])
-    bcs = (t, p) -> field_side_data(s, t, p, 1, (first(grid), last(grid)))
+    bcs = (t, p) -> field_side_data(s, t, p, 1, (zero(T), one(T)))
     return LagrangianPDEProblem(Wave.density(; params = params); D = 1,
         ics_function = ics,
         bcs_function = bcs,
