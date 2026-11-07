@@ -34,7 +34,7 @@ basis is the one that coupling needs.
 
 ```julia
 SymbolicAnsatz(p[1] * sin(p[2] * x - p[3] * t), t, x, p;
-    xspan = (0.0, 2π), start = [1.0, 1.0, 2π])
+    xspan = (0, 2π), start = [1, 1, 2π])
 ```
 """
 struct SymbolicAnsatz{T, TB <: TensorBSplineAnsatz, U, UT, UX, JU, JUT, JUX} <:

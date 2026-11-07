@@ -4,6 +4,7 @@ using GeometricIntegratorsBase
 using GeometricSolutions
 using LinearAlgebra
 using MultisymplecticIntegrators
+using Random
 using SimpleSolvers
 using SimpleSplines
 using Symbolics
@@ -163,8 +164,8 @@ function ramp_problem(::Type{T}; α₀ = T(0.3), β = T(1) / 2, h = T(0.4)) wher
         params = params)
 end
 
-"""The steady field `slope · x` on `x ∈ (−1, 1)`, one step long."""
-function side_problem(::Type{T}, slope) where {T}
+"""The steady field `slope · x` on `x ∈ (−1, 1)`, `steps` steps of the length one."""
+function side_problem(::Type{T}, slope; steps = 1) where {T}
     c = T(1) / 2
     span = (-one(T), one(T))
     step = T(1) / 10
@@ -181,7 +182,7 @@ function side_problem(::Type{T}, slope) where {T}
             grid, p, 1),
         exact_u = field_exact(field, 1), exact_v = field_exact(velocity, 1),
         exact_w = field_exact(gradient, 1),
-        timespan = (zero(T), one(T)), timestep = one(T), xspan = span, xstep = step,
+        timespan = (zero(T), T(steps)), timestep = one(T), xspan = span, xstep = step,
         params = params)
 end
 
@@ -262,7 +263,7 @@ end
         @test fieldtype(typeof(ansatz), :u) === typeof(ansatz.u)
         @test fieldtype(typeof(ansatz), :Jux) === typeof(ansatz.Jux)
         # the parameter vector is the one the expression is written in
-        @test ansatz.p == [p[1], p[2], p[3]]
+        @test all(isequal.(ansatz.p, collect(p)))
     end
 
     @testset "A1b the field map and its derivatives" begin
@@ -361,7 +362,7 @@ end
             timestep = T(4) * T(π), xspan = (zero(T), T(2) * T(π)), xstep = T(π) / 10)
         method = SpaceTimeGalerkin(travelling_ansatz(T), WeakInitialAndBoundaryConditions())
         @test_throws ArgumentError(
-            "the ansatz holds 1 expressions, and the problem has 2 components") (
+            "the ansatz holds 1 expressions, but the problem has 2 components") (
             GeometricIntegrator(two_components, method))
         # another space interval
         other_span = Wave.problem(T = T, timespan = (zero(T), T(4) * T(π)),
@@ -378,22 +379,29 @@ end
         @test GeometricIntegrator(problem, method) isa GeometricIntegrator
     end
 
+    # A one-parameter ansatz that is linear in its parameter, on a steady field whose exact
+    # parameter the first slab finds from a start that is not it: the second slab's continuation
+    # guess is then the first slab's answer, and its initial residual is round-off.
     @testset "A1e the start vector carries across slabs" begin
         for T in (Float64, Float32)
-            problem = travelling_problem(T)
-            ansatz = travelling_ansatz(T)
+            problem = side_problem(T, T(7) / 10; steps = 2)
+            ansatz = SymbolicAnsatz(q * x, t, x, [q];
+                xspan = (-one(T), one(T)), start = [zero(T)])
             method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions())
             slab = slab_setup(problem, method)
             c = cache(slab.int)
             M.initial_guess!(current(slab.solstep), nothing, nothing, slab.int)
-            @test c.x[1:ansatz.num_params] == ansatz.start
+            @test c.x[1] == zero(T)
             integrate!(slab.solstep, slab.int)
+            first_initial = c.initial_residuals[1]
             solved = copy(c.x)
             next_slab!(slab, 2)
             M.initial_guess!(current(slab.solstep), nothing, nothing, slab.int)
-            @test c.x[1:ansatz.num_params] == solved[1:ansatz.num_params]
+            @test c.x[1] == solved[1]
             integrate!(slab.solstep, slab.int)
-            @test c.initial_residuals[2] ≤ T(1e-8) * c.initial_residuals[1]
+            # The residual at the carried parameter is round-off, so the ratio carries a floor of
+            # the element type's own resolution beside the clause's `1e-8`.
+            @test c.initial_residuals[2] ≤ (T(1e-8) + 64 * eps(T)) * first_initial
         end
     end
 
@@ -470,7 +478,8 @@ end
     # The affine control: the field `(p₁ + p₂t̂)x` is linear in its parameters and the wave density
     # is quadratic in them, so the slab's residual is affine in the solver's vector and Newton
     # reaches its root in one step. The side data ramp linearly in time, so each slab's solution
-    # differs from the previous one and the continuation guess is not the answer.
+    # differs from the previous one and the continuation guess is not the answer. The solve's
+    # tolerance is the family's measured one, `symbolic_f_reltol` of the registry entry's model file.
     @testset "A2c the affine control converges in two iterations" begin
         for T in (Float64, Float32)
             problem = ramp_problem(T)
@@ -478,12 +487,12 @@ end
                 xspan = (-one(T), one(T)), start = T[1] / 2 .* [one(T), T(3) / 5])
             method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions())
             int = GeometricIntegrator(problem, method; f_abstol = zero(T),
-                f_reltol = T(1e-12))
+                f_reltol = symbolic_f_reltol(T))
             result = integrate(int)
             @test all(result.stats.converged)
             @test all(result.stats.iterations .<= 2)
             @test maximum(result.stats.residuals ./ result.stats.initial_residuals) ≤
-                  T(1e-12)
+                  symbolic_f_reltol(T)
         end
     end
 
@@ -598,8 +607,9 @@ end
             @test all(isfinite, result.stats.residuals)
             @test all(isfinite, result.stats.initial_residuals)
             grid = collect(xgrid(problem))
+            exact_field = field_exact(Wave.exact_u, 1)
             for n in 1:2
-                exact = Wave.exact_u(result.solution.t[n], grid, parameters(problem))
+                exact = exact_field(result.solution.t[n], grid, parameters(problem))
                 @test maximum(abs.(result.solution.u[n] .- exact)) ≤
                       1e3 * eps(T) * max(one(T), maximum(abs, exact))
             end
@@ -622,8 +632,10 @@ end
             u = data["u"]
             @test length(u) == 1
             @test size(u[1]) == (length(t), length(x))
+            exact_field = field_exact(Wave.exact_u, 1)
+            params = parameters(symbolic_problem(only(family_entries(:symbolic))))
             for n in eachindex(t)
-                exact = Wave.exact_u(t[n], x)
+                exact = exact_field(t[n], x, params)
                 @test maximum(abs.(u[1][n, :] .- exact)) ≤
                       1e3 * eps(Float64) * max(1.0, maximum(abs, exact))
             end

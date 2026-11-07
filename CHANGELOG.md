@@ -396,6 +396,42 @@ makes it worth keeping.
   `VectorWave` as well as `Wave`, closing K19. `integrate` delegates its step loop to
   `integrate_steps!`, where the solution, solution step, trace vector, integrator and cache have
   concrete types, closing K30.
+- **The symbolic family returns: a `SymbolicAnsatz` whose field is a closed-form expression.**
+  `SymbolicAnsatz(expr, t, x, p; xspan, start, degree = 1, ncells = (2, 2), n, x_boundary = Free())`
+  is a `SpaceTimeAnsatz` of one slab in the normalised time `t̂ ∈ [0, 1]`, whose unknowns are the
+  parameters of the expression and not a coefficient array: `expr` is a `Num` or a `Vector{Num}` of
+  `D` entries, `t` and `x` are its coordinates, `p` its parameter symbols, and `start` the initial
+  guess of the parameter vector on the first slab. The constructor builds six in-place functions
+  with `Symbolics.build_function(…; expression = Val(false))` — the field, its derivatives `∂u/∂t̂`
+  and `∂u/∂x`, and the parameter Jacobian of each — and holds them in concrete fields, so a step
+  contains no `Vector{Any}` and compiles nothing at run time. It refuses, each with an
+  `ArgumentError` that names the offending value, an expression with a free symbol other than `t`,
+  `x` and the entries of `p`, an empty parameter vector, a `start` of another length than `p`, a
+  non-increasing `xspan`, and, at the construction of the integrator, an expression count that is
+  not the problem's `D`, another element type than the problem's and another `xspan`. The ansatz
+  holds a `TensorBSplineAnsatz` named `trace`, whose tensor Gauss rule is the slab's quadrature and
+  whose space basis carries the multiplier tables; the trace basis does not constrain the field.
+  The residual is the discrete action's gradient in the solver's layout: the interior form is
+  `h Σ ωt ωx (∂u·J_u + ∂v·J_v + ∂w·J_w)` over the parameter rows, and the coupling adds the four
+  boundary loads to those same rows and writes its constraint blocks after them.
+  `WeakInitialAndBoundaryConditions` is the coupling the ansatz takes; `WeakInitialCondition` and
+  `CoefficientRestriction` are refused, naming that coupling, because a parameter ansatz has no
+  bottom coefficient row and a field free at both ends is not constrained by the initial condition
+  alone. `SpaceTimeGalerkin` solves a symbolic step with `SimpleSolvers.LapackPivotedQR` and keeps
+  the ecosystem's LU for every other ansatz: the coupling's Jacobian is a saddle point whose
+  constraint rows depend only on the field, so its rank is at most twice the parameter count and a
+  rank-deficient factorisation leaves the parameters determined while only the multipliers are
+  not. `Continuation` carries the solved parameters from slab to slab, and
+  `space_quadrature_weights(::SymbolicAnsatz)` and `energy_error(problem, ::SymbolicAnsatz,
+  traces)` give the diagnostics that a spline run reports. `scripts/symbolic_model.jl` registers
+  the `:symbolic` family with the standing wave of `Wave`, converted to the slab's normalised time
+  by `t = timestep · t̂` and integrated at the wave's period, 4, on a trace basis of degree 2 and
+  four cells per direction. `test/ansatz/symbolic.jl` checks the field map and its parameter
+  Jacobians against hand-written derivatives, the residual against `SymbolicActionOracle` — the
+  independent discrete action of `test/helpers/action_oracle.jl`, differentiated with ForwardDiff —
+  the solver's Jacobian against central differences, the affine control's two-iteration solve, the
+  closed form of the travelling wave over five slabs, the two-component field of `VectorWave`, the
+  side data of each end, and the registry entry's run and archive.
 
 ### Changed
 
