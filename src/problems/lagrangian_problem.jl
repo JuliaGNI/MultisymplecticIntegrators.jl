@@ -157,9 +157,9 @@ end
 """
     field_side_data(solutions, t, params, D, xspan)
 
-The side data of a slab at the one time `t`: `left` and `right`, each `(u = …, v = …, w = …)` of `D`
-vectors, entry `d` the exact value of component `d` at that end of `xspan`, which a function of
-`solutions` returns at a point.
+The side data of a slab at the one time `t`: `left` and `right`, each `(u = …, v = …, w = …)` of
+`D` vectors, the `D`-vector that a function of `solutions` returns at that end of `xspan`, entry `d`
+the exact value of component `d`.
 """
 function field_side_data(solutions, t, params, D::Integer, xspan)
     (; u, v, w) = solutions
