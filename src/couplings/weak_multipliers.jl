@@ -557,13 +557,11 @@ function coupling_term!(
     coupling_unknowns!(data, x, D)
     multiplier_values!(s.lambda_bottom, data.initial_multiplier, data.multiplier_basis)
     multiplier_values!(s.lambda_top, data.top_multiplier, data.multiplier_basis)
-    if nμ > 0
-        multiplier_values!(s.mu_left, view(data.boundary_multiplier, 1:nμ, :),
-            data.boundary_basis)
-        multiplier_values!(
-            s.mu_right, view(data.boundary_multiplier, (nμ + 1):(2 * nμ), :),
-            data.boundary_basis)
-    end
+    multiplier_values!(s.mu_left, view(data.boundary_multiplier, 1:nμ, :),
+        data.boundary_basis)
+    multiplier_values!(
+        s.mu_right, view(data.boundary_multiplier, (nμ + 1):(2 * nμ), :),
+        data.boundary_basis)
     # the four boundary loads on the parameter rows
     for i in 1:np
         total = zero(ST)
@@ -572,13 +570,11 @@ function coupling_term!(
             total += xq.weight[r] * (s.lambda_bottom[r, d] * s.bottom_J[r, d, i] -
                       s.lambda_top[r, d] * s.top_J[r, d, i])
         end
-        if nμ > 0
-            for q in 1:qt, d in 1:D
+        for q in 1:qt, d in 1:D
 
-                total += hh * tq.weight[q] *
-                         (s.mu_left[q, d] * s.left_J[q, d, i] -
-                          s.mu_right[q, d] * s.right_J[q, d, i])
-            end
+            total += hh * tq.weight[q] *
+                     (s.mu_left[q, d] * s.left_J[q, d, i] -
+                      s.mu_right[q, d] * s.right_J[q, d, i])
         end
         b[i] += total
     end
@@ -592,7 +588,6 @@ function coupling_term!(
         end
         b[multiplier_index(np, D, nλ, nμ, :top, d, p)] = -value
     end
-    nμ == 0 && return nothing
     # the two side constraints
     for d in 1:D, p in 1:nμ
 
@@ -615,24 +610,13 @@ function coupling_guess!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST}
     np, D = ansatz.num_params, length(ansatz.expr)
     nλ, nμ = size(data.initial_multiplier, 1), size(data.boundary_basis, 1)
     hh, tr = convert(ST, timestep(problem)), data.traces
-    for i in 1:np
-        s.params[i] = c.x[i]
-    end
-    xq = s.tabulation.space
-    for r in 1:nquadrature(xq)
-        evaluate_at!(s, one(ST), xq.node[r])
-        for d in 1:D
-            tr.x_u[r, d] = s.ubuf[d]
-            tr.x_v[r, d] = s.utbuf[d] / hh
-            tr.x_w[r, d] = s.uxbuf[d]
-        end
-    end
+    s.params .= view(c.x, 1:np)
+    top_values!(tr.x_u, tr.x_v, tr.x_w, s, trace_evaluation(s), hh)
     project_momentum!(data.work.guess_multiplier, data, problem)
     for d in 1:D, p in 1:nλ
 
         c.x[multiplier_index(np, D, nλ, nμ, :top, d, p)] = data.work.guess_multiplier[p, d]
     end
-    nμ == 0 && return nothing
     tq = s.tabulation.time
     for (eidx, edge, end_of_span) in ((1, :left, xspan(ansatz)[1]),
         (2, :right, xspan(ansatz)[2]))

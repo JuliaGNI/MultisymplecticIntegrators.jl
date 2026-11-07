@@ -111,9 +111,6 @@ end
 """The space interval of the slab."""
 xspan(ansatz::SymbolicAnsatz) = ansatz.xspan
 
-"""The number of parameters of the ansatz: the entries of its parameter vector."""
-num_params(ansatz::SymbolicAnsatz) = ansatz.num_params
-
 """The tensor Gauss–Legendre quadrature of the slab, which the ansatz's trace basis owns."""
 quadrature(ansatz::SymbolicAnsatz) = quadrature(ansatz.trace)
 
@@ -252,16 +249,17 @@ output_evaluation(s::SymbolicSlab) = s.output
 """The evaluation of the trace basis at the nodes of the space quadrature."""
 trace_evaluation(s::SymbolicSlab) = s.trace
 
-# The field and its parameter Jacobian at the space nodes of one horizontal edge of the slab, at
-# the normalised time `t̂`: what the bottom and the top of the slab hold.
-function horizontal_edge!(u::AbstractMatrix{ST}, J::AbstractArray{ST, 3},
-        s::SymbolicSlab{ST}, t̂, nodes) where {ST}
-    for r in eachindex(nodes)
-        evaluate_at!(s, t̂, nodes[r])
-        for d in axes(u, 2), i in axes(J, 3)
-
-            u[r, d] = s.ubuf[d]
-            J[r, d, i] = s.Jubuf[d, i]
+# The field and its parameter Jacobian at the points `(t̂, x)` of one edge of the slab, one row
+# per point: the space nodes at `t̂ = 0` and `t̂ = 1`, and the time nodes at either end of `xspan`.
+function edge!(u::AbstractMatrix{ST}, J::AbstractArray{ST, 3}, s::SymbolicSlab{ST},
+        points) where {ST}
+    for (k, (t̂, x)) in enumerate(points)
+        evaluate_at!(s, t̂, x)
+        for d in axes(u, 2)
+            u[k, d] = s.ubuf[d]
+            for i in axes(J, 3)
+                J[k, d, i] = s.Jubuf[d, i]
+            end
         end
     end
     return nothing
@@ -305,22 +303,11 @@ function slab_field!(
             end
         end
     end
-    for (edge_u, edge_J, t̂) in ((s.bottom_u, s.bottom_J, zero(ST)),
-        (s.top_u, s.top_J, one(ST)))
-        horizontal_edge!(edge_u, edge_J, s, t̂, xq.node)
-    end
-    for (edge_u, edge_J, end_of_span) in ((s.left_u, s.left_J, xspan(a)[1]),
-        (s.right_u, s.right_J, xspan(a)[2]))
-        for q in 1:qt
-            evaluate_at!(s, tq.node[q], convert(ST, end_of_span))
-            for d in 1:D
-                edge_u[q, d] = s.ubuf[d]
-                for i in 1:np
-                    edge_J[q, d, i] = s.Jubuf[d, i]
-                end
-            end
-        end
-    end
+    left, right = convert(ST, xspan(a)[1]), convert(ST, xspan(a)[2])
+    edge!(s.bottom_u, s.bottom_J, s, zip(Iterators.repeated(zero(ST)), xq.node))
+    edge!(s.top_u, s.top_J, s, zip(Iterators.repeated(one(ST)), xq.node))
+    edge!(s.left_u, s.left_J, s, zip(tq.node, Iterators.repeated(left)))
+    edge!(s.right_u, s.right_J, s, zip(tq.node, Iterators.repeated(right)))
     return nothing
 end
 
@@ -406,14 +393,15 @@ end
 The symbolic family solves its slab with a rank-revealing linear solve.
 
 The multiplier coupling's Jacobian is a saddle point whose constraint rows depend only on the
-field, so its rank is at most twice the parameter count: on a trace basis of degree one and two
-cells the first slab's `10 × 10` matrix has rank 6, and its four smallest singular values are at
-round-off. The minimum-norm step of a complete orthogonal factorization solves a consistent system
-exactly and drops the directions the rank does not carry, where a factorisation without rank
-detection loses the descent direction: with the ecosystem's LU the closed-form run takes three to
-29 iterations per slab and reaches the tolerance on its first slab alone in `Float64`, where the
-pivoted QR converges in two iterations at every slab in both precisions. Every other ansatz keeps
-the ecosystem's default.
+field, so its rank is at most twice the parameter count: for the three-parameter travelling wave
+`p₁ sin(p₂x − p₃t̂)` on a trace basis of degree one and two cells, the first slab's `10 × 10`
+matrix has rank 6, and its four smallest singular values are at round-off. The minimum-norm step
+of a complete orthogonal factorization solves a consistent system exactly and drops the
+directions the rank does not carry, where a factorisation without rank detection loses the
+descent direction: started at its exact parameters, that run takes three to 29 iterations per
+slab with the ecosystem's LU and reaches the tolerance on its first slab alone in `Float64`,
+where the pivoted QR converges in two iterations at every slab in both precisions. Every other
+ansatz keeps the ecosystem's default.
 """
 function initsolver(solvermethod::Newton,
         method::SpaceTimeGalerkin{<:SymbolicAnsatz}, caches::CacheDict; kwargs...)

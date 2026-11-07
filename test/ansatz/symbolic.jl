@@ -55,9 +55,9 @@ function travelling_problem(::Type{T}) where {T}
 end
 
 """The ansatz `p₁ sin(p₂x − p₃t̂)`, whose exact parameters are `[1, 1, 2π]` here."""
-function travelling_ansatz(::Type{T}) where {T}
+function travelling_ansatz(::Type{T}; start = T[1, 1, 2π]) where {T}
     return SymbolicAnsatz(p[1] * sin(p[2] * x - p[3] * t), t, x, p;
-        xspan = (zero(T), T(2) * T(π)), start = T[1, 1, 2π])
+        xspan = (zero(T), T(2) * T(π)), start = start)
 end
 
 # The hand-written field map of the travelling wave: the oracle's own, independent of the package.
@@ -758,10 +758,14 @@ end
         end
     end
 
+    # From the exact parameters and from two starts off them, one in the amplitude and the
+    # frequency, one in the wave number: the solve has to find the parameters, not keep them.
     @testset "A4a the closed form over five slabs" begin
-        for T in (Float64, Float32)
+        for T in (Float64, Float32),
+            start in (T[1, 1, 2π], T[6 // 5, 1, 2π + 3 // 10], T[1, 11 // 10, 2π])
+
             problem = travelling_problem(T)
-            method = SpaceTimeGalerkin(travelling_ansatz(T),
+            method = SpaceTimeGalerkin(travelling_ansatz(T; start = start),
                 WeakInitialAndBoundaryConditions())
             int = GeometricIntegrator(problem, method; f_abstol = zero(T),
                 f_reltol = T(100) * eps(T))
