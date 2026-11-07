@@ -32,7 +32,10 @@ The ansatz discretises the field on one slab, and owns the quadrature of the sla
 built by [`ansatz_data`](@ref), whose type [`ansatz_data_type`](@ref) gives without building it.
 For a [`TensorBSplineAnsatz`](@ref) the block is a [`TensorBSplineSlab`](@ref): the coefficient
 array, its weak form, the top row of the last slab, the tables of the slab's quadrature, and the
-space basis at the output grid and at the trace nodes.
+space basis at the output grid and at the trace nodes. For a [`SymbolicAnsatz`](@ref) the block is
+a [`SymbolicSlab`](@ref): the parameter vector, its weak form, the field and its parameter
+Jacobians at the nodes and on the four edges of the slab, the tables of the slab's quadrature, and
+the trace basis' space basis at the output grid and at the trace nodes.
 
 The core calls these functions of the ansatz, each on its block:
 
@@ -41,13 +44,16 @@ The core calls these functions of the ansatz, each on its block:
   the coupling's fixed bottom row;
 - [`slab_weak_form!`](@ref) and [`free_residual!`](@ref): the weak form of the density's
   derivatives, and its rows of the free coefficients in the solver's layout;
-- [`keep_top!`](@ref): keep the top row of the solved slab;
+- [`keep_top!`](@ref): keep the top row of the solved slab, which a symbolic ansatz, with no rows,
+  does not have;
 - [`top_values!`](@ref), with [`output_evaluation`](@ref), [`trace_evaluation`](@ref) and
   [`evaluation_points`](@ref): the field at the top of the slab, at the output grid and at the
   trace nodes, from one evaluation;
 - [`check_ansatz`](@ref): the refusal of an ansatz that the problem cannot support.
 
-The counts [`ntime_functions`](@ref) and [`nspace_functions`](@ref) size the solver's vector.
+The counts [`ntime_functions`](@ref) and [`nspace_functions`](@ref) size the solver's vector of a
+tensor B-spline ansatz, and the parameter count sizes that of a symbolic ansatz;
+[`total_free_coefficients`](@ref) gives the size for either.
 
 ## The coupling
 
@@ -82,7 +88,9 @@ Within a step, every function of the coupling dispatches on its block:
 ## The guess
 
 The initial guess fills the solver's vector before each solve, through [`initial_guess!`](@ref):
-[`Continuation`](@ref) repeats the previous slab's top row, and [`FitTo`](@ref) evaluates a
+[`Continuation`](@ref) repeats the previous slab's top row, or, for a symbolic ansatz, takes the
+ansatz's start vector on the first slab and the previous slab's parameters after it, and
+[`FitTo`](@ref) evaluates a
 [`SlabTarget`](@ref) on the slab with [`evaluate!`](@ref) and fits the ansatz to it with a
 [`SlabFitMethod`](@ref) through `fit!`, whose contract [`Projection`](@ref) states. The coupling
 then guesses its own unknowns.
@@ -97,8 +105,9 @@ the solution, the traces and the [`solve_stats`](@ref) of the run.
 ## The action form (U17)
 
 The interior weak form of a slab is the gradient of its discrete action with respect to the
-parameters `ĉ` of the ansatz, the whole coefficient array for the tensor B-spline ansatz, and the
-residual keeps the rows of it that the free rows carry. The action is the sum over the nodes of the
+parameters `ĉ` of the ansatz, the whole coefficient array for the tensor B-spline ansatz and the
+parameter vector for the symbolic ansatz, and the residual keeps the rows of it that the free rows
+carry. The action is the sum over the nodes of the
 slab's quadrature of the weighted density `L(u, v, w)`, where `u`, `v` and `w` are the field and its
 derivatives that `ĉ` gives at the nodes. By the chain rule, the gradient is the pullback of the
 density's derivatives `∂u`, `∂v`, `∂w` at the nodes through the map from `ĉ` to the field there.
@@ -116,7 +125,9 @@ For the tensor B-spline ansatz the field map is linear in `ĉ`, so its pullback 
 the tabulated basis, which is the weak form in `src/core/weak_form.jl`. An ansatz whose field map
 is not linear, such as a network, implements [`slab_field!`](@ref) as its map and
 [`slab_weak_form!`](@ref) as the pullback of `∂u`, `∂v` and `∂w` through that map by automatic
-differentiation, with [`free_residual!`](@ref) on its own block. A coupling may compute
+differentiation, with [`free_residual!`](@ref) on its own block. The symbolic ansatz is such an
+ansatz, and its pullback reads the parameter Jacobians that it differentiates symbolically when it
+is built. A coupling may compute
 [`coupling_term!`](@ref) as the gradient, by automatic differentiation, of its own action terms:
 the function receives the solver's vector `x` and the coupling's block, which is all those terms
 read. Neither the core nor the existing couplings change for either.

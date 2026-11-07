@@ -1,6 +1,5 @@
 """
-    SymbolicAnsatz(expr, t, x, p; xspan, start, degree = 1, ncells = (2, 2), n = nothing,
-                   x_boundary = Free())
+    SymbolicAnsatz(expr, t, x, p; xspan, start, degree = 1, ncells = (2, 2), n = nothing)
 
 A symbolic ansatz of one space-time slab whose field is a closed-form expression.
 
@@ -30,9 +29,14 @@ an `ArgumentError` naming the offending value. [`check_ansatz`](@ref) refuses an
 that is not the problem's `D`, an element type that is not the problem's, and an `xspan` that is
 not the problem's.
 
-The parameters are the unknowns of the slab. A coupling that imposes the slab's data weakly lets
-the field be free at both ends of `xspan`; the default `Free()` boundary condition of the trace
-basis is the one that coupling needs.
+The parameters are the unknowns of the slab. [`WeakInitialAndBoundaryConditions`](@ref) is the one
+coupling the ansatz takes, and it lets the field be free at both ends of `xspan`, so the trace
+basis is built with the `Free()` boundary condition that coupling needs.
+
+The integrator stores the solved top multipliers as the `top_multiplier` entry of each step's
+internal state, as it does for a spline ansatz. For a symbolic ansatz they are not unique: the
+Jacobian of a step has a null space in the top and side multipliers that leaves the parameters
+determined, so the stored values carry no meaning on their own.
 
 ```julia
 SymbolicAnsatz(p[1] * sin(p[2] * x - p[3] * t), t, x, p;
@@ -58,8 +62,7 @@ struct SymbolicAnsatz{T, TB <: TensorBSplineAnsatz, U, UT, UX, JU, JUT, JUX} <:
 end
 
 function SymbolicAnsatz(expr, t::Num, x::Num, p::AbstractVector;
-        xspan, start::AbstractVector, degree = 1, ncells = (2, 2), n = nothing,
-        x_boundary::BoundaryCondition = Free())
+        xspan, start::AbstractVector, degree = 1, ncells = (2, 2), n = nothing)
     expressions = expr isa AbstractVector ? collect(expr) : [expr]
     all(e -> e isa Num, expressions) ||
         throw(ArgumentError("the expression must be a Num or a vector of Num, got " *
@@ -81,7 +84,7 @@ function SymbolicAnsatz(expr, t::Num, x::Num, p::AbstractVector;
                             "has $num_params parameters"))
     T = _coordinate_type(xspan)
     xsp = (convert(T, xspan[1]), convert(T, xspan[2]))
-    trace = TensorBSplineAnsatz(; degree, ncells, xspan = xsp, n, x_boundary)
+    trace = TensorBSplineAnsatz(; degree, ncells, xspan = xsp, n, x_boundary = Free())
     ut = Num[Symbolics.derivative(expression, t) for expression in expressions]
     ux = Num[Symbolics.derivative(expression, x) for expression in expressions]
     u = build_in_place(expressions, p, t, x)

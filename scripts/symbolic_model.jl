@@ -12,8 +12,12 @@ The symbolic family: the space-time Galerkin integrator on a closed-form ansatz,
 wave of the `Wave` problem, at the wave's period.
 
 An entry's `timestep` is the period of the standing wave of its parameters, so every slab carries
-the same function of the slab's normalised time and the ansatz is the exact solution of each of
-them. `stem` names the archive and the figure; `label` is what a report shows.
+the same function of the slab's normalised time and the ansatz can represent the exact solution
+of each of them. The discrete solve shows a phase error: on `wave-symbolic-h4` it returns the
+parameters `[0.7997258, 0.8005483, 0, 0, 1, 0.5]` for the exact `[0.8, 0.8, 0, 0, 1, 0.5]`, so the
+sum `A₁ + B₁/2`, which is all the field shows at a whole period, is exact, and its split between
+the cosine and the sine amplitude is off by `5.5e-4`. `stem` names the archive and the figure;
+`label` is what a report shows.
 """
 const SYMBOLIC = (
     (stem = "wave-symbolic-h4", label = "symbolic, h = 4",

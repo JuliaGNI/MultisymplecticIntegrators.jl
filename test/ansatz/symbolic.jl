@@ -27,6 +27,10 @@ const M = MultisymplecticIntegrators
 
 const SYMBOLIC_SEED = 20261107
 
+# The parameters `[A₁, B₁, A₂, B₂, l, c]` that the registry entry's run solves for on its last
+# slab, measured cold in `Float64`; the second harmonic's `2e-16` amplitudes are written as zero.
+const ENTRY_PARAMETERS = [0.7997258338925288, 0.8005483322149424, 0.0, 0.0, 1.0, 0.5]
+
 # ---- the fixtures ----------------------------------------------------------
 #
 # The scalar fixture is the travelling wave `sin(x − ct)` of a wave speed of one half: its period
@@ -813,9 +817,19 @@ end
 
     # The entry's convergence is recorded and not asserted: the closed-form oracle asserts it
     # (`A4a`), and `symbolic_f_reltol` is a tolerance measured on the family's affine control (`A2c`)
-    # which a `Float32` step of this entry does not reach. The stats are still read, so a step that
-    # produces no residual, or a residual that is not finite, fails here.
-    @testset "A5a the entry's closed form in both precisions" begin
+    # which a `Float32` step of this entry does not reach: both of its steps stagnate after five
+    # iterations at `1.3e-4` and `7.9e-5` of their initial residual, and report
+    # `converged = false`. The stats are still read, so a step that produces no residual, or a
+    # residual that is not finite, fails here.
+    #
+    # The ansatz can represent the exact solution, `[0.8, 0.8, 0, 0, 1, 0.5]`, but the discrete
+    # solve shows a phase error: it returns `ENTRY_PARAMETERS`, measured cold in `Float64`. The sum
+    # `A₁ + B₁/2` is exact, so the field matches the closed form at the whole periods it is stored
+    # at, and the split between the two amplitudes is off by `5.5e-4`. Measured against
+    # `ENTRY_PARAMETERS`, a `Float64` run from a start shifted by `1e-9` ends `18.5 eps` away and the
+    # `Float32` runs `3.6 eps(Float32)` and `2.5 eps(Float32)` away, the same with
+    # `--check-bounds=yes`, under the bound `1e3 eps(T)`.
+    @testset "A5a the entry's parameters and field in both precisions" begin
         entry = only(family_entries(:symbolic))
         for T in (Float64, Float32)
             problem = symbolic_problem(entry; T = T)
@@ -824,8 +838,10 @@ end
             @test ansatz.num_params == 6
             @test length(ansatz.start) == 6
             @test eltype(ansatz.start) === T
-            result = integrate(problem, method; f_abstol = zero(T),
+            int = GeometricIntegrator(problem, method; f_abstol = zero(T),
                 f_reltol = symbolic_f_reltol(T))
+            result = integrate(int)
+            @test maximum(abs.(cache(int).ansatz.params .- ENTRY_PARAMETERS)) ≤ 1e3 * eps(T)
             @test length(result.traces) == 2
             @test length(result.stats.iterations) == 2
             @test length(result.stats.residuals) == 2
