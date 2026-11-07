@@ -432,14 +432,14 @@ function SymbolicActionOracle(problem, ansatz, field)
         timespan(problem)[1], zeros2, zeros(T, nλ, D), zeros(T, qts, D), zeros(T, qts, D))
 end
 
-# The side data at the nodes of the time rule of the slab that starts at `start`.
+# The side data at the nodes of the time rule of the slab that starts at `start`: entry `d` of a
+# side datum is component `d`'s value at that end.
 function symbolic_side_values!(o::SymbolicActionOracle{T}) where {T}
     for q in eachindex(o.t̂)
-        t = o.start + o.h * o.t̂[q]
-        values = o.problem.bcs_function((t, t), parameters(o.problem))
+        values = o.problem.bcs_function(o.start + o.h * o.t̂[q], parameters(o.problem))
         for d in 1:o.D
-            o.ga[q, d] = values.left.u[2 * (d - 1) + 1]
-            o.gb[q, d] = values.right.u[2 * (d - 1) + 1]
+            o.ga[q, d] = values.left.u[d]
+            o.gb[q, d] = values.right.u[d]
         end
     end
     return nothing
@@ -455,12 +455,10 @@ and the side data are read at `t = timespan[1] + h t̂_q`.
 function symbolic_first_datum!(o::SymbolicActionOracle{T}) where {T}
     params = parameters(o.problem)
     values = o.problem.ics_function(collect(o.x), params)
-    qx, D = length(o.x), o.D
-    u = [T(values.u[(d - 1) * qx + r]) for r in 1:qx, d in 1:D]
-    v = [T(values.v[(d - 1) * qx + r]) for r in 1:qx, d in 1:D]
-    w = [T(values.w[(d - 1) * qx + r]) for r in 1:qx, d in 1:D]
+    qx = length(o.x)
+    u, v, w = T.(values.u), T.(values.v), T.(values.w)
     o.target .= u
-    p₀ = zeros(T, qx, D)
+    p₀ = zeros(T, qx, o.D)
     for r in 1:qx
         p₀[r, :] = node_momentum(o.problem.density, u[r, :], v[r, :], w[r, :], params)
     end
