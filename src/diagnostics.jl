@@ -25,6 +25,14 @@ function space_quadrature_weights(ansatz::TensorBSplineAnsatz)
 end
 
 """
+    space_quadrature_weights(ansatz)
+
+The weights of the ansatz's space quadrature, which a [`SymbolicAnsatz`](@ref) takes from the
+trace basis that owns its rule.
+"""
+space_quadrature_weights(ansatz::SymbolicAnsatz) = space_quadrature_weights(ansatz.trace)
+
+"""
     energy_error(problem, method, traces)
     energy_error(problem, ansatz, traces)
 
@@ -67,6 +75,16 @@ function energy_error(problem::LagrangianPDEProblem{T}, ansatz::TensorBSplineAns
     reference = first(energies)
     return iszero(reference) ? abs.(energies .- reference) :
            abs.((energies .- reference) ./ reference)
+end
+
+"""
+    energy_error(problem, ansatz::SymbolicAnsatz, traces)
+
+The relative energy deviation of a symbolic run, read from the traces through the trace basis'
+space rule, which is the rule the trace is stored on.
+"""
+function energy_error(problem::LagrangianPDEProblem, ansatz::SymbolicAnsatz, traces)
+    energy_error(problem, ansatz.trace, traces)
 end
 
 # The energy of every trace of a run, one `step_energy` each.

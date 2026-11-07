@@ -63,6 +63,9 @@ export TensorBSplineAnsatz, degree, ncells, quadrature,
 include("core/slab_integrator.jl")
 export SpaceTimeGalerkin, SpaceTimeGalerkinCache, ansatz, coupling, total_free_coefficients
 
+include("ansatz/symbolic.jl")
+export SymbolicAnsatz
+
 # the couplings
 include("couplings/coefficient_restriction.jl")
 export CoefficientRestriction
