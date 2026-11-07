@@ -582,7 +582,7 @@ function coupling_term!(
         end
         b[i] += total
     end
-    # the bottom constraint, whose multiplier is the coupling's carried unknown
+    # the bottom constraint, in the rows of the top multiplier: the coupling's carried unknown
     for d in 1:D, p in 1:nλ
 
         value = zero(ST)

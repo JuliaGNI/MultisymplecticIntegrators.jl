@@ -19,14 +19,16 @@ here.
 The constructor builds six in-place functions with `Symbolics.build_function(…; expression =
 Val(false))`: the field, its two derivatives `∂u/∂t̂` and `∂u/∂x`, and the parameter Jacobian of
 each, a `D × length(p)` matrix. They are held in concrete fields, so no container of abstract type
-and no runtime compilation of generated code enters a step. The ansatz also holds a
-[`TensorBSplineAnsatz`](@ref) named `trace`, whose rule is the slab's quadrature and whose space
-basis carries the coupling's multiplier tables; the trace basis does not constrain the field.
+and no `eval` of generated code enters a step; each function compiles once, at its first call. The
+ansatz also holds a [`TensorBSplineAnsatz`](@ref) named `trace`, whose rule is the slab's
+quadrature and whose space basis carries the coupling's multiplier tables; the trace basis does not
+constrain the field.
 
 The constructor refuses an expression whose free symbols are not `t`, `x` and the entries of `p`,
-an empty `p`, and a `start` of another length than `p`, each with an `ArgumentError` naming the
-offending value. [`check_ansatz`](@ref) refuses an expression count that is not the problem's `D`,
-an element type that is not the problem's, and an `xspan` that is not the problem's.
+an empty `p`, a `start` of another length than `p` and an `xspan` that does not increase, each with
+an `ArgumentError` naming the offending value. [`check_ansatz`](@ref) refuses an expression count
+that is not the problem's `D`, an element type that is not the problem's, and an `xspan` that is
+not the problem's.
 
 The parameters are the unknowns of the slab. A coupling that imposes the slab's data weakly lets
 the field be free at both ends of `xspan`; the default `Free()` boundary condition of the trace
