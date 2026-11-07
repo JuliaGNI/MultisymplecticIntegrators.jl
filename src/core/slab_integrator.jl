@@ -639,14 +639,44 @@ function integrate_step!(sol, history, params,
 end
 
 """
+    nunknowns(ansatz, coupling, problem)
+
+The number of the ansatz's own unknowns of one slab: the entries of the solver's vector that precede
+the coupling's.
+
+A tensor B-spline ansatz has one unknown per free row of its coefficient array, per space function
+and per component, so its count is
+
+```julia
+nunknowns(::TensorBSplineAnsatz, coupling, problem) =
+    free_rows(coupling, ansatz) * nspace_functions(ansatz) * components(problem)
+```
+
+with the coupling that leaves the free rows and the problem that fixes the component count in scope.
+An ansatz that keeps its unknowns as a parameter vector declares its own count instead; a
+[`NetworkAnsatz`](@ref) has one per parameter its mode frees.
+"""
+function nunknowns(ansatz::TensorBSplineAnsatz, coupling::SlabCoupling,
+        problem::LagrangianPDEProblem)
+    return free_rows(coupling, ansatz) * nspace_functions(ansatz) * components(problem)
+end
+
+"""
+    slab_unknowns(ansatz, coupling, problem)
+
+The size of one slab's nonlinear system: one equation per unknown of the ansatz, and one per unknown
+the coupling adds after them.
+"""
+function slab_unknowns(ansatz, coupling, problem)
+    nunknowns(ansatz, coupling, problem) + coupling_unknowns(coupling, ansatz, problem)
+end
+
+"""
     total_free_coefficients(method, problem)
 
-The size of one slab's nonlinear system: one equation per free coefficient, and one per unknown the
-coupling adds after them.
+The size of one slab's nonlinear system: one equation per unknown of the ansatz, and one per unknown
+the coupling adds after them.
 """
 function total_free_coefficients(method::SpaceTimeGalerkin, problem::LagrangianPDEProblem)
-    a = ansatz(method)
-    c = coupling(method)
-    return free_rows(c, a) * nspace_functions(a) * components(problem) +
-           coupling_unknowns(c, a, problem)
+    return slab_unknowns(ansatz(method), coupling(method), problem)
 end

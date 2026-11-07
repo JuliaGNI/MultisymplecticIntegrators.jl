@@ -4,7 +4,7 @@ using GeometricBase
 using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: Diagonal, I, LU, dot, ldiv!, lu, norm
+using LinearAlgebra: Diagonal, I, LU, dot, ldiv!, lu, mul!, norm
 using SimpleSplines
 using SimpleSolvers
 using SparseArrays
@@ -16,6 +16,10 @@ import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrat
                       quadrature_weights, l2_projection!, nodes as spline_nodes
 import SimpleSolvers: initial_residual, method, solve_with_status!, NonlinearSolverException
 import SimpleSolvers: config, jacobian!, jacobianmatrix
+import AbstractNeuralNetworks: Chain, Dense, NeuralNetwork, layers, params
+import NeuralNetworkParameters: flatten
+import SymbolicNeuralNetworks: SymbolicNeuralNetwork, Jacobian, derivative,
+                               build_flat_function, flat_parameter_gradient
 import GeometricBase: datatype, timetype, arrtype, equtype, timespan, timestep, parameters,
                       periodicity, ntime, initialstate, timesteps, integrate, update!,
                       nodes
@@ -66,6 +70,15 @@ export SpaceTimeGalerkin, SpaceTimeGalerkinCache, ansatz, coupling, total_free_c
 include("ansatz/symbolic.jl")
 export SymbolicAnsatz
 
+# the initial guess: the roles first, then the fit a network uses
+include("initial_guess/fit_methods.jl")
+include("initial_guess/guess.jl")
+
+# the network ansatz, which the coupling's carrier and the guess hooks extend
+include("ansatz/network.jl")
+include("initial_guess/orthogonal_greedy.jl")
+export NetworkAnsatz, trace_basis, OrthogonalGreedy
+
 # the couplings
 include("couplings/coefficient_restriction.jl")
 export CoefficientRestriction
@@ -73,9 +86,6 @@ export CoefficientRestriction
 include("couplings/weak_multipliers.jl")
 export WeakInitialCondition, WeakInitialAndBoundaryConditions
 
-# the initial guess
-include("initial_guess/fit_methods.jl")
-include("initial_guess/guess.jl")
 export Continuation, FitTo, Projection, InitialCondition, PreviousSlab
 export ExactSolution, TargetFunction
 export default_fit

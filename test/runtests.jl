@@ -24,6 +24,8 @@ end
 if "slow" in GROUPS
     @safetestset "Symbolic ansatz" include("ansatz/symbolic.jl")
     @safetestset "Weak multipliers" include("couplings/weak_multipliers.jl")
+    @safetestset "Network ansatz" include("ansatz/network.jl")
+    @safetestset "Orthogonal greedy" include("initial_guess/orthogonal_greedy.jl")
     @safetestset "Property: generated problems" include("verification/properties/generator.jl")
     @safetestset "Property: gradient" include("verification/properties/gradient.jl")
     @safetestset "Property: Jacobian" include("verification/properties/jacobian.jl")

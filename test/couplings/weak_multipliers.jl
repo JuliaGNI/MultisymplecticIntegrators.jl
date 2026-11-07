@@ -648,4 +648,36 @@ end
         M.residual!(b_after, x2, sstep, parameters(prob2), int2)
         @test b_after == b_before
     end
+
+    @testset "M1 the network under WeakInitialAndBoundaryConditions" for T in (Float64,
+        Float32)
+        # the spline arm: it converges at every step, on the coupling the network shares
+        _, _, _, spline_result = wave_run(T)
+        @test all(spline_result.stats.converged)
+        # the network arm: it completes, records its stats, and its residual is the gradient of the
+        # action whose multiplier functions and surface rule are the trace basis'
+        problem = wave_problem(T)
+        ansatz = NetworkAnsatz(S = 10, xspan = (zero(T), one(T)), degree = 3,
+            ncells = (2, 5), quadrature_order = 6)
+        method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions();
+            initial_guess = FitTo(ExactSolution(); method = OrthogonalGreedy()))
+        int = GeometricIntegrator(problem, method)
+        c = cache(int)
+        result = integrate(int)
+        @test length(result.traces) == 5
+        @test length(result.stats.iterations) == 5
+        @test all(isfinite, c.trace_u)
+        # the network's own rule is not the trace basis' rule
+        @test M.quadrature_points(c.ansatz)[1] != c.ansatz.trace_tabulation.time.node
+        oracle = ActionOracle(problem, method)
+        datum = first_datum(oracle)
+        N = unknown_count(oracle)
+        @test N == length(nlsolution(int))
+        θ = 2 .* rand(Xoshiro(20261107), T, N) .- 1
+        b = zeros(T, N)
+        M.residual!(b, θ, nothing, parameters(problem), int)
+        ∇S = oracle_residual(oracle, datum, θ)
+        @test maximum(abs, ∇S) ≥ T(1 // 100)
+        @test maximum(abs, b - ∇S) ≤ 100 * eps(T) * maximum(abs, ∇S)
+    end
 end

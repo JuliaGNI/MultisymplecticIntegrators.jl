@@ -113,3 +113,42 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `collect(0.0:nextfloat(0.0):1.0)` throws `InexactError: Int64(Inf)`.
 - kind: defect
 - found: 2026-11-07
+
+### K38 · The `WAVE_NN_FULLY` run is an unconverged iterate.
+
+- location: `test/helpers/reference_values.jl:45`, `src/ansatz/network.jl`
+- evidence: the §A case of the entry — `Wave` at `h = 0.05`, `xspan = (0, 1)`, `S = 10`, `tanh`,
+  `Nw = Nb = 50`, the exact solution as the guess with `OrthogonalGreedy()` — run with
+  `NetworkAnsatz(; mode = :all)` and `WeakInitialAndBoundaryConditions()` takes
+  `iterations = [71, 102, 98, 53, 97]` at `residual = [0.422, 0.469, 0.259, 0.679, 0.0943]`, each
+  from an initial residual of `[43.9, 3.81, 13.1, 4.67, 1.72]`, and `converged = false` at every
+  step, in `Float64`; the solve stops on the solver's stagnation test, not at its tolerance. Its
+  sup-norm deviation from the §A entry is `0.7553` over the five steps. The record is that run and
+  not a reference: the network's rows are the gradient of a discrete action the Newton solve cannot
+  drive to round-off, which is the measured result and not a defect of the assembly.
+- kind: defect
+- found: 2026-11-07
+
+### K39 · The `WAVE_NN_PARTIALLY` run takes two iterations and moves no residual.
+
+- location: `test/helpers/reference_values.jl:46`, `src/ansatz/network.jl`
+- evidence: the same §A case with `mode = :last_layer` takes `iterations = [2, 2, 2, 2, 2]` and
+  leaves each step's residual at its initial value, `[3.89, 3.58, 0.445, 0.131, 0.201]`, with
+  `converged = false`: the coupling's `6` bottom and `2 × 4` side constraint rows reach only the
+  `S = 10` output weights, so the step's system is rank deficient by `4` and the minimum-norm step
+  of `LapackPivotedQR` carries no descent. The run completes and records its stats, and its
+  sup-norm deviation from the §A entry is `580.4`, the entry being a diverged iterate whose own `u`
+  reaches `1.3e2` against this run's `0.7`. `S = 20` frees enough weights to meet the rows and still
+  takes two iterations without reaching the tolerance.
+- kind: defect
+- found: 2026-11-07
+
+### K40 · The `SINE_GORDON_NN_FULLY` run is an unconverged iterate.
+
+- location: `test/helpers/reference_values.jl:69`, `src/ansatz/network.jl`
+- evidence: the three-step sine-Gordon case of the entry takes `iterations = [51, 87, 114]` at
+  `residual = [0.0421, 0.0379, 0.0405]` and `converged = false` in `Float64`, and its sup-norm
+  deviation from the entry is `0.0462` over the three steps. As for K38 the record is that run and
+  not a reference.
+- kind: defect
+- found: 2026-11-07
