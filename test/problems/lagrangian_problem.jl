@@ -170,7 +170,7 @@ include("../helpers/testsetup.jl")
         # `D = 1` problem accepts, so that each `D = 1` refusal below reaches its own guard.
         ics1 = (x, p) -> (u = zeros(length(x), 1), v = zeros(length(x), 1),
             w = zeros(length(x), 1))
-        bcs = (times, p) -> nothing
+        bcs = (t, p) -> nothing
         @test_throws ArgumentError LagrangianPDEProblem(density; D = 2, ics_function = ics,
             bcs_function = bcs, timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0),
             xstep = 0.25)

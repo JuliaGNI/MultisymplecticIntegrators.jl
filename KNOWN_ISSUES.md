@@ -88,7 +88,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `xspan = (0.2, 0.8)`, and `Wave`'s closed form is `sin(πx/l)` in space, whose two ends carry the
   same value: `Wave.solution_u(0.0, 0.2, Wave.default_parameters())` is `0.7053423027509678` and
   the same call at `0.8` is `0.7053423027509679`. A target filled with `bcs.right.u[d]` at the left
-  end and `bcs.left.u[d]` at the right passes all 25 assertions of the testset. The mutant that
+  end and `bcs.left.u[d]` at the right passes all 25 assertions of each precision. The mutant that
   swaps them is caught by A6a of the same file, whose travelling wave differs at its two ends.
 - kind: missing test
 - found: 2026-11-07
@@ -98,16 +98,18 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - location: `src/problems/lagrangian_problem.jl:84`
 - evidence: `grep -rn 'xstep = 0[,)]\|xstep = zero\|xstep = -' test/` finds nothing, so every test
   problem passes a positive step and the guard `xh > zero(T) || throw(ArgumentError("xstep must be
-  positive, got $xh"))` is unasserted: the mutant that deletes the line leaves the suite green.
+  positive, got $xh"))` is unasserted: the mutant that deletes the line survived the round-2 run of
+  `test/problems/lagrangian_problem.jl` (`E7: a non-positive xstep is accepted`). Without the guard,
+  `xstep = 0.0` reaches `round(Int, (xsp[2] - xsp[1]) / xh)` and throws `InexactError`.
 - kind: missing test
 - found: 2026-11-07
 
 ### K37 · A `xstep` at the smallest positive `Float64` throws `InexactError`, not `ArgumentError`.
 
-- location: `src/problems/lagrangian_problem.jl:217`
+- location: `src/problems/lagrangian_problem.jl:210`
 - evidence: `Wave.problem(xstep = nextfloat(0.0))` passes the positive-step guard and throws
   `InexactError: Int64(Inf)` from `round(Int, (xsp[2] - xsp[1]) / xh)`, where the constructor's
-  refusals are `ArgumentError`s. The grid line this branch replaces throws the same on the base:
-  `collect(0.0:nextfloat(0.0):1.0)` is `InexactError: Int64(Inf)`.
+  refusals are `ArgumentError`s. A stepped range of that step fails alike:
+  `collect(0.0:nextfloat(0.0):1.0)` throws `InexactError: Int64(Inf)`.
 - kind: defect
 - found: 2026-11-07

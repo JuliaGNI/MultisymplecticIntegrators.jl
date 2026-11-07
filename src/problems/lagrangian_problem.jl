@@ -117,10 +117,12 @@ end
 
 The initial data `(u = …, v = …, w = …)` of `D` components at time `t`: three
 `(length(x), D)` matrices, entry `[r, d]` the value of component `d` at the `r`-th point of `x`.
+Each matrix is the component-major vector that a function of `solutions` returns at the grid `x`,
+laid out in `D` columns.
 """
 function field_initial_data(solutions, x::AbstractVector, params, D::Integer, t)
     (; u, v, w) = solutions
-    across(f) = [_field_component(f(t, xi, params), d) for xi in x, d in 1:D]
+    across(f) = reshape(f(t, x, params), length(x), D)
     return (u = across(u), v = across(v), w = across(w))
 end
 
@@ -153,24 +155,15 @@ function field_exact(f, D::Integer)
 end
 
 """
-    field_solutions(u, v, w, D)
-
-The exact solution of `D` components as `(u = …, v = …, w = …)`, each entry the closed form of one
-field lifted by [`field_exact`](@ref).
-"""
-function field_solutions(u, v, w, D::Integer)
-    return (u = field_exact(u, D), v = field_exact(v, D), w = field_exact(w, D))
-end
-
-"""
     field_side_data(solutions, t, params, D, xspan)
 
 The side data of a slab at the one time `t`: `left` and `right`, each `(u = …, v = …, w = …)` of `D`
-vectors, entry `d` the exact value of component `d` at that end of `xspan`.
+vectors, entry `d` the exact value of component `d` at that end of `xspan`, which a function of
+`solutions` returns at a point.
 """
 function field_side_data(solutions, t, params, D::Integer, xspan)
     (; u, v, w) = solutions
-    side(f, x) = [_field_component(f(t, x, params), d) for d in 1:D]
+    side(f, x) = reshape(f(t, x, params), D)
     left, right = first(xspan), last(xspan)
     return (left = (u = side(u, left), v = side(v, left), w = side(w, left)),
         right = (u = side(u, right), v = side(v, right), w = side(w, right)))

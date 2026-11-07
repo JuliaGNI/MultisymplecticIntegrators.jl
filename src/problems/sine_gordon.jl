@@ -78,9 +78,10 @@ function solution_w(t, x, params = default_parameters())
     return 4 * γ * exp(ξ) / (1 + exp(ξ)^2)
 end
 
-"""The exact solution of the kink of `D` components, as [`field_solutions`](@ref) lifts it."""
+"""The exact solution of the kink of `D` components, as [`field_exact`](@ref) lifts it."""
 function solutions(D::Integer = 1)
-    return field_solutions(solution_u, solution_v, solution_w, D)
+    return (u = field_exact(solution_u, D), v = field_exact(solution_v, D),
+        w = field_exact(solution_w, D))
 end
 
 """

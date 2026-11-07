@@ -20,8 +20,7 @@ problem = Wave.problem(timespan = (0.0, 3.0), timestep = 0.3, xstep = 0.01)
 module Wave
 
 export default_parameters, density, problem, solution_u, solution_v, solution_w,
-       initial_data,
-       side_data
+       initial_data, side_data
 
 using Symbolics
 using MultisymplecticIntegrators
@@ -87,9 +86,10 @@ function initial_data(x::AbstractVector, params = default_parameters(), D::Integ
     field_initial_data(solutions(D), x, params, D, t)
 end
 
-"""The exact solution of the wave of `D` components, as [`field_solutions`](@ref) lifts it."""
+"""The exact solution of the wave of `D` components, as [`field_exact`](@ref) lifts it."""
 function solutions(D::Integer = 1)
-    return field_solutions(solution_u, solution_v, solution_w, D)
+    return (u = field_exact(solution_u, D), v = field_exact(solution_v, D),
+        w = field_exact(solution_w, D))
 end
 
 """

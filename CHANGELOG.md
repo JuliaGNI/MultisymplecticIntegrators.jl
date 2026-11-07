@@ -111,9 +111,11 @@ makes it worth keeping.
   `Vector{T}` rather than a union (K11); and the output grid `xgrid(problem)`, the range
   `range(xspan[1], xspan[2]; length = n)` with `n = round(Int, Δx / xstep) + 1`, so the grid ends on
   the end of the span and a step that divides the span builds (K29), where the constructor refuses
-  an `xstep` that leaves fewer than two points. `ntime(problem)` is the number of steps a
-  `GeometricSolution` of the problem holds (K28), and `slab_start(problem, sol) = sol.t -
-  timestep(problem)` is the one spelling of a slab's start time.
+  an `xstep` that leaves fewer than two points. The grid is the problem's alone: the package has no
+  second grid helper beside it, so the integrator and its callers report on the one grid (K20).
+  `ntime(problem)` is the number of steps a `GeometricSolution` of the problem holds (K28), and
+  `slab_start(problem, sol) = sol.t - timestep(problem)` is the one spelling of a slab's start
+  time.
 - **`Wave`, `VectorWave`, `SineGordon` and `LinearTransport`.** The scalar and vector wave
   equations, the sine-Gordon kink and the transport of a Gaussian, each with its closed-form exact
   solution and its parameters. `Wave.problem` is massless: its density `L = ½v² − ½c²w²` has the
