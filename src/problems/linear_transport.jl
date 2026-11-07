@@ -80,21 +80,21 @@ function density(; params = default_parameters())
 end
 
 function solution_u(t, x, params = default_parameters())
-    T = promote_type(typeof(t), typeof(x))
+    T = float(promote_type(typeof(t), typeof(x)))
     p = convert_parameters(T, params)
     u = T(0.5) * exp(-(x + 2 - p.c * t)^2) / sqrt(T(π))
     return (u, zero(u))
 end
 
 function solution_v(t, x, params = default_parameters())
-    T = promote_type(typeof(t), typeof(x))
+    T = float(promote_type(typeof(t), typeof(x)))
     p = convert_parameters(T, params)
     v = p.c * (2 + x - p.c * t) * exp(-((2 + x - p.c * t)^2)) / sqrt(T(π))
     return (v, zero(v))
 end
 
 function solution_w(t, x, params = default_parameters())
-    T = promote_type(typeof(t), typeof(x))
+    T = float(promote_type(typeof(t), typeof(x)))
     p = convert_parameters(T, params)
     w = -(2 + x - p.c * t) * exp(-((2 + x - p.c * t)^2)) / sqrt(T(π))
     return (w, zero(w))

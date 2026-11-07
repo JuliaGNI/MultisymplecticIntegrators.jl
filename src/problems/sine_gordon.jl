@@ -56,14 +56,14 @@ function density(; params = default_parameters())
 end
 
 function solution_u(t, x, params = default_parameters())
-    T = promote_type(typeof(t), typeof(x))
+    T = float(promote_type(typeof(t), typeof(x)))
     p = convert_parameters(T, params)
     γ = T(lorentz_factor(params))
     return 4 * atan(exp(γ * (x - p.velocity * t)))
 end
 
 function solution_v(t, x, params = default_parameters())
-    T = promote_type(typeof(t), typeof(x))
+    T = float(promote_type(typeof(t), typeof(x)))
     p = convert_parameters(T, params)
     γ = T(lorentz_factor(params))
     ξ = γ * (x - p.velocity * t)
@@ -71,7 +71,7 @@ function solution_v(t, x, params = default_parameters())
 end
 
 function solution_w(t, x, params = default_parameters())
-    T = promote_type(typeof(t), typeof(x))
+    T = float(promote_type(typeof(t), typeof(x)))
     p = convert_parameters(T, params)
     γ = T(lorentz_factor(params))
     ξ = γ * (x - p.velocity * t)

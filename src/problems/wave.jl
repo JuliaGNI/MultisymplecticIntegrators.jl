@@ -48,7 +48,7 @@ function density(; params = default_parameters(), m = 0.0, β = 0.0)
 end
 
 function solution_u(t, x, params = default_parameters())
-    T = promote_type(typeof(t), typeof(x))
+    T = float(promote_type(typeof(t), typeof(x)))
     p = convert_parameters(T, params)
     ω₁ = T(π) * p.c / p.l
     return (p.A1 * cos(ω₁ * t) + p.B1 * sin(ω₁ * t + T(π) / 6)) * sin(T(π) * x / p.l) +
@@ -57,7 +57,7 @@ function solution_u(t, x, params = default_parameters())
 end
 
 function solution_v(t, x, params = default_parameters())
-    T = promote_type(typeof(t), typeof(x))
+    T = float(promote_type(typeof(t), typeof(x)))
     p = convert_parameters(T, params)
     ω₁ = T(π) * p.c / p.l
     return (-p.A1 * ω₁ * sin(ω₁ * t) + p.B1 * ω₁ * cos(ω₁ * t + T(π) / 6)) *
@@ -67,7 +67,7 @@ function solution_v(t, x, params = default_parameters())
 end
 
 function solution_w(t, x, params = default_parameters())
-    T = promote_type(typeof(t), typeof(x))
+    T = float(promote_type(typeof(t), typeof(x)))
     p = convert_parameters(T, params)
     return (p.A1 * cos(T(π) * p.c * t / p.l) +
             p.B1 * sin(T(π) * p.c * t / p.l + T(π) / 6)) * T(π) / p.l *

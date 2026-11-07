@@ -99,6 +99,16 @@ include("../helpers/testsetup.jl")
         @test parameters(problem) === params
     end
 
+    @testset "the closed forms take integer coordinates" begin
+        # An integer time and point compute in `Float64`, and a `Float32` pair stays `Float32`.
+        for M in (Wave, SineGordon, LinearTransport),
+            f in (M.solution_u, M.solution_v, M.solution_w)
+
+            @test f(1, 0) == f(1.0, 0.0)
+            @test eltype(f(1.0f0, 0.0f0)) === Float32
+        end
+    end
+
     @testset "the boundary data of a slab" begin
         problem = Wave.problem(
             params = (c = 0.5, A1 = 0.8, A2 = 0.0, B1 = 0.4, B2 = 0.0,
