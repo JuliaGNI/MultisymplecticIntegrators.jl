@@ -357,6 +357,16 @@ end
             "the start vector holds 2 entries, but the ansatz has 3 parameters") SymbolicAnsatz(
             p[1] * sin(p[2] * x - p[3] * t), t, x, p;
             xspan = (zero(T), T(2) * T(π)), start = T[1, 2])
+        # a space interval that does not increase
+        decreasing = try
+            SymbolicAnsatz(p[1] * sin(p[2] * x - p[3] * t), t, x, p;
+                xspan = (T(2) * T(π), zero(T)), start = T[1, 1, 2π])
+            nothing
+        catch exception
+            exception
+        end
+        @test decreasing isa ArgumentError
+        @test occursin("xspan must increase", sprint(showerror, decreasing))
         # an expression count that is not the problem's
         two_components = Wave.problem(T = T, D = 2, timespan = (zero(T), T(8) * T(π)),
             timestep = T(4) * T(π), xspan = (zero(T), T(2) * T(π)), xstep = T(π) / 10)
@@ -400,7 +410,7 @@ end
             @test c.x[1] == solved[1]
             integrate!(slab.solstep, slab.int)
             # The residual at the carried parameter is round-off, so the ratio carries a floor of
-            # the element type's own resolution beside the clause's `1e-8`.
+            # the element type's own resolution beside the `1e-8` term.
             @test c.initial_residuals[2] ≤ (T(1e-8) + 64 * eps(T)) * first_initial
         end
     end

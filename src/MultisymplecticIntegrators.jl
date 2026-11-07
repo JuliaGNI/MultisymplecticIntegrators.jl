@@ -25,7 +25,7 @@ import GeometricIntegratorsBase: GeometricIntegrator, solutionstep, reset!, inte
                                  cache, current, default_extrapolation, NoExtrapolation
 import GeometricIntegratorsBase: Cache, CacheType, IntegratorCache, check_solver_status,
                                  nlsolution, default_solver, initial_guess!,
-                                 integrate_step!, residual!, solver,
+                                 integrate_step!, residual!, solver, initsolver,
                                  solverstate, copy_internal_variables!, internal
 
 # abstract types
