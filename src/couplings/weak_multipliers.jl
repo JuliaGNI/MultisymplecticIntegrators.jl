@@ -494,6 +494,15 @@ function coupling_unknowns(c::MultiplierCoupling, a::SymbolicAnsatz,
     return coupling_unknowns(c, a.trace, p)
 end
 
+"""
+    check_coupling(problem, coupling, ansatz)
+
+Refuse a coupling that a symbolic ansatz cannot take.
+
+A parameter ansatz has no bottom coefficient row, so its interior weak form alone is not the
+gradient of the slab's action; the weak initial-and-boundary coupling adds the four boundary
+terms that complete it. The refusals of the other couplings name the one that is taken.
+"""
 function check_coupling(problem::LagrangianPDEProblem, c::MultiplierCoupling,
         a::SymbolicAnsatz)
     return check_coupling(problem, c, a.trace)

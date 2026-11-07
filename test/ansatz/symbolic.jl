@@ -67,6 +67,16 @@ function travelling_field(t̂, x, params)
         ux = (params[1] * params[2] * cos(params[2] * x - params[3] * t̂),))
 end
 
+# The two closed forms of a vector field in the shape the problem's `solutions` are read in: the
+# component-major vector at a grid, which `field_initial_data` lays out in `D` columns, and one
+# entry per component at a single point, which is the side data's.
+function stack(f, g)
+    return function (t, x, p)
+        x isa AbstractVector || return [f(t, x, p), g(t, x, p)]
+        return vcat([f(t, xi, p) for xi in x], [g(t, xi, p) for xi in x])
+    end
+end
+
 """Two travelling waves of different speeds on `x ∈ (0, 2π)`, each one period per slab."""
 function vector_problem(::Type{T}) where {T}
     c = T(1) / 2
@@ -80,13 +90,6 @@ function vector_problem(::Type{T}) where {T}
     second_slope(t, x, p) = T(1) / 2 * 2 * cos(2x - 2c * t)
     timespan = (zero(T), T(20) * T(π))
     params = (c = c,)
-    # The two components' values, in the shape the problem's `solutions` are read in: the
-    # component-major vector at a grid, which `field_initial_data` lays out in `D` columns, and one
-    # entry per component at a single point, which is the side data's.
-    stack(f, g) = function (t, x, p)
-        x isa AbstractVector || return [f(t, x, p), g(t, x, p)]
-        return vcat([f(t, xi, p) for xi in x], [g(t, xi, p) for xi in x])
-    end
     solutions = (u = stack(first, second), v = stack(first_velocity, second_velocity),
         w = stack(first_slope, second_slope))
     return LagrangianPDEProblem(VectorWave.vector_density(; params = params, D = 2);
@@ -115,11 +118,81 @@ function vector_field(t̂, x, params)
     return (; u, ut, ux)
 end
 
+# ---- the vector fixtures of the affine control and the side data ------------
+#
+# The two-component problems of the wave density whose fields are a polynomial in `x` of degree
+# one: the ramped field `(α₀ + βt)x`, with its own `α₀` and `β` per component, whose data differ
+# from slab to slab, and the steady field `slope · x`, whose two ends carry `∓slope`.
+
+"""The two-parameter ansatz `(p₁x, p₂x)` of a steady vector field, on `x ∈ (−1, 1)`."""
+function vector_steady_ansatz(::Type{T}; start = T[T(7) / 10, T(-3) / 10]) where {T}
+    return SymbolicAnsatz(Num[s[1] * x, s[2] * x], t, x, collect(s[1:2]);
+        xspan = (-one(T), one(T)), start = start)
+end
+
+"""Two steady fields `slope_d · x`, on `x ∈ (−1, 1)`, `steps` steps of the length one."""
+function vector_steady_problem(::Type{T}, slopes; steps = 1) where {T}
+    c = T(1) / 2
+    span = (-one(T), one(T))
+    step = T(1) / 10
+    first(t, x, p) = slopes[1] * x
+    second(t, x, p) = slopes[2] * x
+    flat(t, x, p) = zero(T)
+    first_slope(t, x, p) = slopes[1]
+    second_slope(t, x, p) = slopes[2]
+    params = (c = c,)
+    solutions = (u = stack(first, second), v = stack(flat, flat),
+        w = stack(first_slope, second_slope))
+    return LagrangianPDEProblem(VectorWave.vector_density(; params = params, D = 2);
+        D = 2,
+        ics_function = (x, p) -> field_initial_data(solutions, x, p, 2, zero(T)),
+        bcs_function = (t, p) -> field_side_data(solutions, t, p, 2, span),
+        solutions = solutions,
+        timespan = (zero(T), T(steps)), timestep = one(T), xspan = span, xstep = step,
+        params = params)
+end
+
+"""The four-parameter ansatz `((p₁ + p₂t̂)x, (p₃ + p₄t̂)x)` of the ramped vector field."""
+function vector_ramp_ansatz(::Type{T}) where {T}
+    expressions = Num[(s[1] + s[2] * t) * x, (s[3] + s[4] * t) * x]
+    return SymbolicAnsatz(expressions, t, x, collect(s[1:4]);
+        xspan = (-one(T), one(T)), start = T[T(1) / 2, T(3) / 5, T(-1) / 2, T(3) / 10])
+end
+
+"""Two ramps `(α₀ + βt)x`, one per component, on `x ∈ (−1, 1)`, two slabs of `h = 4 / 10`."""
+function vector_ramp_problem(::Type{T}) where {T}
+    c = T(1) / 2
+    span = (-one(T), one(T))
+    step = T(1) / 4
+    h = T(4) / 10
+    α₀ = (T(3) / 10, T(-1) / 5)
+    β = (T(1) / 2, T(-1) / 4)
+    first(t, x, p) = (α₀[1] + β[1] * t) * x
+    second(t, x, p) = (α₀[2] + β[2] * t) * x
+    first_velocity(t, x, p) = β[1] * x
+    second_velocity(t, x, p) = β[2] * x
+    first_slope(t, x, p) = α₀[1] + β[1] * t
+    second_slope(t, x, p) = α₀[2] + β[2] * t
+    params = (c = c,)
+    solutions = (u = stack(first, second), v = stack(first_velocity, second_velocity),
+        w = stack(first_slope, second_slope))
+    return LagrangianPDEProblem(VectorWave.vector_density(; params = params, D = 2);
+        D = 2,
+        ics_function = (x, p) -> field_initial_data(solutions, x, p, 2, zero(T)),
+        bcs_function = (t, p) -> field_side_data(solutions, t, p, 2, span),
+        solutions = solutions,
+        timespan = (zero(T), T(2) * h), timestep = h, xspan = span, xstep = step,
+        params = params)
+end
+
 # The fixtures of the action-gradient check: a `D = 1` and a `D = 2` problem, each with the
-# ansatz and the hand-written field map of its own.
+# ansatz and the hand-written field map of its own, and a steady field whose two ends carry
+# different data — the travelling wave's carry the same value at both, because its span is one
+# period of it — so that the oracle's reading of `left` and `right` is separable.
 function symbolic_fixtures(::Type{T}) where {T}
     return ((travelling_problem(T), travelling_ansatz(T), travelling_field),
-        (vector_problem(T), vector_ansatz(T), vector_field))
+        (vector_problem(T), vector_ansatz(T), vector_field),
+        (side_problem(T, T(7) / 10; steps = 2), side_ansatz(T), steady_field))
 end
 
 # ---- the affine control and the side data ----------------------------------
@@ -169,6 +242,17 @@ function side_problem(::Type{T}, slope; steps = 1) where {T}
         params = params)
 end
 
+"""The one-parameter ansatz `p₁x` of the side-data fixture, on `x ∈ (−1, 1)`."""
+function side_ansatz(::Type{T}) where {T}
+    return SymbolicAnsatz(q * x, t, x, [q];
+        xspan = (-one(T), one(T)), start = [T(7) / 10])
+end
+
+# The hand-written field map of the steady field `p₁x`: no velocity, and the slope `p₁`.
+function steady_field(t̂, x, params)
+    return (u = (params[1] * x,), ut = (zero(params[1]),), ux = (params[1],))
+end
+
 # ---- the slab helpers ------------------------------------------------------
 
 """An integrator of one slab, and the solution and solution step a run of it drives."""
@@ -187,6 +271,17 @@ function next_slab!(slab, n::Integer)
     c = cache(slab.int)
     M.slab_bottom!(c, c.coupling, slab.problem, ansatz(slab.method), current(slab.solstep))
     return nothing
+end
+
+"""
+    random_parameters(T, n; offset = 0)
+
+`n` random parameters in `(−1, 1)`, from the file's fixed seed, so that a fixture is checked at a
+point of its parameter space that is neither its start nor its exact parameters.
+"""
+function random_parameters(::Type{T}, n::Integer; offset = 0) where {T}
+    rng = Xoshiro(SYMBOLIC_SEED + offset + n)
+    return 2 .* rand(rng, T, n) .- 1
 end
 
 """
@@ -243,41 +338,60 @@ end
         for f in (ansatz.u, ansatz.ut, ansatz.ux, ansatz.Ju, ansatz.Jut, ansatz.Jux)
             @test isconcretetype(typeof(f))
         end
-        @test fieldtype(typeof(ansatz), :u) === typeof(ansatz.u)
-        @test fieldtype(typeof(ansatz), :Jux) === typeof(ansatz.Jux)
+        # the constructor stores its two coordinates and its span as given
+        @test isequal(ansatz.t, t)
+        @test isequal(ansatz.x, x)
+        @test ansatz.xspan == (zero(Float64), 2π)
         # the parameter vector is the one the expression is written in
         @test all(isequal.(ansatz.p, collect(p)))
     end
 
     @testset "A1b the field map and its derivatives" begin
-        for T in (Float64, Float32)
-            problem = travelling_problem(T)
-            ansatz = travelling_ansatz(T)
+        for T in (Float64, Float32), (problem, ansatz, field) in symbolic_fixtures(T)
+
             slab = M.ansatz_data(ansatz, problem, T)
             tnodes, xnodes = M.quadrature_points(slab)
             h = timestep(problem)
-            qt, qx = length(tnodes), length(xnodes)
-            u, v, w = zeros(T, qt, qx, 1), zeros(T, qt, qx, 1), zeros(T, qt, qx, 1)
-            params = T[0.7, 1.1, 1.3]
+            qt, qx, D = length(tnodes), length(xnodes), length(ansatz.expr)
+            params = random_parameters(T, ansatz.num_params)
+            u = zeros(T, qt, qx, D)
+            v = similar(u)
+            w = similar(u)
             M.slab_field!(u, v, w, slab, params, nothing, ansatz.num_params, h)
-            for q in 1:qt, r in 1:qx
-
+            # the nodes of the slab's own rule
+            for q in 1:qt, r in 1:qx, d in 1:D
                 t̂, xr = tnodes[q], xnodes[r]
-                value = params[1] * sin(params[2] * xr - params[3] * t̂)
-                velocity = -params[1] * params[3] * cos(params[2] * xr - params[3] * t̂) / h
-                slope = params[1] * params[2] * cos(params[2] * xr - params[3] * t̂)
-                @test abs(u[q, r, 1] - value) ≤ 16 * eps(T) * max(one(T), abs(value))
-                @test abs(v[q, r, 1] - velocity) ≤
-                      16 * eps(T) * max(one(T), abs(velocity))
-                @test abs(w[q, r, 1] - slope) ≤ 16 * eps(T) * max(one(T), abs(slope))
+                values = field(t̂, xr, params)
+                @test abs(u[q, r, d] - values.u[d]) ≤
+                      16 * eps(T) * max(one(T), abs(values.u[d]))
+                @test abs(v[q, r, d] - values.ut[d] / h) ≤
+                      16 * eps(T) * max(one(T), abs(values.ut[d] / h))
+                @test abs(w[q, r, d] - values.ux[d]) ≤
+                      16 * eps(T) * max(one(T), abs(values.ux[d]))
+            end
+            # the bottom of the slab is `t̂ = 0` at the nodes of the space rule
+            for r in 1:qx, d in 1:D
+
+                values = field(zero(T), xnodes[r], params)
+                @test abs(slab.bottom_u[r, d] - values.u[d]) ≤
+                      16 * eps(T) * max(one(T), abs(values.u[d]))
             end
             # the top of the slab is `t̂ = 1`, at the nodes of the trace evaluation
-            utop, vtop, wtop = zeros(T, qx, 1), zeros(T, qx, 1), zeros(T, qx, 1)
+            utop, vtop, wtop = zeros(T, qx, D), zeros(T, qx, D), zeros(T, qx, D)
             M.top_values!(utop, vtop, wtop, slab, M.trace_evaluation(slab), h)
-            for r in 1:qx
-                xr = xnodes[r]
-                value = params[1] * sin(params[2] * xr - params[3])
-                @test abs(utop[r, 1] - value) ≤ 16 * eps(T) * max(one(T), abs(value))
+            for r in 1:qx, d in 1:D
+
+                values = field(one(T), xnodes[r], params)
+                @test abs(utop[r, d] - values.u[d]) ≤
+                      16 * eps(T) * max(one(T), abs(values.u[d]))
+            end
+            # the middle of the slab, `t̂ = 1/2`, through the block's own evaluation
+            for r in 1:qx, d in 1:D
+
+                M.evaluate_at!(slab, T(1) / 2, xnodes[r])
+                values = field(T(1) / 2, xnodes[r], params)
+                @test abs(slab.ubuf[d] - values.u[d]) ≤
+                      16 * eps(T) * max(one(T), abs(values.u[d]))
             end
             # the two evaluations are the output grid and the space quadrature nodes
             @test M.evaluation_points(M.output_evaluation(slab)) ==
@@ -294,27 +408,26 @@ end
     end
 
     @testset "A1c the parameter Jacobians" begin
-        for T in (Float64, Float32)
-            problem = travelling_problem(T)
-            ansatz = travelling_ansatz(T)
+        for T in (Float64, Float32), (problem, ansatz, field) in symbolic_fixtures(T)
+
             slab = M.ansatz_data(ansatz, problem, T)
             tnodes, xnodes = M.quadrature_points(slab)
             h = timestep(problem)
-            u, v, w = zeros(T, length(tnodes), length(xnodes), 1),
-            zeros(T, length(tnodes), length(xnodes), 1),
-            zeros(T, length(tnodes), length(xnodes), 1)
-            params = T[0.7, 1.1, 1.3]
+            qt, qx, D = length(tnodes), length(xnodes), length(ansatz.expr)
+            params = random_parameters(T, ansatz.num_params; offset = 10)
+            u = zeros(T, qt, qx, D)
+            v = similar(u)
+            w = similar(u)
             M.slab_field!(u, v, w, slab, params, nothing, ansatz.num_params, h)
-            for q in eachindex(tnodes), r in eachindex(xnodes)
-
+            for q in 1:qt, r in 1:qx, d in 1:D
                 t̂, xr = tnodes[q], xnodes[r]
-                field = q -> [q[1] * sin(q[2] * xr - q[3] * t̂)]
-                velocity = q -> [-q[1] * q[3] * cos(q[2] * xr - q[3] * t̂) / h]
-                slope = q -> [q[1] * q[2] * cos(q[2] * xr - q[3] * t̂)]
+                of_field = q -> [field(t̂, xr, q).u[d]]
+                of_velocity = q -> [field(t̂, xr, q).ut[d] / h]
+                of_slope = q -> [field(t̂, xr, q).ux[d]]
                 for (expected, stored) in (
-                    (ForwardDiff.jacobian(field, params), slab.Ju[q, r, 1, :]),
-                    (ForwardDiff.jacobian(velocity, params), slab.Jv[q, r, 1, :]),
-                    (ForwardDiff.jacobian(slope, params), slab.Jw[q, r, 1, :]))
+                    (ForwardDiff.jacobian(of_field, params), slab.Ju[q, r, d, :]),
+                    (ForwardDiff.jacobian(of_velocity, params), slab.Jv[q, r, d, :]),
+                    (ForwardDiff.jacobian(of_slope, params), slab.Jw[q, r, d, :]))
                     scale = maximum(abs, expected)
                     @test maximum(abs, stored .- vec(expected)) ≤
                           sqrt(eps(T)) * max(one(T), scale)
@@ -373,37 +486,51 @@ end
     end
 
     # A one-parameter ansatz that is linear in its parameter, on a steady field whose exact
-    # parameter the first slab finds from a start that is not it: the second slab's continuation
-    # guess is then the first slab's answer, and its initial residual is round-off.
+    # parameter the first slab finds from a start that is neither zero nor it: the second slab's
+    # continuation guess is then the first slab's answer, and its initial residual is round-off.
+    # The second leg is the two-component field of the same shape.
     @testset "A1e the start vector carries across slabs" begin
         for T in (Float64, Float32)
-            problem = side_problem(T, T(7) / 10; steps = 2)
-            ansatz = SymbolicAnsatz(q * x, t, x, [q];
-                xspan = (-one(T), one(T)), start = [zero(T)])
-            method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions())
-            slab = slab_setup(problem, method)
-            c = cache(slab.int)
-            M.initial_guess!(current(slab.solstep), nothing, nothing, slab.int)
-            @test c.x[1] == zero(T)
-            integrate!(slab.solstep, slab.int)
-            first_initial = c.initial_residuals[1]
-            solved = copy(c.x)
-            next_slab!(slab, 2)
-            M.initial_guess!(current(slab.solstep), nothing, nothing, slab.int)
-            @test c.x[1] == solved[1]
-            integrate!(slab.solstep, slab.int)
-            # The residual at the carried parameter is round-off, so the ratio carries a floor of
-            # the element type's own resolution beside the `1e-8` term.
-            @test c.initial_residuals[2] ≤ (T(1e-8) + 64 * eps(T)) * first_initial
+            scalar = (side_problem(T, T(7) / 10; steps = 2),
+                SymbolicAnsatz(q * x, t, x, [q];
+                    xspan = (-one(T), one(T)), start = [T(3) / 10]))
+            vector = (vector_steady_problem(T, (T(7) / 10, T(-3) / 10); steps = 2),
+                vector_steady_ansatz(T; start = T[T(3) / 10, T(2) / 10]))
+            for (problem, ansatz) in (scalar, vector)
+                np = ansatz.num_params
+                method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions())
+                slab = slab_setup(problem, method)
+                c = cache(slab.int)
+                M.initial_guess!(current(slab.solstep), nothing, nothing, slab.int)
+                @test c.x[1:np] == ansatz.start
+                integrate!(slab.solstep, slab.int)
+                first_initial = c.initial_residuals[1]
+                solved = copy(c.x[1:np])
+                @test solved != ansatz.start
+                next_slab!(slab, 2)
+                M.initial_guess!(current(slab.solstep), nothing, nothing, slab.int)
+                @test c.x[1:np] == solved
+                integrate!(slab.solstep, slab.int)
+                # The ansatz is linear in its parameters and one Newton step is exact, so the
+                # residual at the carried parameters is the round-off of the residual there:
+                # measured, the second step's initial residual is `0.72 eps(T)` of the first
+                # step's in `Float64` and `1.91 eps(T)` in `Float32` for the one-component field,
+                # and `0.64` and `1.98` for the two-component one, against the bound of
+                # `64 eps(T)`.
+                @test c.initial_residuals[2] ≤ 64 * eps(T) * first_initial
+            end
         end
     end
 
     @testset "A1f the element type of the block and the run" begin
         source = read(joinpath(pkgdir(M), "src", "ansatz", "symbolic.jl"), String)
         @test !occursin("Float64(", source)
-        for T in (Float64, Float32)
-            problem = travelling_problem(T)
-            ansatz = travelling_ansatz(T)
+        for T in (Float64, Float32),
+            fixture in ((travelling_problem, travelling_ansatz), (
+                vector_problem, vector_ansatz))
+
+            problem = fixture[1](T)
+            ansatz = fixture[2](T)
             method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions())
             int = GeometricIntegrator(problem, method)
             c = cache(int)
@@ -448,23 +575,39 @@ end
         end
     end
 
+    # The solver's Jacobian against central differences of the residual. The differences are taken
+    # on the `Float64` slab in both precisions: at the step `cbrt(eps(T))` their truncation error
+    # `δ²|∂³F|/6` reaches `6.1e-4` of the scale in `Float32`, above the bound of
+    # `sqrt(eps(Float32)) = 3.45e-4`, although the `Float32` Jacobian agrees with the `Float64` one
+    # to `1.9e-6`. Measured on this tree, the worst of the sixteen vectors is `0.13` of the bound
+    # in `Float64` and `0.005` in `Float32` — margins of `7.8×` and `230×` — for the scalar
+    # fixture, and `0.05` and `0.005` for the two-component one.
     @testset "A2b the Jacobian is the derivative of the residual" begin
-        for T in (Float64, Float32)
-            problem = travelling_problem(T)
-            method = SpaceTimeGalerkin(travelling_ansatz(T),
-                WeakInitialAndBoundaryConditions())
+        for T in (Float64, Float32),
+            fixture in ((travelling_problem, travelling_ansatz), (
+                vector_problem, vector_ansatz))
+
+            problem = fixture[1](T)
+            method = SpaceTimeGalerkin(fixture[2](T), WeakInitialAndBoundaryConditions())
             slab = slab_setup(problem, method)
+            reference_problem = fixture[1](Float64)
+            reference_method = SpaceTimeGalerkin(fixture[2](Float64),
+                WeakInitialAndBoundaryConditions())
+            reference = slab_setup(reference_problem, reference_method)
             s = GeometricIntegratorsBase.solver(slab.int)
             N = length(cache(slab.int).x)
-            rng = Xoshiro(SYMBOLIC_SEED + 2)
-            θ = 2 .* rand(rng, T, N) .- 1
             params = parameters(problem)
-            jacobian!(s, θ, (current(slab.solstep), params, slab.int))
-            J = copy(jacobianmatrix(s))
-            scale = maximum(abs, J)
-            @test scale ≥ T(1 // 100)
-            @test maximum(abs, J - central_differences(slab.int, θ, params)) ≤
-                  sqrt(eps(T)) * scale
+            rng = Xoshiro(SYMBOLIC_SEED + 2)
+            for _ in 1:16
+                θ = 2 .* rand(rng, T, N) .- 1
+                jacobian!(s, θ, (current(slab.solstep), params, slab.int))
+                J = copy(jacobianmatrix(s))
+                scale = maximum(abs, J)
+                differences = central_differences(reference.int, Float64.(θ),
+                    parameters(reference_problem))
+                @test scale ≥ T(1 // 100)
+                @test maximum(abs, J - differences) ≤ sqrt(eps(T)) * scale
+            end
         end
     end
 
@@ -479,17 +622,20 @@ end
     # tolerance is the family's measured one, `symbolic_f_reltol` of the registry entry's model file.
     @testset "A2c the affine control converges in two iterations" begin
         for T in (Float64, Float32)
-            problem = ramp_problem(T)
-            ansatz = SymbolicAnsatz((r[1] + r[2] * t) * x, t, x, r;
-                xspan = (-one(T), one(T)), start = T[1] / 2 .* [one(T), T(3) / 5])
-            method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions())
-            int = GeometricIntegrator(problem, method; f_abstol = zero(T),
-                f_reltol = symbolic_f_reltol(T), max_iterations = 2)
-            result = integrate(int)
-            @test all(result.stats.converged)
-            @test all(result.stats.iterations .<= 2)
-            @test maximum(result.stats.residuals ./ result.stats.initial_residuals) ≤
-                  symbolic_f_reltol(T)
+            scalar = (ramp_problem(T),
+                SymbolicAnsatz((r[1] + r[2] * t) * x, t, x, r;
+                    xspan = (-one(T), one(T)), start = T[1] / 2 .* [one(T), T(3) / 5]))
+            vector = (vector_ramp_problem(T), vector_ramp_ansatz(T))
+            for (problem, ansatz) in (scalar, vector)
+                method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions())
+                int = GeometricIntegrator(problem, method; f_abstol = zero(T),
+                    f_reltol = symbolic_f_reltol(T), max_iterations = 2)
+                result = integrate(int)
+                @test all(result.stats.converged)
+                @test all(result.stats.iterations .<= 2)
+                @test maximum(result.stats.residuals ./ result.stats.initial_residuals) ≤
+                      symbolic_f_reltol(T)
+            end
         end
     end
 
@@ -515,6 +661,9 @@ end
         end
     end
 
+    # The side data of each end, of a scalar and of a two-component field: the run takes the
+    # parameters to the slopes and the field at the two ends to `∓slope`, and a problem whose
+    # data are exchanged takes them to the other end's values.
     @testset "A3b the side data of each end" begin
         for T in (Float64, Float32)
             for (slope, expected) in ((T(0.7), T(0.7)), (T(-0.7), T(-0.7)))
@@ -529,6 +678,82 @@ end
                 grid = result.solution.u[end]
                 @test abs(first(grid) - expected * xspan(problem)[1]) ≤ 1e3 * eps(T)
                 @test abs(last(grid) - expected * xspan(problem)[2]) ≤ 1e3 * eps(T)
+            end
+            for slopes in ((T(0.7), T(-0.3)), (T(-0.7), T(0.3)))
+                problem = vector_steady_problem(T, slopes)
+                ansatz = vector_steady_ansatz(T; start = T[T(0.7), T(0.3)])
+                method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions())
+                int = GeometricIntegrator(problem, method)
+                result = integrate(int)
+                @test all(result.stats.converged)
+                @test maximum(abs.(cache(int).ansatz.params .- collect(slopes))) ≤
+                      1e3 * eps(T)
+                nx = length(xgrid(problem))
+                grid = result.solution.u[end]
+                for d in 1:2
+                    component = grid[((d - 1) * nx + 1):(d * nx)]
+                    @test abs(first(component) - slopes[d] * xspan(problem)[1]) ≤
+                          1e3 * eps(T)
+                    @test abs(last(component) - slopes[d] * xspan(problem)[2]) ≤
+                          1e3 * eps(T)
+                end
+            end
+        end
+    end
+
+    # The multiplier guess of a field that moves: the guess writes the `L²` projection of the
+    # momentum `∂L/∂v` at the top of the slab onto the multiplier basis, and the projection of the
+    # flux `∂L/∂w` at each end onto the boundary basis. The values are the hand-written field's,
+    # with the `1/h` of the velocity, so a guess that reads the field wrong, drops that `1/h` or
+    # writes nothing differs from them.
+    @testset "A3c the multiplier guess of a moving field" begin
+        for T in (Float64, Float32), (problem, ansatz, field) in symbolic_fixtures(T)
+
+            method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions())
+            slab = slab_setup(problem, method)
+            c = cache(slab.int)
+            data = c.coupling
+            np, D = ansatz.num_params, length(ansatz.expr)
+            nλ, nμ = size(data.initial_multiplier, 1), size(data.boundary_basis, 1)
+            h = timestep(problem)
+            M.initial_guess!(current(slab.solstep), nothing, nothing, slab.int)
+            params = c.x[1:np]
+            # the top of the slab: `∂L/∂v` at `t̂ = 1`, in the multiplier basis' `L²` projection
+            xq = c.ansatz.tabulation.space
+            Ωx = Diagonal(xq.weight)
+            Λ = data.multiplier_basis
+            momentum = zeros(T, length(xq.node), D)
+            for r in eachindex(xq.node), d in 1:D
+
+                momentum[r, d] = field(one(T), xq.node[r], params).ut[d] / h
+            end
+            expected_top = ((Λ * Ωx * Λ') \ (Λ * Ωx)) * momentum
+            for d in 1:D, p in 1:nλ
+
+                top = c.x[M.multiplier_index(np, D, nλ, nμ, :top, d, p)]
+                @test abs(top - expected_top[p, d]) ≤
+                      1e3 * eps(T) * max(one(T), abs(expected_top[p, d]))
+            end
+            # the two ends: the flux `∂L/∂w = −c² ∂ₓu` of the wave density at the nodes of the
+            # time rule, in the boundary basis' projection
+            tq = c.ansatz.tabulation.time
+            Ωt = Diagonal(tq.weight)
+            χ = data.boundary_basis
+            c₀ = parameters(problem).c
+            for (edge, end_of_span) in ((:left, xspan(problem)[1]),
+                (:right, xspan(problem)[2]))
+                flux = zeros(T, length(tq.node), D)
+                for q in eachindex(tq.node), d in 1:D
+
+                    flux[q, d] = -c₀^2 * field(tq.node[q], end_of_span, params).ux[d]
+                end
+                expected = ((χ * Ωt * χ') \ (χ * Ωt)) * flux
+                for d in 1:D, p in 1:nμ
+
+                    side = c.x[M.multiplier_index(np, D, nλ, nμ, edge, d, p)]
+                    @test abs(side - expected[p, d]) ≤
+                          1e3 * eps(T) * max(one(T), abs(expected[p, d]))
+                end
             end
         end
     end
@@ -590,8 +815,8 @@ end
         entry = only(family_entries(:symbolic))
         for T in (Float64, Float32)
             problem = symbolic_problem(entry; T = T)
-            ansatz = symbolic_ansatz(entry; T = T)
             method = symbolic_method(entry; T = T)
+            ansatz = M.ansatz(method)
             @test ansatz.num_params == 6
             @test length(ansatz.start) == 6
             @test eltype(ansatz.start) === T
@@ -608,6 +833,23 @@ end
             for n in 1:2
                 exact = exact_field(result.solution.t[n], grid, parameters(problem))
                 @test maximum(abs.(result.solution.u[n] .- exact)) ≤
+                      1e3 * eps(T) * max(one(T), maximum(abs, exact))
+            end
+            # the archive of the run itself, in this element type: the seven keys that the
+            # driver's `store_run!` completes with the entry's `"stem"` (`A5b`).
+            archive = symbolic_run(entry; T = T)
+            @test sort!(collect(keys(archive))) ==
+                  sort!(["kind", "label", "problem_label", "timestep", "t", "x", "u"])
+            @test archive["kind"] == "solution"
+            @test archive["label"] == entry.label
+            @test archive["problem_label"] == "Wave"
+            @test archive["timestep"] == entry.timestep
+            t, x, u = archive["t"], archive["x"], archive["u"]
+            @test eltype(u[1]) === T
+            @test size(u[1]) == (length(t), length(x))
+            for n in eachindex(t)
+                exact = exact_field(t[n], x, parameters(problem))
+                @test maximum(abs.(u[1][n, :] .- exact)) ≤
                       1e3 * eps(T) * max(one(T), maximum(abs, exact))
             end
         end
@@ -657,10 +899,12 @@ end
     # `2.57e-6` in `Float32`, and the bound is `1e3 eps(T)`, a multiple of the element type's own
     # resolution as §V requires: `2.2e-13` in `Float64` and `1.19e-4` in `Float32`.
     @testset "A6 the energy of a symbolic run" begin
-        for T in (Float64, Float32)
-            problem = travelling_problem(T)
-            method = SpaceTimeGalerkin(travelling_ansatz(T),
-                WeakInitialAndBoundaryConditions())
+        for T in (Float64, Float32),
+            fixture in ((travelling_problem, travelling_ansatz), (
+                vector_problem, vector_ansatz))
+
+            problem = fixture[1](T)
+            method = SpaceTimeGalerkin(fixture[2](T), WeakInitialAndBoundaryConditions())
             result = integrate(problem, method; f_abstol = zero(T),
                 f_reltol = T(100) * eps(T))
             errors = energy_error(problem, method, result.traces)

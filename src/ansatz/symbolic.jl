@@ -138,16 +138,6 @@ function check_ansatz(problem::LagrangianPDEProblem{PT}, ansatz::SymbolicAnsatz{
 end
 
 """
-    check_coupling(problem, coupling, ansatz)
-
-Refuse a coupling that a symbolic ansatz cannot take.
-
-A parameter ansatz has no bottom coefficient row, so its interior weak form alone is not the
-gradient of the slab's action; the weak initial-and-boundary coupling adds the four boundary
-terms that complete it. The refusals of the other couplings name the one that is taken.
-"""
-
-"""
     SymbolicSlab{ST, T, A}
 
 The block of a [`SymbolicAnsatz`](@ref) in the slab cache: what the ansatz keeps of one slab.
@@ -159,7 +149,8 @@ and `right` hold the field and its parameter Jacobian at the four boundary sets:
 `t̂ = 1` at the space nodes, and `x = a` and `x = b` at the time nodes. `tabulation` holds the
 tables of the slab's quadrature, and `output` and `trace` evaluate the trace basis' space basis at
 the output grid and at the nodes of the space rule. The remaining fields are the scratch of one
-evaluation, so a residual evaluation of a slab and its Jacobian allocate nothing.
+evaluation: the six evaluators of the ansatz write into them, so a call of `slab_field!`,
+`slab_weak_form!` or `top_values!` allocates nothing.
 """
 struct SymbolicSlab{ST, T, A <: SymbolicAnsatz{T}}
     ansatz::A
@@ -258,6 +249,21 @@ output_evaluation(s::SymbolicSlab) = s.output
 """The evaluation of the trace basis at the nodes of the space quadrature."""
 trace_evaluation(s::SymbolicSlab) = s.trace
 
+# The field and its parameter Jacobian at the space nodes of one horizontal edge of the slab, at
+# the normalised time `t̂`: what the bottom and the top of the slab hold.
+function horizontal_edge!(u::AbstractMatrix{ST}, J::AbstractArray{ST, 3},
+        s::SymbolicSlab{ST}, t̂, nodes) where {ST}
+    for r in eachindex(nodes)
+        evaluate_at!(s, t̂, nodes[r])
+        for d in axes(u, 2), i in axes(J, 3)
+
+            u[r, d] = s.ubuf[d]
+            J[r, d, i] = s.Jubuf[d, i]
+        end
+    end
+    return nothing
+end
+
 """
     slab_field!(u, v, w, slab, x, bottom, nf, h)
 
@@ -296,23 +302,9 @@ function slab_field!(
             end
         end
     end
-    for r in 1:qx
-        evaluate_at!(s, zero(ST), xq.node[r])
-        for d in 1:D
-            s.bottom_u[r, d] = s.ubuf[d]
-            for i in 1:np
-                s.bottom_J[r, d, i] = s.Jubuf[d, i]
-            end
-        end
-    end
-    for r in 1:qx
-        evaluate_at!(s, one(ST), xq.node[r])
-        for d in 1:D
-            s.top_u[r, d] = s.ubuf[d]
-            for i in 1:np
-                s.top_J[r, d, i] = s.Jubuf[d, i]
-            end
-        end
+    for (edge_u, edge_J, t̂) in ((s.bottom_u, s.bottom_J, zero(ST)),
+        (s.top_u, s.top_J, one(ST)))
+        horizontal_edge!(edge_u, edge_J, s, t̂, xq.node)
     end
     for (edge_u, edge_J, end_of_span) in ((s.left_u, s.left_J, xspan(a)[1]),
         (s.right_u, s.right_J, xspan(a)[2]))
