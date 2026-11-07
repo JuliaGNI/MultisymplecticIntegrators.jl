@@ -25,7 +25,7 @@ import GeometricIntegratorsBase: GeometricIntegrator, solutionstep, reset!, inte
                                  cache, current, default_extrapolation, NoExtrapolation
 import GeometricIntegratorsBase: Cache, CacheType, IntegratorCache, check_solver_status,
                                  nlsolution, default_solver, initial_guess!,
-                                 integrate_step!, residual!, solver,
+                                 integrate_step!, residual!, solver, initsolver,
                                  solverstate, copy_internal_variables!, internal
 
 # abstract types
@@ -62,6 +62,9 @@ export TensorBSplineAnsatz, degree, ncells, quadrature,
 # the slab core
 include("core/slab_integrator.jl")
 export SpaceTimeGalerkin, SpaceTimeGalerkinCache, ansatz, coupling, total_free_coefficients
+
+include("ansatz/symbolic.jl")
+export SymbolicAnsatz
 
 # the couplings
 include("couplings/coefficient_restriction.jl")

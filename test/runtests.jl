@@ -22,6 +22,7 @@ if "core" in GROUPS
 end
 
 if "slow" in GROUPS
+    @safetestset "Symbolic ansatz" include("ansatz/symbolic.jl")
     @safetestset "Weak multipliers" include("couplings/weak_multipliers.jl")
     @safetestset "Property: generated problems" include("verification/properties/generator.jl")
     @safetestset "Property: gradient" include("verification/properties/gradient.jl")

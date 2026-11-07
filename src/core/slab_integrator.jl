@@ -9,27 +9,30 @@ The ansatz is a [`SpaceTimeAnsatz`](@ref), the coupling a [`SlabCoupling`](@ref)
 a method in the place of the ansatz or a target in the place of the guess, is refused when the
 method is built.
 
-One step of the integrator solves one slab. The unknown is the coefficient array of the ansatz,
-`(Nt, Nx)` per component. A coupling that fixes the bottom row of the time direction supplies it as
-a datum — the initial condition at the first step and the previous slab's top row after it — and
-the remaining `Nt - 1` rows are determined by the interior weak Euler–Lagrange form of the slab,
-tested against the basis functions that vanish at the top of the slab. The `v` term of that form
-leaves one boundary term at the bottom of the slab, the momentum flux, which the coupling supplies
-as well; the top of the slab is free, so its flux is not imposed but measured, and handed on as the
-next slab's bottom flux.
+One step of the integrator solves one slab. The unknown of a [`TensorBSplineAnsatz`](@ref) is its
+coefficient array, `(Nt, Nx)` per component, and the unknown of a [`SymbolicAnsatz`](@ref) the
+parameter vector of its expression. For the coefficient array, a coupling that fixes the bottom
+row of the time direction supplies it as a datum — the initial condition at the first step and the
+previous slab's top row after it — and the remaining `Nt - 1` rows are determined by the interior
+weak Euler–Lagrange form of the slab, tested against the basis functions that vanish at the top of
+the slab. The `v` term of that form leaves one boundary term at the bottom of the slab, the
+momentum flux, which the coupling supplies as well; the top of the slab is free, so its flux is not
+imposed but measured, and handed on as the next slab's bottom flux.
 
 The unknown count is the coupling's: the free rows of each space function and each component, plus
 the coupling's own unknowns behind them. A [`CoefficientRestriction`](@ref) fixes the bottom row, so
 it leaves `(Nt - 1) * Nx * D` free coefficients; a weak-multiplier coupling imposes the initial
-condition with multipliers of its own, so all `Nt` rows are free and the multipliers follow them. A
-step is a nonlinear system of [`total_free_coefficients`](@ref)`(method, problem)` equations, which
-the ecosystem's Newton solver solves. With `linear_solver = true`, for an ansatz linear in its
-coefficients and a linear density, the system is affine with the same Jacobian on every slab: the
-first step factorises it once, and every step solves with that factorisation directly and then
-takes one step of iterative refinement with it, two solves in all. The iterate count, the residual,
-the initial residual and the convergence of every step are recorded in the cache, and the trace
-`(u, v, w)` at the top of the slab, at the nodes of the space quadrature, is kept for the
-diagnostics.
+condition with multipliers of its own, so all `Nt` rows are free and the multipliers follow them.
+A symbolic ansatz has no rows: its parameters are its free unknowns, and
+[`WeakInitialAndBoundaryConditions`](@ref), the one coupling it takes, puts its multipliers after
+them. A step is a nonlinear system of [`total_free_coefficients`](@ref)`(method, problem)`
+equations, which the ecosystem's Newton solver solves, with a pivoted QR as its linear solve for a
+symbolic ansatz. With `linear_solver = true`, for an ansatz linear in its coefficients and a linear
+density, the system is affine with the same Jacobian on every slab: the first step factorises it
+once, and every step solves with that factorisation directly and then takes one step of iterative
+refinement with it, two solves in all. The iterate count, the residual, the initial residual and
+the convergence of every step are recorded in the cache, and the trace `(u, v, w)` at the top of
+the slab, at the nodes of the space quadrature, is kept for the diagnostics.
 
 The roles of the ansatz, the coupling and the guess, and the functions through which the core
 reaches each of them, are on the page *The slab seam* of the manual.

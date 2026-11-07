@@ -408,6 +408,50 @@ makes it worth keeping.
   `VectorWave` as well as `Wave`, closing K19. `integrate` delegates its step loop to
   `integrate_steps!`, where the solution, solution step, trace vector, integrator and cache have
   concrete types, closing K30.
+- **The symbolic family returns: a `SymbolicAnsatz` whose field is a closed-form expression.**
+  `SymbolicAnsatz(expr, t, x, p; xspan, start, degree = 1, ncells = (2, 2), n = nothing)`
+  is a `SpaceTimeAnsatz` of one slab in the normalised time `t̂ ∈ [0, 1]`, whose unknowns are the
+  parameters of the expression and not a coefficient array: `expr` is a `Num` or a `Vector{Num}` of
+  `D` entries, `t` and `x` are its coordinates, `p` its parameter symbols, and `start` the initial
+  guess of the parameter vector on the first slab. The constructor builds six in-place functions
+  with `Symbolics.build_function(…; expression = Val(false))` — the field, its derivatives `∂u/∂t̂`
+  and `∂u/∂x`, and the parameter Jacobian of each — and holds them in concrete fields, so a step
+  contains no `Vector{Any}` and runs no `eval` of generated code: each of the six functions
+  compiles once, at its first call. It refuses, each with an
+  `ArgumentError` that names the offending value, an expression with a free symbol other than `t`,
+  `x` and the entries of `p`, an empty parameter vector, a `start` of another length than `p`, a
+  non-increasing `xspan`, and, at the construction of the integrator, an expression count that is
+  not the problem's `D`, another element type than the problem's and another `xspan`. The ansatz
+  holds a `TensorBSplineAnsatz` named `trace`, whose tensor Gauss rule is the slab's quadrature and
+  whose space basis is always `Free()` and carries the multiplier tables; the trace basis does not
+  constrain the field. The residual is the discrete action's gradient in the solver's layout: the
+  interior form is `h Σ ωt ωx (∂u·J_u + ∂v·J_v + ∂w·J_w)` over the parameter rows, and the coupling
+  adds the four boundary loads to those same rows and writes its constraint blocks after them.
+  `WeakInitialAndBoundaryConditions` is the coupling the ansatz takes; `WeakInitialCondition` and
+  `CoefficientRestriction` are refused, naming that coupling, because a parameter ansatz has no
+  bottom coefficient row and a field free at both ends is not constrained by the initial condition
+  alone. `SpaceTimeGalerkin` solves a symbolic step with `SimpleSolvers.LapackPivotedQR` and keeps
+  the ecosystem's LU for every other ansatz: the coupling's Jacobian is a saddle point whose
+  constraint rows depend only on the field, so its rank is at most twice the parameter count and a
+  rank-deficient factorisation leaves the parameters determined while only the multipliers are
+  not, so the `top_multiplier` that the integrator stores in each step's internal state carries
+  no meaning on its own. `Continuation` carries the solved parameters from slab to slab, and
+  `space_quadrature_weights(::SymbolicAnsatz)` and `energy_error(problem, ::SymbolicAnsatz,
+  traces)` give the diagnostics that a spline run reports. `scripts/symbolic_model.jl` registers
+  the `:symbolic` family with the standing wave of `Wave`, converted to the slab's normalised time
+  by `t = timestep · t̂` and integrated at the wave's period, 4, on a trace basis of degree 2 and
+  four cells per direction. The ansatz can represent the exact solution, but the discrete solve has
+  a phase error, so the entry does not return the exact parameters. Starting at `[0.8, 0.8, 0, 0, 1, 0.5]`, it returns
+  `[0.7997258, 0.8005483, 0, 0, 1, 0.5]`. The sum `A₁ + B₁/2`, which is all the field shows at a
+  whole period, is exact, and the split between the cosine and the sine amplitude is off by
+  `5.5e-4`. In `Float32` both steps stagnate and report `converged = false`.
+  `test/ansatz/symbolic.jl` checks the field map and its parameter Jacobians against hand-written
+  derivatives, the residual against `SymbolicActionOracle` — the independent discrete action of
+  `test/helpers/action_oracle.jl`, differentiated with ForwardDiff — the solver's Jacobian against
+  central differences, the affine control's two-iteration solve, the closed form of the travelling
+  wave over five slabs, from the exact parameters and from two starts off them, the two-component
+  field of `VectorWave`, the side data of each end, and the registry entry's solved parameters in
+  both precisions, its run and its archive.
 
 ### Changed
 
