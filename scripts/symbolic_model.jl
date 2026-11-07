@@ -24,8 +24,8 @@ const SYMBOLIC = (
     symbolic_f_reltol(::Type{T})
 
 The relative tolerance the symbolic family's steps are solved to, measured on the family's affine
-control: the residual of a converged step is at most `1e-12` of its initial residual in `Float64`
-and `1e-6` of it in `Float32`.
+control: its two steps reach `2.6e-16` and `1.6e-16` of their initial residual in `Float64` and
+`6.1e-8` and `6.9e-8` of it in `Float32`. `1e-12` and `1e-6` sit above both.
 """
 symbolic_f_reltol(::Type{Float64}) = 1e-12
 symbolic_f_reltol(::Type{Float32}) = 1.0f-6
@@ -66,6 +66,7 @@ function symbolic_ansatz(entry; T::Type = Float64)
 end
 
 """
+    symbolic_problem(entry)
     symbolic_problem(entry; T = Float64)
 
 The wave problem of a registry entry: its time span, which is two of its periods, its time step and
@@ -78,6 +79,7 @@ function symbolic_problem(entry; T::Type = Float64)
 end
 
 """
+    symbolic_method(entry)
     symbolic_method(entry; T = Float64)
 
 The method of a registry entry: its ansatz under the coupling a symbolic ansatz takes.
