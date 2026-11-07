@@ -335,8 +335,8 @@ end
         @test ansatz.start == [1.0, 1.0, 2π]
         @test ansatz.trace isa TensorBSplineAnsatz
         @test ansatz.trace.xspan == ansatz.xspan
-        for f in (ansatz.u, ansatz.ut, ansatz.ux, ansatz.Ju, ansatz.Jut, ansatz.Jux)
-            @test isconcretetype(typeof(f))
+        for name in (:u, :ut, :ux, :Ju, :Jut, :Jux)
+            @test isconcretetype(fieldtype(typeof(ansatz), name))
         end
         # the constructor stores its two coordinates and its span as given
         @test isequal(ansatz.t, t)
@@ -704,8 +704,8 @@ end
     # The multiplier guess of a field that moves: the guess writes the `L²` projection of the
     # momentum `∂L/∂v` at the top of the slab onto the multiplier basis, and the projection of the
     # flux `∂L/∂w` at each end onto the boundary basis. The values are the hand-written field's,
-    # with the `1/h` of the velocity, so a guess that reads the field wrong, drops that `1/h` or
-    # writes nothing differs from them.
+    # with the `1/h` of the velocity, so a guess that reads the field wrong, drops the top
+    # momentum's `1/h` or writes nothing differs from them.
     @testset "A3c the multiplier guess of a moving field" begin
         for T in (Float64, Float32), (problem, ansatz, field) in symbolic_fixtures(T)
 
