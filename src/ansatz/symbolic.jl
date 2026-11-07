@@ -148,9 +148,10 @@ quadrature, and `Ju`, `Jv` and `Jw` the parameter Jacobian of each there. `botto
 and `right` hold the field and its parameter Jacobian at the four boundary sets: `t̂ = 0` and
 `t̂ = 1` at the space nodes, and `x = a` and `x = b` at the time nodes. `tabulation` holds the
 tables of the slab's quadrature, and `output` and `trace` evaluate the trace basis' space basis at
-the output grid and at the nodes of the space rule. The remaining fields are the scratch of one
-evaluation: the six evaluators of the ansatz write into them, so a call of `slab_field!`,
-`slab_weak_form!` or `top_values!` allocates nothing.
+the output grid and at the nodes of the space rule. The six evaluators of the ansatz write into
+the scratch buffers `ubuf` to `Juxbuf`, so a call of `slab_field!`, `slab_weak_form!` or
+`top_values!` allocates nothing; `lambda_bottom`, `lambda_top`, `mu_left` and `mu_right` hold the
+multipliers' values at the nodes of the rule.
 """
 struct SymbolicSlab{ST, T, A <: SymbolicAnsatz{T}}
     ansatz::A
@@ -404,12 +405,13 @@ The symbolic family solves its slab with a rank-revealing linear solve.
 
 The multiplier coupling's Jacobian is a saddle point whose constraint rows depend only on the
 field, so its rank is at most twice the parameter count: on a trace basis of degree one and two
-cells the first slab's `10 × 10` matrix has rank 6, and its three smallest singular values are at
+cells the first slab's `10 × 10` matrix has rank 6, and its four smallest singular values are at
 round-off. The minimum-norm step of a complete orthogonal factorization solves a consistent system
 exactly and drops the directions the rank does not carry, where a factorisation without rank
-detection loses the descent direction: on the closed-form run the ecosystem's LU stalls at the
-fourth slab, with a residual of `0.56` after 19 iterations, and the pivoted QR takes two iterations
-at every slab. Every other ansatz keeps the ecosystem's default.
+detection loses the descent direction: with the ecosystem's LU the closed-form run takes three to
+29 iterations per slab and reaches the tolerance on its first slab alone in `Float64`, where the
+pivoted QR converges in two iterations at every slab in both precisions. Every other ansatz keeps
+the ecosystem's default.
 """
 function initsolver(solvermethod::Newton,
         method::SpaceTimeGalerkin{<:SymbolicAnsatz}, caches::CacheDict; kwargs...)
