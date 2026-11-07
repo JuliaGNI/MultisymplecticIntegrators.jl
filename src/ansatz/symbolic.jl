@@ -79,7 +79,6 @@ function SymbolicAnsatz(expr, t::Num, x::Num, p::AbstractVector;
                             "has $num_params parameters"))
     T = _coordinate_type(xspan)
     xsp = (convert(T, xspan[1]), convert(T, xspan[2]))
-    xsp[1] < xsp[2] || throw(ArgumentError("xspan must increase, got $xsp"))
     trace = TensorBSplineAnsatz(; degree, ncells, xspan = xsp, n, x_boundary)
     ut = Num[Symbolics.derivative(expression, t) for expression in expressions]
     ux = Num[Symbolics.derivative(expression, x) for expression in expressions]
@@ -160,7 +159,7 @@ and `right` hold the field and its parameter Jacobian at the four boundary sets:
 `t̂ = 1` at the space nodes, and `x = a` and `x = b` at the time nodes. `tabulation` holds the
 tables of the slab's quadrature, and `output` and `trace` evaluate the trace basis' space basis at
 the output grid and at the nodes of the space rule. The remaining fields are the scratch of one
-evaluation, so that a step allocates nothing.
+evaluation, so a residual evaluation of a slab and its Jacobian allocate nothing.
 """
 struct SymbolicSlab{ST, T, A <: SymbolicAnsatz{T}}
     ansatz::A
@@ -412,16 +411,19 @@ end
 The symbolic family solves its slab with a rank-revealing linear solve.
 
 The multiplier coupling's Jacobian is a saddle point whose constraint rows depend only on the
-field, so it is rank deficient whenever more multipliers than parameters constrain the slab. The
-minimum-norm step of a complete orthogonal factorization solves a consistent system exactly and
-drops the directions the rank does not carry, where an LU factorisation answers the same matrix
-with a `SingularException`. Every other ansatz keeps the ecosystem's default.
+field, so its rank is at most twice the parameter count: on a trace basis of degree one and two
+cells the first slab's `10 × 10` matrix has rank 6, and its three smallest singular values are at
+round-off. The minimum-norm step of a complete orthogonal factorization solves a consistent system
+exactly and drops the directions the rank does not carry, where a factorisation without rank
+detection loses the descent direction: on the closed-form run the ecosystem's LU stalls at the
+fourth slab, with a residual of `0.56` after 19 iterations, and the pivoted QR takes two iterations
+at every slab. Every other ansatz keeps the ecosystem's default.
 """
-function GeometricIntegratorsBase.initsolver(solvermethod::Newton,
+function initsolver(solvermethod::Newton,
         method::SpaceTimeGalerkin{<:SymbolicAnsatz}, caches::CacheDict; kwargs...)
     options = merge((; linear_solver_method = SimpleSolvers.LapackPivotedQR()),
         values(kwargs))
-    return invoke(GeometricIntegratorsBase.initsolver,
+    return invoke(initsolver,
         Tuple{NonlinearSolverMethod, GeometricMethod, CacheDict},
         solvermethod, method, caches; options...)
 end

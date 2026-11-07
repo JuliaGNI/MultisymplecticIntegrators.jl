@@ -39,8 +39,8 @@ end
 The six-parameter standing wave of `Wave`, converted from physical time to the slab's normalised
 time by `t = timestep · t̂`, with the symbols it is written in.
 
-The parameters are `[A₁, B₁, A₂, B₂, l, c]`: the amplitudes and the phase of the two harmonics, the
-length of the interval and the wave speed.
+The parameters are `[A₁, B₁, A₂, B₂, l, c]`: the cosine and sine amplitudes of the two harmonics,
+the length of the interval and the wave speed.
 """
 function symbolic_expression(entry; T::Type = Float64)
     @variables t τ x p[1:6]
