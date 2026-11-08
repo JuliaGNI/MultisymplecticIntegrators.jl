@@ -19,7 +19,7 @@ the hidden weights `(S, 2)`, the hidden biases `(S,)` and the output weights `(S
 
 `mode` fixes which parameters the solver determines: `:all` frees every one of them, and
 `:last_layer` frees the output weights alone and leaves the hidden layer where the initial guess put
-it, so that the step is affine in its unknowns and one Newton step reaches its tolerance. The
+it, so that the step is affine in its unknowns and two Newton iterations reach its tolerance. The
 parameters live in the ansatz's block in the slab cache and never in the ansatz, so two integrators
 that share one ansatz object give identical results.
 

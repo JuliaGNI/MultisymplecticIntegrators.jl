@@ -562,8 +562,9 @@ end
 
 # ---- the network ansatz ----------------------------------------------------
 #
-# The oracle of a network slab reads the field from the ansatz's own generated functions, which take
-# one point `[t̂, x]` and the flat parameter vector, and differentiates its action with ForwardDiff.
+# The oracle of a network slab writes the field out from the network's own definition — one point
+# `[t̂, x]` and the flat parameter vector — rather than reading the ansatz's generated functions,
+# and differentiates its action with ForwardDiff.
 # The interior action is read on the ansatz's own rule and the four surface terms on the trace
 # basis' rules, whose multiplier functions and weights the coupling's tables are built on.
 
