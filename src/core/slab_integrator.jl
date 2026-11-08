@@ -33,13 +33,14 @@ solves, with a pivoted QR as its linear solve for a symbolic or a network ansatz
 linear solve replaces Newton's iterations: the step's equations are the slab's rows — a network's
 interior weak form beside the coupling's initial and boundary rows — with the Jacobian of the whole
 system, and a solution is read from zero and then refined once with the same factorisation, two
-solves in all and no iterate. The factorisation is the solver's own linear method, taken once per
-run: the Jacobian of such a step is a saddle point whose constraint rows reach only the free output
-weights of a `:last_layer` network, so the pivoted QR of a network solves it by its minimum-norm
-step, where a factorisation without rank detection raises on a zero pivot. The iterate count, the
-residual, the initial residual and the convergence of every step are recorded in the cache, and the
-trace `(u, v, w)` at the top of the slab, at the nodes of the space quadrature, is kept for the
-diagnostics.
+solves in all and no iterate. The factorisation is the solver's own linear method — the
+`linear_solver_method` of its configuration, which is `SimpleSolvers.LapackPivotedQR` for a network —
+taken once per run: the Jacobian of such a step is a saddle point whose constraint rows reach only
+the free output weights of a `:last_layer` network, so the pivoted QR of a network solves it by its
+minimum-norm step, where a factorisation without rank detection raises on a zero pivot. The iterate
+count, the residual, the initial residual and the convergence of every step are recorded in the
+cache, and the trace `(u, v, w)` at the top of the slab, at the nodes of the space quadrature, is
+kept for the diagnostics.
 
 The roles of the ansatz, the coupling and the guess, and the functions through which the core
 reaches each of them, are on the page *The slab seam* of the manual.
@@ -113,8 +114,8 @@ function check_method(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin)
     a = ansatz(method)
     if method.linear_solver
         if a isa NetworkAnsatz && a.mode !== :last_layer
-            throw(ArgumentError("linear_solver = true needs an ansatz whose step is affine in " *
-                                "its unknowns; NetworkAnsatz in :$(a.mode) mode is not"))
+            throw(ArgumentError("linear_solver = true needs an ansatz whose step is affine in its unknowns; " *
+                                "NetworkAnsatz in :$(a.mode) mode is not"))
         end
         (is_linear_in_coefficients(a) || (a isa NetworkAnsatz && a.mode === :last_layer)) ||
             throw(ArgumentError("linear_solver = true needs an ansatz that is linear in its " *

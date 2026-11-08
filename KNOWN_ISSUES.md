@@ -194,3 +194,35 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   its signature.
 - kind: defect
 - found: #44
+
+### K44 · The `WAVE_ELM_LSGD` sounding is an unconverged iterate of another architecture.
+
+- location: `test/helpers/reference_values.jl:61`, `src/initial_guess/trained_hidden_layer.jl`
+- evidence: the entry is the old stack's `LSGD` branch on `Wave` at `h = 0.05` over five steps, a
+  network of two hidden layers of twenty units whose field's derivative came from `Zygote`, and its
+  own record is `iterations = [4, 6, 7, 4, 4]` at `residual = [3.46e-6, 2.25e-4, 2.13e-3, 2.69e-2,
+  6.22e-1]`, with `energy_error` rising to `2.74e14`. This tree's counterpart is the `:last_layer`
+  network at `S = 20` fitted by `TrainedHiddenLayer(epochs = 100, learning_rate = 1e-5)` from the
+  seed 1234, `degree = 3` and `ncells = (10, 10)`, the old constructor's cells: it takes
+  `iterations = [3, 3, 3, 3, 5]` at `residual = [9.61e-5, 8.91e-5, 1.55e-4, 2.21e-4, 3.87e-4]`,
+  each from an initial residual of `[7.72, 6.92, 8.65, 10.43, 12.42]`, and `converged = false` at
+  every step under the default `f_reltol = √eps(Float64)`. Its sup-norm deviation from the entry's
+  `u` is `1.79e6`, measured in `Float64` in a cold process on `arm64-apple-darwin27.0.0`
+  (`apple-m4`) at Julia 1.13.3, four BLAS threads and `--check-bounds=auto`. The record is that run
+  and not a reference: the two are unconverged iterates of two architectures, one with two hidden
+  layers and one with one.
+- kind: defect
+- found: 2026-11-08
+
+### K45 · The `SINE_GORDON_ELM_LSGD` sounding is an unconverged iterate of another architecture.
+
+- location: `test/helpers/reference_values.jl:71`, `src/initial_guess/trained_hidden_layer.jl`
+- evidence: the entry is the same `LSGD` branch on `SineGordon` over three steps at `h = 0.05`, and
+  its own record is `iterations = [13, 3, 27]` at `residual = [1.56e-7, 2.17e-2, 5.56e-3]`, with
+  `energy_error` rising to `4.89e6`. This tree's counterpart, the same `:last_layer` method of K44
+  on the same cells, takes `iterations = [4, 6, 4]` at `residual = [1.23e-5, 1.22e-5, 1.66e-5]`,
+  each from an initial residual of `[4.31, 4.46, 4.37]`, and `converged = false` at every step. Its
+  sup-norm deviation from the entry's `u` is `151.3`, on the machine and with the settings of K44.
+  As for K44 the record is that run and not a reference.
+- kind: defect
+- found: 2026-11-08

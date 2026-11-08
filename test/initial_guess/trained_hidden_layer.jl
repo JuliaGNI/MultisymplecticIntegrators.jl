@@ -117,12 +117,24 @@ function trained_slab(problem, method)
     return int
 end
 
-"""The interior sample the fit reads, of size `(Qt, Qx, D)`, rebuilt from the fit's own workspace."""
+"""
+The interior sample the fit reads, of size `(Qt, Qx, D)`, rebuilt from the fit's own workspace in
+the order the workspace lays its points out: the space index runs fastest inside a time row.
+"""
 function interior_sample(f, block)
     qt = length(block.tabulation.time.node)
     qx = length(block.tabulation.space.node)
     D = size(f.target, 2)
-    return copy(reshape(view(f.target, 1:(qt * qx), :), qt, qx, D))
+    sample = similar(f.target, qt, qx, D)
+    k = 0
+    for q in 1:qt, r in 1:qx
+
+        k += 1
+        for d in 1:D
+            sample[q, r, d] = f.target[k, d]
+        end
+    end
+    return sample
 end
 
 """The misfit of a fitted parameter vector on the fit's own sample, `Σ_k ω_k (u_k − f_k)²`, read
@@ -326,6 +338,30 @@ end
         assert_no_upcast(c.x, T)
         assert_no_upcast(result.solution.u, T)
         @test length(result.traces) == 2
+    end
+
+    # The layout of the output layer: the component index runs fastest inside a hidden unit, which
+    # is the order `NeuralNetworkParameters` reads. A target whose second component vanishes leaves
+    # the second component of the fitted field exactly zero, because the least-squares solution of a
+    # zero right-hand side is zero; a fit that wrote the output weights unit-major would fill the
+    # second component from the first one's weights.
+    @testset "E1f the output layer is written in the parameter order" for T in (Float64,)
+        problem = vector_wave_problem(T; β = 0.0, timespan = (zero(T), T(0.05)))
+        target = (t, x, p) -> (sin(2 * T(π) * x) * cos(T(π) * t), zero(T))
+        int = trained_slab(problem,
+            trained_method(T; S = FIT_S, D = 2,
+                guess = FitTo(TargetFunction(target);
+                    method = TrainedHiddenLayer(epochs = 0))))
+        c = cache(int)
+        f = c.ansatz.train
+        first, second = zero(T), zero(T)
+        for k in axes(f.points, 2)
+            M.evaluate_at!(c.ansatz, f.points[1, k], f.points[2, k])
+            first = max(first, abs(c.ansatz.values[1]))
+            second = max(second, abs(c.ansatz.values[2]))
+        end
+        @test first > zero(T)
+        @test iszero(second)
     end
 
     # A method object carries no fit state: two integrators that share one give bit-identical runs,

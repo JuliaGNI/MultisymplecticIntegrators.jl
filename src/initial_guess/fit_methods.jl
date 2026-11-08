@@ -67,10 +67,10 @@ weights and the hidden biases, and then reads the output weights by least square
 features that step left.
 
 The misfit the step descends is the field's distance from the sample of the slab, weighted as the
-slab's own measure weights it: the ansatz's interior rule by `h ωₜ ωₓ`, the two surfaces at the
-space rule by `ωₓ`, and the two surfaces at the time rule by `h ωₜ`. The features the solve reads
-are the hidden layer's activations at those same points, so the four surfaces carry the initial and
-boundary data into the fit.
+slab's own measure weights it on the normalised time: the ansatz's interior rule by `ωₜ ωₓ`, the two
+surfaces at the space rule by `ωₓ`, and the two surfaces at the time rule by `ωₜ`. The features the
+solve reads are the hidden layer's activations at those same points, so the four surfaces carry the
+initial and boundary data into the fit.
 
 `epochs = 0` fits the output layer alone on the hidden layer the `rng` draws; a larger `epochs`
 descends first. The draw is taken from `rng` and never from the process's global generator, and the

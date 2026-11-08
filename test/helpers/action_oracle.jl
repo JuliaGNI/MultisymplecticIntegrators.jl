@@ -625,8 +625,7 @@ function NetworkActionOracle(problem, method; block = nothing)
     M = MultisymplecticIntegrators
     M.nfree(a) == M.nparameters(a) || block !== nothing ||
         throw(ArgumentError(
-            "the action oracle of a :last_layer network needs the block that holds its fixed " *
-            "parameters"))
+            "the action oracle of a :last_layer network needs the block that holds its fixed parameters"))
     own = SimpleSplines.quadratures(M.quadrature(a))
     tr = M.trace_basis(a)
     trace = SimpleSplines.quadratures(M.quadrature(tr))

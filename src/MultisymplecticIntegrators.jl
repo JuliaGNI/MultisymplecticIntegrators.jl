@@ -76,10 +76,11 @@ include("initial_guess/fit_methods.jl")
 include("initial_guess/guess.jl")
 include("initial_guess/orthogonal_greedy.jl")
 include("initial_guess/trained_hidden_layer.jl")
+export TrainedHiddenLayer
 
 # the network ansatz, which the coupling's carrier and the guess hooks extend
 include("ansatz/network.jl")
-export NetworkAnsatz, trace_basis, OrthogonalGreedy, TrainedHiddenLayer
+export NetworkAnsatz, trace_basis, OrthogonalGreedy
 
 # the couplings
 include("couplings/coefficient_restriction.jl")

@@ -10,17 +10,18 @@
 
 The workspace of a [`TrainedHiddenLayer`](@ref) fit in the block of a network ansatz.
 
-`initial` is the hidden layer the method's generator drew, which is what the buffers were built
-for: a fit whose method, sizes or draw differ from these builds them again, so that two methods of
-one size on one block give the two fits that fresh blocks give. `face_target` is the target at the
-four surfaces of the slab, which the guess fills beside the interior one. The remaining fields are
-the sample the fit is taken on and the buffers of its two steps: `points` holds the normalised time
-and the space coordinate of every point of the sample, `measure` the weight the slab's measure gives
-that point, and `target` and `values` the target and the field there, one row per point and one
-column per component. `features` holds the hidden layer's activations at the points, weighted by the
-square root of `measure`, and `rhs` the target weighted the same way; `features \\ rhs` is the
-least-squares problem whose solution is the output layer. `gradient` is the misfit's derivative with
-respect to the hidden parameters, and `misfit` the misfit of the fitted field.
+`initial` is the hidden layer the method's generator drew — `Xoshiro(1234)` unless the method names
+another — which is what the buffers were built for: a fit whose method, sizes or draw differ from
+these builds them again, so that two methods of one size on one block give the two fits that fresh
+blocks give. `face_target` is the target at the four surfaces of the slab, which the guess fills
+beside the interior one. The remaining fields are the sample the fit is taken on and the buffers of
+its two steps: `points` holds the normalised time and the space coordinate of every point of the
+sample, `measure` the weight the slab's measure gives that point, and `target` and `values` the
+target and the field there, one row per point and one column per component. `features` holds the
+hidden layer's activations at the points, weighted by the square root of `measure`, and `rhs` the
+target weighted the same way; `features \\ rhs` is the least-squares problem whose solution is the
+output layer. `gradient` is the misfit's derivative with respect to the hidden parameters, and
+`misfit` the misfit of the fitted field.
 
 The buffers are of the problem's element type, and the method holds no state of the fit.
 """
@@ -199,8 +200,8 @@ layer from the method's generator, read the output weights of that draw by least
 once per epoch, take one gradient-descent step on the hidden parameters and read the output weights
 again. `epochs = 0` leaves the drawn hidden layer in place and fits the output layer alone.
 
-The parameters are written into `w` in the order `L1.W`, `L1.b`, `L2.W`; `w`'s hidden part is the
-draw's, whatever it held before.
+The parameters are written into `w` in the order `L1.W`, `L1.b`, `L2.W`; `w`'s hidden part — the
+entries before `first_free`, which the mode does not free — is the draw's, whatever it held before.
 """
 function fit_trained!(f::TrainedFit{ST}, method::TrainedHiddenLayer, w::AbstractVector{ST},
         ansatz, sample::AbstractArray{ST, 3}, s) where {ST}
