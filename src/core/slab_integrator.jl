@@ -637,7 +637,7 @@ function integrate_step!(sol, history, params,
         lu_fac = c.linear_lu
         if lu_fac === nothing
             jacobian!(s, c.linear_zero, (sol, params, int))
-            lu_fac = SimpleSolvers.linearsolver(s)
+            lu_fac = linearsolver(s)
             factorize!(lu_fac, jacobianmatrix(s))
             c.linear_lu = lu_fac
             c.factorisations += 1

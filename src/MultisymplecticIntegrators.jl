@@ -8,7 +8,7 @@ using LinearAlgebra: Diagonal, I, UpperTriangular, axpy!, dot, ldiv!, mul!, norm
 using SimpleSplines
 using SimpleSolvers
 using SparseArrays
-using Random: AbstractRNG, Xoshiro, rand
+using Random: AbstractRNG, Xoshiro
 using Symbolics
 
 import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrature,
@@ -16,7 +16,7 @@ import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrat
                       basis_values, degree, nbasis, ncells, quadrature_nodes,
                       quadrature_weights, l2_projection!, nodes as spline_nodes
 import SimpleSolvers: initial_residual, method, solve_with_status!, NonlinearSolverException
-import SimpleSolvers: config, jacobian!, jacobianmatrix
+import SimpleSolvers: config, jacobian!, jacobianmatrix, linearsolver
 import AbstractNeuralNetworks: Chain, Dense, NeuralNetwork, layers, params
 import NeuralNetworkParameters: flatten, unflatten, unflatten!
 import SymbolicNeuralNetworks: SymbolicNeuralNetwork, Jacobian, derivative,
