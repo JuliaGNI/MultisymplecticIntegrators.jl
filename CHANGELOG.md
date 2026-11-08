@@ -478,7 +478,8 @@ makes it worth keeping.
   `√eps(T)` of its scale, in both precisions. The two `NN_PDE_Integrator` modes at `S = 10` reach no
   tolerance and their per-step stats are recorded; the affine control at `S = 20` converges in two
   iterations to a fraction of its initial residual that each precision's own relative tolerance
-  records. The runs are recorded as K38–K40 rather than asserted against a tolerance (U13, U24).
+  records. The runs are recorded as K38–K40 and K42 rather than asserted against a tolerance
+  (U13, U24).
 - **The cache of another element type inherits the ansatz's fixed parameters.**
   `copy_ansatz_data!` copies what an ansatz keeps outside the solver's vector — the parameters it
   holds fixed — from the cache of the problem's element type into the one the solver evaluates at,

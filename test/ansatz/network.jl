@@ -22,29 +22,34 @@ const M = MultisymplecticIntegrators
 The largest deviation of a network run from its §A entry, in the sup norm over the output grid, with
 the value this tree measures beside it.
 
-`WAVE_NN_FULLY`: `0.7553` over the five steps, in `Float64` — the entry is the run of the old
-integrator, and this bound holds the run of this one. `WAVE_NN_PARTIALLY`: `580.6` in `Float64` and
-`580.5` in `Float32`, and the bound of `600` records that run: the entry is a diverged iterate, its
-own `u` reaching `581.76` where this run's stays under `0.7`, so the deviation records the entry and
-not the accuracy of this run. `WAVE_NN_SYMBOLIC_FULLY`: the same run of the field as `WAVE_NN_FULLY`,
-written by the symbolic integrator of the old stack. `SINE_GORDON_NN_FULLY`: `0.046`, against a
-bound of `0.1`.
+`WAVE_NN_FULLY`: `0.7587` over the five steps in `Float64` and `12.04` in `Float32`, against a bound
+of `13` — the bound is the `Float32` arm's, whose steps reach a residual of `1.8` and do not
+converge, where the `Float64` arm stops at `0.43`. `WAVE_NN_PARTIALLY`: `579.2` in `Float64` and
+`580.4` in `Float32`, and the bound of `600` records that run: the entry is a diverged iterate, its
+own `u` reaching `581.76`, so the deviation records the entry and not the accuracy of this run.
+`WAVE_NN_SYMBOLIC_FULLY`: the old symbolic integrator's run of the same §A case, whose own `u`
+differs from `WAVE_NN_FULLY`'s by up to `0.7615`, so the two are separate records; this tree's
+`:all` arm deviates from it by `0.437` in `Float64` and `12.04` in `Float32`, against the same bound
+of `13`. `SINE_GORDON_NN_FULLY`: `0.0204` in `Float64` and `0.0408` in `Float32`, against a bound of
+`0.05`.
 
 Neither entry can be reproduced bit for bit: they were made before the two defects the network
 family fixes — the bottom points read in the normalized coordinate (`xspan` is `(0, 1)`, so there
 they coincide, and this bound is the fit's alone) and the duplicate atom of the old dictionary,
 which cost the greedy a whole selection.
 """
-const NETWORK_SUP_BOUND = (WAVE_NN_FULLY = 0.0, WAVE_NN_PARTIALLY = 0.0,
-    WAVE_NN_SYMBOLIC_FULLY = 0.0, SINE_GORDON_NN_FULLY = 0.0)
+const NETWORK_SUP_BOUND = (WAVE_NN_FULLY = 13.0, WAVE_NN_PARTIALLY = 600.0,
+    WAVE_NN_SYMBOLIC_FULLY = 13.0, SINE_GORDON_NN_FULLY = 0.05)
 
 """
 The largest deviation of `N1`'s record arms — the same §A case with the initial condition as the guess
 of the first slab instead of the exact solution — from the same entries, with the value this tree
 measures beside it. The guess is a different target, so the fit seeds a different network and the
-deviation from the entry is not the one `NETWORK_SUP_BOUND` records.
+deviation from the entry is not the one `NETWORK_SUP_BOUND` records: `WAVE_NN_FULLY` is `0.831` in
+`Float64` and `1.211` in `Float32`, against a bound of `1.5`, and `WAVE_NN_PARTIALLY` is `580.6` in
+`Float64` and `580.5` in `Float32`, against a bound of `600`.
 """
-const NETWORK_ICS_SUP_BOUND = (WAVE_NN_FULLY = 0.0, WAVE_NN_PARTIALLY = 0.0)
+const NETWORK_ICS_SUP_BOUND = (WAVE_NN_FULLY = 1.5, WAVE_NN_PARTIALLY = 600.0)
 
 """The steps of the §A case."""
 const NETWORK_STEPS = 5
@@ -58,7 +63,7 @@ const NETWORK_CONTROL_S = 20
 """
 The relative tolerance of the network family's steps, measured on the affine control of `:last_layer`
 at `S = 20`: the largest of its five step ratios `residual / initial residual` is `8.3e-6` in
-`Float64` and `6.7e-4` in `Float32`, against the bounds this tree allows.
+`Float64` and `2.0e-3` in `Float32`, against the bounds this tree allows.
 
 The control's steps are affine in its unknowns — the coupling's constraint rows reach the free
 output weights alone and the hidden layer, which the fit fixed, enters the residual as data — so two
@@ -258,6 +263,13 @@ end
         after = (ansatz.mode, ansatz.S, ansatz.D, ansatz.np, ansatz.nfree,
             ansatz.first_free, ansatz.xspan, ansatz.chain)
         @test all(before[k] === after[k] for k in eachindex(before))
+        # one method object, two integrators: each keeps its parameters in its own block, so a write
+        # into one is not seen by the other
+        first_block = cache(first_int).ansatz
+        second_block = cache(second_int).ansatz
+        kept = copy(second_block.params)
+        first_block.params .+= one(T)
+        @test second_block.params == kept
     end
 
     @testset "N5 the element type is the problem's" for T in (Float64, Float32)
@@ -373,7 +385,7 @@ end
         tnodes, xnodes = M.quadrature_points(c.ansatz)
         xt, _ = gauss_rule(T, xspan[1], xspan[2], 5,
             M.quadrature_order_of(M.trace_basis(ansatz))[2])
-        @test extrema(xnodes) ≈ extrema(xt)
+        @test collect(extrema(xnodes)) ≈ collect(extrema(xt))
         @test length(xnodes) == length(xt)
         sample = zeros(T, length(tnodes), length(xnodes), 2)
         M.evaluate!(sample, InitialCondition(), c, ansatz, problem,
@@ -410,7 +422,7 @@ end
         @test finite_states(result.solution.u)
         @test all(isfinite, c.trace_u)
         @test all(isfinite, c.trace_v)
-        # the second component's rows carry its own target, not the first one's
+        # each component holds its own output weights, one column of the fit's coefficients
         @test M.output_weights(c.ansatz.params, ansatz, 1) !=
               M.output_weights(c.ansatz.params, ansatz, 2)
         # the step's residual is recorded: a network step is a record, and it may fail (U13, U24)
@@ -421,11 +433,15 @@ end
         scalar = SpaceTimeGalerkin(network_ansatz(T; D = 2),
             WeakInitialAndBoundaryConditions())
         @test_throws ArgumentError GeometricIntegrator(wave_problem(T), scalar)
-        @test_throws ArgumentError NetworkAnsatz(S = 4, xspan = (zero(T),))
-        @test_throws ArgumentError NetworkAnsatz(S = 4, D = 0, xspan = (zero(T), one(T)))
-        @test_throws ArgumentError NetworkAnsatz(S = 0, xspan = (zero(T), one(T)))
+        @test_throws ArgumentError NetworkAnsatz(
+            S = 4, xspan = (zero(T),), ncells = (2, 5),
+            degree = 3)
+        @test_throws ArgumentError NetworkAnsatz(S = 4, D = 0, xspan = (zero(T), one(T)),
+            ncells = (2, 5), degree = 3)
+        @test_throws ArgumentError NetworkAnsatz(S = 0, xspan = (zero(T), one(T)),
+            ncells = (2, 5), degree = 3)
         @test_throws ArgumentError NetworkAnsatz(S = 4, xspan = (zero(T), one(T)),
-            mode = :full)
+            ncells = (2, 5), degree = 3, mode = :full)
     end
 
     @testset "A1 the §A case in both modes" for T in (Float64, Float32)

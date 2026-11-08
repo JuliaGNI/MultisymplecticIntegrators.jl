@@ -120,28 +120,29 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - evidence: the §A case of the entry — `Wave` at `h = 0.05`, `xspan = (0, 1)`, `S = 10`, `tanh`,
   `Nw = Nb = 50`, the exact solution as the guess with `OrthogonalGreedy()` — run with
   `NetworkAnsatz(; mode = :all)` and `WeakInitialAndBoundaryConditions()` takes
-  `iterations = [71, 102, 98, 53, 97]` at `residual = [0.422, 0.469, 0.259, 0.679, 0.0943]`, each
-  from an initial residual of `[43.9, 3.81, 13.1, 4.67, 1.72]`, and `converged = false` at every
-  step, in `Float64`; the solve stops on the solver's stagnation test, not at its tolerance. Its
-  sup-norm deviation from the §A entry is `0.7553` over the five steps. The record is that run and
+  `iterations = [100, 80, 95, 55, 86]` at `residual = [6.36e-3, 3.69e-2, 0.2656, 0.4336,
+  2.73e-2]`, each from an initial residual of `[13.60, 52.08, 56.23, 32.29, 64.93]`, and
+  `converged = false` at every step, in `Float64`. The entry itself reports `converged = true` at
+  `residual = [0.602, 4.789, 270.7, 39.61, 1575.0]`. Its sup-norm deviation from the entry is
+  `0.7587` over the five steps in `Float64` and `12.04` in `Float32`. The record is that run and
   not a reference: the network's rows are the gradient of a discrete action the Newton solve cannot
   drive to round-off, which is the measured result and not a defect of the assembly.
 - kind: defect
 - found: 2026-11-07
 
-### K39 · The `WAVE_NN_PARTIALLY` run takes three to five iterations and reaches no tolerance.
+### K39 · The `WAVE_NN_PARTIALLY` run reaches no tolerance.
 
 - location: `test/helpers/reference_values.jl:57`, `src/ansatz/network.jl`
-- evidence: the same §A case with `mode = :last_layer` takes `iterations = [3, 4, 4, 3, 3]` at
-  `residual = [7.52e-4, 6.06e-4, 7.02e-4, 7.93e-4, 8.80e-4]`, each from an initial residual of
-  `[0.879, 9.27, 11.2, 13.4, 15.7]`, and `converged = false` at every step, in `Float64`: the
+- evidence: the same §A case with `mode = :last_layer` takes `iterations = [3, 3, 5, 3, 5]` at
+  `residual = [5.82e-4, 1.05e-3, 2.03e-3, 1.92e-3, 3.54e-3]`, each from an initial residual of
+  `[1.937, 14.14, 19.00, 31.82, 30.95]`, and `converged = false` at every step, in `Float64`: the
   coupling's `14` constraint rows reach only the `10` output weights, so the step's system is rank
   deficient by `4` and no tolerance is reachable at that size. The run completes and records its
-  stats, and its sup-norm deviation from the §A entry is `580.6` in `Float64` and `580.5` in
-  `Float32`, the entry being a diverged iterate whose own `u` reaches `1.3e2` against this run's
-  `0.7`; the deviation records that entry and not the accuracy of this run. The affine control at
+  stats, and its sup-norm deviation from the §A entry is `579.2` in `Float64` and `580.4` in
+  `Float32`, the entry being a diverged iterate whose own `u` reaches `581.76`; the deviation
+  records that entry and not the accuracy of this run. The affine control at
   `S = 20`, where the freed output weights carry every row, converges in two iterations to `8.3e-6`
-  of its initial residual in `Float64` and `6.7e-4` in `Float32`, which is what the family's
+  of its initial residual in `Float64` and `2.0e-3` in `Float32`, which is what the family's
   `network_f_reltol` records.
 - kind: defect
 - found: 2026-11-07
@@ -149,9 +150,24 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 ### K40 · The `SINE_GORDON_NN_FULLY` run is an unconverged iterate.
 
 - location: `test/helpers/reference_values.jl:69`, `src/ansatz/network.jl`
-- evidence: the three-step sine-Gordon case of the entry takes `iterations = [51, 87, 114]` at
-  `residual = [0.0421, 0.0379, 0.0405]` and `converged = false` in `Float64`, and its sup-norm
-  deviation from the entry is `0.0462` over the three steps. As for K38 the record is that run and
+- evidence: the three-step sine-Gordon case of the entry takes `iterations = [62, 59, 80]` at
+  `residual = [1.34e-2, 2.38e-2, 1.11e-2]`, each from an initial residual of `[0.6289, 0.2668,
+  0.2299]`, and `converged = false` in `Float64`; the entry reports `converged = true` at
+  `residual = [0.2339, 1.549, 139.9]`. Its sup-norm deviation from the entry is `0.0204` in
+  `Float64` and `0.0408` in `Float32` over the three steps. As for K38 the record is that run and
   not a reference.
 - kind: defect
 - found: 2026-11-07
+
+### K42 · The `WAVE_NN_SYMBOLIC_FULLY` run is an unconverged iterate of the same case.
+
+- location: `test/helpers/reference_values.jl:59`, `src/ansatz/network.jl`
+- evidence: the entry is the symbolic integrator of the old stack on the §A case of K38, and this
+  tree's counterpart to it is the `:all` arm of K38, whose deviation from it is `0.4369` in
+  `Float64` and `12.04` in `Float32` over the five steps. The entry's own `u` differs from
+  `WAVE_NN_FULLY`'s by up to `0.7615`, so the two entries are separate records and neither is the
+  other's reference; `maximum(abs, WAVE_NN_FULLY.u)` is `1.48`. The entry reports `converged = true`
+  at `iterations = [5, 2, 27, 7, 1]` and `residual = [0.602, 8.766, 6.202, 65.82, 47.99]`, so as
+  for K38 the record is that run and not a reference.
+- kind: defect
+- found: 2026-11-08

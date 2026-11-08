@@ -246,4 +246,19 @@ end
         @test first_fit_allocations(w2, ansatz, sample, c2) < 100_000_000
         @test fit_allocations(w2, ansatz, sample, c2) == 0
     end
+
+    # A dictionary of four atoms fills at most four of the ten units, and the units the selection
+    # passes over stay at zero whatever the vector held before the fit: the fit clears it and writes
+    # only the atoms it took.
+    @testset "G4 a short dictionary leaves the units it did not fill at zero" for T in (Float64,
+        Float32)
+        ansatz, c, problem = greedy_slab(T; S = 10)
+        sample, _ = greedy_sample(T, c, problem, (t, x) -> sin(2 * π * x) * cos(π * t))
+        w = ones(T, ansatz.np)
+        M.fit!(w, OrthogonalGreedy(Nw = 1, Nb = 1), ansatz, sample, c)
+        atoms = M.fit_atoms(w, ansatz)
+        @test count(a -> a != (zero(T), zero(T), zero(T)), atoms) ≤ 4
+        @test all(a -> a == (zero(T), zero(T), zero(T)), atoms[5:end])
+        @test all(iszero, M.output_weights(w, ansatz, 1)[5:end])
+    end
 end

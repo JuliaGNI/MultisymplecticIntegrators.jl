@@ -15,9 +15,10 @@ function NetworkFit(::Type{ST}) where {ST}
     NetworkFit{ST}((zeros(ST, 0, 0) for _ in 1:7)..., Int[], Bool[])
 end
 
-"""Fit `S` atoms and the output weights of `D` components to `sample` by the orthogonal greedy
-algorithm of [`OrthogonalGreedy`](@ref), in place throughout, and return the number of atoms taken:
-a fit after the first allocates nothing, and an atom shorter than `√eps` adds no rank."""
+"""Fit `S` atoms of `D` components to `sample` by the orthogonal greedy algorithm of
+[`OrthogonalGreedy`](@ref), in place throughout, and return the number of atoms taken: a fit after
+the first allocates nothing, and an atom shorter than `√eps` adds no rank. The coefficients are
+the projection's, one row per selected atom, for the caller's triangular solve."""
 function fit_network!(f::NetworkFit{ST}, method::OrthogonalGreedy,
         sample::AbstractArray{ST, 3}, tabulation::SlabTabulation, S::Integer, D::Integer,
         activation) where {ST}
@@ -86,15 +87,6 @@ function fit_network!(f::NetworkFit{ST}, method::OrthogonalGreedy,
             for n in 1:N
                 f.residual[n, d] -= f.chosen[n, s] * value
             end
-        end
-    end
-    for i in s:-1:1
-        for d in 1:D
-            value = f.coefficients[i, d]
-            for j in (i + 1):s
-                value -= f.gram[i, j] * f.coefficients[j, d]
-            end
-            f.coefficients[i, d] = value / f.gram[i, i]
         end
     end
     return s
