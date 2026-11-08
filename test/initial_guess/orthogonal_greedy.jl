@@ -177,8 +177,7 @@ The greedy fit as its definition states it, recomputed here with no code of the 
 closed-form dictionary of `Nw + 1` directions of `[0, 2π)` crossed with `Nb + 1` biases over
 `[-π, π]`, the pick of each step by the modulus of the projection on the weighted residual, and the
 Gram–Schmidt step that makes the rest of the residual orthogonal to the atom taken. It returns the
-`S` picks as `(w₁, w₂, b)` triples, the indices of the atoms they are, and the modulus of every
-atom's projection at each step.
+`S` picks as `(w₁, w₂, b)` triples and the modulus of every atom's projection at each step.
 
 `nodes` is a `2 × N` matrix of the slab's own nodes, and `weights` and `target` are vectors of
 length `N`.
@@ -202,13 +201,11 @@ function closed_greedy(::Type{T}, nodes::AbstractMatrix{T}, weights::AbstractVec
     residual = root .* target
     taken = falses(m)
     picks = NTuple{3, T}[]
-    selected = Int[]
     correlations = Vector{T}[]
     for s in 1:S
         corr = abs.(table * residual)
         push!(correlations, corr)
         k = argmax(ifelse.(taken, zero(T), corr))
-        push!(selected, k)
         push!(picks, (dictionary[k, 1], dictionary[k, 2], dictionary[k, 3]))
         taken[k] = true
         column = table[k, :] .* one(T)
@@ -221,7 +218,7 @@ function closed_greedy(::Type{T}, nodes::AbstractMatrix{T}, weights::AbstractVec
         chosen[:, s] .= column ./ gain
         residual .-= dot(view(chosen, :, s), residual) .* view(chosen, :, s)
     end
-    return picks, selected, correlations
+    return picks, correlations
 end
 
 """The allocations of one fit of a fresh workspace, which build its tables, through a function
@@ -252,7 +249,7 @@ end
         # the selection recomputed from its definition, on the closed form of the same dictionary:
         # the eight atoms written are the copy's picks in order, and each step's pick carries the
         # copy's largest correlation against the atoms the earlier steps left
-        picks, selected, correlations = closed_greedy(T, nodes, node_weights, target)
+        picks, correlations = closed_greedy(T, nodes, node_weights, target)
         atoms = M.fit_atoms(w, ansatz)
         dictionary = M.greedy_atoms(OrthogonalGreedy(), T)
         position(atom) = argmin([maximum(abs.(collect(atom) .- dictionary[k, :]))
