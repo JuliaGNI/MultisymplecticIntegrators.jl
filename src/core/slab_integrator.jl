@@ -30,17 +30,20 @@ multipliers after them. A step is a nonlinear system of
 [`total_free_coefficients`](@ref)`(method, problem)` equations, which the ecosystem's Newton solver
 solves, with a pivoted QR as its linear solve for a symbolic or a network ansatz. With
 `linear_solver = true`, for an ansatz whose step is affine in its unknowns and a linear density, one
-linear solve replaces Newton's iterations: the step's equations are the slab's rows — a network's
-interior weak form beside the coupling's initial and boundary rows — with the Jacobian of the whole
-system, and a solution is read from zero and then refined once with the same factorisation, two
-solves in all and no iterate. The factorisation is the solver's own linear method — the
-`linear_solver_method` of its configuration, which is `SimpleSolvers.LapackPivotedQR` for a network —
-taken once per run: the Jacobian of such a step is a saddle point whose constraint rows reach only
-the free output weights of a `:last_layer` network, so the pivoted QR of a network solves it by its
-minimum-norm step, where a factorisation without rank detection raises on a zero pivot. The iterate
-count, the residual, the initial residual and the convergence of every step are recorded in the
-cache, and the trace `(u, v, w)` at the top of the slab, at the nodes of the space quadrature, is
-kept for the diagnostics.
+linear solve replaces Newton's iterations: the step's equations are the slab's weak-form rows — a
+network's interior weak form beside the coupling's weak initial and boundary rows — with the
+Jacobian of the whole system, and a solution is read from zero and then refined once with the same
+factorisation, two solves in all and no iterate. The factorisation is the solver's own linear
+method — the `linear_solver_method` of its configuration, which is
+`SimpleSolvers.LapackPivotedQR` for a network — taken at the run's first step and again at each step
+whose guess has moved the parameters the step holds fixed, because the Jacobian depends on them: for
+a `:last_layer` network those are the hidden parameters before its free output weights, of which the
+cache keeps a copy and compares it exactly. The Jacobian of such a step is a saddle point whose
+constraint rows reach only the free output weights of a `:last_layer` network, so the pivoted QR of a
+network solves it by its minimum-norm step, where a factorisation without rank detection raises on a
+zero pivot. The iterate count, the residual, the initial residual and the convergence of every step
+are recorded in the cache, and the trace `(u, v, w)` at the top of the slab, at the nodes of the
+space quadrature, is kept for the diagnostics.
 
 The roles of the ansatz, the coupling and the guess, and the functions through which the core
 reaches each of them, are on the page *The slab seam* of the manual.
@@ -275,6 +278,32 @@ layer in the block, which the block of another element type does not inherit.
 copy_ansatz_data!(cache_data, data) = nothing
 
 """
+    nheld_parameters(block)
+
+The number of a block's leading parameters that a step holds fixed: the ones it reads and never
+frees, on which the step's Jacobian therefore depends. An ansatz whose every unknown is a row of the
+solver's vector holds none, and the default answers 0.
+"""
+nheld_parameters(block) = 0
+
+"""
+    held_parameters_changed(held, block)
+
+Whether the parameters the block's step holds fixed differ from the copy `held`, of the length
+[`nheld_parameters`](@ref)`(block)` that a factorisation was taken with. A block that holds no
+parameter answers `false`.
+"""
+held_parameters_changed(held::AbstractVector, block) = false
+
+"""
+    copy_held_parameters!(held, block)
+
+Write the parameters the block's step holds fixed into `held`, the copy a factorisation was taken
+with. A block that holds no parameter writes nothing.
+"""
+copy_held_parameters!(held::AbstractVector, block) = nothing
+
+"""
     bottom_datum(data)
 
 The bottom row of the coefficient array that the coupling fixes, of size `(Nx, D)`, or `nothing`
@@ -362,6 +391,7 @@ mutable struct SpaceTimeGalerkinCache{ST, AD, CD <: CouplingData} <: IntegratorC
     steps::Int
     factorisations::Int
     linear_lu::Union{Nothing, LinearSolver}
+    linear_held::Vector{ST}
     linear_rhs::Vector{ST}
     linear_zero::Vector{ST}
     ansatz::AD
@@ -379,6 +409,7 @@ function Cache{ST}(problem::LagrangianPDEProblem,
     D = components(problem)
     nfree = total_free_coefficients(method, problem)
     nlin = method.linear_solver ? nfree : 0
+    nheld = method.linear_solver ? nheld_parameters(slab) : 0
     return SpaceTimeGalerkinCache{ST, typeof(slab),
         coupling_data_type(coupling(method), a, problem, ST)}(
         zeros(ST, nfree),
@@ -398,6 +429,7 @@ function Cache{ST}(problem::LagrangianPDEProblem,
         0,
         0,
         nothing,
+        zeros(ST, nheld),
         zeros(ST, nlin),
         zeros(ST, nlin),
         slab,
@@ -440,8 +472,8 @@ end
     reset!(cache::SpaceTimeGalerkinCache)
 
 Clear the state a run leaves in the cache: the step counter, which is what tells the coupling and
-the guess whether the slab is the run's first, the linear-solver factorisation and counter, and the
-per-step records of the Newton solve.
+the guess whether the slab is the run's first, the linear-solver factorisation with the counter and
+the copy of the parameters it was taken with, and the per-step records of the Newton solve.
 
 A run starts at the problem's initial data, so a cache that still counted the previous run's steps
 would hand that run's last top row to the new first slab as its bottom datum.
@@ -450,6 +482,7 @@ function reset!(c::SpaceTimeGalerkinCache)
     c.steps = 0
     c.factorisations = 0
     c.linear_lu = nothing
+    fill!(c.linear_held, zero(eltype(c.linear_held)))
     empty!(c.iterations)
     empty!(c.residuals)
     empty!(c.initial_residuals)
@@ -462,8 +495,8 @@ end
     factorisations(int::GeometricIntegrator)
 
 The number of Jacobian factorisations computed by the direct linear solver since the last `reset!`
-of the cache, which is one per run: the factorisation is the linear method of the solver, taken once
-and kept.
+of the cache, which is one per run whose guess leaves the parameters the step holds fixed unchanged,
+and one more at every step whose guess has moved them.
 """
 factorisations(c::SpaceTimeGalerkinCache) = c.factorisations
 function factorisations(int::GeometricIntegrator{
@@ -635,12 +668,13 @@ function integrate_step!(sol, history, params,
         residual!(c.linear_rhs, x, sol, params, int)
         r₀ = norm(c.linear_rhs)
         lu_fac = c.linear_lu
-        if lu_fac === nothing
+        if lu_fac === nothing || held_parameters_changed(c.linear_held, c.ansatz)
             jacobian!(s, c.linear_zero, (sol, params, int))
             lu_fac = linearsolver(s)
             factorize!(lu_fac, jacobianmatrix(s))
             c.linear_lu = lu_fac
             c.factorisations += 1
+            copy_held_parameters!(c.linear_held, c.ansatz)
         end
         residual!(c.linear_rhs, c.linear_zero, sol, params, int)
         ldiv!(c.linear_rhs, lu_fac, c.linear_rhs)

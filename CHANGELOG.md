@@ -390,16 +390,19 @@ makes it worth keeping.
   `DifferentiationInterface`, `Enzyme`, `Mooncake`, `SimpleSolvers` and the packages of the two
   test helpers it includes.
 
-- **Direct single-factorisation solve for linear densities.** `SpaceTimeGalerkin` takes the keyword
+- **Direct linear solve for linear densities, with a cached factorisation.** `SpaceTimeGalerkin`
+  takes the keyword
   `linear_solver = false`. When `linear_solver = true`, `check_method` verifies that the ansatz is
   linear in its coefficients and that the problem's density is linear (`is_linear_density`, checked
   symbolically when `LagrangianDensity` is built and true for `VectorWave.VectorDensity` when
   `β == 0`), refusing a nonlinear ansatz or density with an `ArgumentError`. On the first step,
-  `integrate_step!` evaluates and LU-factorises the constant slab Jacobian once, and every step
-  then solves from zero with that factorisation and takes one step of iterative refinement with
-  it. The run factorises once (`factorisations(int) == 1`), and `stats.iterations` records 2 for
-  each step. Over five slabs the deviation of the solution from the Newton solve is at most
-  9.5 eps(T) in `Float32` and 13.9 eps(T) in `Float64`.
+  `integrate_step!` evaluates the slab Jacobian and factorises it, and every step then solves from
+  zero with that factorisation and takes one step of iterative refinement with it. The run
+  factorises once (`factorisations(int) == 1`) while the parameters the step holds fixed stay the
+  same — a tensor or a symbolic ansatz's coefficients never move them — and once more at each step
+  whose guess has moved them, as a `:last_layer` network's retrained hidden layer does.
+  `stats.iterations` records 2 for each step. Over five slabs the deviation of the solution from
+  the Newton solve is at most 9.5 eps(T) in `Float32` and 13.9 eps(T) in `Float64`.
 - **One pointwise density-derivative path and a function barrier for the step loop.**
   `density_derivatives!`, `momentum_load!` and `flux_load!` each call `point_derivatives`,
   `WeakInitialCondition` and `WeakInitialAndBoundaryConditions` compute `bottom_load` once per step
@@ -547,7 +550,9 @@ makes it worth keeping.
   that a `:last_layer` Jacobian is, and the cache's `linear_lu` field holds it of whatever type it
   is. The observable of the option is the step's residual — `1.4e-14` of its initial residual over
   three slabs of `LinearTransport` at `S = 20` and `D = 2`, which is `64 eps(Float64)` — taken with
-  one factorisation over the run and two recorded solves per step; the vector's distance from a
+  one factorisation at the run's first step and again at every step whose guess has moved the
+  parameters the step holds fixed, which for a `:last_layer` network is its hidden layer, and two
+  recorded solves per step; the vector's distance from a
   Newton solve's is not an observable, because the Jacobian's near-null space leaves it
   undetermined. The ELM family's direct least-squares branch is this option.
 - **`LinearTransport`'s density is the doubled field's.** `L = ψ (v₁ + c w₁)` on `D = 2`, with

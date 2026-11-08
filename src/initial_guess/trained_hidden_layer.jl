@@ -64,7 +64,6 @@ function fit_stale(f::TrainedFit{ST}, method::TrainedHiddenLayer, draw::Abstract
     f.method === nothing && return true
     f.method.epochs == method.epochs || return true
     f.method.learning_rate == method.learning_rate || return true
-    length(f.initial) == length(draw) || return true
     f.initial == draw || return true
     length(f.measure) == N || return true
     size(f.target) == (N, D) || return true
@@ -119,7 +118,7 @@ end
 
 # The target of every point of the sample: the interior one as the guess sampled it, and the four
 # surfaces from the target the fit was given.
-function fit_sample!(f::TrainedFit{ST}, sample::AbstractArray{ST, 3}, s) where {ST}
+function sample_target!(f::TrainedFit{ST}, sample::AbstractArray{ST, 3}, s) where {ST}
     tq, xq = s.tabulation.time, s.tabulation.space
     qt, qx, D = nquadrature(tq), nquadrature(xq), size(sample, 3)
     k = 0
@@ -213,7 +212,7 @@ function fit_trained!(f::TrainedFit{ST}, method::TrainedHiddenLayer, w::Abstract
         draw[θ] = 2 * rand(rng, ST) - 1
     end
     fit_layout!(f, method, draw, ansatz, s)
-    fit_sample!(f, sample, s)
+    sample_target!(f, sample, s)
     copyto!(w, 1, draw, 1, nh)
     solve_output_layer!(f, w, ansatz, s)
     if method.epochs > 0

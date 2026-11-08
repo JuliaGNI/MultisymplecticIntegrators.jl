@@ -49,12 +49,13 @@ end
 """
     elm_method(entry; T = Float64)
 
-The method of a registry entry: its ansatz, the coupling a network takes, and an initial condition
-fitted by a trained hidden layer.
+The method of a registry entry: its ansatz, the coupling a network takes, and the previous slab's
+field fitted by a trained hidden layer, which falls back to the trained fit of the initial condition
+at the first slab.
 """
 function elm_method(entry; T::Type = Float64)
     return SpaceTimeGalerkin(elm_ansatz(entry; T = T), WeakInitialAndBoundaryConditions();
-        initial_guess = FitTo(InitialCondition();
+        initial_guess = FitTo(PreviousSlab();
             method = TrainedHiddenLayer(epochs = entry.epochs,
                 learning_rate = T(entry.learning_rate))))
 end

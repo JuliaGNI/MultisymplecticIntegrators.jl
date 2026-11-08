@@ -47,10 +47,29 @@ const SAMPLE_ENTRIES = 10 * 20 + 2 * 20 + 2 * 8
 
 """
 The fraction of the drawn hidden layer's misfit that 60 epochs at `learning_rate = 1e-2` must
-reach, measured on `arm64-apple-darwin27.0.0` at Julia 1.13.3 in a cold process: `5.55e-1` with the
-hidden layer drawn and its output layer solved, and `4.41e-2` after the training, a ratio of `0.079`.
+reach, measured on `arm64-apple-darwin27.0.0` at Julia 1.13.3: `5.55e-1` with the hidden layer drawn
+and its output layer solved, and `4.41e-2` after the training, a ratio of `0.079`.
 """
 const TRAINED_MISFIT_FRACTION = 1 // 2
+
+"""
+The two misfits of E1a's fit, by element type and components: `drawn` is the fit that solves the
+output layer alone on the hidden layer `Xoshiro(1234)` draws, and `trained` the same fit after 60
+epochs at `learning_rate = 1e-2`. Measured on `arm64-apple-darwin27.0.0` at Julia 1.13.3:
+`0.5551 → 0.04409` in `Float64` at both `D = 1` and `D = 2`, `0.5551 → 0.04443` in `Float32` at
+`D = 1`, and `0.5551 → 0.04402` in `Float32` at `D = 2`, where the least-squares solve carries a
+second, zero column and its QR path differs.
+
+The values are asserted to three significant digits, which absorbs a reassociation of the misfit's
+sum.
+"""
+const TRAINED_MISFITS = (
+    drawn = Dict{Tuple{DataType, Int}, Float64}(
+        (Float64, 1) => 0.5551, (Float64, 2) => 0.5551,
+        (Float32, 1) => 0.5551, (Float32, 2) => 0.5551),
+    trained = Dict{Tuple{DataType, Int}, Float64}(
+        (Float64, 1) => 0.04409, (Float64, 2) => 0.04409,
+        (Float32, 1) => 0.04443, (Float32, 2) => 0.04402))
 
 function trained_ansatz(::Type{T}; S = FIT_S, D = 1, mode = :last_layer, degree = 3,
         ncells = (2, 5), xspan = (zero(T), one(T))) where {T}
@@ -233,17 +252,25 @@ end
 
 @testset "Trained hidden layer" begin
     # The fit's two ends: the drawn hidden layer with its output layer solved, and the same with
-    # the hidden layer trained first. The observable is the misfit on the fit's own sample.
-    @testset "E1a the fit at epochs = 0 and at epochs > 0" for T in (Float64, Float32)
-        target = (t, x, p) -> sin(2 * T(π) * x) * cos(T(π) * t)
-        make(epochs, lr) = trained_method(T;
+    # the hidden layer trained first. The observable is the misfit on the fit's own sample, in both
+    # components of a vector-valued field as well as on a scalar one.
+    @testset "E1a the fit at epochs = 0 and at epochs > 0" for T in (Float64, Float32),
+        D in (1, 2)
+
+        scalar(t, x, p) = sin(2 * T(π) * x) * cos(T(π) * t)
+        target = D === 1 ? scalar : (t, x, p) -> (scalar(t, x, p), zero(T))
+        problem = D === 1 ? wave_problem(T) :
+                  vector_wave_problem(T; β = zero(T), timespan = (zero(T), T(0.25)))
+        make(epochs, lr) = trained_method(T; S = FIT_S, D = D,
             guess = FitTo(TargetFunction(target);
                 method = TrainedHiddenLayer(epochs = epochs, learning_rate = lr)))
-        drawn = cache(trained_slab(wave_problem(T), make(0, T(1e-2)))).ansatz
-        trained = cache(trained_slab(wave_problem(T), make(60, T(1e-2)))).ansatz
+        drawn = cache(trained_slab(problem, make(0, T(1e-2)))).ansatz
+        trained = cache(trained_slab(problem, make(60, T(1e-2)))).ansatz
         @test isfinite(drawn.train.misfit)
         @test isfinite(trained.train.misfit)
         @test drawn.train.misfit > zero(T)
+        @test drawn.train.misfit ≈ TRAINED_MISFITS.drawn[(T, D)] rtol = 1 // 1000
+        @test trained.train.misfit ≈ TRAINED_MISFITS.trained[(T, D)] rtol = 1 // 1000
         @test trained.train.misfit ≤
               convert(T, TRAINED_MISFIT_FRACTION) * drawn.train.misfit
         # the misfit read back through the network's own evaluation is the fit's
@@ -275,11 +302,30 @@ end
                     method = TrainedHiddenLayer(epochs = 0))))
         c = cache(int)
         f = c.ansatz.train
+        tq, xq = c.ansatz.tabulation.time, c.ansatz.tabulation.space
         interior = length(tn) * length(xn)
+        qxt, qtt = length(xt.weight), length(tt.weight)
         @test length(f.measure) == SAMPLE_ENTRIES
         @test length(f.target) == SAMPLE_ENTRIES
         @test maximum(abs, view(f.target, 1:interior, 1)) < 1 // 10^6
         @test maximum(abs, f.face_target) > zero(T)
+        # the weight of every point of the sample: the interior's tensor product of the two rules,
+        # and each of the four faces by the weights of the other direction
+        expected = T[]
+        for q in eachindex(tq.weight), r in eachindex(xq.weight)
+
+            push!(expected, tq.weight[q] * xq.weight[r])
+        end
+        @test view(f.measure, 1:interior) == expected
+        rows = interior
+        for _ in 1:2
+            @test f.measure[(rows + 1):(rows + qxt)] == xt.weight
+            rows += qxt
+        end
+        for _ in 1:2
+            @test f.measure[(rows + 1):(rows + qtt)] == tt.weight
+            rows += qtt
+        end
         faces = T[]
         for r in eachindex(xt.node)
             M.evaluate_at!(c.ansatz, zero(T), xt.node[r])
@@ -341,17 +387,40 @@ end
         f = c.ansatz.train
         w = copy(c.ansatz.params)
         @test f.method.epochs == 0
+        # the hidden parameters are the draw, one scalar at a time from the method's own generator
+        rng = copy(Xoshiro(1234))
+        @test w[1:(3 * FIT_S)] ==
+              T[T(2) * rand(rng, T) - one(T) for _ in 1:(3 * FIT_S)]
         @test any(x -> !iszero(x), w[(3 * FIT_S + 1):end])
         @test f.misfit ≤ fitted_misfit(c.ansatz, w) * (one(T) + sqrt(eps(T)))
+        # the output layer is the least-squares solution, so the misfit's derivative with respect to
+        # every output weight vanishes at it, read through the block's own evaluation and parameter
+        # derivative: the largest measured is `1944 eps(T)` of the summed magnitudes of the terms
+        for θ in (3 * FIT_S + 1):length(w)
+            g, scale = zero(T), zero(T)
+            for k in axes(f.points, 2)
+                M.evaluate_at!(c.ansatz, f.points[1, k], f.points[2, k])
+                for d in axes(f.target, 2)
+                    ζ = 2 * f.measure[k] * (c.ansatz.values[d] - f.target[k, d])
+                    g += ζ * c.ansatz.gradient[d, θ]
+                    scale += abs(ζ * c.ansatz.gradient[d, θ])
+                end
+            end
+            @test abs(g) ≤ 10^4 * eps(T) * scale
+        end
         assert_no_upcast(f.features, T)
     end
 
     # The fit's buffers and the block are of the problem's element type, and no evaluation of a
-    # `Float32` slab reaches `Float64`.
-    @testset "E1e the element type of the fit and of its workspace" for T in (Float64, Float32)
-        method = trained_method(T; guess = FitTo(InitialCondition();
-            method = TrainedHiddenLayer(epochs = 4)))
-        int = GeometricIntegrator(wave_problem(T; timespan = (zero(T), T(0.1))), method)
+    # `Float32` slab reaches `Float64` — on a scalar field and on a vector-valued one.
+    @testset "E1e the element type of the fit and of its workspace" for T in (Float64, Float32),
+        (D, problem) in ((1, wave_problem(T; timespan = (zero(T), T(0.1)))),
+            (2, vector_wave_problem(T; β = zero(T), timespan = (zero(T), T(0.1)))))
+
+        method = trained_method(T; D = D,
+            guess = FitTo(InitialCondition();
+                method = TrainedHiddenLayer(epochs = 4)))
+        int = GeometricIntegrator(problem, method)
         c = cache(int)
         result = integrate(int)
         assert_no_upcast(c.ansatz.params, T)
@@ -387,6 +456,49 @@ end
         end
         @test first > zero(T)
         @test iszero(second)
+    end
+
+    # The trained fit takes every target of `§Guess`: the exact solution, which only a problem that
+    # has one can supply, and the previous slab's field continued past its top. The sample is the
+    # target's own values — the exact solution at the physical time of every point, and the previous
+    # slab's field at `t̂ = 1`, carried up by its slope there — so the two fits are what a fit that
+    # read another target would not be.
+    @testset "E1g the trained fit takes every target of the guess" for T in (Float64, Float32)
+        problem = wave_problem(T; timespan = (zero(T), T(0.1)))
+        h = timestep(problem)
+        t₀ = first(problem.timespan)
+        exact = cache(trained_slab(problem,
+            trained_method(T;
+                guess = FitTo(ExactSolution(); method = TrainedHiddenLayer(epochs = 0))))).ansatz
+        f = exact.train
+        @test all(isfinite, f.target)
+        @test maximum(abs, f.target) > zero(T)
+        for k in axes(f.points, 2)
+            @test f.target[k, 1] ==
+                  problem.solutions.u(t₀ + h * f.points[1, k], f.points[2, k],
+                parameters(problem))[1]
+        end
+        # the previous slab's target, read at the second slab, is the first slab's top field
+        int = GeometricIntegrator(problem,
+            trained_method(T;
+                guess = FitTo(PreviousSlab(); method = TrainedHiddenLayer(epochs = 0))))
+        c = cache(int)
+        solution = GeometricSolution(problem)
+        step = solutionstep(int, solution[0])
+        reset!(step, timesteps(solution)[1])
+        M.integrate_step!(current(step), nothing, parameters(problem), int)
+        previous = copy(c.ansatz.params)
+        reset!(step, timesteps(solution)[2])
+        M.integrate_step!(current(step), nothing, parameters(problem), int)
+        f = c.ansatz.train
+        interior = length(c.ansatz.tabulation.time.node) *
+                   length(c.ansatz.tabulation.space.node)
+        copyto!(c.ansatz.params, previous)
+        for k in 1:interior
+            M.evaluate_at!(c.ansatz, one(T), f.points[2, k])
+            @test f.target[k, 1] ==
+                  c.ansatz.values[1] + f.points[1, k] * c.ansatz.values[2]
+        end
     end
 
     # A method object carries no fit state: two integrators that share one give bit-identical runs,
@@ -431,6 +543,8 @@ end
         @test w == fresh(8)
         @test four == fresh(4)
         @test w != four
+        # the workspace names the method it was last built for, so the key holds `epochs`
+        @test f.method.epochs == 8
     end
 
     # The direct linear solve is offered to a `:last_layer` network on a linear density, and to no
@@ -475,10 +589,11 @@ end
         @test occursin("linear", nonlinear.msg)
     end
 
-    # The option's step: one factorisation over the run, two recorded solves per step, §V's
-    # convergence rule under the family's own tolerance, and a solution of the problem's element
-    # type. Each step's residual ratio is recorded in units of `eps(T)` and no floor is asserted on
-    # it. The Newton arm records its own figures and asserts neither.
+    # The option's step under a guess that leaves the hidden layer alone: one factorisation over the
+    # run, two recorded solves per step, §V's convergence rule under the family's own tolerance, and
+    # a solution of the problem's element type. Each step's residual ratio is recorded in units of
+    # `eps(T)` and no floor is asserted on it. The Newton arm records its own figures and asserts
+    # neither.
     @testset "E3b one factorisation, two iterations and the recorded residual ratio" for T in (
         Float64, Float32)
         transport = linear_transport_problem(T)
@@ -496,6 +611,10 @@ end
         @test c.iterations == fill(2, 3)
         @test all(c.residuals .≤
                   options.f_abstol .+ options.f_reltol .* c.initial_residuals)
+        # the residual of a step is the step's own observable, and a fabricated zero would pass the
+        # convergence rule: every one is finite and positive
+        @test all(isfinite, c.residuals)
+        @test all(>(0), c.residuals)
         for n in 1:3
             @test all(isfinite, result.solution.u[n])
             @test eltype(result.solution.u[n]) === T
@@ -513,35 +632,84 @@ end
             cache(newton).residuals)
     end
 
-    # The family runs on a problem that has no exact solution, from the initial condition at the
-    # first slab and from the continuation after it, at the family's own relative tolerance.
+    # The factorisation is the step's Jacobian, and a `:last_layer` step's Jacobian reads the hidden
+    # layer the mode holds fixed: a guess that retrains that layer at every step against a target
+    # that moves takes the factorisation again at every step, and every step still converges. A path
+    # that kept the run's first factorisation would keep it against a Jacobian that has moved.
+    @testset "E3c the factorisation follows the hidden layer" for T in (Float64, Float32)
+        transport = linear_transport_problem(T)
+        moving = (t, x, p) -> (sin(2 * T(π) * x + 200 * t), zero(T))
+        method = SpaceTimeGalerkin(
+            trained_ansatz(T; S = 20, D = 2,
+                xspan = (T(-0.5), zero(T))),
+            WeakInitialAndBoundaryConditions();
+            initial_guess = FitTo(TargetFunction(moving);
+                method = TrainedHiddenLayer(epochs = 60, learning_rate = 0.1)),
+            linear_solver = true)
+        int = GeometricIntegrator(transport, method; f_abstol = zero(T),
+            f_reltol = trained_f_reltol(T))
+        c = cache(int)
+        result = integrate(int)
+        @test length(result.traces) == 3
+        @test M.factorisations(int) == 3
+        @test all(c.converged)
+        # the copy holds the hidden layer alone: a guess that carries the output weights from slab to
+        # slab leaves the parameters the Jacobian reads unchanged, so that run factorises once
+        carried = SpaceTimeGalerkin(
+            trained_ansatz(T; S = 20, D = 2, xspan = (T(-0.5), zero(T))),
+            WeakInitialAndBoundaryConditions();
+            initial_guess = Continuation(), linear_solver = true)
+        other = GeometricIntegrator(transport, carried; f_abstol = zero(T),
+            f_reltol = trained_f_reltol(T))
+        carried_result = integrate(other)
+        @test length(carried_result.traces) == 3
+        @test M.factorisations(other) == 1
+        @info("the moved hidden layer's factorisations", T, M.factorisations(int),
+            c.iterations, c.converged, c.residuals ./ c.initial_residuals,
+            trained_f_reltol(T))
+    end
+
+    # The family runs on a problem that has no exact solution, from one guess: the trained fit of the
+    # previous slab's field, which falls back to the trained fit of the initial condition at the
+    # first slab. Its first step is that fallback bit for bit.
     @testset "E4a the family on Wave without an exact solution" for T in (Float64, Float32)
         problem = without_solutions(wave_problem(T), Wave.density(), 1)
         @test problem.solutions === nothing
-        runs = (
-            :trained => FitTo(InitialCondition();
-                method = TrainedHiddenLayer(epochs = 20)),
-            :continuation => Continuation())
-        for (name, guess) in runs
-            int = GeometricIntegrator(problem,
-                trained_method(T; S = TRAINED_S, guess = guess);
-                f_abstol = zero(T), f_reltol = trained_f_reltol(T),
-                max_iterations = TRAINED_ITERATIONS)
-            c = cache(int)
-            result = integrate(int)
-            @test length(result.traces) == TRAINED_STEPS
-            @test all(c.converged)
-            @test maximum(c.iterations) ≤ 2
-            @test maximum(c.residuals ./ c.initial_residuals) ≤ trained_f_reltol(T)
-            @test finite_states(result.solution.u)
-            @test finite_states(result.solution.v)
-            assert_no_upcast(result.solution.u, T)
-            assert_no_upcast(result.solution.v, T)
-            assert_no_upcast(c.x, T)
-            assert_no_upcast(c.trace_u, T)
-            @info("the family's Wave run", T, name, c.iterations, c.converged,
-                maximum(c.residuals ./ c.initial_residuals), trained_f_reltol(T))
-        end
+        int = GeometricIntegrator(problem,
+            trained_method(T; S = TRAINED_S,
+                guess = FitTo(PreviousSlab();
+                    method = TrainedHiddenLayer(epochs = 20)));
+            f_abstol = zero(T), f_reltol = trained_f_reltol(T),
+            max_iterations = TRAINED_ITERATIONS)
+        c = cache(int)
+        result = integrate(int)
+        @test length(result.traces) == TRAINED_STEPS
+        @test all(c.converged)
+        @test maximum(c.iterations) ≤ TRAINED_ITERATIONS
+        @test maximum(c.residuals ./ c.initial_residuals) ≤ trained_f_reltol(T)
+        @test finite_states(result.solution.u)
+        @test finite_states(result.solution.v)
+        assert_no_upcast(result.solution.u, T)
+        assert_no_upcast(result.solution.v, T)
+        assert_no_upcast(c.x, T)
+        assert_no_upcast(c.trace_u, T)
+        # the first step is the trained fit of the initial condition, bit for bit
+        initial = GeometricIntegrator(problem,
+            trained_method(T; S = TRAINED_S,
+                guess = FitTo(InitialCondition();
+                    method = TrainedHiddenLayer(epochs = 20)));
+            f_abstol = zero(T), f_reltol = trained_f_reltol(T),
+            max_iterations = TRAINED_ITERATIONS)
+        c1 = cache(initial)
+        solution = GeometricSolution(problem)
+        step = solutionstep(initial, solution[0])
+        reset!(step, timesteps(solution)[1])
+        M.integrate_step!(current(step), nothing, parameters(problem), initial)
+        @test c1.iterations[1] === c.iterations[1]
+        @test c1.residuals[1] === c.residuals[1]
+        @test c1.initial_residuals[1] === c.initial_residuals[1]
+        @info("the family's Wave run", T, c.iterations, c.converged,
+            maximum(c.residuals ./ c.initial_residuals), trained_f_reltol(T))
     end
 
     # The family's run on a density that is not linear completes and records its figures, and
@@ -551,7 +719,7 @@ end
         @test problem.solutions === nothing
         int = GeometricIntegrator(problem,
             trained_method(T; S = TRAINED_S,
-                guess = FitTo(InitialCondition();
+                guess = FitTo(PreviousSlab();
                     method = TrainedHiddenLayer(epochs = 20)));
             f_abstol = zero(T), f_reltol = trained_f_reltol(T))
         c = cache(int)
@@ -637,7 +805,7 @@ end
                      ActionOracle(problem, method; block = c.ansatz)
             N = length(c.x)
             @test N == unknown_count(oracle)
-            θ = T.(2 .* rand(Xoshiro(1234), N) .- 1)
+            θ = T.(2 .* rand(Xoshiro(11), N) .- 1)
             b = zeros(T, N)
             M.residual!(b, θ, nothing, parameters(problem), int)
             ∇S = oracle_residual(oracle, first_datum(oracle), θ)
@@ -648,8 +816,9 @@ end
     end
 
     # The `VectorWave` density at `β ≠ 0`: the run completes, both components are finite, every
-    # step's figures are recorded, and the first slab's residual is the action's gradient. Neither
-    # accuracy nor convergence is asserted (§V, U12, U24).
+    # step's figures are recorded beside its rotation charge, and the first slab's residual is the
+    # action's gradient. Neither accuracy nor convergence is asserted, and the charge's deviation is
+    # a record (§V, U12, U24).
     @testset "E7a VectorWave at β ≠ 0 is finite and its residual is the action's gradient" for T in (Float64,)
         problem = vector_wave_problem(T; β = 0.5)
         method = trained_method(T; S = TRAINED_S, D = 2,
@@ -658,18 +827,28 @@ end
         int = GeometricIntegrator(problem, method;
             f_abstol = zero(T), f_reltol = trained_f_reltol(T))
         c = cache(int)
-        result = integrate(int)
-        @test length(result.traces) == 10
+        solution = GeometricSolution(problem)
+        step = solutionstep(int, solution[0])
+        J = T[]
+        for n in 1:10
+            reset!(step, timesteps(solution)[n])
+            M.integrate_step!(current(step), nothing, parameters(problem), int)
+            copy!(solution, current(step), n)
+            push!(J, charge(c))
+        end
+        @test length(J) == 10
+        @test all(isfinite, J)
         @test length(c.iterations) == 10
         @test length(c.residuals) == 10
-        @test finite_states(result.solution.u)
-        @test finite_states(result.solution.v)
+        @test finite_states(solution.u)
+        @test finite_states(solution.v)
         @test all(isfinite, c.trace_u)
+        record_charge(:E7a, T, J, maximum(x -> abs(x - J[1]), J))
         first_slab = trained_slab(problem, method)
         c1 = cache(first_slab)
         oracle = ActionOracle(problem, method; block = c1.ansatz)
         N = length(c1.x)
-        θ = T.(2 .* rand(Xoshiro(1234), N) .- 1)
+        θ = T.(2 .* rand(Xoshiro(11), N) .- 1)
         b = zeros(T, N)
         M.residual!(b, θ, nothing, parameters(problem), first_slab)
         ∇S = oracle_residual(oracle, first_datum(oracle), θ)

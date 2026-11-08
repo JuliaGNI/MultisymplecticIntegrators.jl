@@ -318,13 +318,13 @@ end
 function target_point!(values::AbstractVector{ST}, ::ExactSolution,
         c::SpaceTimeGalerkinCache, ansatz::NetworkAnsatz, problem::LagrangianPDEProblem,
         sol, t̂, x) where {ST}
-    return point_target!(values, problem.solutions.u, c.ansatz, problem, sol, t̂, x)
+    return point_target!(values, problem.solutions.u, problem, sol, t̂, x)
 end
 
 function target_point!(values::AbstractVector{ST}, target::TargetFunction,
         c::SpaceTimeGalerkinCache, ansatz::NetworkAnsatz, problem::LagrangianPDEProblem,
         sol, t̂, x) where {ST}
-    return point_target!(values, target.f, c.ansatz, problem, sol, t̂, x)
+    return point_target!(values, target.f, problem, sol, t̂, x)
 end
 
 function target_point!(values::AbstractVector{ST}, ::PreviousSlab,
@@ -342,7 +342,7 @@ function target_point!(values::AbstractVector{ST}, ::PreviousSlab,
 end
 
 # One point of a pointwise target `f(t, x, params)`, converted to the element type.
-function point_target!(values::AbstractVector{ST}, f, s,
+function point_target!(values::AbstractVector{ST}, f,
         problem::LagrangianPDEProblem, sol, t̂, x) where {ST}
     value = f(slab_start(problem, sol) + timestep(problem) * t̂, x, parameters(problem))
     for d in eachindex(values)
@@ -651,6 +651,23 @@ function copy_ansatz_data!(c::NetworkSlab{ST}, d::NetworkSlab) where {ST}
     return nothing
 end
 
+# The parameters a `:last_layer` network's step holds fixed are the hidden layer's weights and
+# biases, `L1.W` then `L1.b`, which are the `first_free - 1` entries before the free output
+# weights: a guess that retrains the hidden layer moves the step's Jacobian.
+nheld_parameters(s::NetworkSlab) = s.ansatz.first_free - 1
+
+function held_parameters_changed(held::AbstractVector, s::NetworkSlab)
+    for k in eachindex(held)
+        s.params[k] == held[k] || return true
+    end
+    return false
+end
+
+function copy_held_parameters!(held::AbstractVector, s::NetworkSlab)
+    copyto!(held, 1, s.params, 1, length(held))
+    return nothing
+end
+
 """
     nunknowns(ansatz::NetworkAnsatz, coupling, problem)
 
@@ -737,19 +754,13 @@ function evaluate!(sample::AbstractArray{ST, 3}, ::ExactSolution,
 end
 
 # A pointwise target `f(t, x, params)` at the nodes of the block's own rule, in physical time,
-# converted to the problem's element type. A `f` that returns a number gives every component that
-# number; one that returns a vector gives component `d` its `d`-th entry.
+# converted to the problem's element type, one point at a time.
 function network_target_values!(sample::AbstractArray{ST, 3}, f, s::NetworkSlab,
         problem::LagrangianPDEProblem, sol) where {ST}
     tq, xq = s.tabulation.time, s.tabulation.space
-    t₀ = slab_start(problem, sol)
-    h = timestep(problem)
     for q in 1:nquadrature(tq), r in 1:nquadrature(xq)
 
-        value = f(t₀ + h * tq.node[q], xq.node[r], parameters(problem))
-        for d in axes(sample, 3)
-            sample[q, r, d] = convert(ST, value isa Number ? value : value[d])
-        end
+        point_target!(view(sample, q, r, :), f, problem, sol, tq.node[q], xq.node[r])
     end
     return nothing
 end

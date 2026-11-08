@@ -35,11 +35,11 @@ newton_tolerance(::Type{T}, options) where {T} = T(options.f_abstol / eps(Float6
 """
     trained_f_reltol(::Type{T})
 
-The relative tolerance of an ELM family step, measured on the `:last_layer` control of `Wave` at
-`S = 20` with `f_abstol = 0` and the trained fit at the first slab: the largest of its five step
-ratios `residual / initial residual` is `1.9e-5` in `Float64` and `2.5e-3` in `Float32`, and the
-continuation's are `1.0e-5` and `1.2e-2`. Every step of the four arms converged under the bound,
-which sits above each ratio by at least a factor of `500` in `Float64` and `8` in `Float32`.
+The relative tolerance of an ELM family step, measured on the family's run of `Wave` at `S = 20`
+with `f_abstol = 0` and the one guess `FitTo(PreviousSlab(); method = TrainedHiddenLayer(epochs =
+20))`: the largest of its five step ratios `residual / initial residual` is `5.6e-5` in `Float64` and
+`1.2e-2` in `Float32`. Every step converged under the bound, which sits above each ratio by a factor
+of `180` and `8.6`.
 """
 trained_f_reltol(::Type{Float64}) = 1.0e-2
 trained_f_reltol(::Type{Float32}) = 1.0e-1
