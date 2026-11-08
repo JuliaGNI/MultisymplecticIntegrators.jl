@@ -309,10 +309,10 @@ end
 
     # The two `S = 10` arms are records: in `:last_layer` mode the sixteen constraint rows of the
     # coupling outnumber the ten output weights they reach, so the step's system is inconsistent,
-    # and the `:all` arm's solve does not reach round-off (K38); no tolerance is reached, and the
-    # run is its own expected value (U13, U24). The affine control is the assertion: at `S = 20`
-    # the freed output weights carry every row, and two Newton iterations reach the root of an
-    # affine system.
+    # and the `:all` arm's solve does not reach round-off (K38); neither arm meets the default
+    # tolerances of the solver, and the run is its own expected value (U13, U24). The affine control
+    # is the assertion: at `S = 20` the freed output weights carry every row, and two Newton
+    # iterations reach the root of an affine system.
     @testset "N1 the network integrates Wave under both modes" for T in (Float64, Float32)
         for (mode, name, entry) in ((:all, :WAVE_NN_FULLY, WAVE_NN_FULLY),
             (:last_layer, :WAVE_NN_PARTIALLY, WAVE_NN_PARTIALLY))
