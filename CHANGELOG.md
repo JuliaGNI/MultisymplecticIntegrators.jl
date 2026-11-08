@@ -500,7 +500,8 @@ makes it worth keeping.
   linear in the output weights alone, so the hidden weights and the biases stay where the dictionary
   put them; it allocates nothing after its first call and its workspace stays under the `100 MB` the
   family allows. On the §A case's own target it reaches a relative `L²` error of `1.5e-2` at `S = 8`,
-  and on `sin(2πx) cos(πt)` over `[0, 1] × [0, 0.05]` `9.2e-2`, where G1's bound is `5e-2` (K41).
+  and on `sin(2πx) cos(πt)` over `[0, 1] × [0, 0.05]` `9.17e-2`, within `1.1 ×` the `8.72e-2` the
+  old `OGA2D` dictionary and pick rule reach on the same slab.
   `AbstractNeuralNetworks` (compat `0.9.1`), `SymbolicNeuralNetworks` (compat `0.9`) and
   `NeuralNetworkParameters` (compat `0.5`) join `[deps]`, and `test/ansatz/network.jl` and
   `test/initial_guess/orthogonal_greedy.jl` join the `core` group.

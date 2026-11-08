@@ -12,16 +12,15 @@ include("../helpers/reference_values.jl")
 const M = MultisymplecticIntegrators
 
 """
-The relative `L²` bound of the greedy fit on the slab — `5e-2`, the bound a local fit's own error is
-allowed — with the value this tree measures beside it: `9.2e-2` at `S = 8` on the target
-`sin(2πx) cos(πt)` over `[0, 1] × [0, 0.05]`, in both precisions, and `1.5e-2` on the §A case's own
-target at the same size. The two differ because the dictionary's directions are of unit length, so a
-ridge spans at most one radian across `[0, 1]`: eight of them hold the fundamental of the §A case,
-and not the second mode that `sin(2πx)` is. The best eight atoms of that dictionary, found by a
-search over its own grid, reach `5.4e-2` on this target, so no selection passes the bound here.
-`Float32` keeps the same bound, whose square is far above its round-off.
+The factor by which the greedy fit may exceed the old `OGA2D` fit's error on the same slab, with the
+values this tree measures beside it: the fit reaches `9.17e-2` at `S = 8` on the target
+`sin(2πx) cos(πt)` over `[0, 1] × [0, 0.05]`, in both precisions, where the old dictionary and pick
+rule reach `8.72e-2` and so bound it at `9.60e-2`. The dictionary's directions are of unit length,
+so a ridge spans at most one radian across `[0, 1]`, and eight of them hold a fundamental and not
+the second mode that `sin(2πx)` is. The old grid's direction list spans `[-π, π]` with both ends,
+so one direction is listed there twice and every atom also appears negated, `tanh` being odd.
 """
-const GREEDY_L2_BOUND = 5.0e-2
+const GREEDY_L2_FACTOR = 11 // 10
 
 """The default dictionary of the fit: `51 × 51` atoms at `Nw = Nb = 50`."""
 const GREEDY_ATOMS = 51 * 51
@@ -91,6 +90,88 @@ function greedy_error(::Type{T}, c, w, sample, weights) where {T}
     return sqrt(error / scale)
 end
 
+"""
+    greedy_nodes(::Type{T}, c, sample, weights)
+
+The slab's own rule as the flat vectors an atom of the old dictionary reads: a `2 × N` matrix
+whose first row is the normalised time and whose second is the space coordinate of each node, the
+node weights, and the first component of the sampled target, in the order the fit lays them out.
+"""
+function greedy_nodes(::Type{T}, c, sample, weights) where {T}
+    tnodes, xnodes = M.quadrature_points(c.ansatz)
+    N = length(tnodes) * length(xnodes)
+    nodes = Matrix{T}(undef, 2, N)
+    node_weights = Vector{T}(undef, N)
+    target = Vector{T}(undef, N)
+    n = 0
+    for q in eachindex(tnodes), r in eachindex(xnodes)
+
+        n += 1
+        nodes[1, n] = T(tnodes[q])
+        nodes[2, n] = T(xnodes[r])
+        node_weights[n] = T(weights[q, r])
+        target[n] = T(sample[q, r, 1])
+    end
+    return nodes, node_weights, target
+end
+
+"""
+    old_oga2d_error(::Type{T}, nodes, weights, target; Nw = 50, Nb = 50, S = 8)
+
+The relative `L²` error of the `OGA2D` dictionary and pick rule on the sample `target`: the bound
+the greedy fit is held to, measured here instead of read from a reference.
+
+Its dictionary is `Nw + 1` directions of `[-π, π]` with both ends, so the last entry repeats the
+first, crossed with `Nb + 1` biases over the same interval; its atoms are
+`tanh(w₁ t̂ + w₂ x + b)` at the nodes. It selects `S` atoms by the modulus of their projection on
+the weighted residual, refitting the output weights by weighted least squares after each selection,
+and it shares no code with the fit it measures.
+
+`nodes` is a `2 × N` matrix of the slab's own nodes, and `weights` and `target` are vectors of
+length `N`.
+"""
+function old_oga2d_error(::Type{T}, nodes::AbstractMatrix{T}, weights::AbstractVector{T},
+        target::AbstractVector{T}; Nw = 50, Nb = 50, S = 8) where {T}
+    nd, nb = Nw + 1, Nb + 1
+    N = size(nodes, 2)
+    table = Matrix{T}(undef, nd * nb, N)
+    k = 0
+    for θ in range(-T(π), T(π); length = nd), b in range(-T(π), T(π); length = nb)
+
+        k += 1
+        c, s = T(cos(θ)), T(sin(θ))
+        for n in 1:N
+            table[k, n] = tanh(c * nodes[1, n] + s * nodes[2, n] + b)
+        end
+    end
+    chosen = Matrix{T}(undef, N, S)
+    root_weights = sqrt.(weights)
+    residual = copy(target)
+    correlations = zeros(T, size(table, 1))
+    coefficients = zeros(T, S)
+    for s in 1:S
+        for a in axes(table, 1)
+            projection = zero(T)
+            for n in 1:N
+                projection += table[a, n] * residual[n] * weights[n]
+            end
+            correlations[a] = abs(projection)
+        end
+        chosen[:, s] = table[argmax(correlations), :]
+        scaled = chosen[:, 1:s] .* root_weights
+        coefficients[1:s] = scaled \ (target .* root_weights)
+        residual = target - chosen[:, 1:s] * coefficients[1:s]
+    end
+    fitted = chosen * coefficients
+    error = zero(T)
+    scale = zero(T)
+    for n in 1:N
+        error += weights[n] * (fitted[n] - target[n])^2
+        scale += weights[n] * target[n]^2
+    end
+    return sqrt(error / scale)
+end
+
 """The allocations of one fit of a fresh workspace, through a function barrier."""
 function fit_allocations(w, ansatz, sample, c)
     M.fit!(w, OrthogonalGreedy(), ansatz, sample, c)
@@ -105,9 +186,9 @@ end
         w = zeros(T, ansatz.np)
         M.fit!(w, OrthogonalGreedy(), ansatz, sample, c)
         error = greedy_error(T, c, w, sample, weights)
-        @test error ≤ GREEDY_L2_BOUND
-        # every selected atom is a direction and a bias of the dictionary, and no atom repeats
-        @test length(M.fit_atoms(w, ansatz)) == ansatz.S
+        nodes, node_weights, target = greedy_nodes(T, c, sample, weights)
+        @test error ≤ GREEDY_L2_FACTOR * old_oga2d_error(T, nodes, node_weights, target)
+        # no atom is selected twice
         @test allunique(M.fit_atoms(w, ansatz))
         assert_no_upcast(w, T)
     end
@@ -123,9 +204,20 @@ end
         directions = unique(keys)
         @test length(directions) == 51
         @test all(count(==(d), keys) == 51 for d in directions)
-        # every direction lies on the unit circle, and 0 and 2π are the same direction
+        # every direction lies on the unit circle and on the closed-form half-open grid, and no two
+        # of them is closer than half the grid's chord — a duplicate of the two ends is separated by
+        # rounding alone, about `2.4e-16` in `Float64` and `1.7e-7` in `Float32`
         @test all(abs(hypot(d[1], d[2]) - one(T)) ≤ 4 * eps(T) for d in directions)
-        @test !((one(T), zero(T)) in directions[2:end])
+        closed_form = [(cospi(2 * T(j - 1) / T(51)), sinpi(2 * T(j - 1) / T(51)))
+                       for j in eachindex(directions)]
+        @test all(
+            pair -> abs(pair[1][1] - pair[2][1]) ≤ 4 * eps(T) &&
+                    abs(pair[1][2] - pair[2][2]) ≤ 4 * eps(T),
+            zip(directions, closed_form))
+        separations = [hypot(d[1] - e[1], d[2] - e[2])
+                       for (i, d) in enumerate(directions), (k, e) in enumerate(directions)
+                       if i < k]
+        @test minimum(separations) ≥ sin(T(π) / T(51))
         # and no two atoms coincide in their two weights and their bias together
         @test allunique([(atoms[k, 1], atoms[k, 2], atoms[k, 3]) for k in axes(atoms, 1)])
     end
