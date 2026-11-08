@@ -133,14 +133,18 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-11-07
 
-### K39 · The `WAVE_NN_PARTIALLY` run reaches no tolerance.
+### K39 · The `WAVE_NN_PARTIALLY` run does not converge at the solver's default tolerances.
 
 - location: `test/helpers/reference_values.jl:57`, `src/ansatz/network.jl`
 - evidence: the same §A case with `mode = :last_layer` takes `iterations = [3, 4, 4, 3, 3]` at
   `residual = [9.41e-4, 1.59e-3, 2.34e-3, 3.12e-3, 2.28e-3]`, each from an initial residual of
   `[2.175, 32.10, 61.90, 92.79, 119.7]`, and `converged = false` at every step, in `Float64`: the
   coupling's `16` constraint rows reach only the `10` output weights, so the step's system is rank
-  deficient by at least `6` and no tolerance is reachable at that size. The run completes and
+  deficient by at least `6`. The run uses the solver's default tolerances, `f_abstol = 1.78e-15` as
+  in the options of the §A entry and `f_reltol = 1.49e-8`, not their `4.44e-16`, and does not meet
+  them: its residuals stay near `1e-3`, at `4.3e-4`, `5.0e-5`, `3.8e-5`, `3.4e-5` and `1.9e-5` of
+  the initial residual. The run does not use `network_f_reltol`; the last four ratios lie below its
+  `1e-4`, which says nothing about convergence under the run's own settings. The run completes and
   records its stats, and its sup-norm deviation from the §A entry is `581.5` in `Float64` and
   `580.4` in `Float32`, on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3, the entry being
   a diverged iterate whose own `u` reaches `581.76`; the deviation records that entry and not the
