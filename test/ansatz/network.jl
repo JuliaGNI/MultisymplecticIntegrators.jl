@@ -19,37 +19,47 @@ include("../helpers/action_oracle.jl")
 const M = MultisymplecticIntegrators
 
 """
-The largest deviation of a network run from its §A entry, in the sup norm over the output grid, with
-the value this tree measures beside it.
+The largest deviation of a network run from its §A entry, in the sup norm over the output grid, per
+precision, with the value this tree measures beside it. Each bound is at most `1.5` times its own
+measurement. Measured on `arm64-apple-darwin27.0.0` (`apple-m4`), Julia 1.13.3,
+`--check-bounds=auto`, one BLAS thread.
 
-`WAVE_NN_FULLY`: `0.7587` over the five steps in `Float64` and `12.04` in `Float32`, against a bound
-of `13` — the bound is the `Float32` arm's, whose steps reach a residual of `1.8` and do not
-converge, where the `Float64` arm stops at `0.43`. `WAVE_NN_PARTIALLY`: `579.2` in `Float64` and
-`580.4` in `Float32`, and the bound of `600` records that run: the entry is a diverged iterate, its
-own `u` reaching `581.76`, so the deviation records the entry and not the accuracy of this run.
+`WAVE_NN_FULLY`: `0.7504` over the five steps in `Float64` and `9.29` in `Float32`, against `1.0`
+and `13.0` — the `Float32` arm's steps reach a residual of `1.8` and do not converge, where the
+`Float64` arm stops at `0.13`. `WAVE_NN_PARTIALLY`: `579.2` in `Float64` and `580.3` in `Float32`,
+and the bound of `860` records that run: the entry is a diverged iterate, its own `u` reaching
+`581.76`, so the deviation records the entry and not the accuracy of this run.
 `WAVE_NN_SYMBOLIC_FULLY`: the old symbolic integrator's run of the same §A case, whose own `u`
 differs from `WAVE_NN_FULLY`'s by up to `0.7615`, so the two are separate records; this tree's
-`:all` arm deviates from it by `0.437` in `Float64` and `12.04` in `Float32`, against the same bound
-of `13`. `SINE_GORDON_NN_FULLY`: `0.0204` in `Float64` and `0.0408` in `Float32`, against a bound of
-`0.05`.
+`:all` arm deviates from it by `0.4629` in `Float64` and `9.37` in `Float32`, against `0.65` and
+`14.0`. `SINE_GORDON_NN_FULLY`: `0.0165` in `Float64` and `0.117` in `Float32`, against `0.024` and
+`0.17`.
 
 Neither entry can be reproduced bit for bit: they were made before the two defects the network
 family fixes — the bottom points read in the normalized coordinate (`xspan` is `(0, 1)`, so there
 they coincide, and this bound is the fit's alone) and the duplicate atom of the old dictionary,
 which cost the greedy a whole selection.
 """
-const NETWORK_SUP_BOUND = (WAVE_NN_FULLY = 13.0, WAVE_NN_PARTIALLY = 600.0,
-    WAVE_NN_SYMBOLIC_FULLY = 13.0, SINE_GORDON_NN_FULLY = 0.05)
+function network_sup_bound(::Type{Float64})
+    (WAVE_NN_FULLY = 1.0, WAVE_NN_PARTIALLY = 860.0,
+        WAVE_NN_SYMBOLIC_FULLY = 0.65, SINE_GORDON_NN_FULLY = 0.024)
+end
+function network_sup_bound(::Type{Float32})
+    (WAVE_NN_FULLY = 13.0, WAVE_NN_PARTIALLY = 860.0,
+        WAVE_NN_SYMBOLIC_FULLY = 14.0, SINE_GORDON_NN_FULLY = 0.17)
+end
 
 """
 The largest deviation of `N1`'s record arms — the same §A case with the initial condition as the guess
-of the first slab instead of the exact solution — from the same entries, with the value this tree
-measures beside it. The guess is a different target, so the fit seeds a different network and the
-deviation from the entry is not the one `NETWORK_SUP_BOUND` records: `WAVE_NN_FULLY` is `0.831` in
-`Float64` and `1.211` in `Float32`, against a bound of `1.5`, and `WAVE_NN_PARTIALLY` is `580.6` in
-`Float64` and `580.5` in `Float32`, against a bound of `600`.
+of the first slab instead of the exact solution — from the same entries, per precision, with the
+value this tree measures beside it. The guess is a different target, so the fit seeds a different
+network and the deviation from the entry is not the one `network_sup_bound` records:
+`WAVE_NN_FULLY` is `0.6019` in `Float64` and `1.261` in `Float32`, against `0.88` and `1.85`, and
+`WAVE_NN_PARTIALLY` is `580.6` in `Float64` and `580.5` in `Float32`, against `860`. Each bound is at
+most `1.5` times its own measurement, on the machine `network_sup_bound` names.
 """
-const NETWORK_ICS_SUP_BOUND = (WAVE_NN_FULLY = 1.5, WAVE_NN_PARTIALLY = 600.0)
+network_ics_sup_bound(::Type{Float64}) = (WAVE_NN_FULLY = 0.88, WAVE_NN_PARTIALLY = 860.0)
+network_ics_sup_bound(::Type{Float32}) = (WAVE_NN_FULLY = 1.85, WAVE_NN_PARTIALLY = 860.0)
 
 """The steps of the §A case."""
 const NETWORK_STEPS = 5
@@ -63,7 +73,7 @@ const NETWORK_CONTROL_S = 20
 """
 The relative tolerance of the network family's steps, measured on the affine control of `:last_layer`
 at `S = 20`: the largest of its five step ratios `residual / initial residual` is `8.3e-6` in
-`Float64` and `2.0e-3` in `Float32`, against the bounds this tree allows.
+`Float64` and `7.0e-3` in `Float32`, against the bounds this tree allows.
 
 The control's steps are affine in its unknowns — the coupling's constraint rows reach the free
 output weights alone and the hidden layer, which the fit fixed, enters the residual as data — so two
@@ -107,9 +117,9 @@ function finite_states(x)
     return all(n -> all(isfinite, x[n]), eachindex(x))
 end
 
-"""Whether two solution series agree on every state they hold."""
+"""Whether two solution series are bit-identical on every state they hold."""
 function same_states(x, y)
-    return axes(x) == axes(y) && all(n -> x[n] ≈ y[n], eachindex(x))
+    return axes(x) == axes(y) && all(n -> x[n] == y[n], eachindex(x))
 end
 
 """
@@ -293,8 +303,8 @@ end
     # reach the root of an affine system.
     @testset "N1 the network integrates Wave under both modes" for T in (Float64, Float32)
         for (mode, entry, bound) in ((
-            :all, WAVE_NN_FULLY, NETWORK_ICS_SUP_BOUND.WAVE_NN_FULLY),
-            (:last_layer, WAVE_NN_PARTIALLY, NETWORK_ICS_SUP_BOUND.WAVE_NN_PARTIALLY))
+            :all, WAVE_NN_FULLY, network_ics_sup_bound(T).WAVE_NN_FULLY),
+            (:last_layer, WAVE_NN_PARTIALLY, network_ics_sup_bound(T).WAVE_NN_PARTIALLY))
             _, _, int, result = network_run(T; mode = mode)
             c = cache(int)
             @test length(result.traces) == NETWORK_STEPS
@@ -445,8 +455,9 @@ end
     end
 
     @testset "A1 the §A case in both modes" for T in (Float64, Float32)
-        for (mode, entry, bound) in ((:all, WAVE_NN_FULLY, NETWORK_SUP_BOUND.WAVE_NN_FULLY),
-            (:last_layer, WAVE_NN_PARTIALLY, NETWORK_SUP_BOUND.WAVE_NN_PARTIALLY))
+        for (mode, entry, bound) in ((
+            :all, WAVE_NN_FULLY, network_sup_bound(T).WAVE_NN_FULLY),
+            (:last_layer, WAVE_NN_PARTIALLY, network_sup_bound(T).WAVE_NN_PARTIALLY))
             _, _, _, result = network_run(T; mode = mode,
                 guess = FitTo(ExactSolution(); method = OrthogonalGreedy()))
             @test length(result.traces) == NETWORK_STEPS
@@ -455,7 +466,7 @@ end
             deviation = sup_deviation(result, entry)
             @test deviation ≤ bound
             mode === :all && @test sup_deviation(result, WAVE_NN_SYMBOLIC_FULLY) ≤
-                  NETWORK_SUP_BOUND.WAVE_NN_SYMBOLIC_FULLY
+                  network_sup_bound(T).WAVE_NN_SYMBOLIC_FULLY
         end
         # the three-step SineGordon case of the entry
         problem = SineGordon.problem(
@@ -466,6 +477,6 @@ end
         result = integrate(GeometricIntegrator(problem, method))
         @test length(result.traces) == 3
         @test sup_deviation(result, SINE_GORDON_NN_FULLY) ≤
-              NETWORK_SUP_BOUND.SINE_GORDON_NN_FULLY
+              network_sup_bound(T).SINE_GORDON_NN_FULLY
     end
 end

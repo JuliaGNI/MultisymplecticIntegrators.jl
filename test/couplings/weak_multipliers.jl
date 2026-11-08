@@ -51,9 +51,9 @@ end
 
 """A whole run of one coupling on `Wave` at its default parameters: five steps of `h = 0.05`."""
 function wave_run(::Type{T}; coupling = WeakInitialCondition(), x_boundary = Dirichlet(),
-        ncells = (2, 20), guess = Continuation(),
+        ncells = (2, 20), degree = 2, guess = Continuation(),
         problem = wave_problem(T)) where {T}
-    ansatz = wave_ansatz(T; ncells = ncells, x_boundary = x_boundary)
+    ansatz = wave_ansatz(T; ncells = ncells, degree = degree, x_boundary = x_boundary)
     method = SpaceTimeGalerkin(ansatz, coupling; initial_guess = guess)
     int = GeometricIntegrator(problem, method)
     result = integrate(int)
@@ -61,6 +61,16 @@ function wave_run(::Type{T}; coupling = WeakInitialCondition(), x_boundary = Dir
     @test all(result.stats.converged)
     return problem, method, int, result
 end
+
+"""
+The bound of M1's spline arm on the largest energy error of its five steps, per precision, with the
+value this tree measures beside it: `3.47e-7` in `Float64`, at the arm's own `degree = (3, 3)` and
+`ncells = (2, 5)`, and `4.44e-5` in `Float32`, at `degree = 2` and `ncells = (2, 20)`. Measured on
+`arm64-apple-darwin27.0.0` (`apple-m4`), Julia 1.13.3, `--check-bounds=auto`, one BLAS thread; each
+bound is about `2.9` times its own measurement.
+"""
+m1_spline_energy(::Type{Float64}) = 1.0e-6
+m1_spline_energy(::Type{Float32}) = 1.3e-4
 
 """
 A `D = 2` problem whose density is the vector density of `VectorWave`, built through the density
@@ -656,13 +666,17 @@ end
         Float32)
         # the spline arm: the network's own coupling and guess, on the basis whose ends the
         # coupling's boundary rows carry, converging at every step and reaching the energy error a
-        # second-order scheme gives at this `h`
+        # second-order scheme gives at this `h`. In `Float64` it runs at the network's own
+        # `degree = (3, 3)` and `ncells = (2, 5)`; in `Float32` those settings do not converge —
+        # steps 2 to 5 stop at a residual of `1.2e-6` against a tolerance of `9.5e-7`, the round-off
+        # floor of that solve — so that arm keeps the coarser basis it solves.
+        degree, ncells = T === Float64 ? ((3, 3), (2, 5)) : (2, (2, 20))
         spline_problem, spline_method, _, spline_result = wave_run(T;
             coupling = WeakInitialAndBoundaryConditions(), x_boundary = Free(),
-            guess = FitTo(ExactSolution()))
+            guess = FitTo(ExactSolution()), degree = degree, ncells = ncells)
         @test all(spline_result.stats.converged)
         @test maximum(energy_error(spline_problem, spline_method, spline_result.traces)) <
-              1e-3
+              m1_spline_energy(T)
         # the network arm: it completes, records its stats, and its residual is the gradient of the
         # action whose multiplier functions and surface rule are the trace basis'
         problem = wave_problem(T)

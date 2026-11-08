@@ -207,9 +207,9 @@ in the order `L1.W`, `L1.b`, `L2.W`: the two hidden weights and the bias of ever
 the output weight of every component behind it. A unit the selection passed over leaves its
 parameters at zero.
 
-The output weights are the triangular solve of the fit's Gram matrix: the projection is orthogonal
-to the atoms already taken, so its coefficients are those of the atoms and not of the network, and
-the solve turns them into the output weights of a hidden layer that is already fixed.
+The output weights are the ones the fit returns: the projection is orthogonal to the atoms already
+taken, so its coefficients are those of the atoms and not of the network, and the fit's triangular
+solve turns them into the output weights of a hidden layer that is already fixed.
 """
 function fit!(w::AbstractVector{ST}, method::OrthogonalGreedy, ansatz::NetworkAnsatz,
         sample::AbstractArray{ST, 3}, c::SpaceTimeGalerkinCache) where {ST}
@@ -217,18 +217,9 @@ function fit!(w::AbstractVector{ST}, method::OrthogonalGreedy, ansatz::NetworkAn
     n = fit_network!(f, method, sample, c.ansatz.tabulation, ansatz.S, ansatz.D,
         activation_function(ansatz))
     S, D = ansatz.S, ansatz.D
-    for i in n:-1:1, d in 1:D
-
-        value = f.coefficients[i, d]
-        for j in (i + 1):n
-            value -= f.gram[i, j] * f.coefficients[j, d]
-        end
-        f.coefficients[i, d] = value / f.gram[i, i]
-    end
     fill!(w, zero(ST))
     for j in 1:n
         k = f.selected[j]
-        k == 0 && continue
         w[j], w[S + j], w[2S + j] = f.atoms[k, 1], f.atoms[k, 2], f.atoms[k, 3]
         for d in 1:D
             w[3S + (j - 1) * D + d] = f.coefficients[j, d]

@@ -65,25 +65,6 @@ The fit method `FitTo(target)` uses when the caller names none.
 default_fit(::SpaceTimeAnsatz) = Projection()
 
 """
-    greedy_atoms(method::OrthogonalGreedy, ::Type{T})
-
-The dictionary of the fit, as `(w₁, w₂, b)` rows of precision `T`: `Nw + 1` directions of equal
-angle on the half-open circle `[0, 2π)`, crossed with `Nb + 1` biases over `bias_interval`. The
-grid is half-open, so no direction is repeated and every direction of the circle appears once.
-"""
-function greedy_atoms(method::OrthogonalGreedy, ::Type{T}) where {T}
-    nd, nb = method.Nw + 1, method.Nb + 1
-    a, b = convert(T, method.bias_interval[1]), convert(T, method.bias_interval[2])
-    atoms = Matrix{T}(undef, nd * nb, 3)
-    for k in 1:(nd * nb)
-        θ = 2 * T(π) * T((k - 1) ÷ nb) / T(nd)
-        atoms[k, 1], atoms[k, 2] = cos(θ), sin(θ)
-        atoms[k, 3] = a + (b - a) * T((k - 1) % nb) / T(nb - 1)
-    end
-    return atoms
-end
-
-"""
     is_linear_in_coefficients(ansatz)
 
 Whether the ansatz is linear in its coefficients. A `Projection()` needs one that is; an ansatz

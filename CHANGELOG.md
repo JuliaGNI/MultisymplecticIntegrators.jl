@@ -502,7 +502,7 @@ makes it worth keeping.
   `[0, 1] × [0, 0.05]` at `S = 8` it stays within `11//10` of the relative `L²` error the old
   `OGA2D` dictionary and pick rule reach on the same slab, which the test measures with its own copy
   of that fit.
-  `AbstractNeuralNetworks` (compat `0.9.1`), `SymbolicNeuralNetworks` (compat `0.9`) and
+  `AbstractNeuralNetworks` (compat `0.9.1`), `SymbolicNeuralNetworks` (compat `0.9.1`) and
   `NeuralNetworkParameters` (compat `0.5`) join `[deps]`, and `test/ansatz/network.jl` and
   `test/initial_guess/orthogonal_greedy.jl` join the `slow` group.
 

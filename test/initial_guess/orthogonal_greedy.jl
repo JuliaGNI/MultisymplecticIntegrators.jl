@@ -1,5 +1,5 @@
 using GeometricIntegratorsBase
-using LinearAlgebra: norm
+using LinearAlgebra: dot, norm
 using MultisymplecticIntegrators
 using Test
 
@@ -172,6 +172,58 @@ function old_oga2d_error(::Type{T}, nodes::AbstractMatrix{T}, weights::AbstractV
     return sqrt(error / scale)
 end
 
+"""
+The greedy fit as its definition states it, recomputed here with no code of the fit: the
+closed-form dictionary of `Nw + 1` directions of `[0, 2π)` crossed with `Nb + 1` biases over
+`[-π, π]`, the pick of each step by the modulus of the projection on the weighted residual, and the
+Gram–Schmidt step that makes the rest of the residual orthogonal to the atom taken. It returns the
+`S` picks as `(w₁, w₂, b)` triples, the indices of the atoms they are, and the modulus of every
+atom's projection at each step.
+
+`nodes` is a `2 × N` matrix of the slab's own nodes, and `weights` and `target` are vectors of
+length `N`.
+"""
+function closed_greedy(::Type{T}, nodes::AbstractMatrix{T}, weights::AbstractVector{T},
+        target::AbstractVector{T}; Nw = 50, Nb = 50, S = 8) where {T}
+    nd, nb = Nw + 1, Nb + 1
+    m, N = nd * nb, size(nodes, 2)
+    root = sqrt.(weights)
+    dictionary = Matrix{T}(undef, m, 3)
+    table = Matrix{T}(undef, m, N)
+    for k in 1:m
+        θ = 2 * T(π) * T((k - 1) ÷ nb) / T(nd)
+        b = -T(π) + 2 * T(π) * T((k - 1) % nb) / T(nb - 1)
+        dictionary[k, :] .= (cos(θ), sin(θ), b)
+        for n in 1:N
+            table[k, n] = root[n] * tanh(cos(θ) * nodes[1, n] + sin(θ) * nodes[2, n] + b)
+        end
+    end
+    chosen = zeros(T, N, S)
+    residual = root .* target
+    taken = falses(m)
+    picks = NTuple{3, T}[]
+    selected = Int[]
+    correlations = Vector{T}[]
+    for s in 1:S
+        corr = abs.(table * residual)
+        push!(correlations, corr)
+        k = argmax(ifelse.(taken, zero(T), corr))
+        push!(selected, k)
+        push!(picks, (dictionary[k, 1], dictionary[k, 2], dictionary[k, 3]))
+        taken[k] = true
+        column = table[k, :] .* one(T)
+        norm2 = dot(table[k, :], table[k, :])
+        for j in 1:(s - 1)
+            column .-= dot(view(chosen, :, j), column) .* view(chosen, :, j)
+        end
+        gain = sqrt(dot(column, column))
+        gain > sqrt(eps(T) * norm2) || break
+        chosen[:, s] .= column ./ gain
+        residual .-= dot(view(chosen, :, s), residual) .* view(chosen, :, s)
+    end
+    return picks, selected, correlations
+end
+
 """The allocations of one fit of a fresh workspace, which build its tables, through a function
 barrier."""
 function first_fit_allocations(w, ansatz, sample, c)
@@ -197,7 +249,40 @@ end
         @test error ≤ GREEDY_L2_FACTOR * old_oga2d_error(T, nodes, node_weights, target)
         # no atom is selected twice
         @test allunique(M.fit_atoms(w, ansatz))
+        # the selection recomputed from its definition, on the closed form of the same dictionary:
+        # the eight atoms written are the copy's picks in order, and each step's pick carries the
+        # copy's largest correlation against the atoms the earlier steps left
+        picks, selected, correlations = closed_greedy(T, nodes, node_weights, target)
+        atoms = M.fit_atoms(w, ansatz)
+        dictionary = M.greedy_atoms(OrthogonalGreedy(), T)
+        position(atom) = argmin([maximum(abs.(collect(atom) .- dictionary[k, :]))
+                                 for k in axes(dictionary, 1)])
+        @test length(atoms) == length(picks)
+        for s in eachindex(picks)
+            @test maximum(abs.(collect(atoms[s]) .- picks[s])) ≤ 4 * eps(T)
+            left = setdiff(axes(dictionary, 1), position.(atoms[1:(s - 1)]))
+            @test abs(correlations[s][position(atoms[s])]) ≥
+                  (1 - 64 * eps(T)) * maximum(abs, correlations[s][left])
+        end
         assert_no_upcast(w, T)
+    end
+
+    # The workspace of a fit is keyed on the parameters of its method as well as on its sizes: a
+    # second fit on the same block, with a dictionary of the same size and another bias interval,
+    # reads its own dictionary — a workspace keyed on sizes alone returns the first one's biases.
+    @testset "G5 a second fit on one block reads its own dictionary" for T in (Float64, Float32)
+        ansatz, c, problem = greedy_slab(T)
+        sample, _ = greedy_sample(T, c, problem, (t, x) -> sin(2 * π * x) * cos(π * t))
+        narrow = OrthogonalGreedy(bias_interval = (-1, 1))
+        w = zeros(T, ansatz.np)
+        M.fit!(w, OrthogonalGreedy(), ansatz, sample, c)
+        M.fit!(w, narrow, ansatz, sample, c)
+        _, fresh, _ = greedy_slab(T)
+        expected = zeros(T, ansatz.np)
+        M.fit!(expected, narrow, ansatz, sample, fresh)
+        S = ansatz.S
+        @test all(b -> -1 ≤ b ≤ 1, w[(2S + 1):(3S)])
+        @test w == expected
     end
 
     @testset "G2 the dictionary holds no duplicate atom" for T in (Float64, Float32)
