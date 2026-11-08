@@ -195,9 +195,9 @@ function check_ansatz(problem::LagrangianPDEProblem{PT}, ansatz::NetworkAnsatz{T
     return nothing
 end
 
-default_fit(::NetworkAnsatz) = OrthogonalGreedy()
-
 is_linear_in_coefficients(::NetworkAnsatz) = false
+
+default_fit(::NetworkAnsatz) = OrthogonalGreedy()
 
 """
     fit!(w, method::OrthogonalGreedy, ansatz::NetworkAnsatz, sample, cache)
