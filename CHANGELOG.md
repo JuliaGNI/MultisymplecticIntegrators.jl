@@ -542,3 +542,12 @@ makes it worth keeping.
   `ArgumentError`. SimpleSplines 0.3.5 calls FFTW's method by `invoke`.
 - **Repository hygiene.** `figures/` (13 files that nothing referenced), the tracked `.DS_Store`
   files and `rename_error.jl` are deleted.
+- **The manual's library page is split by source layer.** One `@autodocs` block documented every
+  name of the package on `library.md`, and the generated page reached `224.65 KiB` against
+  Documenter's `200 KiB` size threshold once the network family's docstrings landed there, so the
+  Documentation workflow failed. The names now sit on four pages — *Library* for the abstract
+  types, the slab core and the diagnostics, *The ansatz families*, *Couplings and initial guesses*,
+  and *Example problems and diagnostics* for the problem layer and the submodules — and every
+  block of those pages that documents the top-level module names the source files of its layer,
+  which `@autodocs` matches by the end of a file's path. A file that no block names leaves its
+  docstrings out of the manual, and the build reports it through `checkdocs = :all`.

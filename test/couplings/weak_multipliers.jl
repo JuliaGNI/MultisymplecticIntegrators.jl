@@ -668,8 +668,9 @@ end
         # coupling's boundary rows carry, converging at every step and reaching the energy error a
         # second-order scheme gives at this `h`. In `Float64` it runs at the network's own
         # `degree = (3, 3)` and `ncells = (2, 5)`; in `Float32` those settings do not converge —
-        # steps 2 to 5 stop at a residual of `1.2e-6` against a tolerance of `9.5e-7`, the round-off
-        # floor of that solve — so that arm keeps the coarser basis it solves.
+        # steps 2 to 5 stop at `1.08e-6 … 1.42e-6`, the round-off floor of that solve, against a
+        # tolerance of `9.73e-7 … 9.79e-7` measured on `arm64-apple-darwin27.0.0` at Julia 1.13.3 —
+        # so that arm keeps the coarser basis it solves.
         degree, ncells = T === Float64 ? ((3, 3), (2, 5)) : (2, (2, 20))
         spline_problem, spline_method, _, spline_result = wave_run(T;
             coupling = WeakInitialAndBoundaryConditions(), x_boundary = Free(),

@@ -124,7 +124,10 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   1.94e-2]`, each from an initial residual of `[13.60, 52.07, 56.31, 33.18, 63.87]`, and
   `converged = false` at every step, in `Float64`. The entry itself reports `converged = true` at
   `residual = [0.602, 4.789, 270.7, 39.61, 1575.0]`. Its sup-norm deviation from the entry is
-  `0.7504` over the five steps in `Float64` and `9.29` in `Float32`. The record is that run and
+  `0.7504` over the five steps in `Float64` and `9.29` in `Float32`, on
+  `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3; the same entry's `:all` arm with the
+  initial condition as the guess deviates by `0.6019` and `1.261` there, and reads `0.9999` in
+  `Float64` on CI's `windows-latest` runner at Julia 1.12.7. The record is that run and
   not a reference: the network's rows are the gradient of a discrete action the Newton solve cannot
   drive to round-off, which is the measured result and not a defect of the assembly.
 - kind: defect
@@ -139,8 +142,10 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   coupling's `14` constraint rows reach only the `10` output weights, so the step's system is rank
   deficient by `4` and no tolerance is reachable at that size. The run completes and records its
   stats, and its sup-norm deviation from the §A entry is `579.2` in `Float64` and `580.3` in
-  `Float32`, the entry being a diverged iterate whose own `u` reaches `581.76`; the deviation
-  records that entry and not the accuracy of this run. The affine control at
+  `Float32`, on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3, the entry being a diverged
+  iterate whose own `u` reaches `581.76`; the deviation records that entry and not the accuracy of
+  this run. The initial condition as the guess instead of the exact solution gives `580.6` and
+  `580.5` in that order. The affine control at
   `S = 20`, where the freed output weights carry every row, converges in two iterations to `8.3e-6`
   of its initial residual in `Float64` and `7.0e-3` in `Float32`, which is what the family's
   `network_f_reltol` records.
@@ -154,8 +159,9 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `residual = [1.34e-2, 1.61e-2, 3.00e-4]`, each from an initial residual of `[0.6289, 0.2669,
   0.2674]`, and `converged = false` in `Float64`; the entry reports `converged = true` at
   `residual = [0.2339, 1.549, 139.9]`. Its sup-norm deviation from the entry is `0.0165` in
-  `Float64` and `0.117` in `Float32` over the three steps. As for K38 the record is that run and
-  not a reference.
+  `Float64` and `0.117` in `Float32` over the three steps, on `arm64-apple-darwin27.0.0`
+  (`apple-m4`) at Julia 1.13.3, where CI's `macOS-latest` runner reads `0.2442` in `Float32` at
+  Julia 1.12.7. As for K38 the record is that run and not a reference.
 - kind: defect
 - found: 2026-11-07
 
@@ -164,7 +170,8 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - location: `test/helpers/reference_values.jl:59`, `src/ansatz/network.jl`
 - evidence: the entry is the symbolic integrator of the old stack on the §A case of K38, and this
   tree's counterpart to it is the `:all` arm of K38, whose deviation from it is `0.4629` in
-  `Float64` and `9.37` in `Float32` over the five steps. The entry's own `u` differs from
+  `Float64` and `9.37` in `Float32` over the five steps, on `arm64-apple-darwin27.0.0`
+  (`apple-m4`) at Julia 1.13.3. The entry's own `u` differs from
   `WAVE_NN_FULLY`'s by up to `0.7615`, so the two entries are separate records and neither is the
   other's reference; `maximum(abs, WAVE_NN_FULLY.u)` is `1.48`. The entry reports `converged = true`
   at `iterations = [5, 2, 27, 7, 1]` and `residual = [0.602, 8.766, 6.202, 65.82, 47.99]`, so as
