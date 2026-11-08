@@ -480,10 +480,10 @@ makes it worth keeping.
   respect to each free parameter, the four surface rows included, and it equals the gradient of the
   discrete action of `test/helpers/action_oracle.jl`; the solver's Jacobian equals central
   differences of it to `√eps(T)` of its scale, in both precisions. On the `NN_PDE_Integrator` case
-  of the reference record at `S = 10`, the two modes reach no tolerance and their per-step stats are
-  recorded; the affine control at `S = 20` converges in two iterations to a fraction of its initial
-  residual that each precision's own relative tolerance records. The runs are recorded as K38–K40
-  and K42 rather than asserted against a tolerance
+  of the reference record at `S = 10`, neither mode meets the default tolerances of the solver and
+  their per-step stats are recorded; the affine control at `S = 20` converges in two iterations to
+  a fraction of its initial residual that each precision's own relative tolerance records. The runs
+  are recorded as K38–K40 and K42 rather than asserted against a tolerance
   (U13, U24).
 - **The slab core sizes its system through the ansatz, and an ansatz keeps its fixed parameters
   across element types.** `nunknowns(ansatz, coupling, problem)` is the number of an ansatz's own
