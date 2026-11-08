@@ -452,6 +452,66 @@ makes it worth keeping.
   wave over five slabs, from the exact parameters and from two starts off them, the two-component
   field of `VectorWave`, the side data of each end, and the registry entry's solved parameters in
   both precisions, its run and its archive.
+- **The network family returns: a `NetworkAnsatz` whose field is a two-layer network, with the
+  orthogonal-greedy fit that seeds it.** `NetworkAnsatz(; S, activation = tanh, mode = :all, xspan,
+  ncells, degree, quadrature_order = nothing, D = 1)` is a `SpaceTimeAnsatz` of one slab whose input
+  is the slab's normalised time `t̂ ∈ [0, 1]` and the physical space coordinate `x`, and whose output
+  is the `D` components of the field: `Chain(Dense(2, S, σ), Dense(S, D, identity;
+  use_bias = false))`, whose parameters are the hidden weights, the hidden biases and the output
+  weights, in the order `L1.W`, `L1.b`, `L2.W` of `NeuralNetworkParameters`. `:all` frees every
+  parameter; `:last_layer` frees the output weights alone and leaves the hidden layer where the fit
+  put it, so a step is affine in its unknowns, and two Newton iterations reach its tolerance
+  wherever the output weights carry every constraint row of the coupling.
+  The parameters live in the ansatz's block in the slab cache and never in the ansatz object, so two
+  integrators that share one ansatz give identical results. The constructor refuses, each with an
+  `ArgumentError` that names the values it compared, an `xspan` that does not hold two increasing
+  values, an `S` or a `D` that is not positive, and a `mode` that is neither `:all` nor
+  `:last_layer`; at the building of the cache it refuses another element type, another `xspan` and a
+  network whose output dimension is not the problem's `D`. A network's Newton system is solved with
+  `SimpleSolvers.LapackPivotedQR()` unless the caller names another `linear_solver_method`: its
+  minimum-norm step drops the directions the rank does not carry, where a plain factorisation meets
+  a zero pivot. An activation that `SymbolicNeuralNetworks` cannot differentiate raises that
+  package's own error, which is not caught. The network carries a `TensorBSplineAnsatz` as
+  `trace_basis(ansatz)`: its functions are
+  the multipliers of `WeakInitialAndBoundaryConditions`, and its rule is the one the coupling's
+  tables and its surface rows are built on, while the field itself is evaluated on a rule of the
+  ansatz's own, one node per cell more in time than the trace basis' and the same in space. The
+  residual is the Euler–Lagrange residual of the slab weighted by the derivative of the field with
+  respect to each free parameter, the four surface rows included, and it equals the gradient of the
+  discrete action of `test/helpers/action_oracle.jl`; the solver's Jacobian equals central
+  differences of it to `√eps(T)` of its scale, in both precisions. On the `NN_PDE_Integrator` case
+  of the reference record at `S = 10`, the two modes reach no tolerance and their per-step stats are
+  recorded; the affine control at `S = 20` converges in two iterations to a fraction of its initial
+  residual that each precision's own relative tolerance records. The runs are recorded as K38–K40
+  and K42 rather than asserted against a tolerance
+  (U13, U24).
+- **The slab core sizes its system through the ansatz, and an ansatz keeps its fixed parameters
+  across element types.** `nunknowns(ansatz, coupling, problem)` is the number of an ansatz's own
+  unknowns of one slab and `slab_unknowns` the size of the whole system, which
+  `total_free_coefficients` returns, so an ansatz that holds its unknowns as a parameter vector
+  declares its own count. `copy_ansatz_data!` copies what an ansatz keeps outside the solver's
+  vector — the parameters it holds fixed — from the cache of the problem's element type into the one
+  the solver evaluates at, and `residual!` calls it beside `copy_coupling_data!`. A `:last_layer`
+  step frees the output weights alone, so its field and its Jacobian are the hidden layer's, which
+  the fit writes into the block of the problem's element type; without the copy the solver's block
+  would hold that layer at zero and the Jacobian would vanish.
+- **`OrthogonalGreedy` fits a network to a slab target.** `OrthogonalGreedy(; bias_interval = (-π,
+  π), Nw = 50, Nb = 50)` is the fit a network takes by default: a dictionary of `Nw + 1` directions
+  of equal angle on the half-open circle `[0, 2π)`, crossed with `Nb + 1` biases over
+  `bias_interval`, tabulated once at the nodes of the slab's own rule, from which the fit selects
+  `S` atoms by the modulus of their projection on the target and refits the output weights of every
+  component by least squares after each selection. An atom whose remaining direction is shorter than
+  `√eps` of its own length adds no rank and is passed over, so no atom is selected twice. The fit is
+  linear in the output weights alone, so the hidden weights and the biases stay where the dictionary
+  put them; a fit after the first allocates nothing, and the first, which builds the tables,
+  allocates under the `100 MB` the family allows. On the slab of `sin(2πx) cos(πt)` over
+  `[0, 1] × [0, 0.05]` at `S = 8` it stays within `11//10` of the relative `L²` error the old
+  `OGA2D` dictionary and pick rule reach on the same slab, which the test measures with its own copy
+  of that fit.
+  `AbstractNeuralNetworks` (compat `0.9.1`), `SymbolicNeuralNetworks` (compat `0.9`) and
+  `NeuralNetworkParameters` (compat `0.5`) join `[deps]`, `SimpleSolvers`' floor rises from `0.14.1`
+  to `0.14.2`, the first release whose `NeuralNetworkParameters` bound admits `0.5`, and
+  `test/ansatz/network.jl` and `test/initial_guess/orthogonal_greedy.jl` join the `slow` group.
 
 ### Changed
 
@@ -489,3 +549,12 @@ makes it worth keeping.
   `ArgumentError`. SimpleSplines 0.3.5 calls FFTW's method by `invoke`.
 - **Repository hygiene.** `figures/` (13 files that nothing referenced), the tracked `.DS_Store`
   files and `rename_error.jl` are deleted.
+- **The manual's library page is split by source layer.** One `@autodocs` block documented every
+  name of the package on `library.md`, and the generated page reached `224.65 KiB` against
+  Documenter's `200 KiB` size threshold once the network family's docstrings landed there, so the
+  Documentation workflow failed. The names now sit on four pages — *Library* for the abstract
+  types, the slab core and the diagnostics, *The ansatz families*, *Couplings and initial guesses*,
+  and *Example problems and diagnostics* for the problem layer and the submodules — and every
+  block of those pages that documents the top-level module names the source files of its layer,
+  which `@autodocs` matches by the end of a file's path. A file that no block names leaves its
+  docstrings out of the manual, and the build reports it through `checkdocs = :all`.

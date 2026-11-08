@@ -3,16 +3,19 @@ using GeometricIntegratorsBase
 using GeometricSolutions
 using LinearAlgebra: rank, svdvals
 using MultisymplecticIntegrators
+using Random
 using SimpleSplines
 using Test
 
 import GeometricEquations: problem
 import GeometricIntegratorsBase: GeometricIntegrator, cache, copy_internal_variables!,
-                                 integrate!, internal, solutionstep
+                                 current, integrate!, internal, nlsolution, reset!,
+                                 solutionstep
 
 include("../helpers/testsetup.jl")
 include("../helpers/reference_values.jl")
 include("../helpers/weak_initial_condition_reference.jl")
+include("../helpers/action_oracle.jl")
 
 const M = MultisymplecticIntegrators
 
@@ -48,9 +51,9 @@ end
 
 """A whole run of one coupling on `Wave` at its default parameters: five steps of `h = 0.05`."""
 function wave_run(::Type{T}; coupling = WeakInitialCondition(), x_boundary = Dirichlet(),
-        ncells = (2, 20), guess = Continuation(),
+        ncells = (2, 20), degree = 2, guess = Continuation(),
         problem = wave_problem(T)) where {T}
-    ansatz = wave_ansatz(T; ncells = ncells, x_boundary = x_boundary)
+    ansatz = wave_ansatz(T; ncells = ncells, degree = degree, x_boundary = x_boundary)
     method = SpaceTimeGalerkin(ansatz, coupling; initial_guess = guess)
     int = GeometricIntegrator(problem, method)
     result = integrate(int)
@@ -58,6 +61,16 @@ function wave_run(::Type{T}; coupling = WeakInitialCondition(), x_boundary = Dir
     @test all(result.stats.converged)
     return problem, method, int, result
 end
+
+"""
+The bound of M1's spline arm on the largest energy error of its five steps, per precision, with the
+value this tree measures beside it: `3.47e-7` in `Float64`, at the arm's own `degree = (3, 3)` and
+`ncells = (2, 5)`, and `4.44e-5` in `Float32`, at `degree = 2` and `ncells = (2, 20)`. Measured on
+`arm64-apple-darwin27.0.0` (`apple-m4`), Julia 1.13.3, `--check-bounds=auto`, one BLAS thread; each
+bound is about `2.9` times its own measurement.
+"""
+m1_spline_energy(::Type{Float64}) = 1.0e-6
+m1_spline_energy(::Type{Float32}) = 1.3e-4
 
 """
 A `D = 2` problem whose density is the vector density of `VectorWave`, built through the density
@@ -647,5 +660,70 @@ end
         c2.coupling.initial_multiplier .+= T(100)
         M.residual!(b_after, x2, sstep, parameters(prob2), int2)
         @test b_after == b_before
+    end
+
+    @testset "M1 the network under WeakInitialAndBoundaryConditions" for T in (Float64,
+        Float32)
+        # the spline arm: the network's own coupling and guess, on the basis whose ends the
+        # coupling's boundary rows carry, converging at every step and reaching the energy error a
+        # second-order scheme gives at this `h`. In `Float64` it runs at the network's own
+        # `degree = (3, 3)` and `ncells = (2, 5)`; in `Float32` those settings do not converge —
+        # steps 2 to 5 stop at `1.08e-6 … 1.42e-6`, the round-off floor of that solve, against a
+        # tolerance of `9.73e-7 … 9.79e-7` measured on `arm64-apple-darwin27.0.0` at Julia 1.13.3 —
+        # so that arm keeps the coarser basis it solves.
+        degree, ncells = T === Float64 ? ((3, 3), (2, 5)) : (2, (2, 20))
+        spline_problem, spline_method, _, spline_result = wave_run(T;
+            coupling = WeakInitialAndBoundaryConditions(), x_boundary = Free(),
+            guess = FitTo(ExactSolution()), degree = degree, ncells = ncells)
+        @test all(spline_result.stats.converged)
+        @test maximum(energy_error(spline_problem, spline_method, spline_result.traces)) <
+              m1_spline_energy(T)
+        # the network arm: it completes, records its stats, and its residual is the gradient of the
+        # action whose multiplier functions and surface rule are the trace basis'
+        problem = wave_problem(T)
+        ansatz = NetworkAnsatz(S = 10, xspan = (zero(T), one(T)), degree = 3,
+            ncells = (2, 5), quadrature_order = 6)
+        method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions();
+            initial_guess = FitTo(ExactSolution(); method = OrthogonalGreedy()))
+        int = GeometricIntegrator(problem, method)
+        c = cache(int)
+        result = integrate(int)
+        @test length(result.traces) == 5
+        @test length(result.stats.iterations) == 5
+        @test all(isfinite, c.trace_u)
+        # the network's own rule is not the trace basis' rule
+        @test M.quadrature_points(c.ansatz)[1] != c.ansatz.trace_tabulation.time.node
+        # the carried momentum: the second slab enters with the top multiplier of the first
+        carry_problem = wave_problem(T; timespan = (zero(T), T(0.1)))
+        carry = GeometricIntegrator(carry_problem, method)
+        solution = GeometricSolution(carry_problem)
+        carry_step = solutionstep(carry, solution[0])
+        reset!(carry_step, timesteps(solution)[1])
+        M.integrate_step!(current(carry_step), history(carry_step),
+            parameters(carry_step), carry)
+        first_top = copy(cache(carry).coupling.top_multiplier)
+        @test any(x -> !iszero(x), first_top)
+        @test cache(carry).coupling.initial_multiplier != first_top
+        reset!(carry_step, timesteps(solution)[2])
+        M.integrate_step!(current(carry_step), history(carry_step),
+            parameters(carry_step), carry)
+        @test cache(carry).coupling.initial_multiplier == first_top
+        # the residual of the first slab, on a fresh integrator, whose datum is the first one
+        fresh = GeometricIntegrator(problem, method)
+        solution = GeometricSolution(problem)
+        solstep = solutionstep(fresh, solution[0])
+        reset!(solstep, timesteps(solution)[1])
+        cf = cache(fresh)
+        M.slab_bottom!(cf, cf.coupling, problem, ansatz, current(solstep))
+        M.initial_guess!(solstep, nothing, parameters(problem), fresh)
+        oracle = ActionOracle(problem, method)
+        N = unknown_count(oracle)
+        @test N == length(nlsolution(fresh))
+        θ = T.(2 .* rand(Xoshiro(20261107), N) .- 1)
+        b = zeros(T, N)
+        M.residual!(b, θ, nothing, parameters(problem), fresh)
+        ∇S = oracle_residual(oracle, first_datum(oracle), θ)
+        @test maximum(abs, ∇S) ≥ T(1 // 100)
+        @test maximum(abs, b - ∇S) ≤ 100 * eps(T) * maximum(abs, ∇S)
     end
 end

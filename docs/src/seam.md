@@ -35,7 +35,11 @@ array, its weak form, the top row of the last slab, the tables of the slab's qua
 space basis at the output grid and at the trace nodes. For a [`SymbolicAnsatz`](@ref) the block is
 a [`SymbolicSlab`](@ref): the parameter vector, its weak form, the field and its parameter
 Jacobians at the nodes and on the four edges of the slab, the tables of the slab's quadrature, and
-the trace basis' space basis at the output grid and at the trace nodes.
+the trace basis' space basis at the output grid and at the trace nodes. For a
+[`NetworkAnsatz`](@ref) the block is a [`NetworkSlab`](@ref): the parameter vector, its weak form,
+the field and its parameter derivative at the nodes of the ansatz's own rule and on the four edges
+of the slab, the tables of that rule and of the trace basis', and the scratch of one point
+evaluation.
 
 The core calls these functions of the ansatz, each on its block:
 
@@ -49,11 +53,16 @@ The core calls these functions of the ansatz, each on its block:
 - [`top_values!`](@ref), with [`output_evaluation`](@ref), [`trace_evaluation`](@ref) and
   [`evaluation_points`](@ref): the field at the top of the slab, at the output grid and at the
   trace nodes, from one evaluation;
-- [`check_ansatz`](@ref): the refusal of an ansatz that the problem cannot support.
+- [`check_ansatz`](@ref): the refusal of an ansatz that the problem cannot support;
+- [`copy_ansatz_data!`](@ref): what the block keeps outside the solver's vector, from the cache of
+  the problem's element type into the cache the solver works in; the default copies nothing.
 
-The counts [`ntime_functions`](@ref) and [`nspace_functions`](@ref) size the solver's vector of a
-tensor B-spline ansatz, and the parameter count sizes that of a symbolic ansatz;
-[`total_free_coefficients`](@ref) gives the size for either.
+The solver's vector of a slab holds the ansatz's unknowns and then the coupling's.
+[`nunknowns`](@ref) counts the ansatz's: for a tensor B-spline ansatz the free rows of its
+[`ntime_functions`](@ref), times [`nspace_functions`](@ref), times the components, and for a network
+the parameters its mode frees. [`slab_unknowns`](@ref) adds the coupling's unknowns.
+A symbolic ansatz counts its parameters, and [`total_free_coefficients`](@ref) gives the size for
+every ansatz.
 
 ## The coupling
 

@@ -19,6 +19,8 @@ makedocs(;
         "Home" => "index.md",
         "The slab seam" => "seam.md",
         "Library" => "library.md",
+        "The ansatz families" => "ansatz.md",
+        "Couplings and initial guesses" => "couplings.md",
         "Example problems and diagnostics" => "problems.md"
     ]
 )

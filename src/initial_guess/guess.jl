@@ -103,6 +103,10 @@ needs_exact_solution(::ExactSolution) = true
 
 Fill the nonlinear solver's vector of the slab from the method's initial guess, and then the
 coupling's own unknowns from the guess the coupling defines for them.
+
+An ansatz whose unknowns are not coefficients supplies its own hooks: a network's are
+`apply_guess!(c, guess::Continuation, ansatz::NetworkAnsatz, …)`, which carries its previous
+parameters, and `apply_guess!(c, guess::FitTo, ansatz::NetworkAnsatz, …)`, which fits its target.
 """
 function initial_guess!(sol, history, params,
         int::GeometricIntegrator{<:SpaceTimeGalerkin, <:LagrangianPDEProblem})

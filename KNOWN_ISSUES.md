@@ -55,10 +55,10 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K31 · A7a's `integrate!` run does not assert convergence.
 
-- location: `test/couplings/weak_multipliers.jl:94-113`
+- location: `test/couplings/weak_multipliers.jl:107-126`
 - evidence: `multiplier_momentum`, which A7a calls, drives a 50-step `VectorWave` run (β = 0.5)
   through `integrate!` and does not read `cache(int).converged`. The `integrate` run of the same
-  problem and method in A7a (`:498-501`) asserts `all(result.stats.converged)`, so a step that does
+  problem and method in A7a (`:511-514`) asserts `all(result.stats.converged)`, so a step that does
   not converge still fails A7a, but the run whose momenta A7a checks has no assertion of its own.
 - kind: missing test
 - found: 2026-11-01
@@ -83,7 +83,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K35 · The side-data testset's symmetric span cannot see `left` and `right` swapped.
 
-- location: `test/couplings/weak_multipliers.jl:548`
+- location: `test/couplings/weak_multipliers.jl:561`
 - evidence: the testset "the side data of every component reaches the slab" builds its problem on
   `xspan = (0.2, 0.8)`, and `Wave`'s closed form is `sin(πx/l)` in space, whose two ends carry the
   same value: `Wave.solution_u(0.0, 0.2, Wave.default_parameters())` is `0.7053423027509678` and
@@ -113,3 +113,80 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `collect(0.0:nextfloat(0.0):1.0)` throws `InexactError: Int64(Inf)`.
 - kind: defect
 - found: 2026-11-07
+
+### K38 · The `WAVE_NN_FULLY` run is an unconverged iterate.
+
+- location: `test/helpers/reference_values.jl:55`, `src/ansatz/network.jl`
+- evidence: the §A case of the entry — `Wave` at `h = 0.05`, `xspan = (0, 1)`, `S = 10`, `tanh`,
+  `Nw = Nb = 50`, the exact solution as the guess with `OrthogonalGreedy()` — run with
+  `NetworkAnsatz(; mode = :all)` and `WeakInitialAndBoundaryConditions()` takes
+  `iterations = [54, 77, 51, 53, 51]` at `residual = [0.1088, 0.1346, 0.2991, 0.6403, 0.6917]`,
+  each from an initial residual of `[15.31, 70.66, 79.15, 50.10, 68.46]`, and `converged = false`
+  at every step, in `Float64`. The entry itself reports `converged = true` at
+  `residual = [0.602, 4.789, 270.7, 39.61, 1575.0]`. Its sup-norm deviation from the entry is
+  `0.5518` over the five steps in `Float64` and `14.74` in `Float32`, on
+  `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3, two BLAS threads; the same entry's
+  `:all` arm with the initial condition as the guess deviates by `0.6894` and `1.340` there. The
+  record is that run and not a reference: the network's rows are the gradient of a discrete action
+  the Newton solve cannot drive to round-off, which is the measured result and not a defect of the
+  assembly.
+- kind: defect
+- found: 2026-11-07
+
+### K39 · The `WAVE_NN_PARTIALLY` run reaches no tolerance.
+
+- location: `test/helpers/reference_values.jl:57`, `src/ansatz/network.jl`
+- evidence: the same §A case with `mode = :last_layer` takes `iterations = [3, 4, 4, 3, 3]` at
+  `residual = [9.41e-4, 1.59e-3, 2.34e-3, 3.12e-3, 2.28e-3]`, each from an initial residual of
+  `[2.175, 32.10, 61.90, 92.79, 119.7]`, and `converged = false` at every step, in `Float64`: the
+  coupling's `16` constraint rows reach only the `10` output weights, so the step's system is rank
+  deficient by at least `6` and no tolerance is reachable at that size. The run completes and
+  records its stats, and its sup-norm deviation from the §A entry is `581.5` in `Float64` and
+  `580.4` in `Float32`, on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3, the entry being
+  a diverged iterate whose own `u` reaches `581.76`; the deviation records that entry and not the
+  accuracy of this run. The initial condition as the guess instead of the exact solution gives
+  `580.5` and `580.5` in that order. The affine control at `S = 20`, where the freed output weights
+  carry every row, converges in two iterations to `7.8e-6` of its initial residual in `Float64` and
+  `6.4e-3` in `Float32`, which is what the family's `network_f_reltol` records.
+- kind: defect
+- found: 2026-11-07
+
+### K40 · The `SINE_GORDON_NN_FULLY` run is an unconverged iterate.
+
+- location: `test/helpers/reference_values.jl:69`, `src/ansatz/network.jl`
+- evidence: the three-step sine-Gordon case of the entry takes `iterations = [134, 62, 118]` at
+  `residual = [1.79e-3, 5.19e-3, 2.26e-3]`, each from an initial residual of `[0.6580, 0.5470,
+  0.5158]`, and `converged = false` in `Float64`; the entry reports `converged = true` at
+  `residual = [0.2339, 1.549, 139.9]`. Its sup-norm deviation from the entry is `0.0137` in
+  `Float64` and `0.0222` in `Float32` over the three steps, on `arm64-apple-darwin27.0.0`
+  (`apple-m4`) at Julia 1.13.3. As for K38 the record is that run and not a reference.
+- kind: defect
+- found: 2026-11-07
+
+### K42 · The `WAVE_NN_SYMBOLIC_FULLY` run is an unconverged iterate of the same case.
+
+- location: `test/helpers/reference_values.jl:59`, `src/ansatz/network.jl`
+- evidence: the entry is the symbolic integrator of the old stack on the §A case of K38, and this
+  tree's counterpart to it is the `:all` arm of K38, whose deviation from it is `0.2451` in
+  `Float64` and `14.74` in `Float32` over the five steps, on `arm64-apple-darwin27.0.0`
+  (`apple-m4`) at Julia 1.13.3. The entry's own `u` differs from
+  `WAVE_NN_FULLY`'s by up to `0.7615`, so the two entries are separate records and neither is the
+  other's reference; `maximum(abs, WAVE_NN_FULLY.u)` is `1.48`. The entry reports `converged = true`
+  at `iterations = [5, 2, 27, 7, 1]` and `residual = [0.602, 8.766, 6.202, 65.82, 47.99]`, so as
+  for K38 the record is that run and not a reference.
+- kind: defect
+- found: 2026-11-08
+
+### K43 · The network family's surface code repeats the symbolic ansatz's.
+
+- location: `src/ansatz/network.jl`, `src/couplings/weak_multipliers.jl`
+- evidence: about 180 lines of the network family nearly repeat the code of `SymbolicAnsatz`:
+  `edge!`, `slab_weak_form!`, `free_residual!`, `keep_top!`, `top_values!`, `initsolver` (an
+  identical body), the `check_coupling` refusals, `coupling_term!` and `coupling_guess!`. They differ
+  only in the surface rule and in the names of the scratch buffers. `network_target_values!` repeats
+  `target_values!` of `src/initial_guess/guess.jl`, whose `ansatz` argument is unused, and the
+  network's `evaluate!(::InitialCondition)` differs from the tensor one only in `trace_basis`. A
+  shared supertype with a surface-rule accessor removes the copy; a reuse of `target_values!` widens
+  its signature.
+- kind: defect
+- found: #44

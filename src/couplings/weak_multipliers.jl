@@ -639,3 +639,203 @@ function coupling_guess!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST}
     end
     return nothing
 end
+
+# ---- the network ansatz ----------------------------------------------------
+#
+# A network holds its unknowns as a parameter vector, and its field is free at both ends of `xspan`.
+# The multiplier tables, their projections and the surfaces they are read at are the trace basis',
+# which the network carries, so every function that builds or reads them delegates to that basis.
+# The field's rows are its free parameters, weighted by the derivative of the field with respect to
+# each of them, at the four surfaces of the slab, which the network's block evaluates on the trace
+# basis' rules; its interior rows are evaluated on its own, at a rule of the ansatz's own.
+
+"""The free rows of a network slab are its free parameters."""
+free_rows(::MultiplierCoupling, a::NetworkAnsatz) = nfree(a)
+
+function space_multiplier_indices(c::MultiplierCoupling, a::NetworkAnsatz)
+    return space_multiplier_indices(c, trace_basis(a))
+end
+
+function boundary_multiplier_indices(c::MultiplierCoupling, a::NetworkAnsatz)
+    return boundary_multiplier_indices(c, trace_basis(a))
+end
+
+function multiplier_counts(c::MultiplierCoupling, a::NetworkAnsatz)
+    return multiplier_counts(c, trace_basis(a))
+end
+
+function coupling_data(c::MultiplierCoupling, a::NetworkAnsatz,
+        p::LagrangianPDEProblem, ::Type{ST}) where {ST}
+    return coupling_data(c, trace_basis(a), p, ST)
+end
+
+function coupling_data_type(c::MultiplierCoupling, a::NetworkAnsatz,
+        p::LagrangianPDEProblem, ::Type{ST}) where {ST}
+    return coupling_data_type(c, trace_basis(a), p, ST)
+end
+
+function coupling_unknowns(c::MultiplierCoupling, a::NetworkAnsatz,
+        p::LagrangianPDEProblem)
+    return coupling_unknowns(c, trace_basis(a), p)
+end
+
+function coupling_internal(c::MultiplierCoupling, a::NetworkAnsatz,
+        p::LagrangianPDEProblem)
+    return coupling_internal(c, trace_basis(a), p)
+end
+
+"""
+    check_coupling(problem, coupling, ansatz)
+
+Refuse a coupling that a network cannot take.
+
+A network holds no bottom coefficient row, so its interior weak form alone is not the gradient of the
+slab's action: the weak initial-and-boundary coupling adds the four surface terms that complete it,
+and the refusals of the other couplings name the one that is taken. The trace basis' own `x_boundary`
+is not checked, because the network builds that basis with `Free()`, the condition the weak
+initial-and-boundary coupling needs.
+"""
+function check_coupling(problem::LagrangianPDEProblem, c::MultiplierCoupling,
+        a::NetworkAnsatz)
+    return nothing
+end
+
+function check_coupling(::LagrangianPDEProblem, ::CoefficientRestriction,
+        ::NetworkAnsatz)
+    throw(ArgumentError("CoefficientRestriction cannot pair with a NetworkAnsatz; a " *
+                        "NetworkAnsatz takes WeakInitialAndBoundaryConditions"))
+end
+
+function check_coupling(::LagrangianPDEProblem, ::WeakInitialCondition,
+        ::NetworkAnsatz)
+    throw(ArgumentError("WeakInitialCondition cannot pair with a NetworkAnsatz; a " *
+                        "NetworkAnsatz takes WeakInitialAndBoundaryConditions"))
+end
+
+function slab_bottom!(c::SpaceTimeGalerkinCache{ST}, data::MultiplierData{ST},
+        problem::LagrangianPDEProblem, ansatz::NetworkAnsatz, sol) where {ST}
+    tr, w = data.traces, data.work
+    tb = trace_basis(ansatz)
+    xt, tt = c.ansatz.trace_tabulation.space, c.ansatz.trace_tabulation.time
+    if c.steps == 0
+        w.target .= initial_condition_sample(ST, problem, tb)
+        ics = problem.ics_function(collect(space_quadrature_nodes(tb)), parameters(problem))
+        tr.x_u .= ics.u
+        tr.x_v .= ics.v
+        tr.x_w .= ics.w
+        project_momentum!(data.initial_multiplier, data, problem)
+    else
+        w.target .= c.trace_u
+        copyto!(data.initial_multiplier, data.top_multiplier)
+    end
+    for d in axes(data.initial_multiplier, 2)
+        basis_load!(view(data.bottom_load, :, d), data.initial_multiplier,
+            data.multiplier_basis, xt, one(ST), d)
+    end
+    size(data.boundary_basis, 1) == 0 && return nothing
+    h, qt, D = timestep(problem), nquadrature(tt), components(problem)
+    t₀ = slab_start(problem, sol)
+    for rt in 1:qt
+        bcs = problem.bcs_function(t₀ + h * tt.node[rt], parameters(problem))
+        for d in 1:D
+            w.boundary_target[rt, d] = ST(bcs.left.u[d])
+            w.boundary_target[qt + rt, d] = ST(bcs.right.u[d])
+        end
+    end
+    return nothing
+end
+
+function coupling_term!(
+        b::AbstractVector{ST}, x::AbstractVector{ST}, data::MultiplierData{ST},
+        c::SpaceTimeGalerkinCache{ST}, ansatz::NetworkAnsatz,
+        problem::LagrangianPDEProblem) where {ST}
+    s = c.ansatz
+    nf, D = nfree(ansatz), ansatz.D
+    nλ, nμ = size(data.initial_multiplier, 1), size(data.boundary_basis, 1)
+    tt, xt = s.trace_tabulation.time, s.trace_tabulation.space
+    qt, qx = nquadrature(tt), nquadrature(xt)
+    hh = convert(ST, timestep(problem))
+    coupling_unknowns!(data, x, D)
+    multiplier_values!(s.lambda_bottom, data.initial_multiplier, data.multiplier_basis)
+    multiplier_values!(s.lambda_top, data.top_multiplier, data.multiplier_basis)
+    multiplier_values!(s.mu_left, view(data.boundary_multiplier, 1:nμ, :),
+        data.boundary_basis)
+    multiplier_values!(s.mu_right, view(data.boundary_multiplier, (nμ + 1):(2nμ), :),
+        data.boundary_basis)
+    # the four surface loads on the parameter rows
+    for k in 1:nf
+        total = zero(ST)
+        for r in 1:qx, d in 1:D
+
+            total += xt.weight[r] * (s.lambda_bottom[r, d] * s.bottom_J[r, d, k] -
+                      s.lambda_top[r, d] * s.top_J[r, d, k])
+        end
+        for q in 1:qt, d in 1:D
+
+            total += hh * tt.weight[q] *
+                     (s.mu_left[q, d] * s.left_J[q, d, k] -
+                      s.mu_right[q, d] * s.right_J[q, d, k])
+        end
+        b[k] += total
+    end
+    # the bottom constraint, in the rows of the top multiplier: the coupling's carried unknown
+    for d in 1:D, p in 1:nλ
+
+        value = zero(ST)
+        for r in 1:qx
+            value += xt.weight[r] * data.multiplier_basis[p, r] *
+                     (s.bottom_u[r, d] - data.work.target[r, d])
+        end
+        b[multiplier_index(nf, D, nλ, nμ, :top, d, p)] = -value
+    end
+    # the two side constraints
+    for d in 1:D, p in 1:nμ
+
+        left = zero(ST)
+        right = zero(ST)
+        for q in 1:qt
+            ω = hh * tt.weight[q] * data.boundary_basis[p, q]
+            left += ω * (s.left_u[q, d] - data.work.boundary_target[q, d])
+            right += ω * (s.right_u[q, d] - data.work.boundary_target[qt + q, d])
+        end
+        b[multiplier_index(nf, D, nλ, nμ, :left, d, p)] = -left
+        b[multiplier_index(nf, D, nλ, nμ, :right, d, p)] = -right
+    end
+    return nothing
+end
+
+function coupling_guess!(data::MultiplierData{ST}, c::SpaceTimeGalerkinCache{ST},
+        ansatz::NetworkAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
+    s = c.ansatz
+    nf, D = nfree(ansatz), ansatz.D
+    nλ, nμ = size(data.initial_multiplier, 1), size(data.boundary_basis, 1)
+    hh, tr = convert(ST, timestep(problem)), data.traces
+    top_values!(tr.x_u, tr.x_v, tr.x_w, s, trace_evaluation(s), hh)
+    project_momentum!(data.work.guess_multiplier, data, problem)
+    for d in 1:D, p in 1:nλ
+
+        c.x[multiplier_index(nf, D, nλ, nμ, :top, d, p)] = data.work.guess_multiplier[p, d]
+    end
+    nμ == 0 && return nothing
+    tt = s.trace_tabulation.time
+    for (eidx, edge, end_of_span) in ((1, :left, xspan(ansatz)[1]), (
+        2, :right, xspan(ansatz)[2]))
+        for q in 1:nquadrature(tt)
+            evaluate_at!(s, tt.node[q], convert(ST, end_of_span))
+            for d in 1:D
+                tr.t_u[q, d] = s.values[d]
+                tr.t_v[q, d] = s.values[D + d] / hh
+                tr.t_w[q, d] = s.values[2D + d]
+            end
+        end
+        flux_load!(
+            tr.t_load, problem.density, tr.t_u, tr.t_v, tr.t_w, parameters(problem))
+        offset = (eidx - 1) * nμ
+        project!(data.boundary_multiplier, offset + 1, data.boundary_projection, tr.t_load)
+        for d in 1:D, p in 1:nμ
+
+            c.x[multiplier_index(nf, D, nλ, nμ, edge, d, p)] = data.boundary_multiplier[offset + p, d]
+        end
+    end
+    return nothing
+end

@@ -10,8 +10,9 @@ a method in the place of the ansatz or a target in the place of the guess, is re
 method is built.
 
 One step of the integrator solves one slab. The unknown of a [`TensorBSplineAnsatz`](@ref) is its
-coefficient array, `(Nt, Nx)` per component, and the unknown of a [`SymbolicAnsatz`](@ref) the
-parameter vector of its expression. For the coefficient array, a coupling that fixes the bottom
+coefficient array, `(Nt, Nx)` per component, the unknown of a [`SymbolicAnsatz`](@ref) the
+parameter vector of its expression, and the unknown of a [`NetworkAnsatz`](@ref) the free part of
+its parameter vector. For the coefficient array, a coupling that fixes the bottom
 row of the time direction supplies it as a datum — the initial condition at the first step and the
 previous slab's top row after it — and the remaining `Nt - 1` rows are determined by the interior
 weak Euler–Lagrange form of the slab, tested against the basis functions that vanish at the top of
@@ -23,11 +24,12 @@ The unknown count is the coupling's: the free rows of each space function and ea
 the coupling's own unknowns behind them. A [`CoefficientRestriction`](@ref) fixes the bottom row, so
 it leaves `(Nt - 1) * Nx * D` free coefficients; a weak-multiplier coupling imposes the initial
 condition with multipliers of its own, so all `Nt` rows are free and the multipliers follow them.
-A symbolic ansatz has no rows: its parameters are its free unknowns, and
-[`WeakInitialAndBoundaryConditions`](@ref), the one coupling it takes, puts its multipliers after
-them. A step is a nonlinear system of [`total_free_coefficients`](@ref)`(method, problem)`
-equations, which the ecosystem's Newton solver solves, with a pivoted QR as its linear solve for a
-symbolic ansatz. With `linear_solver = true`, for an ansatz linear in its coefficients and a linear
+A symbolic ansatz has no rows, and neither has a network: their parameters are their free
+unknowns, and [`WeakInitialAndBoundaryConditions`](@ref), the one coupling either takes, puts its
+multipliers after them. A step is a nonlinear system of
+[`total_free_coefficients`](@ref)`(method, problem)` equations, which the ecosystem's Newton solver
+solves, with a pivoted QR as its linear solve for a symbolic or a network ansatz. With
+`linear_solver = true`, for an ansatz linear in its coefficients and a linear
 density, the system is affine with the same Jacobian on every slab: the first step factorises it
 once, and every step solves with that factorisation directly and then takes one step of iterative
 refinement with it, two solves in all. The iterate count, the residual, the initial residual and
@@ -243,6 +245,19 @@ Copy the coupling's datums from the cache of the problem's element type into the
 works in.
 """
 copy_coupling_data!(::NoCouplingData, ::NoCouplingData) = nothing
+
+"""
+    copy_ansatz_data!(cache_data, data)
+
+Copy what the ansatz block keeps outside the solver's vector — the parameters it holds fixed — from
+the cache of the problem's element type into the cache the solver works in, where the solver
+evaluates at another element type.
+
+An ansatz whose every unknown is a row of the solver's vector keeps nothing here, and the default
+does nothing; a network in `:last_layer` mode frees its output weights alone and leaves its hidden
+layer in the block, which the block of another element type does not inherit.
+"""
+copy_ansatz_data!(cache_data, data) = nothing
 
 """
     bottom_datum(data)
@@ -490,6 +505,7 @@ function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol, params,
     data = cache(int)
     c = cache(int, ST)
     copy_coupling_data!(c.coupling, data.coupling)
+    copy_ansatz_data!(c.ansatz, data.ansatz)
     a = ansatz(method(int))
     p = problem(int)
     nf = free_rows(coupling(c.coupling), a)
@@ -639,14 +655,44 @@ function integrate_step!(sol, history, params,
 end
 
 """
+    nunknowns(ansatz, coupling, problem)
+
+The number of the ansatz's own unknowns of one slab: the entries of the solver's vector that precede
+the coupling's.
+
+A tensor B-spline ansatz has one unknown per free row of its coefficient array, per space function
+and per component, so its count is
+
+```julia
+nunknowns(ansatz::TensorBSplineAnsatz, coupling, problem) =
+    free_rows(coupling, ansatz) * nspace_functions(ansatz) * components(problem)
+```
+
+with the coupling that leaves the free rows and the problem that fixes the component count in scope.
+An ansatz that keeps its unknowns as a parameter vector declares its own count instead; a
+[`NetworkAnsatz`](@ref) has one per parameter its mode frees.
+"""
+function nunknowns(ansatz::TensorBSplineAnsatz, coupling::SlabCoupling,
+        problem::LagrangianPDEProblem)
+    return free_rows(coupling, ansatz) * nspace_functions(ansatz) * components(problem)
+end
+
+"""
+    slab_unknowns(ansatz, coupling, problem)
+
+The size of one slab's nonlinear system: one equation per unknown of the ansatz, and one per unknown
+the coupling adds after them.
+"""
+function slab_unknowns(ansatz, coupling, problem)
+    nunknowns(ansatz, coupling, problem) + coupling_unknowns(coupling, ansatz, problem)
+end
+
+"""
     total_free_coefficients(method, problem)
 
-The size of one slab's nonlinear system: one equation per free coefficient, and one per unknown the
-coupling adds after them.
+The size of one slab's nonlinear system: one equation per unknown of the ansatz, and one per unknown
+the coupling adds after them.
 """
 function total_free_coefficients(method::SpaceTimeGalerkin, problem::LagrangianPDEProblem)
-    a = ansatz(method)
-    c = coupling(method)
-    return free_rows(c, a) * nspace_functions(a) * components(problem) +
-           coupling_unknowns(c, a, problem)
+    return slab_unknowns(ansatz(method), coupling(method), problem)
 end

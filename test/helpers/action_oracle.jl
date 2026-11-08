@@ -559,3 +559,251 @@ function symbolic_gradient(o::SymbolicActionOracle{T}, θ::AbstractVector{T}) wh
     R[(base + nμ * D + 1):(base + 2 * nμ * D)] .= g[(offset + 1):(offset + nμ * D)]
     return R
 end
+
+# ---- the network ansatz ----------------------------------------------------
+#
+# The oracle of a network slab writes the field out from the network's own definition — one point
+# `[t̂, x]` and the flat parameter vector — rather than reading the ansatz's generated functions,
+# and differentiates its action with ForwardDiff.
+# The interior action is read on the ansatz's own rule and the four surface terms on the trace
+# basis' rules, whose multiplier functions and weights the coupling's tables are built on.
+
+"""
+    NetworkActionOracle(problem, method)
+
+The tables of the discrete action of one network slab.
+
+The action is
+
+    S = Σ_q Σ_r ωₜ_q ωₓ_r h L(u, uₜ / h, u_x)
+      + Σ_r ωₓ_r [λ₀(x_r)·(u(0, x_r) − target(x_r)) − λ(x_r)·u(1, x_r)]
+      + Σ_q h ωₜ_q [μ_a(t̂_q)·(u(a, t̂_q) − g_a(t̂_q)) − μ_b(t̂_q)·(u(b, t̂_q) − g_b(t̂_q))],
+
+where the interior sum is taken at the nodes of the ansatz's own quadrature, `uₜ` and `u_x` are its
+two derivatives there, and the multiplier functions `Λ` and `χ`, their weights and the four surfaces
+are read from `trace_basis(ansatz)`. The datum is fixed by [`first_datum`](@ref) and carried to the
+next slab by [`next_datum`](@ref).
+
+The unknowns of the slab are the network's parameters and then the multipliers, so the oracle reads
+every parameter: a `:last_layer` method frees a part of them, which the datum does not carry, and is
+refused.
+"""
+struct NetworkActionOracle{T, P, A}
+    problem::P
+    ansatz::A
+    np::Int
+    D::Int
+    nλ::Int
+    nμ::Int
+    h::T
+    ωt::Vector{T}
+    t̂::Vector{T}
+    ωx::Vector{T}
+    x::Vector{T}
+    ωxt::Vector{T}
+    xt::Vector{T}
+    ωtt::Vector{T}
+    tt::Vector{T}
+    Λ::Matrix{T}
+    χ::Matrix{T}
+end
+
+function ActionOracle(problem, method::SpaceTimeGalerkin{<:NetworkAnsatz}; kwargs...)
+    isempty(kwargs) ||
+        throw(ArgumentError("a network's action oracle takes no keyword argument"))
+    return NetworkActionOracle(problem, method)
+end
+
+function NetworkActionOracle(problem, method)
+    T = eltype(timespan(problem))
+    a = ansatz(method)
+    c = coupling(method)
+    M = MultisymplecticIntegrators
+    M.nfree(a) == M.nparameters(a) || throw(ArgumentError(
+        "the action oracle of a network reads every parameter; a :last_layer method frees " *
+        "$(M.nfree(a)) of $(M.nparameters(a))"))
+    own = SimpleSplines.quadratures(M.quadrature(a))
+    tr = M.trace_basis(a)
+    trace = SimpleSplines.quadratures(M.quadrature(tr))
+    nodes(rule) = collect(T, SimpleSplines.quadrature_nodes(rule))
+    weights(rule) = collect(T, SimpleSplines.quadrature_weights(rule))
+    xt, ωxt = nodes(trace[2]), weights(trace[2])
+    tt, ωtt = nodes(trace[1]), weights(trace[1])
+    tb, xb = SimpleSplines.bases(SimpleSplines.basis(tr))
+    nt, nx = SimpleSplines.nbasis(tb), SimpleSplines.nbasis(xb)
+    corners = c isa WeakInitialAndBoundaryConditions
+    λindices = corners ? (2:(nx - 1)) : (1:nx)
+    table(basis, points, indices) = T[SimpleSplines.evaluate(basis, j, p)
+                                      for p in points, j in indices]
+    return NetworkActionOracle{T, typeof(problem), typeof(a)}(
+        problem, a, M.nparameters(a), a.D, length(λindices), corners ? nt : 0,
+        T(timestep(problem)),
+        weights(own[1]), nodes(own[1]), weights(own[2]), nodes(own[2]),
+        ωxt, xt, ωtt, tt,
+        table(xb, xt, λindices), table(tb, tt, 1:nt))
+end
+
+restricted(::NetworkActionOracle) = false
+
+"""The length of the solver's vector of a network slab: its parameters, then its multipliers."""
+unknown_count(o::NetworkActionOracle) = o.np + (o.nλ + 2 * o.nμ) * o.D
+
+mutable struct NetworkDatum{T}
+    start::T
+    target::Matrix{T}
+    λ₀::Matrix{T}
+    ga::Matrix{T}
+    gb::Matrix{T}
+end
+
+# The side data at the nodes of the trace basis' time rule of the slab that starts at `start`.
+function network_side_values(o::NetworkActionOracle{T}, start) where {T}
+    ga = zeros(T, length(o.tt), o.D)
+    gb = zeros(T, length(o.tt), o.D)
+    o.nμ == 0 && return ga, gb
+    for q in eachindex(o.tt)
+        values = o.problem.bcs_function(start + o.h * o.tt[q], parameters(o.problem))
+        for d in 1:o.D
+            ga[q, d] = values.left.u[d]
+            gb[q, d] = values.right.u[d]
+        end
+    end
+    return ga, gb
+end
+
+"""
+    first_datum(o::NetworkActionOracle)
+
+The datum of the first network slab, from the problem alone: the target is `u₀` at the trace basis'
+space nodes, `λ₀` is `∂L/∂v(u₀, v₀, w₀)` there read into the multiplier basis by the weighted `L²`
+projection, and the side data are read at `t = timespan[1] + h t̂_q`.
+"""
+function first_datum(o::NetworkActionOracle{T}) where {T}
+    params = parameters(o.problem)
+    values = o.problem.ics_function(collect(o.xt), params)
+    qx = length(o.xt)
+    u, v, w = T.(values.u), T.(values.v), T.(values.w)
+    p₀ = zeros(T, qx, o.D)
+    for r in 1:qx
+        p₀[r, :] = node_momentum(o.problem.density, u[r, :], v[r, :], w[r, :], params)
+    end
+    weighted = transpose(o.Λ) * Diagonal(o.ωxt)
+    λ₀ = (weighted * o.Λ) \ (weighted * p₀)
+    start = timespan(o.problem)[1]
+    ga, gb = network_side_values(o, start)
+    return NetworkDatum{T}(start, u, λ₀, ga, gb)
+end
+
+"""
+    next_datum(o, datum, θ)
+
+The datum of the slab after the one whose solved vector is `θ`: the top trace of that slab at the
+trace basis' space nodes, its top multiplier, and the side data at the new slab's times.
+"""
+function next_datum(o::NetworkActionOracle{T}, datum::NetworkDatum{T},
+        θ::AbstractVector{T}) where {T}
+    p = θ[1:o.np]
+    for r in eachindex(o.xt), d in 1:o.D
+
+        datum.target[r, d] = network_field(o, p, one(T), o.xt[r])[d]
+    end
+    datum.λ₀ .= reshape(θ[(o.np + 1):(o.np + o.nλ * o.D)], o.nλ, o.D)
+    datum.start += o.h
+    datum.ga, datum.gb = network_side_values(o, datum.start)
+    return datum
+end
+
+# The values `[u; ∂_t̂u; ∂ₓu]` of the network at one point, of the given parameter vector, written
+# here from the network's own definition rather than read from the ansatz's generated functions:
+# with `S` hidden units of `tanh` and `D` outputs,
+# `u_d = Σ_s W2[s, d] tanh(W1[s, 1] t̂ + W1[s, 2] x + b[s])`, and each derivative carries the slope
+# `1 - tanh²` of its hidden unit times its input weight. The parameters are read in the order
+# `L1.W`, `L1.b`, `L2.W`, with `L1.W` laid out as `[W1[:, 1]; W1[:, 2]]`.
+function network_field(o::NetworkActionOracle, p, t̂, x)
+    S, D = o.ansatz.S, o.D
+    values = zeros(eltype(p), 3D)
+    for s in 1:S
+        σ = tanh(p[s] * t̂ + p[S + s] * x + p[2S + s])
+        slope = one(σ) - abs2(σ)
+        for d in 1:D
+            weight = p[3S + (s - 1) * D + d]
+            values[d] += weight * σ
+            values[D + d] += weight * slope * p[s]
+            values[2D + d] += weight * slope * p[S + s]
+        end
+    end
+    return values
+end
+
+"""
+    network_action(o, datum, z)
+
+The total discrete action of the oracle's slab at `z = (p, λ₀, λ, μ_a, μ_b)`, each block in the
+solver's layout.
+"""
+function network_action(o::NetworkActionOracle{T}, datum::NetworkDatum{T},
+        z::AbstractVector) where {T}
+    np, D, nλ, nμ = o.np, o.D, o.nλ, o.nμ
+    p = z[1:np]
+    i = np
+    λ₀ = reshape(z[(i + 1):(i + nλ * D)], nλ, D)
+    i += nλ * D
+    λ = reshape(z[(i + 1):(i + nλ * D)], nλ, D)
+    i += nλ * D
+    μa = reshape(z[(i + 1):(i + nμ * D)], nμ, D)
+    i += nμ * D
+    μb = reshape(z[(i + 1):(i + nμ * D)], nμ, D)
+    params = parameters(o.problem)
+    action = zero(T)
+    for q in eachindex(o.t̂), r in eachindex(o.x)
+
+        values = network_field(o, p, o.t̂[q], o.x[r])
+        u = [values[d] for d in 1:D]
+        v = [values[D + d] / o.h for d in 1:D]
+        w = [values[2D + d] for d in 1:D]
+        action += o.ωt[q] * o.ωx[r] * o.h *
+                  node_lagrangian(o.problem.density, u, v, w, params)
+    end
+    xa, xb = xspan(o.problem)
+    for d in 1:D
+        for r in eachindex(o.xt)
+            bottom = network_field(o, p, zero(T), o.xt[r])[d]
+            top = network_field(o, p, one(T), o.xt[r])[d]
+            incoming = sum(λ₀[j, d] * o.Λ[r, j] for j in 1:nλ; init = zero(T))
+            outgoing = sum(λ[j, d] * o.Λ[r, j] for j in 1:nλ; init = zero(T))
+            action += o.ωxt[r] * (incoming * (bottom - datum.target[r, d]) - outgoing * top)
+        end
+        for q in eachindex(o.tt)
+            left = network_field(o, p, o.tt[q], xa)[d]
+            right = network_field(o, p, o.tt[q], xb)[d]
+            ma = sum(μa[j, d] * o.χ[q, j] for j in 1:nμ; init = zero(T))
+            mb = sum(μb[j, d] * o.χ[q, j] for j in 1:nμ; init = zero(T))
+            action += o.h * o.ωtt[q] *
+                      (ma * (left - datum.ga[q, d]) - mb * (right - datum.gb[q, d]))
+        end
+    end
+    return action
+end
+
+"""
+    oracle_residual(o::NetworkActionOracle, datum, θ)
+
+The residual of the oracle's network slab at the solver's vector `θ = (p, λ, μ_a, μ_b)`, from the
+gradient of [`network_action`](@ref): `∂S/∂p` on the parameter rows, `−∂S/∂λ₀` on the rows of the
+top multiplier, and `−∂S/∂μ_a` and `+∂S/∂μ_b` on the rows of the two ends.
+"""
+function oracle_residual(o::NetworkActionOracle{T}, datum::NetworkDatum{T},
+        θ::AbstractVector{T}) where {T}
+    np, D, nλ, nμ = o.np, o.D, o.nλ, o.nμ
+    z = vcat(θ[1:np], vec(datum.λ₀), θ[(np + 1):end])
+    g = action_gradient(w -> network_action(o, datum, w), z)
+    R = zeros(T, length(θ))
+    R[1:np] .= g[1:np]
+    base = np + nλ * D
+    R[(np + 1):base] .= -g[(np + 1):base]
+    offset = np + 2 * nλ * D
+    R[(base + 1):(base + nμ * D)] .= -g[(offset + 1):(offset + nμ * D)]
+    offset += nμ * D
+    R[(base + nμ * D + 1):(base + 2 * nμ * D)] .= g[(offset + 1):(offset + nμ * D)]
+    return R
+end
