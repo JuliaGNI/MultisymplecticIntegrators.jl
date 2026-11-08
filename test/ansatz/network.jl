@@ -19,24 +19,15 @@ include("../helpers/action_oracle.jl")
 const M = MultisymplecticIntegrators
 
 # The deviation of a network run from its §A entry is a record, not an assertion: at `S = 10` the
-# `:last_layer` runs have fourteen constraint rows that reach only ten output weights, and the Newton
+# `:last_layer` runs have sixteen constraint rows that reach only ten output weights, and the Newton
 # solve of the `:all` runs does not reach round-off (K38), so every step of these runs is an
 # unconverged Newton iterate, and no bound on its distance from the entry holds across machines.
-# Each test asserts that the deviation is finite and writes it with `@info`; the figures give the
-# scale, and they belong to the machine that produced them.
+# Each test asserts that the deviation is finite and writes it with `@info`, beside the machine that
+# produced it; K38–K40 and K42 record the figures of one machine.
 #
-# On this machine — `arm64-apple-darwin27.0.0` (`apple-m4`), Julia 1.13.3, `--check-bounds=auto` —
-# `Float64` deviates from `WAVE_NN_FULLY` by `0.7504` with the exact solution as the guess and by
-# `0.6019` with the initial condition, from `WAVE_NN_PARTIALLY` by `579.2` and `580.6`, from
-# `WAVE_NN_SYMBOLIC_FULLY` by `0.4629`, and from `SINE_GORDON_NN_FULLY` by `0.0165`; in `Float32`
-# by `9.29` and `1.261`, `580.3` and `580.5`, `9.373` and `0.1166` in that order. CI's runners
-# reach other values on the same tree: `0.2442` from `SINE_GORDON_NN_FULLY` in `Float32` on
-# `macOS-latest` at Julia 1.12.7, against `0.1166` here, and `0.9999` from the `Float64` `:all` arm
-# with the initial condition on `windows-latest` at Julia 1.12.7, against `0.6019`.
-#
-# Neither entry reproduces bit for bit: they predate the two defects the network family fixes — the
-# bottom points read in the normalized coordinate (`xspan` is `(0, 1)`, so there the two coincide)
-# and the duplicate atom of the old dictionary, which cost the greedy a whole selection.
+# Neither entry reproduces bit for bit: the code that wrote them reads the bottom points in the
+# normalized coordinate (`xspan` is `(0, 1)`, so there the two coincide) and keeps a duplicate atom
+# in its dictionary, which costs the greedy a whole selection.
 
 """The steps of the §A case."""
 const NETWORK_STEPS = 5
@@ -49,8 +40,8 @@ const NETWORK_CONTROL_S = 20
 
 """
 The relative tolerance of the network family's steps, measured on the affine control of `:last_layer`
-at `S = 20`: the largest of its five step ratios `residual / initial residual` is `8.3e-6` in
-`Float64` and `7.0e-3` in `Float32`, against the tolerance this function returns.
+at `S = 20`: the largest of its five step ratios `residual / initial residual` is `7.8e-6` in
+`Float64` and `6.4e-3` in `Float32`, against the tolerance this function returns.
 
 The control's steps are affine in its unknowns — the coupling's constraint rows reach the free
 output weights alone and the hidden layer, which the fit fixed, enters the residual as data — so two
@@ -229,6 +220,13 @@ end
             free = mode === :last_layer ? S : 3S + S
             @test M.nfree(ansatz) == free
         end
+        # the bottom multipliers span every space function that vanishes at both ends, as many as a
+        # `Dirichlet()` basis of the same degree and cells has, and each side has one per time function
+        dirichlet = TensorBSplineAnsatz(
+            degree = 3, ncells = (2, 5), xspan = (zero(T), one(T)),
+            x_boundary = Dirichlet())
+        @test M.multiplier_counts(WeakInitialAndBoundaryConditions(), network_ansatz(T)) ==
+              (M.nspace_functions(dirichlet), M.ntime_functions(dirichlet))
         # the tensor path keeps the base's count: free rows × space functions × components
         spline = TensorBSplineAnsatz(
             degree = 2, ncells = (2, 5), xspan = (zero(T), one(T)),
@@ -288,7 +286,7 @@ end
         foreach(t -> assert_no_upcast(t, T), result.traces)
     end
 
-    # The two `S = 10` arms are records: in `:last_layer` mode the fourteen constraint rows of the
+    # The two `S = 10` arms are records: in `:last_layer` mode the sixteen constraint rows of the
     # coupling outnumber the ten output weights they reach, so the step's system is inconsistent,
     # and the `:all` arm's solve does not reach round-off (K38); no tolerance is reached, and the
     # run is its own expected value (U13, U24). The affine control is the assertion: at `S = 20`
@@ -343,7 +341,7 @@ end
             cache(reference.int).ansatz.params .= Float64.(cache(slab.int).ansatz.params)
             rng = Xoshiro(1234)
             for _ in 1:16
-                θ = 2 .* rand(rng, T, N) .- 1
+                θ = T.(2 .* rand(rng, N) .- 1)
                 jacobian!(s, θ, (current(slab.solstep), params, slab.int))
                 J = copy(jacobianmatrix(s))
                 scale = maximum(abs, J)
@@ -377,7 +375,7 @@ end
         params = parameters(slab.problem)
         N = length(cache(slab.int).x)
         @test N == unknown_count(oracle)
-        θ = 2 .* rand(Xoshiro(1234), T, N) .- 1
+        θ = T.(2 .* rand(Xoshiro(1234), N) .- 1)
         b = zeros(T, N)
         M.residual!(b, θ, nothing, params, slab.int)
         ∇S = oracle_residual(oracle, first_datum(oracle), θ)

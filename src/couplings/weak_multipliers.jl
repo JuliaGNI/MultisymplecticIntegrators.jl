@@ -692,7 +692,8 @@ Refuse a coupling that a network cannot take.
 A network holds no bottom coefficient row, so its interior weak form alone is not the gradient of the
 slab's action: the weak initial-and-boundary coupling adds the four surface terms that complete it,
 and the refusals of the other couplings name the one that is taken. The trace basis' own `x_boundary`
-is not read, because the network's field, not the basis, is what the boundary rows carry.
+is not checked, because the network builds that basis with `Free()`, the condition the weak
+initial-and-boundary coupling needs.
 """
 function check_coupling(problem::LagrangianPDEProblem, c::MultiplierCoupling,
         a::NetworkAnsatz)

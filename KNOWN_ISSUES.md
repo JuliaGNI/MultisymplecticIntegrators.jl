@@ -120,48 +120,46 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - evidence: the §A case of the entry — `Wave` at `h = 0.05`, `xspan = (0, 1)`, `S = 10`, `tanh`,
   `Nw = Nb = 50`, the exact solution as the guess with `OrthogonalGreedy()` — run with
   `NetworkAnsatz(; mode = :all)` and `WeakInitialAndBoundaryConditions()` takes
-  `iterations = [133, 99, 107, 107, 112]` at `residual = [5.13e-3, 3.88e-2, 9.89e-2, 0.1336,
-  1.94e-2]`, each from an initial residual of `[13.60, 52.07, 56.31, 33.18, 63.87]`, and
-  `converged = false` at every step, in `Float64`. The entry itself reports `converged = true` at
+  `iterations = [54, 77, 51, 53, 51]` at `residual = [0.1088, 0.1346, 0.2991, 0.6403, 0.6917]`,
+  each from an initial residual of `[15.31, 70.66, 79.15, 50.10, 68.46]`, and `converged = false`
+  at every step, in `Float64`. The entry itself reports `converged = true` at
   `residual = [0.602, 4.789, 270.7, 39.61, 1575.0]`. Its sup-norm deviation from the entry is
-  `0.7504` over the five steps in `Float64` and `9.29` in `Float32`, on
-  `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3; the same entry's `:all` arm with the
-  initial condition as the guess deviates by `0.6019` and `1.261` there, and reads `0.9999` in
-  `Float64` on CI's `windows-latest` runner at Julia 1.12.7. The record is that run and
-  not a reference: the network's rows are the gradient of a discrete action the Newton solve cannot
-  drive to round-off, which is the measured result and not a defect of the assembly.
+  `0.5518` over the five steps in `Float64` and `14.74` in `Float32`, on
+  `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3, two BLAS threads; the same entry's
+  `:all` arm with the initial condition as the guess deviates by `0.6894` and `1.340` there. The
+  record is that run and not a reference: the network's rows are the gradient of a discrete action
+  the Newton solve cannot drive to round-off, which is the measured result and not a defect of the
+  assembly.
 - kind: defect
 - found: 2026-11-07
 
 ### K39 · The `WAVE_NN_PARTIALLY` run reaches no tolerance.
 
 - location: `test/helpers/reference_values.jl:57`, `src/ansatz/network.jl`
-- evidence: the same §A case with `mode = :last_layer` takes `iterations = [3, 3, 6, 3, 5]` at
-  `residual = [5.82e-4, 1.05e-3, 2.03e-3, 1.92e-3, 3.54e-3]`, each from an initial residual of
-  `[1.937, 14.14, 19.00, 31.82, 30.95]`, and `converged = false` at every step, in `Float64`: the
-  coupling's `14` constraint rows reach only the `10` output weights, so the step's system is rank
-  deficient by `4` and no tolerance is reachable at that size. The run completes and records its
-  stats, and its sup-norm deviation from the §A entry is `579.2` in `Float64` and `580.3` in
-  `Float32`, on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3, the entry being a diverged
-  iterate whose own `u` reaches `581.76`; the deviation records that entry and not the accuracy of
-  this run. The initial condition as the guess instead of the exact solution gives `580.6` and
-  `580.5` in that order. The affine control at
-  `S = 20`, where the freed output weights carry every row, converges in two iterations to `8.3e-6`
-  of its initial residual in `Float64` and `7.0e-3` in `Float32`, which is what the family's
-  `network_f_reltol` records.
+- evidence: the same §A case with `mode = :last_layer` takes `iterations = [3, 4, 4, 3, 3]` at
+  `residual = [9.41e-4, 1.59e-3, 2.34e-3, 3.12e-3, 2.28e-3]`, each from an initial residual of
+  `[2.175, 32.10, 61.90, 92.79, 119.7]`, and `converged = false` at every step, in `Float64`: the
+  coupling's `16` constraint rows reach only the `10` output weights, so the step's system is rank
+  deficient by at least `6` and no tolerance is reachable at that size. The run completes and
+  records its stats, and its sup-norm deviation from the §A entry is `581.5` in `Float64` and
+  `580.4` in `Float32`, on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3, the entry being
+  a diverged iterate whose own `u` reaches `581.76`; the deviation records that entry and not the
+  accuracy of this run. The initial condition as the guess instead of the exact solution gives
+  `580.5` and `580.5` in that order. The affine control at `S = 20`, where the freed output weights
+  carry every row, converges in two iterations to `7.8e-6` of its initial residual in `Float64` and
+  `6.4e-3` in `Float32`, which is what the family's `network_f_reltol` records.
 - kind: defect
 - found: 2026-11-07
 
 ### K40 · The `SINE_GORDON_NN_FULLY` run is an unconverged iterate.
 
 - location: `test/helpers/reference_values.jl:69`, `src/ansatz/network.jl`
-- evidence: the three-step sine-Gordon case of the entry takes `iterations = [62, 69, 140]` at
-  `residual = [1.34e-2, 1.61e-2, 3.00e-4]`, each from an initial residual of `[0.6289, 0.2669,
-  0.2674]`, and `converged = false` in `Float64`; the entry reports `converged = true` at
-  `residual = [0.2339, 1.549, 139.9]`. Its sup-norm deviation from the entry is `0.0165` in
-  `Float64` and `0.117` in `Float32` over the three steps, on `arm64-apple-darwin27.0.0`
-  (`apple-m4`) at Julia 1.13.3, where CI's `macOS-latest` runner reads `0.2442` in `Float32` at
-  Julia 1.12.7. As for K38 the record is that run and not a reference.
+- evidence: the three-step sine-Gordon case of the entry takes `iterations = [134, 62, 118]` at
+  `residual = [1.79e-3, 5.19e-3, 2.26e-3]`, each from an initial residual of `[0.6580, 0.5470,
+  0.5158]`, and `converged = false` in `Float64`; the entry reports `converged = true` at
+  `residual = [0.2339, 1.549, 139.9]`. Its sup-norm deviation from the entry is `0.0137` in
+  `Float64` and `0.0222` in `Float32` over the three steps, on `arm64-apple-darwin27.0.0`
+  (`apple-m4`) at Julia 1.13.3. As for K38 the record is that run and not a reference.
 - kind: defect
 - found: 2026-11-07
 
@@ -169,8 +167,8 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 - location: `test/helpers/reference_values.jl:59`, `src/ansatz/network.jl`
 - evidence: the entry is the symbolic integrator of the old stack on the §A case of K38, and this
-  tree's counterpart to it is the `:all` arm of K38, whose deviation from it is `0.4629` in
-  `Float64` and `9.37` in `Float32` over the five steps, on `arm64-apple-darwin27.0.0`
+  tree's counterpart to it is the `:all` arm of K38, whose deviation from it is `0.2451` in
+  `Float64` and `14.74` in `Float32` over the five steps, on `arm64-apple-darwin27.0.0`
   (`apple-m4`) at Julia 1.13.3. The entry's own `u` differs from
   `WAVE_NN_FULLY`'s by up to `0.7615`, so the two entries are separate records and neither is the
   other's reference; `maximum(abs, WAVE_NN_FULLY.u)` is `1.48`. The entry reports `converged = true`

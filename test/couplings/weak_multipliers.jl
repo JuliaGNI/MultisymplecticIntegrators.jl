@@ -719,7 +719,7 @@ end
         oracle = ActionOracle(problem, method)
         N = unknown_count(oracle)
         @test N == length(nlsolution(fresh))
-        θ = 2 .* rand(Xoshiro(20261107), T, N) .- 1
+        θ = T.(2 .* rand(Xoshiro(20261107), N) .- 1)
         b = zeros(T, N)
         M.residual!(b, θ, nothing, parameters(problem), fresh)
         ∇S = oracle_residual(oracle, first_datum(oracle), θ)

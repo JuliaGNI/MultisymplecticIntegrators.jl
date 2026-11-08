@@ -14,7 +14,7 @@ u_d(\\hat t, x) = \\sum_{s=1}^{S} W^{(2)}_{ds} \\, \\sigma\\bigl(W^{(1)}_{s1} \\
 ```
 
 that is `Chain(Dense(2, S, activation), Dense(S, D, identity; use_bias = false))`. Its parameters are
-the hidden weights `(S, 2)`, the hidden biases `(S,)` and the output weights `(S, D)`, in the order
+the hidden weights `(S, 2)`, the hidden biases `(S,)` and the output weights `(D, S)`, in the order
 `L1.W`, `L1.b`, `L2.W` of `NeuralNetworkParameters`, and one hidden layer serves all `D` components.
 
 `mode` fixes which parameters the solver determines: `:all` frees every one of them, and
@@ -25,11 +25,12 @@ ansatz's block in the slab cache and never in the ansatz, so two integrators tha
 object give identical results.
 
 The ansatz carries a [`TensorBSplineAnsatz`](@ref) as its trace basis, `trace_basis(ansatz)`, built
-from `degree` and `ncells` on the same `xspan` with `Dirichlet()` at both ends. The functions of that
-basis are the multipliers of a coupling that imposes the slab's data weakly, and its rule is the one
-the coupling's tables and its surface rows are built on. The field itself is evaluated on a rule of
-the ansatz's own: `quadrature_order` Gauss nodes per cell in the time direction, and the space grid of
-the trace basis, which the cache's trace is kept on. `nothing` takes one node per cell more than the
+from `degree` and `ncells` on the same `xspan` with `Free()` at both ends, the condition the weak
+initial-and-boundary coupling needs. The functions of that basis are the multipliers of a coupling
+that imposes the slab's data weakly, and its rule is the one the coupling's tables and its surface
+rows are built on. The field itself is evaluated on a rule of the ansatz's own: `quadrature_order`
+Gauss nodes per cell in the time direction, and the space grid of the trace basis, which the cache's
+trace is kept on. `nothing` takes one node per cell more than the
 trace basis has, so that the two rules are not the same one.
 
 An `xspan` that does not hold two values, an `S` or a `D` that is not positive, and a `mode` that is
@@ -70,7 +71,7 @@ function NetworkAnsatz(; S::Integer, activation = tanh, mode::Symbol = :all, xsp
     xsp[1] < xsp[2] || throw(ArgumentError("xspan must increase, got $xsp"))
     chain = Chain(Dense(2, S, activation), Dense(S, D, identity; use_bias = false))
     symbolic = SymbolicNeuralNetwork(chain)
-    trace = TensorBSplineAnsatz(; degree, ncells, xspan = xsp, x_boundary = Dirichlet())
+    trace = TensorBSplineAnsatz(; degree, ncells, xspan = xsp, x_boundary = Free())
     order = quadrature_order === nothing ? _default_quadrature_order(degree_of(trace)) + 1 :
             Int(quadrature_order)
     order ≥ 1 || throw(ArgumentError("quadrature_order must be at least 1, got $order"))
@@ -582,11 +583,14 @@ function evaluate!(sample::AbstractArray{ST, 3}, ::PreviousSlab,
     end
     s = c.ansatz
     D = size(sample, 3)
-    for d in 1:D, r in axes(sample, 2), q in axes(sample, 1)
-        t̂ = convert(ST, s.tabulation.time.node[q])
+    for r in axes(sample, 2)
         evaluate_at!(s, one(ST), s.tabulation.space.node[r])
-        # the displacement beyond the previous top, in the normalised time, times the slope there
-        sample[q, r, d] = s.values[d] + t̂ * s.values[D + d]
+        for d in 1:D, q in axes(sample, 1)
+
+            t̂ = convert(ST, s.tabulation.time.node[q])
+            # the displacement beyond the previous top, in the normalised time, times the slope there
+            sample[q, r, d] = s.values[d] + t̂ * s.values[D + d]
+        end
     end
     return nothing
 end

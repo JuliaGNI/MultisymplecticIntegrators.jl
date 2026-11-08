@@ -664,7 +664,7 @@ A tensor B-spline ansatz has one unknown per free row of its coefficient array, 
 and per component, so its count is
 
 ```julia
-nunknowns(::TensorBSplineAnsatz, coupling, problem) =
+nunknowns(ansatz::TensorBSplineAnsatz, coupling, problem) =
     free_rows(coupling, ansatz) * nspace_functions(ansatz) * components(problem)
 ```
 
