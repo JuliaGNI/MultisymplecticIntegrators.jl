@@ -55,10 +55,10 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K31 · A7a's `integrate!` run does not assert convergence.
 
-- location: `test/couplings/weak_multipliers.jl:94-113`
+- location: `test/couplings/weak_multipliers.jl:107-126`
 - evidence: `multiplier_momentum`, which A7a calls, drives a 50-step `VectorWave` run (β = 0.5)
   through `integrate!` and does not read `cache(int).converged`. The `integrate` run of the same
-  problem and method in A7a (`:498-501`) asserts `all(result.stats.converged)`, so a step that does
+  problem and method in A7a (`:511-514`) asserts `all(result.stats.converged)`, so a step that does
   not converge still fails A7a, but the run whose momenta A7a checks has no assertion of its own.
 - kind: missing test
 - found: 2026-11-01
@@ -83,7 +83,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K35 · The side-data testset's symmetric span cannot see `left` and `right` swapped.
 
-- location: `test/couplings/weak_multipliers.jl:548`
+- location: `test/couplings/weak_multipliers.jl:561`
 - evidence: the testset "the side data of every component reaches the slab" builds its problem on
   `xspan = (0.2, 0.8)`, and `Wave`'s closed form is `sin(πx/l)` in space, whose two ends carry the
   same value: `Wave.solution_u(0.0, 0.2, Wave.default_parameters())` is `0.7053423027509678` and

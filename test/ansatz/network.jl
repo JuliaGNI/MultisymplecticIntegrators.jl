@@ -19,10 +19,11 @@ include("../helpers/action_oracle.jl")
 const M = MultisymplecticIntegrators
 
 # The deviation of a network run from its §A entry is a record, not an assertion: at `S = 10` the
-# coupling's fourteen constraint rows reach only the ten output weights, so every step of these
-# runs is an unconverged Newton iterate of a chaotic solve, and no bound on its distance from the
-# entry holds across machines. Each test asserts that the deviation is finite and writes it with
-# `@info`; the figures give the scale, and they belong to the machine that produced them.
+# `:last_layer` runs have fourteen constraint rows that reach only ten output weights, and the Newton
+# solve of the `:all` runs does not reach round-off (K38), so every step of these runs is an
+# unconverged Newton iterate, and no bound on its distance from the entry holds across machines.
+# Each test asserts that the deviation is finite and writes it with `@info`; the figures give the
+# scale, and they belong to the machine that produced them.
 #
 # On this machine — `arm64-apple-darwin27.0.0` (`apple-m4`), Julia 1.13.3, `--check-bounds=auto` —
 # `Float64` deviates from `WAVE_NN_FULLY` by `0.7504` with the exact solution as the guess and by
@@ -264,7 +265,7 @@ end
         after = (ansatz.mode, ansatz.S, ansatz.D, ansatz.np, ansatz.nfree,
             ansatz.first_free, ansatz.xspan, ansatz.chain)
         @test all(before[k] === after[k] for k in eachindex(before))
-        # one method object, two integrators: each keeps its parameters in its own block, so a write
+        # one ansatz object, two integrators: each keeps its parameters in its own block, so a write
         # into one is not seen by the other
         first_block = cache(first_int).ansatz
         second_block = cache(second_int).ansatz
@@ -287,11 +288,12 @@ end
         foreach(t -> assert_no_upcast(t, T), result.traces)
     end
 
-    # The two `S = 10` arms are records: at that size the fourteen constraint rows of the coupling
-    # outnumber the ten output weights they reach, so the step's system is inconsistent and no
-    # tolerance is reached; the run is its own expected value (U13, U24). The affine control is the
-    # assertion: at `S = 20` the freed output weights carry every row, and two Newton iterations
-    # reach the root of an affine system.
+    # The two `S = 10` arms are records: in `:last_layer` mode the fourteen constraint rows of the
+    # coupling outnumber the ten output weights they reach, so the step's system is inconsistent,
+    # and the `:all` arm's solve does not reach round-off (K38); no tolerance is reached, and the
+    # run is its own expected value (U13, U24). The affine control is the assertion: at `S = 20`
+    # the freed output weights carry every row, and two Newton iterations reach the root of an
+    # affine system.
     @testset "N1 the network integrates Wave under both modes" for T in (Float64, Float32)
         for (mode, name, entry) in ((:all, :WAVE_NN_FULLY, WAVE_NN_FULLY),
             (:last_layer, :WAVE_NN_PARTIALLY, WAVE_NN_PARTIALLY))

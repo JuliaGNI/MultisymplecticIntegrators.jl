@@ -19,9 +19,10 @@ the hidden weights `(S, 2)`, the hidden biases `(S,)` and the output weights `(S
 
 `mode` fixes which parameters the solver determines: `:all` frees every one of them, and
 `:last_layer` frees the output weights alone and leaves the hidden layer where the initial guess put
-it, so that the step is affine in its unknowns and two Newton iterations reach its tolerance. The
-parameters live in the ansatz's block in the slab cache and never in the ansatz, so two integrators
-that share one ansatz object give identical results.
+it, so that the step is affine in its unknowns, and two Newton iterations reach its tolerance
+wherever the output weights carry every constraint row of the coupling. The parameters live in the
+ansatz's block in the slab cache and never in the ansatz, so two integrators that share one ansatz
+object give identical results.
 
 The ansatz carries a [`TensorBSplineAnsatz`](@ref) as its trace basis, `trace_basis(ansatz)`, built
 from `degree` and `ncells` on the same `xspan` with `Dirichlet()` at both ends. The functions of that
@@ -123,7 +124,7 @@ end
 xspan(ansatz::NetworkAnsatz) = ansatz.xspan
 
 """
-trace_basis(ansatz::NetworkAnsatz)
+    trace_basis(ansatz::NetworkAnsatz)
 
 The trace basis of the network's multipliers: a [`TensorBSplineAnsatz`](@ref) whose functions the
 coupling uses as its multipliers and on whose rules its tables are built.
@@ -193,8 +194,6 @@ function check_ansatz(problem::LagrangianPDEProblem{PT}, ansatz::NetworkAnsatz{T
         "the ansatz xspan $(xspan(ansatz)) does not match the problem's $(xspan(problem))"))
     return nothing
 end
-
-is_linear_in_coefficients(::NetworkAnsatz) = false
 
 default_fit(::NetworkAnsatz) = OrthogonalGreedy()
 

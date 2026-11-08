@@ -10,14 +10,15 @@ such system, and a `Projection()` on one is refused at construction — see
 [`SpaceTimeGalerkin`](@ref).
 
 A user-defined fit method is a subtype of `SlabFitMethod`, and places the coefficients of `coeffs`,
-of size `(Nt, Nx, D)`, from the sampled target, in one method of
+of size `(Nt, Nx, D)` for a tensor ansatz and the parameter vector of a network, from the sampled
+target, in one method of
 
 ```julia
 fit!(coeffs, method, ansatz, sample, cache)
 ```
 
-`cache` is the [`SpaceTimeGalerkinCache`](@ref) of the slab, which a fit may read; it holds no
-scratch of the fit.
+`cache` is the [`SpaceTimeGalerkinCache`](@ref) of the slab, which a fit may read; a projection
+keeps no scratch in it, and a network's block holds the workspace of its greedy fit.
 """
 struct Projection <: SlabFitMethod end
 

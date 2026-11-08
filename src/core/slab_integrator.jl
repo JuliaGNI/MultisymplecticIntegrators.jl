@@ -10,8 +10,9 @@ a method in the place of the ansatz or a target in the place of the guess, is re
 method is built.
 
 One step of the integrator solves one slab. The unknown of a [`TensorBSplineAnsatz`](@ref) is its
-coefficient array, `(Nt, Nx)` per component, and the unknown of a [`SymbolicAnsatz`](@ref) the
-parameter vector of its expression. For the coefficient array, a coupling that fixes the bottom
+coefficient array, `(Nt, Nx)` per component, the unknown of a [`SymbolicAnsatz`](@ref) the
+parameter vector of its expression, and the unknown of a [`NetworkAnsatz`](@ref) the free part of
+its parameter vector. For the coefficient array, a coupling that fixes the bottom
 row of the time direction supplies it as a datum — the initial condition at the first step and the
 previous slab's top row after it — and the remaining `Nt - 1` rows are determined by the interior
 weak Euler–Lagrange form of the slab, tested against the basis functions that vanish at the top of
@@ -23,11 +24,12 @@ The unknown count is the coupling's: the free rows of each space function and ea
 the coupling's own unknowns behind them. A [`CoefficientRestriction`](@ref) fixes the bottom row, so
 it leaves `(Nt - 1) * Nx * D` free coefficients; a weak-multiplier coupling imposes the initial
 condition with multipliers of its own, so all `Nt` rows are free and the multipliers follow them.
-A symbolic ansatz has no rows: its parameters are its free unknowns, and
-[`WeakInitialAndBoundaryConditions`](@ref), the one coupling it takes, puts its multipliers after
-them. A step is a nonlinear system of [`total_free_coefficients`](@ref)`(method, problem)`
-equations, which the ecosystem's Newton solver solves, with a pivoted QR as its linear solve for a
-symbolic ansatz. With `linear_solver = true`, for an ansatz linear in its coefficients and a linear
+A symbolic ansatz has no rows, and neither has a network: their parameters are their free
+unknowns, and [`WeakInitialAndBoundaryConditions`](@ref), the one coupling either takes, puts its
+multipliers after them. A step is a nonlinear system of
+[`total_free_coefficients`](@ref)`(method, problem)` equations, which the ecosystem's Newton solver
+solves, with a pivoted QR as its linear solve for a symbolic or a network ansatz. With
+`linear_solver = true`, for an ansatz linear in its coefficients and a linear
 density, the system is affine with the same Jacobian on every slab: the first step factorises it
 once, and every step solves with that factorisation directly and then takes one step of iterative
 refinement with it, two solves in all. The iterate count, the residual, the initial residual and
@@ -251,9 +253,9 @@ Copy what the ansatz block keeps outside the solver's vector — the parameters 
 the cache of the problem's element type into the cache the solver works in, where the solver
 evaluates at another element type.
 
-An ansatz whose every unknown is a row of the solver's vector keeps nothing here and says so; a
-network in `:last_layer` mode frees its output weights alone and leaves its hidden layer in the
-block, which the block of another element type does not inherit.
+An ansatz whose every unknown is a row of the solver's vector keeps nothing here, and the default
+does nothing; a network in `:last_layer` mode frees its output weights alone and leaves its hidden
+layer in the block, which the block of another element type does not inherit.
 """
 copy_ansatz_data!(cache_data, data) = nothing
 
