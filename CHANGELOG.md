@@ -512,9 +512,44 @@ makes it worth keeping.
   `NeuralNetworkParameters` (compat `0.5`) join `[deps]`, `SimpleSolvers`' floor rises from `0.14.1`
   to `0.14.2`, the first release whose `NeuralNetworkParameters` bound admits `0.5`, and
   `test/ansatz/network.jl` and `test/initial_guess/orthogonal_greedy.jl` join the `slow` group.
+- **The ELM family returns as a fit of the network ansatz: `TrainedHiddenLayer`.**
+  `TrainedHiddenLayer(; epochs = 100, learning_rate = 1e-5, rng = Xoshiro(1234))` is the fit of a
+  `NetworkAnsatz` in `:last_layer` mode whose hidden layer is trained instead of taken from a
+  dictionary: every epoch takes one gradient-descent step on the hidden weights and the hidden
+  biases of the misfit between the field and the sample, and then reads the output weights by least
+  squares on the hidden features that step left. `epochs = 0` fits the output layer alone on the
+  hidden layer the `rng` draws; the defaults are the old `LSGD` branch's `nepochs = 100` and
+  `GD_lr = 1e-5`. The gradient is the parameter derivative the ansatz already carries, so no
+  reverse-mode package enters the package and `Zygote` is not a dependency. The fit's sample carries
+  the four surfaces of the slab beside its interior — the two in time at the span's space rule and
+  the two in space at the slab's time rule — with each face weighted by the other direction's
+  weights, so the initial and boundary data enter the fit as they entered the old calibration grid.
+  The fit's buffers live in the block (`TrainedFit`), its generator is copied per call and never
+  advanced, and a network in `:all` mode is refused, because Newton determines every layer there.
+  `Random` returns to `[deps]` with a `1` bound, for the generator of the draw alone; the
+  package's `CHANGELOG` entry of the C release records its earlier removal.
+  `test/initial_guess/trained_hidden_layer.jl` joins the `slow` group.
+- **`scripts/elm_model.jl` registers the ELM family in the append-only registry.** One model file
+  builds the family's problem, ansatz, method and archive — the wave equation, at `S = 20` hidden
+  units, `degree = 3` and `ncells = (2, 5)`, at two time steps — and `register_family!(:elm, ELM;
+  run = elm_run)` puts it under `runs/` through the one driver, `scripts/run_family.jl`, without an
+  edit to `scripts/experiments.jl`.
 
 ### Changed
 
+- **The direct linear solve is a `:last_layer` network's option, and its factorisation is the
+  solver's own.** `check_method` admits `linear_solver = true` for a `NetworkAnsatz` in
+  `:last_layer` mode on a linear density beside the ansatz it already admitted — one whose step is
+  linear in its coefficients — and names the mode where it refuses a network in `:all` mode and the
+  density where the density is not linear. The step's factorisation is the solver's own
+  `linear_solver_method` rather than a hard-coded `lu`: for a network that is
+  `SimpleSolvers.LapackPivotedQR`, whose minimum-norm step solves the rank-deficient saddle point
+  that a `:last_layer` Jacobian is, and the cache's `linear_lu` field holds it of whatever type it
+  is. The observable of the option is the step's residual — `1.4e-14` of its initial residual over
+  three slabs of `LinearTransport` at `S = 20` and `D = 2`, which is `64 eps(Float64)` — taken with
+  one factorisation over the run and two recorded solves per step; the vector's distance from a
+  Newton solve's is not an observable, because the Jacobian's near-null space leaves it
+  undetermined. The ELM family's direct least-squares branch is this option.
 - **`LinearTransport`'s density is the doubled field's.** `L = ψ (v₁ + c w₁)` on `D = 2`, with
   component 1 the transported field `u` and component 2 the adjoint field `ψ` of zero data: `ψ`'s
   rows carry the transport equation for `u` and `u`'s rows the adjoint equation for `ψ`, where

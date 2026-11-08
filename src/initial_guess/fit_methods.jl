@@ -59,6 +59,47 @@ struct OrthogonalGreedy <: SlabFitMethod
 end
 
 """
+    TrainedHiddenLayer(; epochs = 100, learning_rate = 1e-5, rng = Xoshiro(1234)) <: SlabFitMethod
+
+The fit method of a [`NetworkAnsatz`](@ref) in `:last_layer` mode that trains the hidden layer
+instead of taking it from a dictionary: every epoch takes one gradient-descent step on the hidden
+weights and the hidden biases, and then reads the output weights by least squares on the hidden
+features that step left.
+
+The misfit the step descends is the field's distance from the sample of the slab, weighted as the
+slab's own measure weights it: the ansatz's interior rule by `h ωₜ ωₓ`, the two surfaces at the
+space rule by `ωₓ`, and the two surfaces at the time rule by `h ωₜ`. The features the solve reads
+are the hidden layer's activations at those same points, so the four surfaces carry the initial and
+boundary data into the fit.
+
+`epochs = 0` fits the output layer alone on the hidden layer the `rng` draws; a larger `epochs`
+descends first. The draw is taken from `rng` and never from the process's global generator, and the
+generator is copied per call, so one method object gives the same fit to every integrator that
+shares it. The buffers of the fit live in the ansatz's block, not in the method.
+
+A network in `:all` mode is refused, because Newton determines the hidden layer there.
+
+```julia
+method = SpaceTimeGalerkin(NetworkAnsatz(S = 20, mode = :last_layer, xspan = (0.0, 1.0),
+        ncells = (2, 5), degree = 3), WeakInitialAndBoundaryConditions();
+    initial_guess = FitTo(InitialCondition(); method = TrainedHiddenLayer(epochs = 20)))
+```
+"""
+struct TrainedHiddenLayer <: SlabFitMethod
+    epochs::Int
+    learning_rate::Float64
+    rng::AbstractRNG
+end
+
+function TrainedHiddenLayer(; epochs::Integer = 100, learning_rate::Real = 1e-5,
+        rng::AbstractRNG = Xoshiro(1234))
+    epochs ≥ 0 || throw(ArgumentError("epochs must be at least 0, got $epochs"))
+    isfinite(learning_rate) && learning_rate ≥ 0 || throw(ArgumentError(
+        "learning_rate must be finite and at least 0, got $learning_rate"))
+    return TrainedHiddenLayer(Int(epochs), Float64(learning_rate), rng)
+end
+
+"""
     default_fit(ansatz)
 
 The fit method `FitTo(target)` uses when the caller names none.

@@ -585,13 +585,18 @@ are read from `trace_basis(ansatz)`. The datum is fixed by [`first_datum`](@ref)
 next slab by [`next_datum`](@ref).
 
 The unknowns of the slab are the network's parameters and then the multipliers, so the oracle reads
-every parameter: a `:last_layer` method frees a part of them, which the datum does not carry, and is
-refused.
+every parameter of a `:all` method. A `:last_layer` method frees a part of them only, and the block
+that holds the parameters the mode fixes is passed beside the method: the oracle reads the fixed
+entries from the block and lays the free ones out from `first_free`. A `:last_layer` call without
+that block is refused.
 """
-struct NetworkActionOracle{T, P, A}
+struct NetworkActionOracle{T, P, A, B}
     problem::P
     ansatz::A
     np::Int
+    nfree::Int
+    first_free::Int
+    block::B
     D::Int
     nλ::Int
     nμ::Int
@@ -608,20 +613,20 @@ struct NetworkActionOracle{T, P, A}
     χ::Matrix{T}
 end
 
-function ActionOracle(problem, method::SpaceTimeGalerkin{<:NetworkAnsatz}; kwargs...)
-    isempty(kwargs) ||
-        throw(ArgumentError("a network's action oracle takes no keyword argument"))
-    return NetworkActionOracle(problem, method)
+function ActionOracle(problem, method::SpaceTimeGalerkin{<:NetworkAnsatz};
+        block = nothing)
+    return NetworkActionOracle(problem, method; block = block)
 end
 
-function NetworkActionOracle(problem, method)
+function NetworkActionOracle(problem, method; block = nothing)
     T = eltype(timespan(problem))
     a = ansatz(method)
     c = coupling(method)
     M = MultisymplecticIntegrators
-    M.nfree(a) == M.nparameters(a) || throw(ArgumentError(
-        "the action oracle of a network reads every parameter; a :last_layer method frees " *
-        "$(M.nfree(a)) of $(M.nparameters(a))"))
+    M.nfree(a) == M.nparameters(a) || block !== nothing ||
+        throw(ArgumentError(
+            "the action oracle of a :last_layer network needs the block that holds its fixed " *
+            "parameters"))
     own = SimpleSplines.quadratures(M.quadrature(a))
     tr = M.trace_basis(a)
     trace = SimpleSplines.quadratures(M.quadrature(tr))
@@ -635,8 +640,9 @@ function NetworkActionOracle(problem, method)
     λindices = corners ? (2:(nx - 1)) : (1:nx)
     table(basis, points, indices) = T[SimpleSplines.evaluate(basis, j, p)
                                       for p in points, j in indices]
-    return NetworkActionOracle{T, typeof(problem), typeof(a)}(
-        problem, a, M.nparameters(a), a.D, length(λindices), corners ? nt : 0,
+    return NetworkActionOracle{T, typeof(problem), typeof(a), typeof(block)}(
+        problem, a, M.nparameters(a), M.nfree(a), a.first_free, block, a.D,
+        length(λindices), corners ? nt : 0,
         T(timestep(problem)),
         weights(own[1]), nodes(own[1]), weights(own[2]), nodes(own[2]),
         ωxt, xt, ωtt, tt,
@@ -645,8 +651,25 @@ end
 
 restricted(::NetworkActionOracle) = false
 
-"""The length of the solver's vector of a network slab: its parameters, then its multipliers."""
-unknown_count(o::NetworkActionOracle) = o.np + (o.nλ + 2 * o.nμ) * o.D
+"""
+The length of the solver's vector of a network slab: the free parameters, then the multipliers.
+"""
+unknown_count(o::NetworkActionOracle) = o.nfree + (o.nλ + 2 * o.nμ) * o.D
+
+"""
+    full_parameters(o, θ)
+
+The whole parameter vector of the slab at the oracle's vector `θ`: its free entries from `θ` at
+`first_free + k - 1`, and the fixed ones from the block.
+"""
+function full_parameters(o::NetworkActionOracle, θ::AbstractVector)
+    o.nfree == o.np && return θ[1:o.np]
+    p = collect(eltype(θ), o.block.params)
+    for k in 1:o.nfree
+        p[o.first_free + k - 1] = θ[k]
+    end
+    return p
+end
 
 mutable struct NetworkDatum{T}
     start::T
@@ -702,12 +725,12 @@ trace basis' space nodes, its top multiplier, and the side data at the new slab'
 """
 function next_datum(o::NetworkActionOracle{T}, datum::NetworkDatum{T},
         θ::AbstractVector{T}) where {T}
-    p = θ[1:o.np]
+    p = full_parameters(o, θ)
     for r in eachindex(o.xt), d in 1:o.D
 
         datum.target[r, d] = network_field(o, p, one(T), o.xt[r])[d]
     end
-    datum.λ₀ .= reshape(θ[(o.np + 1):(o.np + o.nλ * o.D)], o.nλ, o.D)
+    datum.λ₀ .= reshape(θ[(o.nfree + 1):(o.nfree + o.nλ * o.D)], o.nλ, o.D)
     datum.start += o.h
     datum.ga, datum.gb = network_side_values(o, datum.start)
     return datum
@@ -788,22 +811,25 @@ end
 """
     oracle_residual(o::NetworkActionOracle, datum, θ)
 
-The residual of the oracle's network slab at the solver's vector `θ = (p, λ, μ_a, μ_b)`, from the
-gradient of [`network_action`](@ref): `∂S/∂p` on the parameter rows, `−∂S/∂λ₀` on the rows of the
-top multiplier, and `−∂S/∂μ_a` and `+∂S/∂μ_b` on the rows of the two ends.
+The residual of the oracle's network slab at the solver's vector `θ = (θ_free, λ, μ_a, μ_b)`, from
+the gradient of [`network_action`](@ref): `∂S/∂p` on the parameter rows, at the free entries the
+method's mode leaves, `−∂S/∂λ₀` on the rows of the top multiplier, and `−∂S/∂μ_a` and `+∂S/∂μ_b` on
+the rows of the two ends. `p` is the whole parameter vector of [`full_parameters`](@ref), of which
+`θ` holds the free part.
 """
 function oracle_residual(o::NetworkActionOracle{T}, datum::NetworkDatum{T},
         θ::AbstractVector{T}) where {T}
-    np, D, nλ, nμ = o.np, o.D, o.nλ, o.nμ
-    z = vcat(θ[1:np], vec(datum.λ₀), θ[(np + 1):end])
+    np, nf, D, nλ, nμ = o.np, o.nfree, o.D, o.nλ, o.nμ
+    z = vcat(full_parameters(o, θ), vec(datum.λ₀), θ[(nf + 1):end])
     g = action_gradient(w -> network_action(o, datum, w), z)
-    R = zeros(T, length(θ))
-    R[1:np] .= g[1:np]
-    base = np + nλ * D
-    R[(np + 1):base] .= -g[(np + 1):base]
+    R = zeros(T, nf + nλ * D + 2 * nμ * D)
+    for k in 1:nf
+        R[k] = g[o.first_free + k - 1]
+    end
+    R[(nf + 1):(nf + nλ * D)] .= -g[(np + 1):(np + nλ * D)]
     offset = np + 2 * nλ * D
-    R[(base + 1):(base + nμ * D)] .= -g[(offset + 1):(offset + nμ * D)]
+    R[(nf + nλ * D + 1):(nf + nλ * D + nμ * D)] .= -g[(offset + 1):(offset + nμ * D)]
     offset += nμ * D
-    R[(base + nμ * D + 1):(base + 2 * nμ * D)] .= g[(offset + 1):(offset + nμ * D)]
+    R[(nf + nλ * D + nμ * D + 1):(nf + nλ * D + 2 * nμ * D)] .= g[(offset + 1):(offset + nμ * D)]
     return R
 end

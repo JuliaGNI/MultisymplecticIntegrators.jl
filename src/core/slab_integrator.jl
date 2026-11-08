@@ -29,12 +29,17 @@ unknowns, and [`WeakInitialAndBoundaryConditions`](@ref), the one coupling eithe
 multipliers after them. A step is a nonlinear system of
 [`total_free_coefficients`](@ref)`(method, problem)` equations, which the ecosystem's Newton solver
 solves, with a pivoted QR as its linear solve for a symbolic or a network ansatz. With
-`linear_solver = true`, for an ansatz linear in its coefficients and a linear
-density, the system is affine with the same Jacobian on every slab: the first step factorises it
-once, and every step solves with that factorisation directly and then takes one step of iterative
-refinement with it, two solves in all. The iterate count, the residual, the initial residual and
-the convergence of every step are recorded in the cache, and the trace `(u, v, w)` at the top of
-the slab, at the nodes of the space quadrature, is kept for the diagnostics.
+`linear_solver = true`, for an ansatz whose step is affine in its unknowns and a linear density, one
+linear solve replaces Newton's iterations: the step's equations are the slab's rows — a network's
+interior weak form beside the coupling's initial and boundary rows — with the Jacobian of the whole
+system, and a solution is read from zero and then refined once with the same factorisation, two
+solves in all and no iterate. The factorisation is the solver's own linear method, taken once per
+run: the Jacobian of such a step is a saddle point whose constraint rows reach only the free output
+weights of a `:last_layer` network, so the pivoted QR of a network solves it by its minimum-norm
+step, where a factorisation without rank detection raises on a zero pivot. The iterate count, the
+residual, the initial residual and the convergence of every step are recorded in the cache, and the
+trace `(u, v, w)` at the top of the slab, at the nodes of the space quadrature, is kept for the
+diagnostics.
 
 The roles of the ansatz, the coupling and the guess, and the functions through which the core
 reaches each of them, are on the page *The slab seam* of the manual.
@@ -95,15 +100,25 @@ Reject a method that the problem cannot support, before any step runs.
 
 The refusals are `ArgumentError`s: a target that reads the exact solution of a problem that has
 none, a fit that needs an ansatz linear in its coefficients on one that is not, a direct linear
-solve (`linear_solver = true`) on an ansatz that is not linear in its coefficients or a density
+solve (`linear_solver = true`) on an ansatz whose step is not affine in its unknowns or a density
 that is not linear, and what the ansatz's [`check_ansatz`](@ref) and the coupling's
 [`check_coupling`](@ref) refuse.
+
+The direct linear solve is offered to two kinds of step: one whose unknowns enter its equations
+linearly, which is what `is_linear_in_coefficients` reports, and a [`NetworkAnsatz`](@ref) in
+`:last_layer` mode, whose free output weights enter its equations affinely while its hidden layer is
+data. Any other network is refused by mode, because Newton determines every layer in `:all` mode.
 """
 function check_method(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin)
+    a = ansatz(method)
     if method.linear_solver
-        is_linear_in_coefficients(ansatz(method)) ||
+        if a isa NetworkAnsatz && a.mode !== :last_layer
+            throw(ArgumentError("linear_solver = true needs an ansatz whose step is affine in " *
+                                "its unknowns; NetworkAnsatz in :$(a.mode) mode is not"))
+        end
+        (is_linear_in_coefficients(a) || (a isa NetworkAnsatz && a.mode === :last_layer)) ||
             throw(ArgumentError("linear_solver = true needs an ansatz that is linear in its " *
-                                "coefficients; $(nameof(typeof(ansatz(method)))) is not"))
+                                "coefficients; $(nameof(typeof(a))) is not"))
         is_linear_density(problem.density) ||
             throw(ArgumentError("linear_solver = true needs a linear Lagrangian density; " *
                                 "the problem's density is not linear"))
@@ -120,7 +135,6 @@ function check_method(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin)
                                 "coefficients; $(nameof(typeof(ansatz(method)))) is not"))
         end
     end
-    a = ansatz(method)
     check_ansatz(problem, a)
     check_coupling(problem, coupling(method), a)
     return nothing
@@ -346,7 +360,7 @@ mutable struct SpaceTimeGalerkinCache{ST, AD, CD <: CouplingData} <: IntegratorC
     converged::Vector{Bool}
     steps::Int
     factorisations::Int
-    linear_lu::Union{Nothing, LU{ST, Matrix{ST}, Vector{Int}}}
+    linear_lu::Union{Nothing, LinearSolver}
     linear_rhs::Vector{ST}
     linear_zero::Vector{ST}
     ansatz::AD
@@ -446,8 +460,9 @@ end
     factorisations(cache::SpaceTimeGalerkinCache)
     factorisations(int::GeometricIntegrator)
 
-The number of Jacobian LU factorisations computed by the direct linear solver since the last
-`reset!` of the cache.
+The number of Jacobian factorisations computed by the direct linear solver since the last `reset!`
+of the cache, which is one per run: the factorisation is the linear method of the solver, taken once
+and kept.
 """
 factorisations(c::SpaceTimeGalerkinCache) = c.factorisations
 function factorisations(int::GeometricIntegrator{
@@ -602,9 +617,10 @@ end
     integrate_step!(sol, history, params, int)
 
 One slab: the coupling fixes its datum, the initial guess fills the solver's vector, the
-ecosystem's Newton solver (or, when `method.linear_solver` is `true`, one solve with the cached LU
-factorisation from zero and one step of iterative refinement) solves the slab, the cache records
-the solve, and the update writes the solution, the trace and the data the next slab starts from.
+ecosystem's Newton solver (or, when `method.linear_solver` is `true`, one solve with the cached
+factorisation of the solver's own linear method, from zero, and one step of iterative refinement
+with it) solves the slab, the cache records the solve, and the update writes the solution, the trace
+and the data the next slab starts from.
 """
 function integrate_step!(sol, history, params,
         int::GeometricIntegrator{<:SpaceTimeGalerkin, <:LagrangianPDEProblem})
@@ -620,16 +636,17 @@ function integrate_step!(sol, history, params,
         lu_fac = c.linear_lu
         if lu_fac === nothing
             jacobian!(s, c.linear_zero, (sol, params, int))
-            lu_fac = lu(jacobianmatrix(s))
+            lu_fac = SimpleSolvers.linearsolver(s)
+            factorize!(lu_fac, jacobianmatrix(s))
             c.linear_lu = lu_fac
             c.factorisations += 1
         end
         residual!(c.linear_rhs, c.linear_zero, sol, params, int)
-        ldiv!(lu_fac, c.linear_rhs)
+        ldiv!(c.linear_rhs, lu_fac, c.linear_rhs)
         x .= .-c.linear_rhs
         # one step of iterative refinement with the same factorisation
         residual!(c.linear_rhs, x, sol, params, int)
-        ldiv!(lu_fac, c.linear_rhs)
+        ldiv!(c.linear_rhs, lu_fac, c.linear_rhs)
         x .-= c.linear_rhs
         residual!(c.linear_rhs, x, sol, params, int)
         rfₐ = norm(c.linear_rhs)

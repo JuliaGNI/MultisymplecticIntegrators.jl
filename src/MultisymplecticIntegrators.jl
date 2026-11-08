@@ -4,11 +4,11 @@ using GeometricBase
 using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: Diagonal, I, LU, UpperTriangular, axpy!, dot, ldiv!, lu, mul!, norm,
-                     rdiv!
+using LinearAlgebra: Diagonal, I, UpperTriangular, axpy!, dot, ldiv!, mul!, norm, rdiv!
 using SimpleSplines
 using SimpleSolvers
 using SparseArrays
+using Random: AbstractRNG, Xoshiro, rand
 using Symbolics
 
 import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrature,
@@ -71,14 +71,15 @@ export SpaceTimeGalerkin, SpaceTimeGalerkinCache, ansatz, coupling, total_free_c
 include("ansatz/symbolic.jl")
 export SymbolicAnsatz
 
-# the initial guess: the roles first, then the fit a network uses and the ansatz it seeds
+# the initial guess: the roles first, then the fits a network uses and the ansatz they seed
 include("initial_guess/fit_methods.jl")
 include("initial_guess/guess.jl")
 include("initial_guess/orthogonal_greedy.jl")
+include("initial_guess/trained_hidden_layer.jl")
 
 # the network ansatz, which the coupling's carrier and the guess hooks extend
 include("ansatz/network.jl")
-export NetworkAnsatz, trace_basis, OrthogonalGreedy
+export NetworkAnsatz, trace_basis, OrthogonalGreedy, TrainedHiddenLayer
 
 # the couplings
 include("couplings/coefficient_restriction.jl")

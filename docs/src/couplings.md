@@ -11,5 +11,5 @@ targets this package ships, and the fit that brings an ansatz to one of them.
 Modules = [MultisymplecticIntegrators]
 Pages = ["src/couplings/coefficient_restriction.jl", "src/couplings/weak_multipliers.jl",
     "src/initial_guess/fit_methods.jl", "src/initial_guess/guess.jl",
-    "src/initial_guess/orthogonal_greedy.jl"]
+    "src/initial_guess/orthogonal_greedy.jl", "src/initial_guess/trained_hidden_layer.jl"]
 ```
