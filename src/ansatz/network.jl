@@ -124,7 +124,7 @@ end
 xspan(ansatz::NetworkAnsatz) = ansatz.xspan
 
 """
-    trace_basis(ansatz::NetworkAnsatz)
+trace_basis(ansatz::NetworkAnsatz)
 
 The trace basis of the network's multipliers: a [`TensorBSplineAnsatz`](@ref) whose functions the
 coupling uses as its multipliers and on whose rules its tables are built.
@@ -196,6 +196,8 @@ function check_ansatz(problem::LagrangianPDEProblem{PT}, ansatz::NetworkAnsatz{T
 end
 
 default_fit(::NetworkAnsatz) = OrthogonalGreedy()
+
+is_linear_in_coefficients(::NetworkAnsatz) = false
 
 """
     fit!(w, method::OrthogonalGreedy, ansatz::NetworkAnsatz, sample, cache)
