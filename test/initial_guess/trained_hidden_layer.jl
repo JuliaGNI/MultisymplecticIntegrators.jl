@@ -460,9 +460,10 @@ end
 
     # The trained fit takes every target of `§Guess`: the exact solution, which only a problem that
     # has one can supply, and the previous slab's field continued past its top. The sample is the
-    # target's own values — the exact solution at the physical time of every point, and the previous
-    # slab's field at `t̂ = 1`, carried up by its slope there — so the two fits are what a fit that
-    # read another target would not be.
+    # target's own values in every row it carries — the exact solution at the physical time of every
+    # point, and the previous slab's field at `t̂ = 1`, carried up by its slope there — so the two
+    # fits are what a fit that read another target would not be. The interior rows and the rows of
+    # the four faces reach the target by two routes, and both continue the previous slab.
     @testset "E1g the trained fit takes every target of the guess" for T in (Float64, Float32)
         problem = wave_problem(T; timespan = (zero(T), T(0.1)))
         h = timestep(problem)
@@ -491,10 +492,8 @@ end
         reset!(step, timesteps(solution)[2])
         M.integrate_step!(current(step), nothing, parameters(problem), int)
         f = c.ansatz.train
-        interior = length(c.ansatz.tabulation.time.node) *
-                   length(c.ansatz.tabulation.space.node)
         copyto!(c.ansatz.params, previous)
-        for k in 1:interior
+        for k in axes(f.points, 2)
             M.evaluate_at!(c.ansatz, one(T), f.points[2, k])
             @test f.target[k, 1] ==
                   c.ansatz.values[1] + f.points[1, k] * c.ansatz.values[2]

@@ -482,6 +482,9 @@ function reset!(c::SpaceTimeGalerkinCache)
     c.steps = 0
     c.factorisations = 0
     c.linear_lu = nothing
+    # The copy is read only where `linear_lu` is set, and the factorisation that sets it rewrites
+    # the copy before the comparison reads it. A copy left uncleared here is therefore never
+    # consulted, and the clearing is what keeps the cache's two linear-path states in step.
     fill!(c.linear_held, zero(eltype(c.linear_held)))
     empty!(c.iterations)
     empty!(c.residuals)
