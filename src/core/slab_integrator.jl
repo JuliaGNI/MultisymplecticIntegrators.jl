@@ -662,13 +662,11 @@ A tensor B-spline ansatz has one unknown per free row of its coefficient array, 
 and per component, so its count is
 
 ```julia
-nunknowns(ansatz::TensorBSplineAnsatz, coupling, problem) =
+nunknowns(::TensorBSplineAnsatz, coupling, problem) =
     free_rows(coupling, ansatz) * nspace_functions(ansatz) * components(problem)
 ```
 
-with the coupling that leaves the free rows and the problem that fixes the component count as the
-other two arguments.
-
+with the coupling that leaves the free rows and the problem that fixes the component count in scope.
 An ansatz that keeps its unknowns as a parameter vector declares its own count instead; a
 [`NetworkAnsatz`](@ref) has one per parameter its mode frees.
 """
