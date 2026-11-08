@@ -712,8 +712,27 @@ function next_datum(o::NetworkActionOracle{T}, datum::NetworkDatum{T},
     return datum
 end
 
-# The values `[u; ∂_t̂u; ∂ₓu]` of the network at one point, of the given parameter vector.
-network_field(o::NetworkActionOracle, p, t̂, x) = o.ansatz.field([t̂, x], p)
+# The values `[u; ∂_t̂u; ∂ₓu]` of the network at one point, of the given parameter vector, written
+# here from the network's own definition rather than read from the ansatz's generated functions:
+# with `S` hidden units of `tanh` and `D` outputs,
+# `u_d = Σ_s W2[s, d] tanh(W1[s, 1] t̂ + W1[s, 2] x + b[s])`, and each derivative carries the slope
+# `1 - tanh²` of its hidden unit times its input weight. The parameters are read in the order
+# `L1.W`, `L1.b`, `L2.W`, with `L1.W` laid out as `[W1[:, 1]; W1[:, 2]]`.
+function network_field(o::NetworkActionOracle, p, t̂, x)
+    S, D = o.ansatz.S, o.D
+    values = zeros(eltype(p), 3D)
+    for s in 1:S
+        σ = tanh(p[s] * t̂ + p[S + s] * x + p[2S + s])
+        slope = one(σ) - abs2(σ)
+        for d in 1:D
+            weight = p[3S + (s - 1) * D + d]
+            values[d] += weight * σ
+            values[D + d] += weight * slope * p[s]
+            values[2D + d] += weight * slope * p[S + s]
+        end
+    end
+    return values
+end
 
 """
     network_action(o, datum, z)

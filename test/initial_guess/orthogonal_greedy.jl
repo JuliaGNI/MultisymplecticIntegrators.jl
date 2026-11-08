@@ -172,7 +172,14 @@ function old_oga2d_error(::Type{T}, nodes::AbstractMatrix{T}, weights::AbstractV
     return sqrt(error / scale)
 end
 
-"""The allocations of one fit of a fresh workspace, through a function barrier."""
+"""The allocations of one fit of a fresh workspace, which build its tables, through a function
+barrier."""
+function first_fit_allocations(w, ansatz, sample, c)
+    return @allocated M.fit!(w, OrthogonalGreedy(), ansatz, sample, c)
+end
+
+"""The allocations of one fit of a workspace whose tables the first fit built, through a function
+barrier."""
 function fit_allocations(w, ansatz, sample, c)
     M.fit!(w, OrthogonalGreedy(), ansatz, sample, c)
     return @allocated M.fit!(w, OrthogonalGreedy(), ansatz, sample, c)
@@ -232,10 +239,11 @@ end
         weights2 = M.output_weights(w, ansatz, 2)
         @test weights1 != weights2
         @test norm(weights2) ≤ sqrt(eps(T)) * max(norm(weights1), one(T))
-        # the workspace of the default dictionary, measured on a fit of a fresh slab
+        # the workspace of the default dictionary, measured on a fit of a fresh slab: the first fit
+        # builds the dictionary's tables, and no fit after it allocates anything
         _, c2, _ = greedy_slab(T; D = 2)
         w2 = zeros(T, ansatz.np)
-        allocations = fit_allocations(w2, ansatz, sample, c2)
-        @test allocations < 100_000_000
+        @test first_fit_allocations(w2, ansatz, sample, c2) < 100_000_000
+        @test fit_allocations(w2, ansatz, sample, c2) == 0
     end
 end

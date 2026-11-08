@@ -654,9 +654,15 @@ end
 
     @testset "M1 the network under WeakInitialAndBoundaryConditions" for T in (Float64,
         Float32)
-        # the spline arm: it converges at every step, on the coupling the network shares
-        _, _, _, spline_result = wave_run(T)
+        # the spline arm: the network's own coupling and guess, on the basis whose ends the
+        # coupling's boundary rows carry, converging at every step and reaching the energy error a
+        # second-order scheme gives at this `h`
+        spline_problem, spline_method, _, spline_result = wave_run(T;
+            coupling = WeakInitialAndBoundaryConditions(), x_boundary = Free(),
+            guess = FitTo(ExactSolution()))
         @test all(spline_result.stats.converged)
+        @test maximum(energy_error(spline_problem, spline_method, spline_result.traces)) <
+              1e-3
         # the network arm: it completes, records its stats, and its residual is the gradient of the
         # action whose multiplier functions and surface rule are the trace basis'
         problem = wave_problem(T)
@@ -672,6 +678,21 @@ end
         @test all(isfinite, c.trace_u)
         # the network's own rule is not the trace basis' rule
         @test M.quadrature_points(c.ansatz)[1] != c.ansatz.trace_tabulation.time.node
+        # the carried momentum: the second slab enters with the top multiplier of the first
+        carry_problem = wave_problem(T; timespan = (zero(T), T(0.1)))
+        carry = GeometricIntegrator(carry_problem, method)
+        solution = GeometricSolution(carry_problem)
+        carry_step = solutionstep(carry, solution[0])
+        reset!(carry_step, timesteps(solution)[1])
+        M.integrate_step!(current(carry_step), history(carry_step),
+            parameters(carry_step), carry)
+        first_top = copy(cache(carry).coupling.top_multiplier)
+        @test any(x -> !iszero(x), first_top)
+        @test cache(carry).coupling.initial_multiplier != first_top
+        reset!(carry_step, timesteps(solution)[2])
+        M.integrate_step!(current(carry_step), history(carry_step),
+            parameters(carry_step), carry)
+        @test cache(carry).coupling.initial_multiplier == first_top
         # the residual of the first slab, on a fresh integrator, whose datum is the first one
         fresh = GeometricIntegrator(problem, method)
         solution = GeometricSolution(problem)

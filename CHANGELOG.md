@@ -474,13 +474,11 @@ makes it worth keeping.
   ansatz's own, one node per cell more than the trace basis'. The residual is the Euler–Lagrange
   residual of the slab weighted by the derivative of the field with respect to each free parameter,
   the four surface rows included, and it equals the gradient of the discrete action of
-  `test/helpers/action_oracle.jl`; the solver's Jacobian equals central differences of it to `2.7e-10`
-  of its scale in `Float64` and `7.9e-7` in `Float32`. The two `NN_PDE_Integrator` modes take
-  `iterations = [71, 102, 98, 53, 97]` and `[3, 4, 4, 3, 3]` at `S = 10` and reach no tolerance, and
-  their sup-norm deviations from the §A entries are `0.7553` and `580.6`; the affine control at
-  `S = 20` converges in two iterations to `8.3e-6` of its initial residual in `Float64` and `6.7e-4`
-  in `Float32`. The runs are recorded as K38–K40 rather than asserted against a tolerance (U13,
-  U24).
+  `test/helpers/action_oracle.jl`; the solver's Jacobian equals central differences of it to
+  `√eps(T)` of its scale, in both precisions. The two `NN_PDE_Integrator` modes at `S = 10` reach no
+  tolerance and their per-step stats are recorded; the affine control at `S = 20` converges in two
+  iterations to a fraction of its initial residual that each precision's own relative tolerance
+  records. The runs are recorded as K38–K40 rather than asserted against a tolerance (U13, U24).
 - **The cache of another element type inherits the ansatz's fixed parameters.**
   `copy_ansatz_data!` copies what an ansatz keeps outside the solver's vector — the parameters it
   holds fixed — from the cache of the problem's element type into the one the solver evaluates at,
@@ -498,13 +496,14 @@ makes it worth keeping.
   component by least squares after each selection. An atom whose remaining direction is shorter than
   `√eps` of its own length adds no rank and is passed over, so no atom is selected twice. The fit is
   linear in the output weights alone, so the hidden weights and the biases stay where the dictionary
-  put them; it allocates nothing after its first call and its workspace stays under the `100 MB` the
-  family allows. On the §A case's own target it reaches a relative `L²` error of `1.5e-2` at `S = 8`,
-  and on `sin(2πx) cos(πt)` over `[0, 1] × [0, 0.05]` `9.17e-2`, within `1.1 ×` the `8.72e-2` the
-  old `OGA2D` dictionary and pick rule reach on the same slab.
+  put them; a fit after the first allocates nothing, and the first builds a workspace whose arrays
+  stay under the `100 MB` the family allows. On the slab of `sin(2πx) cos(πt)` over
+  `[0, 1] × [0, 0.05]` at `S = 8` it stays within `11//10` of the relative `L²` error the old
+  `OGA2D` dictionary and pick rule reach on the same slab, which the test measures with its own copy
+  of that fit.
   `AbstractNeuralNetworks` (compat `0.9.1`), `SymbolicNeuralNetworks` (compat `0.9`) and
   `NeuralNetworkParameters` (compat `0.5`) join `[deps]`, and `test/ansatz/network.jl` and
-  `test/initial_guess/orthogonal_greedy.jl` join the `core` group.
+  `test/initial_guess/orthogonal_greedy.jl` join the `slow` group.
 
 ### Changed
 

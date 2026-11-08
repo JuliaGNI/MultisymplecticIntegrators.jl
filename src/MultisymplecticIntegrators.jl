@@ -70,13 +70,13 @@ export SpaceTimeGalerkin, SpaceTimeGalerkinCache, ansatz, coupling, total_free_c
 include("ansatz/symbolic.jl")
 export SymbolicAnsatz
 
-# the initial guess: the roles first, then the fit a network uses
+# the initial guess: the roles first, then the fit a network uses and the ansatz it seeds
 include("initial_guess/fit_methods.jl")
 include("initial_guess/guess.jl")
+include("initial_guess/orthogonal_greedy.jl")
 
 # the network ansatz, which the coupling's carrier and the guess hooks extend
 include("ansatz/network.jl")
-include("initial_guess/orthogonal_greedy.jl")
 export NetworkAnsatz, trace_basis, OrthogonalGreedy
 
 # the couplings

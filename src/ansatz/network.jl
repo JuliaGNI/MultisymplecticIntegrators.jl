@@ -135,9 +135,6 @@ end
 """The rule the network evaluates its field on, which is not the trace basis'."""
 quadrature(ansatz::NetworkAnsatz) = ansatz.quadrature
 
-"""The number of hidden units, which is the number of atoms the fit selects."""
-hidden_units(ansatz::NetworkAnsatz) = ansatz.S
-
 """The number of outputs of the network, which is the number of components of the field."""
 noutputs(ansatz::NetworkAnsatz) = ansatz.D
 
@@ -146,17 +143,6 @@ activation_function(ansatz::NetworkAnsatz) = layers(ansatz.chain)[1].σ
 
 """The number of the network's parameters, in the order `L1.W`, `L1.b`, `L2.W`."""
 nparameters(ansatz::NetworkAnsatz) = ansatz.np
-
-"""
-    free_parameters(ansatz::NetworkAnsatz)
-
-The indices of the network's parameters that the solver determines: every one of them in `:all`
-mode, and the output weights alone in `:last_layer` mode.
-"""
-function free_parameters(ansatz::NetworkAnsatz)
-    first = ansatz.first_free
-    return first:(first + ansatz.nfree - 1)
-end
 
 """
     fit_atoms(w, ansatz::NetworkAnsatz)
@@ -213,183 +199,25 @@ is_linear_in_coefficients(::NetworkAnsatz) = false
 default_fit(::NetworkAnsatz) = OrthogonalGreedy()
 
 """
-    NetworkFit{ST}
+    fit!(w, method::OrthogonalGreedy, ansatz::NetworkAnsatz, sample, cache)
 
-The workspace of the [`OrthogonalGreedy`](@ref) fit, one per network block: the nodes of the slab and
-their weights, the dictionary's atoms with its table at those nodes, and the buffers of the greedy
-selection — the orthonormal basis of the atoms taken so far with its triangular factor, the
-projections of the target on it, the target and its residual, the output weights, the correlations,
-the selection, and the mask of the atoms already taken.
-
-Every array is empty until the first fit sizes it, and holds what that fit left for the next one.
+Fit the network to a slab's sampled target, by the greedy fit of
+[`fit_network!`](@ref) on the workspace of the cache's block, and write the fitted atoms into `w`
+in the order `L1.W`, `L1.b`, `L2.W`: the two hidden weights and the bias of every selected atom, and
+the output weight of every component behind it. A unit the selection passed over leaves its
+parameters at zero.
 """
-mutable struct NetworkFit{ST}
-    nodes::Matrix{ST}
-    weights::Vector{ST}
-    atoms::Matrix{ST}
-    table::Matrix{ST}
-    basis::Matrix{ST}
-    gram::Matrix{ST}
-    projection::Matrix{ST}
-    correlations::Matrix{ST}
-    targets::Matrix{ST}
-    residual::Matrix{ST}
-    weighted::Matrix{ST}
-    coefficients::Matrix{ST}
-    work::Vector{ST}
-    selected::Vector{Int}
-    taken::Vector{Bool}
-end
-
-function NetworkFit(::Type{ST}) where {ST}
-    return NetworkFit{ST}(zeros(ST, 2, 0), ST[], zeros(ST, 0, 3), zeros(ST, 0, 0),
-        zeros(ST, 0, 0), zeros(ST, 0, 0), zeros(ST, 0, 0), zeros(ST, 0, 0), zeros(ST, 0, 0),
-        zeros(ST, 0, 0), zeros(ST, 0, 0), zeros(ST, 0, 0), ST[], Int[], Bool[])
-end
-
-"""
-    size_fit!(workspace, N, S, D, M)
-
-Size the workspace of a greedy fit of `N` nodes, `S` atoms and `D` components over a dictionary of
-`M` atoms. Every array is replaced, so a workspace of another size pays for its own tables alone.
-"""
-function size_fit!(f::NetworkFit{ST}, N::Integer, S::Integer, D::Integer,
-        M::Integer) where {ST}
-    f.nodes = zeros(ST, 2, N)
-    f.weights = zeros(ST, N)
-    f.atoms = zeros(ST, M, 3)
-    f.table = zeros(ST, M, N)
-    f.basis = zeros(ST, N, S)
-    f.gram = zeros(ST, S, S)
-    f.projection = zeros(ST, S, D)
-    f.correlations = zeros(ST, M, D)
-    f.targets = zeros(ST, N, D)
-    f.residual = zeros(ST, N, D)
-    f.weighted = zeros(ST, N, D)
-    f.coefficients = zeros(ST, S, D)
-    f.work = zeros(ST, N)
-    f.selected = zeros(Int, S)
-    f.taken = falses(M)
-    return f
-end
-
-"""
-    prepare_fit!(workspace, method::OrthogonalGreedy, tabulation, S, D, activation)
-
-Size the workspace of a greedy fit of `S` atoms and `D` components on the nodes of the slab's own
-rule, and build the dictionary with its table there, unless the workspace already holds them.
-"""
-function prepare_fit!(
-        f::NetworkFit{ST}, method::OrthogonalGreedy, tabulation::SlabTabulation,
-        S::Integer, D::Integer, activation) where {ST}
-    t, x = tabulation.time, tabulation.space
-    N = nquadrature(t) * nquadrature(x)
-    atoms = greedy_atoms(method, ST)
-    m = size(atoms, 1)
-    size(f.table) == (m, N) && size(f.coefficients) == (S, D) && return f
-    size_fit!(f, N, S, D, m)
-    n = 0
-    for q in 1:nquadrature(t), r in 1:nquadrature(x)
-
-        n += 1
-        f.nodes[1, n] = t.node[q]
-        f.nodes[2, n] = x.node[r]
-        f.weights[n] = t.weight[q] * x.weight[r]
-    end
-    copyto!(f.atoms, atoms)
-    for n in axes(f.nodes, 2), k in 1:m
-
-        f.table[k, n] = activation(atoms[k, 1] * f.nodes[1, n] +
-                                   atoms[k, 2] * f.nodes[2, n] + atoms[k, 3])
-    end
-    return f
-end
-
-"""
-    select_direction!(workspace, k, s, N)
-
-Remove from the atom `k` its components along the `s` atoms already taken, into the workspace's
-direction buffer, and return the atom's own squared length there. The projections onto the taken
-atoms stay in the triangular factor, for the least-squares step that follows.
-"""
-function select_direction!(f::NetworkFit{ST}, k::Integer, s::Integer, N::Integer) where {ST}
-    norm2 = zero(ST)
-    for i in 1:N
-        f.work[i] = f.table[k, i]
-        norm2 += f.weights[i] * abs2(f.work[i])
-    end
-    for j in 1:s
-        dot = zero(ST)
-        for i in 1:N
-            dot += f.weights[i] * f.basis[i, j] * f.table[k, i]
-        end
-        f.gram[j, s + 1] = dot
-        for i in 1:N
-            f.work[i] -= dot * f.basis[i, j]
-        end
-    end
-    gain2 = zero(ST)
-    for i in 1:N
-        gain2 += f.weights[i] * abs2(f.work[i])
-    end
-    f.gram[s + 1, s + 1] = gain2
-    return norm2
-end
-
-"""
-    select_atom!(workspace, k, gain, s, N, D)
-
-Take the atom `k`, whose remaining direction has length `gain`, into the orthonormal basis at column
-`s`, and read the output weights of every component behind it: its projections on the target, the
-least-squares solution through the triangular factor, and the residual the next selection reads.
-"""
-function select_atom!(f::NetworkFit{ST}, k::Integer, gain::ST, s::Integer, N::Integer,
-        D::Integer) where {ST}
-    f.selected[s] = k
-    f.gram[s, s] = gain
-    for i in 1:N
-        f.basis[i, s] = f.work[i] / gain
-    end
-    for d in 1:D
-        value = zero(ST)
-        for i in 1:N
-            value += f.weights[i] * f.basis[i, s] * f.targets[i, d]
-        end
-        f.projection[s, d] = value
-        for i in s:-1:1
-            v = f.projection[i, d]
-            for j in (i + 1):s
-                v -= f.gram[i, j] * f.coefficients[j, d]
-            end
-            f.coefficients[i, d] = v / f.gram[i, i]
-        end
-    end
-    for d in 1:D, i in 1:N
-
-        v = f.targets[i, d]
-        for j in 1:s
-            v -= f.basis[i, j] * f.projection[j, d]
-        end
-        f.residual[i, d] = v
-    end
-    return f
-end
-
-"""
-    fit_parameters!(w, workspace, S, D)
-
-Write the fitted atoms into a network's parameter vector, in the order `L1.W`, `L1.b`, `L2.W`: the
-two hidden weights and the bias of atom `j`, and the output weight of every component behind it. An
-atom the selection passed over leaves its unit zero, so the parameter stays where the caller put it.
-"""
-function fit_parameters!(w::AbstractVector{ST}, f::NetworkFit{ST}, S::Integer,
-        D::Integer) where {ST}
-    for j in 1:S
+function fit!(w::AbstractVector{ST}, method::OrthogonalGreedy, ansatz::NetworkAnsatz,
+        sample::AbstractArray{ST, 3}, c::SpaceTimeGalerkinCache) where {ST}
+    f = c.ansatz.fit
+    n = fit_network!(f, method, sample, c.ansatz.tabulation, ansatz.S, ansatz.D,
+        activation_function(ansatz))
+    S, D = ansatz.S, ansatz.D
+    fill!(w, zero(ST))
+    for j in 1:n
         k = f.selected[j]
         k == 0 && continue
-        w[j] = f.atoms[k, 1]
-        w[S + j] = f.atoms[k, 2]
-        w[2S + j] = f.atoms[k, 3]
+        w[j], w[S + j], w[2S + j] = f.atoms[k, 1], f.atoms[k, 2], f.atoms[k, 3]
         for d in 1:D
             w[3S + (j - 1) * D + d] = f.coefficients[j, d]
         end

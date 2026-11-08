@@ -5,6 +5,7 @@ using LinearAlgebra: norm
 using MultisymplecticIntegrators
 using Random
 using SimpleSolvers
+using SimpleSplines
 using Test
 
 import GeometricIntegratorsBase: GeometricIntegrator, cache, current, nlsolution, reset!,
@@ -24,16 +25,26 @@ the value this tree measures beside it.
 `WAVE_NN_FULLY`: `0.7553` over the five steps, in `Float64` — the entry is the run of the old
 integrator, and this bound holds the run of this one. `WAVE_NN_PARTIALLY`: `580.6` in `Float64` and
 `580.5` in `Float32`, and the bound of `600` records that run: the entry is a diverged iterate, its
-own `u` reaching `1.3e2` where this run's stays under `0.7`, so the deviation records the entry and
-not the accuracy of this run. `SINE_GORDON_NN_FULLY`: `0.046`, against a bound of `0.1`.
+own `u` reaching `581.76` where this run's stays under `0.7`, so the deviation records the entry and
+not the accuracy of this run. `WAVE_NN_SYMBOLIC_FULLY`: the same run of the field as `WAVE_NN_FULLY`,
+written by the symbolic integrator of the old stack. `SINE_GORDON_NN_FULLY`: `0.046`, against a
+bound of `0.1`.
 
 Neither entry can be reproduced bit for bit: they were made before the two defects the network
 family fixes — the bottom points read in the normalized coordinate (`xspan` is `(0, 1)`, so there
 they coincide, and this bound is the fit's alone) and the duplicate atom of the old dictionary,
 which cost the greedy a whole selection.
 """
-const NETWORK_SUP_BOUND = (WAVE_NN_FULLY = 1.0, WAVE_NN_PARTIALLY = 600.0,
-    SINE_GORDON_NN_FULLY = 0.1)
+const NETWORK_SUP_BOUND = (WAVE_NN_FULLY = 0.0, WAVE_NN_PARTIALLY = 0.0,
+    WAVE_NN_SYMBOLIC_FULLY = 0.0, SINE_GORDON_NN_FULLY = 0.0)
+
+"""
+The largest deviation of `N1`'s record arms — the same §A case with the initial condition as the guess
+of the first slab instead of the exact solution — from the same entries, with the value this tree
+measures beside it. The guess is a different target, so the fit seeds a different network and the
+deviation from the entry is not the one `NETWORK_SUP_BOUND` records.
+"""
+const NETWORK_ICS_SUP_BOUND = (WAVE_NN_FULLY = 0.0, WAVE_NN_PARTIALLY = 0.0)
 
 """The steps of the §A case."""
 const NETWORK_STEPS = 5
@@ -47,14 +58,14 @@ const NETWORK_CONTROL_S = 20
 """
 The relative tolerance of the network family's steps, measured on the affine control of `:last_layer`
 at `S = 20`: the largest of its five step ratios `residual / initial residual` is `8.3e-6` in
-`Float64` and `6.7e-4` in `Float32`, against the `1e-2` this bound allows.
+`Float64` and `6.7e-4` in `Float32`, against the bounds this tree allows.
 
 The control's steps are affine in its unknowns — the coupling's constraint rows reach the free
 output weights alone and the hidden layer, which the fit fixed, enters the residual as data — so two
 Newton iterations reach the root, and the ratio is the solver's own round-off. `f_abstol = 0`, so no
 step converges on an absolute term.
 """
-network_f_reltol(::Type{Float64}) = 1.0e-2
+network_f_reltol(::Type{Float64}) = 1.0e-4
 network_f_reltol(::Type{Float32}) = 1.0e-2
 
 function network_ansatz(::Type{T}; S = 10, D = 1, mode = :all, degree = 3, ncells = (2, 5),
@@ -84,6 +95,16 @@ end
 function sup_deviation(result, entry)
     return maximum(maximum(abs.(result.solution.u[n] .- entry.u[n, :]))
     for n in 1:length(result.traces))
+end
+
+"""Whether every state of a solution series is finite."""
+function finite_states(x)
+    return all(n -> all(isfinite, x[n]), eachindex(x))
+end
+
+"""Whether two solution series agree on every state they hold."""
+function same_states(x, y)
+    return axes(x) == axes(y) && all(n -> x[n] ≈ y[n], eachindex(x))
 end
 
 """
@@ -160,7 +181,7 @@ function gauss_rule(::Type{T}, a, b, ncells::Integer, n::Integer = 4) where {T}
     width = (b - a) / ncells
     for c in 0:(ncells - 1), k in 1:n
 
-        push!(nodes, a + width * (ξ[k] + one(T)) / 2)
+        push!(nodes, a + width * (T(c) + (ξ[k] + one(T)) / 2))
         push!(weights, width / 2 * ω[k])
     end
     return nodes, weights
@@ -202,7 +223,9 @@ end
             @test M.nfree(ansatz) == free
         end
         # the tensor path keeps the base's count: free rows × space functions × components
-        spline = TensorBSplineAnsatz(degree = 2, ncells = (2, 5), xspan = (zero(T), one(T)))
+        spline = TensorBSplineAnsatz(
+            degree = 2, ncells = (2, 5), xspan = (zero(T), one(T)),
+            x_boundary = Free())
         method = SpaceTimeGalerkin(spline, WeakInitialAndBoundaryConditions())
         int = GeometricIntegrator(problem, method)
         @test length(nlsolution(int)) == total_free_coefficients(method, problem)
@@ -227,8 +250,8 @@ end
         second = integrate(second_int)
         again = integrate(first_int)
         for run in (second, again)
-            @test run.solution.u ≈ first.solution.u
-            @test run.solution.v ≈ first.solution.v
+            @test same_states(run.solution.u, first.solution.u)
+            @test same_states(run.solution.v, first.solution.v)
             @test run.stats.iterations == first.stats.iterations
             @test run.stats.residuals == first.stats.residuals
         end
@@ -248,7 +271,7 @@ end
         assert_no_upcast(c.ansatz.u, T)
         assert_no_upcast(c.ansatz.Ju, T)
         assert_no_upcast(c.ansatz.gradient, T)
-        assert_no_upcast(result.traces, T)
+        foreach(t -> assert_no_upcast(t, T), result.traces)
     end
 
     # The two `S = 10` arms are records: at that size the fourteen constraint rows of the coupling
@@ -257,8 +280,9 @@ end
     # assertion: at `S = 20` the freed output weights carry every row, and two Newton iterations
     # reach the root of an affine system.
     @testset "N1 the network integrates Wave under both modes" for T in (Float64, Float32)
-        for (mode, entry, bound) in ((:all, WAVE_NN_FULLY, NETWORK_SUP_BOUND.WAVE_NN_FULLY),
-            (:last_layer, WAVE_NN_PARTIALLY, NETWORK_SUP_BOUND.WAVE_NN_PARTIALLY))
+        for (mode, entry, bound) in ((
+            :all, WAVE_NN_FULLY, NETWORK_ICS_SUP_BOUND.WAVE_NN_FULLY),
+            (:last_layer, WAVE_NN_PARTIALLY, NETWORK_ICS_SUP_BOUND.WAVE_NN_PARTIALLY))
             _, _, int, result = network_run(T; mode = mode)
             c = cache(int)
             @test length(result.traces) == NETWORK_STEPS
@@ -267,8 +291,8 @@ end
             @test length(result.stats.initial_residuals) == NETWORK_STEPS
             @test length(result.stats.converged) == NETWORK_STEPS
             @test minimum(result.stats.iterations) ≥ 1
-            @test all(isfinite, result.solution.u)
-            @test all(isfinite, result.solution.v)
+            @test finite_states(result.solution.u)
+            @test finite_states(result.solution.v)
             @test all(isfinite, c.trace_u)
             deviation = sup_deviation(result, entry)
             @test deviation ≤ bound
@@ -280,7 +304,7 @@ end
         @test all(control.stats.iterations .<= LAST_LAYER_ITERATIONS)
         @test maximum(control.stats.residuals ./ control.stats.initial_residuals) ≤
               network_f_reltol(T)
-        @test all(isfinite, control.solution.u)
+        @test finite_states(control.solution.u)
         # the identity of the free rows: the control's per-step ratio is the solver's round-off,
         # where a step whose fixed parameters never reached the cache of the solver's element type
         # leaves the Jacobian at zero and the ratio at one
@@ -298,6 +322,10 @@ end
             N = length(cache(slab.int).x)
             params = parameters(slab.problem)
             reference = network_slab(Float64; S = 10, mode = mode)
+            # the reference slab carries the fixed parameters of the slab under test: its own fit
+            # selects a hidden layer of another precision, and the two residuals would differ by
+            # more than the solver's Jacobian differs from central differences
+            cache(reference.int).ansatz.params .= Float64.(cache(slab.int).ansatz.params)
             rng = Xoshiro(1234)
             for _ in 1:16
                 θ = 2 .* rand(rng, T, N) .- 1
@@ -343,7 +371,7 @@ end
         @test maximum(abs, b - ∇S) ≤ 100 * eps(T) * maximum(abs, ∇S)
         # the block's own nodes are the physical ones, and the initial condition is read there
         tnodes, xnodes = M.quadrature_points(c.ansatz)
-        xt, _ = gauss_rule(T, xspan[1], xspan[2], 3,
+        xt, _ = gauss_rule(T, xspan[1], xspan[2], 5,
             M.quadrature_order_of(M.trace_basis(ansatz))[2])
         @test extrema(xnodes) ≈ extrema(xt)
         @test length(xnodes) == length(xt)
@@ -379,7 +407,7 @@ end
         result = integrate(int)
         c = cache(int)
         @test length(result.traces) == 10
-        @test all(isfinite, result.solution.u)
+        @test finite_states(result.solution.u)
         @test all(isfinite, c.trace_u)
         @test all(isfinite, c.trace_v)
         # the second component's rows carry its own target, not the first one's
@@ -387,6 +415,17 @@ end
               M.output_weights(c.ansatz.params, ansatz, 2)
         # the step's residual is recorded: a network step is a record, and it may fail (U13, U24)
         @test result.stats.residuals[1] ≤ result.stats.initial_residuals[1]
+        # the output dimension is the problem's, and the input layer's is two in either case: a
+        # network of two outputs on a scalar problem is refused when its cache is built
+        @test M.noutputs(ansatz) == 2
+        scalar = SpaceTimeGalerkin(network_ansatz(T; D = 2),
+            WeakInitialAndBoundaryConditions())
+        @test_throws ArgumentError GeometricIntegrator(wave_problem(T), scalar)
+        @test_throws ArgumentError NetworkAnsatz(S = 4, xspan = (zero(T),))
+        @test_throws ArgumentError NetworkAnsatz(S = 4, D = 0, xspan = (zero(T), one(T)))
+        @test_throws ArgumentError NetworkAnsatz(S = 0, xspan = (zero(T), one(T)))
+        @test_throws ArgumentError NetworkAnsatz(S = 4, xspan = (zero(T), one(T)),
+            mode = :full)
     end
 
     @testset "A1 the §A case in both modes" for T in (Float64, Float32)
@@ -396,9 +435,11 @@ end
                 guess = FitTo(ExactSolution(); method = OrthogonalGreedy()))
             @test length(result.traces) == NETWORK_STEPS
             @test length(result.stats.iterations) == NETWORK_STEPS
-            @test all(isfinite, result.solution.u)
+            @test finite_states(result.solution.u)
             deviation = sup_deviation(result, entry)
             @test deviation ≤ bound
+            mode === :all && @test sup_deviation(result, WAVE_NN_SYMBOLIC_FULLY) ≤
+                  NETWORK_SUP_BOUND.WAVE_NN_SYMBOLIC_FULLY
         end
         # the three-step SineGordon case of the entry
         problem = SineGordon.problem(
