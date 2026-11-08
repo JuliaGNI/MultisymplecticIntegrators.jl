@@ -121,6 +121,19 @@ function network_functions(symbolic::SymbolicNeuralNetwork, D::Integer)
         build_flat_function(flat_parameter_gradient(values, symbolic), symbolic))
 end
 
+# A function of `build_flat_function` lays its flat parameter vector out into a new parameter set and
+# allocates its result on every call. A point evaluation calls the in-place kernel it wraps instead,
+# `kernel!(out, input, parameters, 1)`, from a parameter set the block keeps and into the block's own
+# scratch. The layout and the kernel are fields of `SymbolicNeuralNetworks`' `FlatParameterFunction`
+# and `InPlaceBatchedFunction`, which that package does not declare public.
+flat_layout(f) = f.layout
+flat_kernel!(f) = f.f.kernel!
+
+# The parameter set of element type `ST` that the network's kernels read.
+function parameter_set(a::NetworkAnsatz, ::Type{ST}) where {ST}
+    return unflatten(flat_layout(a.field), zeros(ST, a.np))
+end
+
 """The space interval of the slab."""
 xspan(ansatz::NetworkAnsatz) = ansatz.xspan
 
@@ -258,9 +271,11 @@ basis', which the coupling's tables are built on; `output` and `trace` are the t
 core evaluates the top of the slab at, and `fit` the workspace of the greedy fit.
 
 `values` and `gradient` are the scratch of one evaluation — the `3D` values of the field, its two
-derivatives and their parameter derivative — and `input` its two-entry argument.
+derivatives and their parameter derivative — `input` its two-entry argument, and `parameter_set`
+the parameters laid out as the network's kernels read them, which every evaluation refreshes from
+`params`.
 """
-struct NetworkSlab{ST, T, A <: NetworkAnsatz{T}}
+struct NetworkSlab{ST, T, A <: NetworkAnsatz{T}, P}
     ansatz::A
     params::Vector{ST}
     residual::Vector{ST}
@@ -289,6 +304,7 @@ struct NetworkSlab{ST, T, A <: NetworkAnsatz{T}}
     input::Vector{ST}
     values::Vector{ST}
     gradient::Matrix{ST}
+    parameter_set::P
     fit::NetworkFit{ST}
 end
 
@@ -306,7 +322,8 @@ function ansatz_data(a::NetworkAnsatz{T}, problem::LagrangianPDEProblem,
     nf, D = a.nfree, a.D
     zero3(q1, q2) = zeros(ST, q1, q2, D)
     zeroJ(q1, q2) = zeros(ST, q1, q2, D, nf)
-    return NetworkSlab{ST, T, typeof(a)}(a,
+    ps = parameter_set(a, ST)
+    return NetworkSlab{ST, T, typeof(a), typeof(ps)}(a,
         zeros(ST, a.np), zeros(ST, nf),
         zero3(qt, qx), zero3(qt, qx), zero3(qt, qx),
         zeroJ(qt, qx), zeroJ(qt, qx), zeroJ(qt, qx),
@@ -317,7 +334,7 @@ function ansatz_data(a::NetworkAnsatz{T}, problem::LagrangianPDEProblem,
         tabulation, trace_tabulation,
         NetworkPoints(collect(T, xgrid(problem))),
         NetworkPoints(collect(T, trace_tabulation.space.node)),
-        zeros(ST, 2), zeros(ST, 3D), zeros(ST, 3D, a.np), NetworkFit(ST))
+        zeros(ST, 2), zeros(ST, 3D), zeros(ST, 3D, a.np), ps, NetworkFit(ST))
 end
 
 """
@@ -327,7 +344,7 @@ The type of [`ansatz_data`](@ref)`(ansatz, problem, ST)`, computed without build
 """
 function ansatz_data_type(a::NetworkAnsatz{T}, ::LagrangianPDEProblem,
         ::Type{ST}) where {T, ST}
-    return NetworkSlab{ST, T, typeof(a)}
+    return NetworkSlab{ST, T, typeof(a), typeof(parameter_set(a, ST))}
 end
 
 """The normalised time nodes and the space nodes of the slab's own quadrature."""
@@ -345,14 +362,15 @@ trace_evaluation(s::NetworkSlab) = s.trace
     evaluate_at!(slab, t̂, x)
 
 Evaluate the field, its two derivatives and their parameter derivative at one point into the block's
-scratch.
+scratch, without allocating.
 """
 @inline function evaluate_at!(s::NetworkSlab, t̂, x)
     a = s.ansatz
     s.input[1] = t̂
     s.input[2] = x
-    copyto!(s.values, a.field(s.input, s.params))
-    copyto!(s.gradient, a.gradient(s.input, s.params))
+    unflatten!(s.parameter_set, flat_layout(a.field), s.params)
+    flat_kernel!(a.field)(s.values, s.input, s.parameter_set, 1)
+    flat_kernel!(a.gradient)(s.gradient, s.input, s.parameter_set, 1)
     return nothing
 end
 

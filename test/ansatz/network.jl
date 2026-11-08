@@ -286,6 +286,27 @@ end
         foreach(t -> assert_no_upcast(t, T), result.traces)
     end
 
+    # A point evaluation runs the network's in-place kernels from the block's own parameter set: it
+    # agrees bit for bit with the allocating call of the generated functions, and allocates nothing.
+    @testset "N6 a point evaluation allocates nothing" for T in (Float64, Float32)
+        for mode in (:all, :last_layer)
+            s = cache(network_slab(T; mode = mode).int).ansatz
+            point = T[T(3 // 10), T(2 // 5)]
+            M.evaluate_at!(s, point[1], point[2])
+            @test s.values == s.ansatz.field(point, s.params)
+            @test s.gradient == s.ansatz.gradient(point, s.params)
+            evaluate(y) = M.evaluate_at!(s, y[1], y[2])
+            allocations(f::F, y::Y) where {F, Y} = (f(y); @allocated f(y))
+            # the helper sees an allocation, so a zero below is the evaluation's and not the helper's
+            @test allocations(collect, point) > 0
+            # asserted under `--check-bounds=auto` only; a run that forces `--check-bounds=yes`
+            # skips the count
+            if Base.JLOptions().check_bounds != 1
+                @test allocations(evaluate, point) == 0
+            end
+        end
+    end
+
     # The two `S = 10` arms are records: in `:last_layer` mode the sixteen constraint rows of the
     # coupling outnumber the ten output weights they reach, so the step's system is inconsistent,
     # and the `:all` arm's solve does not reach round-off (K38); no tolerance is reached, and the

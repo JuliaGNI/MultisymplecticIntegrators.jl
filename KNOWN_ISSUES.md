@@ -176,3 +176,17 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   for K38 the record is that run and not a reference.
 - kind: defect
 - found: 2026-11-08
+
+### K43 · The network family's surface code repeats the symbolic ansatz's.
+
+- location: `src/ansatz/network.jl`, `src/couplings/weak_multipliers.jl`
+- evidence: about 180 lines of the network family nearly repeat the code of `SymbolicAnsatz`:
+  `edge!`, `slab_weak_form!`, `free_residual!`, `keep_top!`, `top_values!`, `initsolver` (an
+  identical body), the `check_coupling` refusals, `coupling_term!` and `coupling_guess!`. They differ
+  only in the surface rule and in the names of the scratch buffers. `network_target_values!` repeats
+  `target_values!` of `src/initial_guess/guess.jl`, whose `ansatz` argument is unused, and the
+  network's `evaluate!(::InitialCondition)` differs from the tensor one only in `trace_basis`. A
+  shared supertype with a surface-rule accessor removes the copy; a reuse of `target_values!` widens
+  its signature.
+- kind: defect
+- found: #44

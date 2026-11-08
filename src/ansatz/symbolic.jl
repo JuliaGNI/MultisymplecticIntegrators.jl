@@ -403,8 +403,7 @@ of a complete orthogonal factorization solves a consistent system exactly and dr
 directions the rank does not carry, where a factorisation without rank detection loses the
 descent direction: started at its exact parameters, that run takes three to 29 iterations per
 slab with the ecosystem's LU and reaches the tolerance on its first slab alone in `Float64`,
-where the pivoted QR converges in two iterations at every slab in both precisions. Every other
-ansatz keeps the ecosystem's default.
+where the pivoted QR converges in two iterations at every slab in both precisions.
 """
 function initsolver(solvermethod::Newton,
         method::SpaceTimeGalerkin{<:SymbolicAnsatz}, caches::CacheDict; kwargs...)
