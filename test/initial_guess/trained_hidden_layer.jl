@@ -258,8 +258,10 @@ end
     record_misfit(record, T, D, misfit, recorded)
 
 Write one misfit of a fit on its own sample with the metadata that makes the figure readable on
-another machine, beside the `const` the same fit is recorded as. No bound is asserted on it: a
-`Float32` misfit moves in its third significant digit under a one-ulp change of its learning rate.
+another machine, beside the `const` the same fit is recorded as. The value is not compared with its
+`const`: a `Float32` misfit moves in its third significant digit under a one-ulp change of its
+learning rate, so E1a asserts the fraction between the two misfits of one fit and reads the trained
+one back through the network's own evaluation, and compares neither with its `const`.
 """
 function record_misfit(record::Symbol, ::Type{T}, D, misfit, recorded) where {T}
     @info("the misfit of a trained fit on its own sample", record, T, D, misfit, recorded,
