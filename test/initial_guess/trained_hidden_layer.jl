@@ -19,7 +19,7 @@ const M = MultisymplecticIntegrators
 
 # The trained fit is measured on what a fit decides: the misfit it leaves on its own sample, the
 # four surfaces that sample carries, the draw it takes from its method, and the block its workspace
-# lives in. A run that may not converge is a record (§V, U12, U24); the `:last_layer` controls of
+# lives in. A run that may not converge is a record; the `:last_layer` controls of
 # `Wave` are the runs this file asserts.
 
 """The steps of the family's run on `Wave`."""
@@ -732,7 +732,7 @@ end
     end
 
     # The family's run on a density that is not linear completes and records its figures, and
-    # nothing about them is asserted: a method that may fail is a record (§V, U12, U24).
+    # nothing about them is asserted: a method that may fail is a record.
     @testset "E4b the family on SineGordon without an exact solution" for T in (Float64, Float32)
         problem = without_solutions(sine_gordon_problem(T), SineGordon.density(), 1)
         @test problem.solutions === nothing
@@ -837,7 +837,7 @@ end
     # The `VectorWave` density at `β ≠ 0`: the run completes, both components are finite, every
     # step's figures are recorded beside its rotation charge, and the first slab's residual is the
     # action's gradient. Neither accuracy nor convergence is asserted, and the charge's deviation is
-    # a record (§V, U12, U24).
+    # a record.
     @testset "E7a VectorWave at β ≠ 0 is finite and its residual is the action's gradient" for T in (Float64,)
         problem = vector_wave_problem(T; β = 0.5)
         method = trained_method(T; S = TRAINED_S, D = 2,
