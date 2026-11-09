@@ -391,9 +391,9 @@ makes it worth keeping.
   test helpers it includes.
 
 - **Direct linear solve for linear densities, with a cached factorisation.** `SpaceTimeGalerkin`
-  takes the keyword
-  `linear_solver = false`. When `linear_solver = true`, `check_method` verifies that the ansatz is
-  linear in its coefficients and that the problem's density is linear (`is_linear_density`, checked
+  takes the keyword `linear_solver = false`. When `linear_solver = true`, `check_method` verifies
+  that the ansatz is linear in its coefficients and that the problem's density is linear
+  (`is_linear_density`, checked
   symbolically when `LagrangianDensity` is built and true for `VectorWave.VectorDensity` when
   `β == 0`), refusing a nonlinear ansatz or density with an `ArgumentError`. On the first step,
   `integrate_step!` evaluates the slab Jacobian and factorises it, and every step then solves from
@@ -530,7 +530,7 @@ makes it worth keeping.
   The fit's buffers live in the block (`TrainedFit`), its generator is copied per call and never
   advanced, and a network in `:all` mode is refused, because Newton determines every layer there.
   `Random` returns to `[deps]` with a `1` bound, for the generator of the draw alone; the
-  package's `CHANGELOG` entry of the C release records its earlier removal.
+  `julia = "1.12"` entry under Breaking Changes records its removal.
   `test/initial_guess/trained_hidden_layer.jl` joins the `slow` group.
 - **`scripts/elm_model.jl` registers the ELM family in the append-only registry.** One model file
   builds the family's problem, ansatz, method and archive — the wave equation, at `S = 20` hidden
@@ -548,13 +548,13 @@ makes it worth keeping.
   `linear_solver_method` rather than a hard-coded `lu`: for a network that is
   `SimpleSolvers.LapackPivotedQR`, whose minimum-norm step solves the rank-deficient saddle point
   that a `:last_layer` Jacobian is, and the cache's `linear_lu` field holds it of whatever type it
-  is. The observable of the option is the step's residual — `1.4e-14` of its initial residual over
-  three slabs of `LinearTransport` at `S = 20` and `D = 2`, which is `64 eps(Float64)` — taken with
-  one factorisation at the run's first step and again at every step whose guess has moved the
-  parameters the step holds fixed, which for a `:last_layer` network is its hidden layer, and two
-  recorded solves per step; the vector's distance from a
-  Newton solve's is not an observable, because the Jacobian's near-null space leaves it
-  undetermined. The ELM family's direct least-squares branch is this option.
+  is. The observable of the option is the step's residual — at most `1.5e-14` of its initial
+  residual over three slabs of `LinearTransport` at `S = 20` and `D = 2`, which is
+  `69 eps(Float64)` — taken with one factorisation at the run's first step and again at every step
+  whose guess has moved the parameters the step holds fixed, which for a `:last_layer` network is
+  its hidden layer, and two recorded solves per step; the vector's distance from a Newton solve's
+  is not an observable, because the Jacobian's near-null space leaves it undetermined. The ELM
+  family's direct least-squares branch is this option.
 - **`LinearTransport`'s density is the doubled field's.** `L = ψ (v₁ + c w₁)` on `D = 2`, with
   component 1 the transported field `u` and component 2 the adjoint field `ψ` of zero data: `ψ`'s
   rows carry the transport equation for `u` and `u`'s rows the adjoint equation for `ψ`, where

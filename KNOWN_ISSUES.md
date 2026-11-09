@@ -187,8 +187,9 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - evidence: about 180 lines of the network family nearly repeat the code of `SymbolicAnsatz`:
   `edge!`, `slab_weak_form!`, `free_residual!`, `keep_top!`, `top_values!`, `initsolver` (an
   identical body), the `check_coupling` refusals, `coupling_term!` and `coupling_guess!`. They differ
-  only in the surface rule and in the names of the scratch buffers. `point_target!` repeats
-  `target_values!` of `src/initial_guess/guess.jl`, whose `ansatz` argument is unused, and the
+  only in the surface rule and in the names of the scratch buffers. `network_target_values!`, through
+  its helper `point_target!`, repeats `target_values!` of `src/initial_guess/guess.jl`, whose
+  `ansatz` argument is unused, and the
   network's `evaluate!(::InitialCondition)` differs from the tensor one only in `trace_basis`. A
   shared supertype with a surface-rule accessor removes the copy; a reuse of `target_values!` widens
   its signature.
