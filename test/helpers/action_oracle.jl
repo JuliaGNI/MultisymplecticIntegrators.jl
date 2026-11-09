@@ -164,6 +164,14 @@ function node_lagrangian(L::LagrangianDensity, u, v, w, params)
 end
 node_lagrangian(L, u, v, w, params) = L(u, v, w, params)
 
+# A coupled density carries a scalar density of one component and the quartic coupling of the
+# components, which is not a sum over them: read both, as that type exposes them.
+function node_lagrangian(density::VectorWave.VectorDensity, u, v, w, params)
+    scalar = sum(d -> density.density(u[d], v[d], w[d], params), 1:length(u))
+    r² = sum(d -> abs2(u[d]), 1:length(u))
+    return scalar - oftype(r², density.β) * r²^2 / 4
+end
+
 # The gradient of the action, with one chunk size for every slab, so that a slab of another size
 # compiles no new method. Every slab of the suite has at least 8 coefficients.
 function action_gradient(f, z)
@@ -856,9 +864,10 @@ at the nodes of the slab's own rule, with
 `N` the level's spatial network with its own time level's side data, `G` the lift that carries the
 slab's side data to its own time, and `Ψ` the bubble in the coordinates of the ansatz's form.
 """
-struct FixedBoundaryOracle{T, P, A}
+struct FixedBoundaryOracle{T, P, A, B}
     problem::P
     ansatz::A
+    block::B
     D::Int
     h::T
     tnode::Vector{T}
@@ -869,15 +878,19 @@ end
 
 function ActionOracle(problem, method::SpaceTimeGalerkin{<:FixedBoundaryNetwork};
         block = nothing)
-    return FixedBoundaryOracle(problem, method)
+    return FixedBoundaryOracle(problem, method; block = block)
 end
 
-function FixedBoundaryOracle(problem::LagrangianPDEProblem, method)
+function FixedBoundaryOracle(problem::LagrangianPDEProblem, method; block = nothing)
     T = eltype(timespan(problem))
     a = ansatz(method)
+    M.nfree(a) == M.nparameters(a) || block !== nothing ||
+        throw(ArgumentError(
+            "the action oracle of a :last_layer fixed-boundary slab needs the block that holds " *
+            "its fixed parameters"))
     tb = a.tabulation
-    return FixedBoundaryOracle{T, typeof(problem), typeof(a)}(problem, a, a.D,
-        T(timestep(problem)), collect(T, tb.tnode), collect(T, tb.tweight),
+    return FixedBoundaryOracle{T, typeof(problem), typeof(a), typeof(block)}(problem, a,
+        block, a.D, T(timestep(problem)), collect(T, tb.tnode), collect(T, tb.tweight),
         collect(T, tb.xnode), collect(T, tb.xweight))
 end
 
@@ -897,11 +910,13 @@ function oracle_parameters(o::FixedBoundaryOracle, datum, z)
     for (k, i) in enumerate(M.spatial_free(a))
         φ0[i] = z[k]
     end
-    φ1 = zeros(eltype(z), M.nspatial(a))
+    φ1 = o.block === nothing ? zeros(eltype(z), M.nspatial(a)) :
+         collect(eltype(z), o.block.params[1:M.nspatial(a)])
     for (k, i) in enumerate(M.spatial_free(a))
         φ1[i] = z[nfp + k]
     end
-    Θ = zeros(eltype(z), M.nbubble(a))
+    Θ = o.block === nothing ? zeros(eltype(z), M.nbubble(a)) :
+        collect(eltype(z), o.block.params[(M.nspatial(a) + 1):end])
     for (k, i) in enumerate(M.bubble_free(a))
         Θ[i] = z[nfp + nfp + k]
     end

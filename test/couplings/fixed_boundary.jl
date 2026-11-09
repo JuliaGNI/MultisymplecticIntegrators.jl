@@ -163,9 +163,10 @@ end
     @testset "generated entry, $form, $mode" for entry in scalar_entries[1:4],
         form in (:abg, :tsr), mode in (:all, :last_layer)
         ansatz = fixed_ansatz(entry.problem; form = form, mode = mode)
+        problem = entry.problem
         slab = fixed_slab(entry.problem, ansatz)
         c = cache(slab.int)
-        oracle = ActionOracle(entry.problem, slab.method)
+        oracle = ActionOracle(problem, slab.method; block = c.ansatz)
         @test length(c.x) == unknown_count(oracle)
         θ = 2 .* rand(rng, Float64, length(c.x)) .- 1
         compare_gradient(slab_residual(slab.int, θ, parameters(entry.problem)),
@@ -177,7 +178,7 @@ end
         problem = PROBLEMS[name]()
         slab = fixed_slab(problem, fixed_ansatz(problem; form = form, mode = mode))
         c = cache(slab.int)
-        oracle = ActionOracle(problem, slab.method)
+        oracle = ActionOracle(problem, slab.method; block = c.ansatz)
         θ = 2 .* rand(rng, Float64, length(c.x)) .- 1
         compare_gradient(slab_residual(slab.int, θ, parameters(problem)),
             oracle_residual(oracle, fixed_datum(c), θ), Float64)
@@ -235,7 +236,7 @@ end
         @test maximum(abs, c.coupling.momentum - expect) ≤
               100 * eps(Float64) * max(1, maximum(abs, expect))
         # the momentum handed on, at the final iterate of a step that is capped at three iterations
-        oracle = ActionOracle(problem, slab.method)
+        oracle = ActionOracle(problem, slab.method; block = c.ansatz)
         datum = fixed_datum(c)
         int = GeometricIntegrator(problem, slab.method; solver = LevenbergMarquardt(),
             max_iterations = 3, verbosity = 0)
@@ -473,6 +474,7 @@ end
         ics = problem.ics_function(grid, p)
         v = collect(ics.v)
         accel(u, v) = begin
+            mass = M.predictor_mass(problem.density, p, Float64, 1)[1]
             a = zeros(length(u))
             w = similar(u)
             for j in eachindex(u)
@@ -487,6 +489,7 @@ end
             end
             for j in 2:(length(u) - 1)
                 a[j] = du[j] - (dw[j + 1] - dw[j - 1]) / (2dx)
+                a[j] /= mass
             end
             a
         end
@@ -546,10 +549,9 @@ end
     chosen = c.ansatz.fit.selected[1:ansatz.St]
     @test all(c.ansatz.fit.atoms[i, 3] ≤ 3.0 for i in chosen)
     @test c.ansatz.fit.method.γ_range == (-3.0, 3.0)
-    fresh = M.ansatz_data(ansatz, problem, Float64)
+    c.ansatz.fit.method = nothing
     w2 = collect(c.ansatz.params)
-    fit!(w2, BubbleGreedy(γ_range = (-3.0, 3.0)), ansatz, sample,
-        (; c.ansatz = fresh, c.coupling = c.coupling))
+    fit!(w2, BubbleGreedy(γ_range = (-3.0, 3.0)), ansatz, sample, c)
     @test second ≈ w2
 end
 
