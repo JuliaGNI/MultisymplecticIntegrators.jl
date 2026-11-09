@@ -891,9 +891,9 @@ end
         c = cache(int)
         solution = GeometricSolution(problem)
         step = solutionstep(int, solution[0])
-        reset!(step, timesteps(solution)[1])
         J = T[]
         for n in 1:10
+            reset!(step, timesteps(solution)[n])
             M.integrate_step!(current(step), nothing, parameters(problem), int)
             push!(J, charge(c))
         end

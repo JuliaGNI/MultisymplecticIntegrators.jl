@@ -773,8 +773,9 @@ Fill the solver's vector of a network slab from the method's initial guess.
 A continuation carries the previous slab's parameters into the new one, which the block still holds
 where the previous step left them; at the first slab there is nothing to carry, and the guess falls
 back to `FitTo(InitialCondition())`. A `FitTo` samples its target at the nodes of the ansatz's own
-rule, samples it at the four surfaces of the slab as well where the fit takes them ([`fit_sample!`](@ref)),
-fits the network to it, and takes the free part of the fitted parameters as its unknowns.
+rule, samples it at the four surfaces of the slab as well where the fit takes them
+([`fit_sample!`](@ref)), fits the network to it, and takes the free part of the fitted parameters as
+its unknowns.
 """
 function apply_guess!(c::SpaceTimeGalerkinCache{ST}, guess::Continuation,
         ansatz::NetworkAnsatz, problem::LagrangianPDEProblem, sol) where {ST}

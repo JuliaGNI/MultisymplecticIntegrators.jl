@@ -161,9 +161,9 @@ function solve_output_layer!(f::TrainedFit{ST}, w::AbstractVector{ST}, ansatz, s
     S, D = ansatz.S, ansatz.D
     hidden_features!(f, w, S, activation_function(ansatz))
     W = f.features \ f.rhs
-    for s in 1:S, d in 1:D
+    for unit in 1:S, d in 1:D
 
-        w[3S + (s - 1) * D + d] = W[s, d]
+        w[3S + (unit - 1) * D + d] = W[unit, d]
     end
     copyto!(s.params, w)
     return nothing

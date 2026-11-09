@@ -85,10 +85,10 @@ method = SpaceTimeGalerkin(NetworkAnsatz(S = 20, mode = :last_layer, xspan = (0.
     initial_guess = FitTo(InitialCondition(); method = TrainedHiddenLayer(epochs = 20)))
 ```
 """
-struct TrainedHiddenLayer <: SlabFitMethod
+struct TrainedHiddenLayer{R <: AbstractRNG} <: SlabFitMethod
     epochs::Int
     learning_rate::Float64
-    rng::AbstractRNG
+    rng::R
 end
 
 function TrainedHiddenLayer(; epochs::Integer = 100, learning_rate::Real = 1e-5,
