@@ -1270,8 +1270,12 @@ The derivative of a scalar side function of time at `t`, by `ForwardDiff` on the
 The lift of a slab differentiates the problem's side data in time, and the data function is the only
 source of that derivative: a `bcs_function` that is not generic in its time argument therefore raises
 where the integrator is built.
+
+`ForwardDiff` marks neither `derivative` nor `gradient` public, and this module binds the name
+`derivative` to `SymbolicNeuralNetworks`' already, so its own `derivative` is imported from neither:
+the scalar derivative is the gradient of the same function of one variable.
 """
-side_derivative(f, t) = forward_derivative(f, t)
+side_derivative(f, t) = gradient(x -> f(x[1]), [t])[1]
 
 """
     spatial_derivative(ansatz, φ, i, d, ŝ, bump, slope, span)

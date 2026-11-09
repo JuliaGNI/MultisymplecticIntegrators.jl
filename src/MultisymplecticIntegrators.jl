@@ -8,7 +8,7 @@ using LinearAlgebra: Diagonal, I, UpperTriangular, axpy!, dot, ldiv!,
                      mul!, norm, rdiv!, svd
 using SimpleSplines
 using SimpleSolvers
-import ForwardDiff: derivative as forward_derivative, gradient, jacobian
+import ForwardDiff: gradient, jacobian
 using SparseArrays
 using Random: AbstractRNG, Xoshiro
 using Symbolics
