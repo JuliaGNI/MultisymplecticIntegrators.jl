@@ -63,7 +63,9 @@ second, zero column and its QR path differs. The same fits at Julia 1.12.7 leave
 
 The values are recorded, not asserted: a `Float32` misfit moves in its third significant digit
 between the two Julia versions and under a one-ulp change of its learning rate, so no bound on it
-holds on every leg, and the fraction is the one bound E1a asserts on them.
+holds on every leg. E1a asserts that the drawn misfit is finite and positive, that the trained one
+is at most `TRAINED_MISFIT_FRACTION` of the drawn one, and that the trained one reads back from the
+network's own evaluation; it asserts neither value against its `const`.
 """
 const TRAINED_MISFITS = (
     drawn = Dict{Tuple{DataType, Int}, Float64}(
