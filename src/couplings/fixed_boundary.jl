@@ -31,8 +31,13 @@ if !@isdefined(FixedBoundaryData)
     covector on the free ones. `ga` and `gb` hold the two ends' side data, one row per time of the
     slab: the slab's start time in row 1, its nodes in rows `2:(qt + 1)`, and its top time in row
     `qt + 2`; `dga` and `dgb` hold the same rows' derivatives in physical time. `start` is the
-    slab's start time, and `p_next` the momentum the step hands on, which is a copy of the block's
-    buffer and never a view of it.
+    slab's start time.
+
+    `phi_next` is the solved level's parameters and `p_next` the momentum the step hands on; the
+    next slab's datum is filled from these two copies. `v_top` is the solved slab's velocity at its
+    top time, on the predictor's grid, which a later slab's predictor starts from. All three are
+    taken when the step's solution is written, so that no buffer a later residual or a later guess
+    rewrites can move them.
     """
     mutable struct FixedBoundaryData{ST} <: CouplingData
         coupling::FixedBoundary
@@ -44,6 +49,8 @@ if !@isdefined(FixedBoundaryData)
         dgb::Matrix{ST}
         start::ST
         p_next::Vector{ST}
+        phi_next::Vector{ST}
+        v_top::Matrix{ST}
     end
 
     """
@@ -200,7 +207,8 @@ else
         side() = zeros(ST, qt + 2, D)
         nfp = length(spatial_free(a))
         return FixedBoundaryData{ST}(c, zeros(ST, nspatial(a)), zeros(ST, nfp),
-            side(), side(), side(), side(), zero(ST), zeros(ST, nfp))
+            side(), side(), side(), side(), zero(ST), zeros(ST, nfp),
+            zeros(ST, nspatial(a)), zeros(ST, PREDICTOR_POINTS, D))
     end
 
     function coupling_data_type(c::FixedBoundary, a::FixedBoundaryNetwork,
@@ -242,13 +250,42 @@ else
     """
         coupling_update!(data, x, cache, ansatz, problem)
 
-    Copy the momentum the step hands on out of the block's buffer, which the next residual rewrites,
-    into the coupling's block.
+    Keep what the solved slab hands on to the next one: the momentum the step passes on, the level
+    the step produced, and that slab's velocity at its top time on the predictor's grid, each as a
+    copy taken now. The block's own `params` and `momentum` are read after the solve and before any
+    later guess overwrites them, so a copy is the only way to keep them.
     """
     function coupling_update!(data::FixedBoundaryData, x::AbstractVector,
             c::SpaceTimeGalerkinCache, ansatz::FixedBoundaryNetwork,
             problem::LagrangianPDEProblem)
         copyto!(data.p_next, c.ansatz.momentum)
+        copyto!(data.phi_next, 1, c.ansatz.params, 1, nspatial(ansatz))
+        top_velocity!(data, c.ansatz, ansatz, problem)
+        return nothing
+    end
+
+    """
+        top_velocity!(data, s, ansatz, problem)
+
+    The velocity of the solved slab's field at its top time, `∂_{t̂}u / h`, at the predictor's grid:
+    the field's time derivative from the slab's own datum `φ₀`, the level the solve produced, the
+    bubble it produced, and the side data at its two ends. This is the velocity the next slab's
+    predictor starts from, because the next slab's datum is the level this one produced and nothing
+    of this slab's bottom level or bubble survives into it.
+    """
+    function top_velocity!(data::FixedBoundaryData{ST}, s::FixedBoundarySlab{ST},
+            ansatz::FixedBoundaryNetwork, problem::LagrangianPDEProblem) where {ST}
+        a = ansatz
+        h = convert(ST, timestep(problem))
+        φ0 = data.phi
+        φ1 = view(data.phi_next, 1:nspatial(a))
+        Θ = bubble_parameters(s)
+        for (r, x) in enumerate(predictor_grid(a, ST)), d in axes(data.v_top, 2)
+
+            _, ut, _ = slab_component(a, d, φ0, φ1, Θ, one(ST), x, h,
+                top_sides(data, d))
+            data.v_top[r, d] = ut / h
+        end
         return nothing
     end
 
@@ -262,6 +299,8 @@ else
         c.dgb .= data.dgb
         c.start = data.start
         copyto!(c.p_next, data.p_next)
+        copyto!(c.phi_next, data.phi_next)
+        c.v_top .= data.v_top
         return nothing
     end
 
@@ -550,7 +589,7 @@ else
             side_row!(data, problem, 1, t₀)
             first_datum!(data, problem, a, t₀)
         else
-            copyto!(data.phi, 1, c.ansatz.params, 1, nspatial(a))
+            copyto!(data.phi, data.phi_next)
             copyto!(data.momentum, data.p_next)
             side_row!(data, problem, 1, t₀)
         end
@@ -562,6 +601,12 @@ else
     end
 
     # ---- the predictor -------------------------------------------------------------------
+
+    """The uniform grid of [`PREDICTOR_POINTS`](@ref) points the predictor runs on, from the span's
+    two ends."""
+    function predictor_grid(a::FixedBoundaryNetwork, ::Type{T}) where {T}
+        return collect(T, range(a.xspan[1], a.xspan[2]; length = PREDICTOR_POINTS))
+    end
 
     """The value of one row of the predictor's history at a point `x` of the span, by linear
     interpolation on the uniform grid."""
@@ -633,7 +678,8 @@ else
     ends' side data and the slab's start time — and not from the block's own copy of it, which the first
     residual evaluation writes after the guess that runs this predictor. It starts from the bottom
     level's network and the initial data's velocity at the first slab, and from the previous slab's top
-    velocity after it.
+    velocity after it: the coupling keeps that velocity when it writes the solved slab, at the grid
+    this predictor runs on, so that the guess reads a state no later step has rewritten.
     """
     function predictor_sample!(sample::AbstractArray{ST, 3}, s::FixedBoundarySlab{ST},
             c::SpaceTimeGalerkinCache{ST, AD, FixedBoundaryData{ST}},
@@ -642,7 +688,7 @@ else
         a = s.ansatz
         D, tb = a.D, a.tabulation
         NG, K = PREDICTOR_POINTS, PREDICTOR_SUBSTEPS
-        grid = collect(range(a.xspan[1], a.xspan[2]; length = NG))
+        grid = predictor_grid(a, ST)
         dx = grid[2] - grid[1]
         h = convert(ST, timestep(problem))
         dt = h / K
@@ -663,13 +709,7 @@ else
                 v[r, d] = ST(initial.v[r, d])
             end
         else
-            φ1, Θ = view(s.params, 1:nspatial(a)), bubble_parameters(s)
-            for r in 1:NG, d in 1:D
-
-                _, ut, _ = slab_component(a, d, φ0, φ1, Θ, one(ST), grid[r], h,
-                    top_sides(data, d))
-                v[r, d] = ut / h
-            end
+            copyto!(v, data.v_top)
         end
         acc = zeros(ST, NG, D)
         w = zeros(ST, NG, D)

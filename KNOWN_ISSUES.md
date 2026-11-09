@@ -258,26 +258,51 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   bubble forms and with and without the projected solve. The matrix's thirty rows for it are built by
   `scripts/experiments.jl` and none of them was run here, so this entry records what the runs that
   were taken show and not a measured floor of every row: a two-step run at `max_iterations = 3` on
-  `Wave` at `h = 0.05` fails U12's rule at both steps in all four combinations, at residuals of
-  `9.6e-3` and `7.6e-4` from initial residuals of `0.22` and `0.19`, while the dead branch — `Continuation()`
-  with `Newton()` on a pivoted QR cut at `1e-12` — converges 20 of 20 steps at a worst ratio of
-  `2.9564e-10` and an error of `6.615e-4` at `t = 1`. The design task's findings §19 measured that no
-  variant of the live solve reaches `1e-11`, and this part does not contradict it. Nothing is fixed
-  here: the plan treats the non-convergence as a measured, recorded result of the method and compares
-  it in the matrix, and a fix, if there is one, is a different solve and not a different tolerance.
+  `Wave` at `h = 0.05`, `Sx = 8`, `St = 10`, `ncells = 20` and `nq = (6, 4)` fails U12's rule at both
+  steps in all four combinations, at final residuals of `9.13e-4` and `1.53e-4` (joint, `:abg`),
+  `0.179` and `3.54e-3` (projected, `:abg`), `1.03e-4` and `1.03e-4` (joint, `:tsr`) and `0.217` and
+  `1.18e-3` (projected, `:tsr`), from initial residuals of `6.81e-3` (`:abg`) and `6.82e-3`
+  (`:tsr`) at the first step, and `0.0691`, `0.301`, `5.74e-3` and `0.301` at the second; while the
+  dead branch — `Continuation()` with `Newton()` on a pivoted QR cut at `1e-12` —
+  converges 20 of 20 steps at a worst ratio of `2.9562e-10` and an error of `6.6156e-4` at `t = 1`.
+  The initial residuals of `0.22` and `0.19` this entry used to quote are `Continuation()`'s, measured
+  at `Sx = St = 4`; the numbers above are the live branch's, under the fit it ships. The design
+  task's findings §19 measured that no variant of the live solve reaches `1e-11`, and this part does
+  not contradict it. Nothing is fixed here: the plan treats the non-convergence as a measured,
+  recorded result of the method and compares it in the matrix, and a fix, if there is one, is a
+  different solve and not a different tolerance.
 - kind: defect
 - found: 2026-11-09
 
-### K50 · The projected solve's inner iteration stops when a step no longer lowers `‖∂S/∂a‖`, so a solve that starts on the floor records that it never moved.
+### K51 · `integrate!` applies a method's initial guess twice, so a guess that reads state it writes starts the step from its own output.
 
-- location: `src/core/levenberg_marquardt.jl`
-- evidence: `project!` stops the inner Newton solve at the first step that does not lower the
-  eliminated block's residual, which is the plan's rule, and its warm start is the `a` the guess
-  left. A guess whose bubble output weights are already at the floor — the first slab of a
-  `FitTo(Predictor())` run whose greedy fit solved that block to round-off — therefore takes no
-  inner step, and the row that records the projected solve records the outer solve's work alone.
-  The recorded residual is still the whole system's, so the row compares one quantity with the joint
-  rows; what it does not show is how much of the work the inner solve did. Measured on `Wave` at
-  `h = 0.05`; the effect on the plateau's rows is not separated from the solve floor `K49` records.
+- location: `src/core/integrate.jl:90`, `src/core/slab_integrator.jl:651`
+- evidence: `integrate_steps!` drives each step with the ecosystem's `integrate!(solstep, integrator)`,
+  which calls `initial_guess!` (`GeometricIntegratorsBase`'s `src/integrate.jl:10`) and then
+  `integrate_step!`, which calls it again (`src/core/slab_integrator.jl:651`). A guess whose fit and
+  target read the block's parameter vector, as `FitTo(Predictor())` did while its bubble fit read
+  `s.params`, therefore measures its own first output on the second application. Measured on `Wave`
+  over two steps, step 2's datum `φ₀` differed from step 1's solved `φ₁` by `80.7` at `Sx = St = 4`
+  and `13.2` at `Sx = 8`, `St = 10` before this branch's bubble fit read the level that fit builds,
+  and by `5.90` and `0.427` with that fit in place, and by `0` through `integrate_step!` alone. The
+  hazard is the base's; this part keeps its datum, its momentum and its top velocity in copies that
+  `coupling_update!` writes (`phi_next`, `p_next`, `v_top`), so that a second application of the guess
+  cannot move what the next slab reads.
+- kind: upstream
+- found: 2026-11-09
+
+### K52 · `Continuation()`'s first slab starts the bubble on a grid whose atoms are pairwise negatives, so a projected solve there has no differentiable eliminated block.
+
+- location: `src/ansatz/network.jl:1588`, `src/core/levenberg_marquardt.jl:283`
+- evidence: `bubble_start` lays `St` units on `α ∈ [-2, 2]` and `β ∈ [2, -2]`, so atom `St + 1 − k` is
+  exactly the negative of atom `k` in both coordinates and the first slab's output weights enter the
+  action only in combinations that this antisymmetry leaves degenerate. At N11's domain (`Sx = 8`,
+  `St = 10`, `ncells = 20`, `nq = (6, 4)`, `Wave` at `h = 0.05`) the eliminated block's Jacobian has
+  rank `5` of `10` above `1e-12 σmax` in both forms, with singular values `0.746 … 1.2e-25` (`:abg`)
+  and `2.98 … 4.7e-21` (`SineGordon`, `:tsr`), so a perturbed hidden entry breaks the pairing and
+  `a*(z)` is not differentiable there. FB5 measures the projected solve from the live branch's
+  `FitTo(Predictor())` guess, whose eliminated block has full rank; the first slab of a
+  `Continuation()` run is unchanged here, and whether `bubble_start` should break the symmetry is not
+  decided in this part.
 - kind: limit
 - found: 2026-11-09

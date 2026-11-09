@@ -83,6 +83,28 @@ function level_network(problem, a, φ, x, t, d)
     return (1 - ŝ) * ga + ŝ * gb + (x - xa) * (xb - x) * m
 end
 
+"""
+    top_velocity(oracle, problem, ansatz, φ0, φ1, Θ, t₀, x, d)
+
+The velocity of a solved slab's field at its top time, `∂_{t̂}u / h`, from the oracle's own field:
+the value a predictor of the slab after it starts its substeps from. `φ0` is that slab's datum, `φ1`
+the level its solve produced and `Θ` its bubble.
+"""
+function top_velocity(oracle, problem, ansatz, φ0, φ1, Θ, t₀, x, d)
+    h = timestep(problem)
+    p = parameters(problem)
+    t₁ = t₀ + h
+    at0 = problem.bcs_function(t₀, p)
+    at1 = problem.bcs_function(t₁, p)
+    dga = ForwardDiff.derivative(τ -> problem.bcs_function(τ, p).left.u[d], t₁)
+    dgb = ForwardDiff.derivative(τ -> problem.bcs_function(τ, p).right.u[d], t₁)
+    sides = (at0.left.u[d], at0.right.u[d], at1.left.u[d], at1.right.u[d],
+        at1.left.u[d], at1.right.u[d], dga, dgb)
+    _, ut, _ = oracle_component(oracle, ansatz, d, φ0, φ1, Θ, one(h), x, h, sides,
+        ansatz.Sx, ansatz.St, ansatz.bubble_form)
+    return ut / h
+end
+
 """Central differences of a residual at `θ`, one column per unknown."""
 function residual_differences(int, θ::AbstractVector{T}, params) where {T}
     n = length(θ)
@@ -316,34 +338,37 @@ end
             xspan = (0.0, 1.0))
         ansatz = FixedBoundaryNetwork(Sx = 8, St = 10, bubble_form = form,
             xspan = (0.0, 1.0), ncells = 20, nq = (6, 4), D = components(problem))
-        method = SpaceTimeGalerkin(ansatz, FixedBoundary();
-            initial_guess = FitTo(Predictor()))
-        slab = fixed_slab(problem, ansatz;
+        slab = fixed_slab(problem, ansatz; guess = FitTo(Predictor()),
             solver = LevenbergMarquardt(variable_projection = true), max_iterations = 5,
             verbosity = 0)
         int, c = slab.int, cache(slab.int)
         p = parameters(problem)
-        slot = length(M.variable_projection_indices(method))
+        slot = length(M.variable_projection_indices(slab.method))
         @test slot == ansatz.St * ansatz.D
-        @test M.variable_projection_indices(method) ==
+        @test M.variable_projection_indices(slab.method) ==
               collect((M.nfree(ansatz) - slot + 1):M.nfree(ansatz))
-        projected = M.variable_projection_indices(method)
+        projected = M.variable_projection_indices(slab.method)
         n = length(c.x)
         oracle = ActionOracle(problem, slab.method; block = c.ansatz)
         datum = fixed_datum(c)
         M.initial_guess!(current(slab.solstep), nothing, p, int)
         θ₀ = copy(c.x)
+        # A fixed-boundary guess is a function of the slab's datum alone, so a second application of
+        # it writes the same vector; that is what lets the two applications a step makes agree.
+        M.initial_guess!(current(slab.solstep), nothing, p, int)
+        @test c.x == θ₀
         f! = (b, z) -> (M.residual!(b, z, nothing, p, int); b)
         # 1. the inner solve: after it, the eliminated block is at a root of its own equations, and
         # the block was not already there — both at the oracle's gradient
         g₀ = oracle_residual(oracle, datum, θ₀)
-        @test norm(view(g₀, projected)) ≥ 1 // 100
-        scale = max(1, norm(view(g₀, projected)))
+        scale = maximum(abs, view(g₀, projected))
+        @test scale ≥ sqrt(eps(Float64))
         x = copy(θ₀)
         r = slab_residual(int, x, p)
         reduced, _ = M.project!(x, f!, r, M.jacobian_of(f!, x, n), projected)
-        floor = norm(view(oracle_residual(oracle, datum, x), projected))
+        floor = maximum(abs, view(oracle_residual(oracle, datum, x), projected))
         @test floor ≤ 100 * eps(Float64) * scale
+        @info "FB5 the inner solve" name=name form=form scale=scale floor=floor
         # 2. the Schur complement against central differences of z ↦ F_o(z, a*(z)), each inner solve
         # warm-started at the solved `a`
         solved = M.lm_solved_indices(n, projected)
@@ -353,6 +378,7 @@ end
             return view(rp, solved)
         end
         z = copy(x)
+        worst = zero(Float64)
         for (k, j) in enumerate(solved)
             δ = cbrt(eps(Float64)) / 10 * max(1, abs(x[j]))
             up = copy(z)
@@ -360,9 +386,12 @@ end
             down = copy(z)
             down[j] -= δ
             difference = (reduced_residual(up) .- reduced_residual(down)) ./ (2δ)
-            @test maximum(abs, difference - view(reduced, :, k)) ≤
-                  sqrt(eps(Float64)) * maximum(abs, reduced)
+            ratio = maximum(abs, difference - view(reduced, :, k)) /
+                    (sqrt(eps(Float64)) * maximum(abs, reduced))
+            worst = max(worst, ratio)
+            @test ratio ≤ 1
         end
+        @info "FB5 the reduced Jacobian against differences" name=name form=form worst=worst
         # 3. one projected step: its recorded residual is the test's own full-system `‖F‖`
         guess = c.x
         r₀ = norm(slab_residual(int, guess, p))
@@ -378,15 +407,14 @@ end
 # ---- FB6 -----------------------------------------------------------------------------
 
 @testset "FB6 the record of a step under each form and solve" begin
-    problem = PROBLEMS[:wave]()
-    small = FixedBoundaryNetwork(
-        Sx = 4, St = 4, xspan = (0.0, 1.0), ncells = 3, nq = (4, 3))
-    @test default_solver(SpaceTimeGalerkin(small, FixedBoundary())) isa LevenbergMarquardt
-    for form in (:abg, :tsr), solve in (:lm, :newton, :projected)
-
-        a = FixedBoundaryNetwork(Sx = 4, St = 4, bubble_form = form, xspan = (0.0, 1.0),
-            ncells = 3, nq = (4, 3))
-        m = SpaceTimeGalerkin(a, FixedBoundary())
+    @test default_solver(SpaceTimeGalerkin(fixed_ansatz(PROBLEMS[:wave]()),
+        FixedBoundary())) isa LevenbergMarquardt
+    for name in (:wave, :sinegordon), form in (:abg, :tsr),
+        solve in (:lm, :projected, :newton)
+        problem = PROBLEMS[name]()
+        a = FixedBoundaryNetwork(Sx = 8, St = 10, bubble_form = form,
+            xspan = xspan(problem), ncells = 20, nq = (6, 4), D = components(problem))
+        m = SpaceTimeGalerkin(a, FixedBoundary(); initial_guess = FitTo(Predictor()))
         solvermethod = if solve === :lm
             LevenbergMarquardt()
         elseif solve === :projected
@@ -401,9 +429,18 @@ end
         solution = GeometricSolution(problem)
         solstep = solutionstep(int, solution[0])
         options = config(solver(int))
+        ns = M.nspatial(a)
+        solved = Float64[]
         for n in 1:2
             reset!(solstep, timesteps(solution)[n])
             M.slab_bottom!(c, c.coupling, problem, a, current(solstep))
+            # The datum of a later slab is the level the step before it solved, and not whatever
+            # the guess of that step left in the block's parameter vector: a run under `integrate!`
+            # applies the guess twice, and the second application overwrote that vector.
+            n == 2 && @test c.coupling.phi == solved
+            # A fixed-boundary guess is a function of the slab's datum alone — the fit and the
+            # predictor read the datum, not the block's parameter vector — so the vector measured
+            # here is the one the step's own guess writes; FB5 asserts that at the first slab.
             M.initial_guess!(current(solstep), nothing, p, int)
             r₀ = norm(slab_residual(int, c.x, p))
             integrate!(solstep, int)
@@ -416,6 +453,7 @@ end
             @test isfinite(c.residuals[end]) && isfinite(c.initial_residuals[end])
             @test c.converged[end] ==
                   M.step_converged(c.residuals[end], c.initial_residuals[end], options)
+            solved = copy(c.ansatz.params[1:ns])
         end
     end
 end
@@ -535,64 +573,88 @@ end
     for name in (:wave, :sinegordon)
         problem = PROBLEMS[name]()
         ansatz = fixed_ansatz(problem)
-        slab = fixed_slab(problem, ansatz)
+        slab = fixed_slab(problem, ansatz; max_iterations = 3, verbosity = 0)
         c = cache(slab.int)
         tb = ansatz.tabulation
-        sample = zeros(Float64, length(tb.tnode), length(tb.xnode), ansatz.D)
-        M.evaluate!(sample, Predictor(), c, ansatz, problem, current(slab.solstep))
-        # the test's own Störmer–Verlet, from the same bottom level and the same velocity
         p = parameters(problem)
+        h = timestep(problem)
         grid = collect(range(xspan(problem)[1], xspan(problem)[2]; length = 101))
         dx = grid[2] - grid[1]
-        dt = timestep(problem) / 10
-        u = [level_network(problem, ansatz, c.coupling.phi, x, 0.0, 1) for x in grid]
-        ics = problem.ics_function(grid, p)
-        v = collect(ics.v)
-        accel(u, v) = begin
-            mass = M.predictor_mass(problem.density, p, Float64, 1)[1]
-            a = zeros(length(u))
-            w = similar(u)
-            for j in eachindex(u)
-                j1, j2 = max(j - 1, 1), min(j + 1, length(u))
-                w[j] = (u[j2] - u[j1]) / ((j2 - j1) * dx)
+        dt = h / 10
+        mass = M.predictor_mass(problem.density, p, Float64, 1)[1]
+        # The test's own Störmer–Verlet: ten substeps, central differences, the side data imposed at
+        # every substep of the slab that starts at `t₀`, and nothing of the package's predictor but
+        # the density's own derivatives.
+        function stormer_verlet(u, v, t₀)
+            accel(u, v) = begin
+                a = zeros(length(u))
+                w = similar(u)
+                for j in eachindex(u)
+                    j1, j2 = max(j - 1, 1), min(j + 1, length(u))
+                    w[j] = (u[j2] - u[j1]) / ((j2 - j1) * dx)
+                end
+                du = zeros(length(u))
+                dw = zeros(length(u))
+                for j in eachindex(u)
+                    du[j] = derivative_u(problem.density, u[j], v[j], w[j], p)
+                    dw[j] = derivative_w(problem.density, u[j], v[j], w[j], p)
+                end
+                for j in 2:(length(u) - 1)
+                    a[j] = (du[j] - (dw[j + 1] - dw[j - 1]) / (2dx)) / mass
+                end
+                a
             end
-            du = zeros(length(u))
-            dw = zeros(length(u))
-            for j in eachindex(u)
-                du[j] = derivative_u(problem.density, u[j], v[j], w[j], p)
-                dw[j] = derivative_w(problem.density, u[j], v[j], w[j], p)
-            end
-            for j in 2:(length(u) - 1)
-                a[j] = du[j] - (dw[j + 1] - dw[j - 1]) / (2dx)
-                a[j] /= mass
-            end
-            a
-        end
-        U = zeros(11, length(grid))
-        U[1, :] .= u
-        a = accel(u, v)
-        for k in 1:10
-            v .+= dt / 2 .* a
-            u .+= dt .* v
-            u[1] = problem.bcs_function(k * dt, p).left.u[1]
-            u[end] = problem.bcs_function(k * dt, p).right.u[1]
+            U = zeros(11, length(u))
+            U[1, :] .= u
             a = accel(u, v)
-            v .+= dt / 2 .* a
-            U[k + 1, :] .= u
+            for k in 1:10
+                v .+= dt / 2 .* a
+                u .+= dt .* v
+                u[1] = problem.bcs_function(t₀ + k * dt, p).left.u[1]
+                u[end] = problem.bcs_function(t₀ + k * dt, p).right.u[1]
+                a = accel(u, v)
+                v .+= dt / 2 .* a
+                U[k + 1, :] .= u
+            end
+            return U
         end
         at(values, x) = begin
             j = clamp(floor(Int, (x - grid[1]) / dx) + 1, 1, length(grid) - 1)
             λ = (x - grid[j]) / dx
             (1 - λ) * values[j] + λ * values[j + 1]
         end
-        for q in eachindex(tb.tnode), r in eachindex(tb.xnode)
+        sample = zeros(Float64, length(tb.tnode), length(tb.xnode), ansatz.D)
+        function compare(U)
+            for q in eachindex(tb.tnode), r in eachindex(tb.xnode)
 
-            position = tb.tnode[q] * 10
-            k = clamp(floor(Int, position) + 1, 1, 10)
-            λ = position - (k - 1)
-            expect = (1 - λ) * at(U[k, :], tb.xnode[r]) + λ * at(U[k + 1, :], tb.xnode[r])
-            @test abs(sample[q, r, 1] - expect) ≤ 1e-5 * max(1, abs(expect))
+                position = tb.tnode[q] * 10
+                k = clamp(floor(Int, position) + 1, 1, 10)
+                λ = position - (k - 1)
+                expect = (1 - λ) * at(U[k, :], tb.xnode[r]) +
+                         λ * at(U[k + 1, :], tb.xnode[r])
+                @test abs(sample[q, r, 1] - expect) ≤ 1e-5 * max(1, abs(expect))
+            end
+            return nothing
         end
+        # the first slab: from the datum's level and the initial data's velocity
+        M.evaluate!(sample, Predictor(), c, ansatz, problem, current(slab.solstep))
+        initial = problem.ics_function(grid, p)
+        u = [level_network(problem, ansatz, c.coupling.phi, x, 0.0, 1) for x in grid]
+        compare(stormer_verlet(u, collect(initial.v), 0.0))
+        # the second slab: from the level the step produced and the velocity at that slab's top
+        datum = copy(c.coupling.phi)
+        integrate!(slab.solstep, slab.int)
+        ns = M.nspatial(ansatz)
+        φ1 = copy(c.ansatz.params[1:ns])
+        Θ = copy(c.ansatz.params[(ns + 1):end])
+        oracle = ActionOracle(problem, slab.method; block = c.ansatz)
+        velocity = [top_velocity(oracle, problem, ansatz, datum, φ1, Θ, 0.0, x, 1)
+                    for x in grid]
+        next_fixed_slab!(slab, 2)
+        @test c.coupling.phi == φ1
+        M.evaluate!(sample, Predictor(), c, ansatz, problem, current(slab.solstep))
+        compare(stormer_verlet([level_network(problem, ansatz, φ1, x, h, 1) for x in grid],
+            velocity, h))
         @test isfinite(maximum(abs, c.ansatz.top_sample))
     end
     transport = M.LinearTransport.problem(timespan = (0.0, 0.1), timestep = 0.05,
