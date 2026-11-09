@@ -477,8 +477,8 @@ end
         @test iszero(second)
     end
 
-    # The trained fit takes every target of `§Guess`: the exact solution, which only a problem that
-    # has one can supply, and the previous slab's field continued past its top. The sample is the
+    # The trained fit takes every target a `FitTo` takes: the exact solution, which only a problem
+    # that has one can supply, and the previous slab's field continued past its top. The sample is the
     # target's own values in every row it carries — the exact solution at the physical time of every
     # point, and the previous slab's field at `t̂ = 1`, carried up by its slope there — so the two
     # fits are what a fit that read another target would not be. The interior rows and the rows of
@@ -608,7 +608,8 @@ end
     end
 
     # The option's step under a guess that leaves the hidden layer alone: one factorisation over the
-    # run, two recorded solves per step, §V's convergence rule under the family's own tolerance, and
+    # run, two recorded solves per step, the convergence rule `residual ≤ f_abstol + f_reltol ·
+    # initial_residual` under the family's own tolerance, and
     # a solution of the problem's element type. Each step's residual ratio is recorded in units of
     # `eps(T)` and no floor is asserted on it. The Newton arm records its own figures and asserts
     # neither.
@@ -755,7 +756,7 @@ end
 
     # The two records of the old stack's ELM formulation, at its own cells: a run of each completes
     # and its deviation from the entry is written with its metadata. Both entries are unconverged
-    # iterates of another architecture, so the deviation is a record (§L, 2026-11-08).
+    # iterates of another architecture, so the deviation is a record (K44, K45).
     @testset "E5a the two section A soundings" for T in (Float64,)
         elm_method(problem) = SpaceTimeGalerkin(
             NetworkAnsatz(S = TRAINED_S, mode = :last_layer, xspan = problem.xspan,
