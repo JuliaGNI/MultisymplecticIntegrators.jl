@@ -112,3 +112,110 @@ function entry_by_stem(entries, stem)
     throw(ArgumentError("the registry holds no entry `$(stem)`; it holds " *
                         join((entry.stem for entry in entries), ", ")))
 end
+
+# ---- the fixed-boundary network ------------------------------------------------------
+
+"""
+The branches of the fixed-boundary family: the dead branch — the previous level continued and solved
+by Newton in `(α, β, γ)` — and the live branch's four combinations of the bubble's form and its
+solve, each started by the predictor.
+"""
+const FIXED_BOUNDARY_BRANCHES = (
+    (name = "dead", form = :abg, solver = :newton),
+    (name = "live-abg-joint", form = :abg, solver = :joint),
+    (name = "live-tsr-joint", form = :tsr, solver = :joint),
+    (name = "live-abg-projected", form = :abg, solver = :projected),
+    (name = "live-tsr-projected", form = :tsr, solver = :projected))
+
+const FIXED_BOUNDARY_PROBLEMS = ("wave", "sinegordon")
+const FIXED_BOUNDARY_STEPS = (0.1, 0.05, 0.025)
+
+"""
+The fixed-boundary family: `Wave` and `SineGordon` at three time steps, on the dead branch and on
+the four combinations of the bubble's form and its solve, and the two rows of the plateau probe.
+"""
+const FIXED_BOUNDARY = vcat(
+    [(stem = "$(problem)-fixed-boundary-$(branch.name)-h$(step)",
+         label = "$(problem), $(branch.name), h = $(step)", problem, step,
+         form = branch.form, solver = branch.solver, Sx = 8, St = 10, T = Float64)
+     for problem in FIXED_BOUNDARY_PROBLEMS, step in FIXED_BOUNDARY_STEPS,
+    branch in FIXED_BOUNDARY_BRANCHES],
+    [
+        (stem = "wave-fixed-boundary-plateau-h0.025", label = "wave, plateau, h = 0.025",
+            problem = "wave", step = 0.025, form = :tsr, solver = :joint, Sx = 12, St = 16,
+            T = Float64),
+        (stem = "wave-fixed-boundary-plateau-extended",
+            label = "wave, plateau, extended precision",
+            problem = "wave", step = 0.025, form = :tsr, solver = :joint, Sx = 8, St = 10,
+            T = BigFloat)])
+
+"""
+    fixed_boundary_problem(entry)
+
+The problem of a fixed-boundary entry: one step of the extended-precision row, and the run's time
+span otherwise.
+"""
+function fixed_boundary_problem(entry)
+    T = entry.T
+    problem = entry.problem === "wave" ? Wave.problem : SineGordon.problem
+    timestep = T(entry.step)
+    return problem(
+        T = T, timespan = (zero(T), T(entry.solver === :newton ? 1 : 2) * timestep),
+        timestep = timestep, xspan = (zero(T), one(T)), xstep = timestep)
+end
+
+"""
+    fixed_boundary_method(entry; T = entry.T)
+
+The method of a fixed-boundary entry: its ansatz, the fixed-boundary coupling, and the guess its
+branch starts from.
+"""
+function fixed_boundary_method(entry)
+    T = entry.T
+    ansatz = FixedBoundaryNetwork(Sx = entry.Sx, St = entry.St, bubble_form = entry.form,
+        xspan = (zero(T), one(T)), ncells = 20, nq = (6, 4))
+    guess = entry.solver === :newton ? Continuation() : FitTo(Predictor())
+    return SpaceTimeGalerkin(ansatz, FixedBoundary(); initial_guess = guess)
+end
+
+"""
+    fixed_boundary_run(entry) -> Dict{String, Any}
+
+The registry's `run` for the fixed-boundary family: integrate one entry with the solver its branch
+names and return the archive of its per-step record.
+
+The solver is `Newton()` on the dead branch, and Levenberg–Marquardt on the live one — joint, or
+with the bubble's output weights eliminated. The convergence flags are the run's own record and not
+an assertion: no live-branch variant of this method converges, and a row that did not converge is a
+result of the comparison.
+"""
+function fixed_boundary_run(entry)
+    problem = fixed_boundary_problem(entry)
+    method = fixed_boundary_method(entry)
+    solvermethod = entry.solver === :newton ? Newton() :
+                   entry.solver === :projected ?
+                   LevenbergMarquardt(variable_projection = true) :
+                   LevenbergMarquardt()
+    seconds = @elapsed result = integrate(problem, method; solver = solvermethod, verbosity = 0)
+    stats = result.stats
+    report(entry.label, "$(length(result.traces)) steps, " *
+                        "$(count(stats.converged)) converged")
+    report_error("worst relative residual",
+        maximum(stats.residuals ./ max.(stats.initial_residuals, eps(entry.T))))
+    t, x, u = solution_data(problem, result)
+    return Dict{String, Any}(
+        "kind" => "solution",
+        "label" => entry.label,
+        "problem_label" => entry.problem,
+        "timestep" => Float64(entry.step),
+        "t" => t,
+        "x" => x,
+        "u" => u,
+        "iterations" => stats.iterations,
+        "residuals" => stats.residuals,
+        "initial_residuals" => stats.initial_residuals,
+        "converged" => stats.converged,
+        "seconds" => seconds)
+end
+
+register_family!(:fixed_boundary, FIXED_BOUNDARY; run = fixed_boundary_run)

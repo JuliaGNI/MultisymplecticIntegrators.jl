@@ -10,6 +10,7 @@ targets this package ships, and the fits that bring an ansatz to one of them.
 ```@autodocs
 Modules = [MultisymplecticIntegrators]
 Pages = ["src/couplings/coefficient_restriction.jl", "src/couplings/weak_multipliers.jl",
+    "src/couplings/fixed_boundary.jl",
     "src/initial_guess/fit_methods.jl", "src/initial_guess/guess.jl",
     "src/initial_guess/orthogonal_greedy.jl", "src/initial_guess/trained_hidden_layer.jl"]
 ```

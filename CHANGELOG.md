@@ -544,6 +544,23 @@ makes it worth keeping.
   units, `degree = 3` and `ncells = (2, 5)`, at two time steps — and `register_family!(:elm, ELM;
   run = elm_run)` puts it under `runs/` through the one driver, `scripts/run_family.jl`, without an
   edit to `scripts/experiments.jl`.
+- **The fixed-boundary network, its coupling and Levenberg–Marquardt.** `FixedBoundaryNetwork` makes
+  the configuration of one time level the parameter vector of a *spatial* network, carries the side
+  data in the field itself and puts a tanh bubble on the slab, so a step solves for the next level's
+  parameters and the bubble's and has no multiplier at all. `FixedBoundary` is its coupling: it
+  carries the datum `(φ₀, p₀)`, hands on `∂S/∂φ₁`, and its `BubbleGreedy` fit starts a slab from a
+  greedy dictionary of 2184 atoms. The bubble's hidden layer has two coordinate systems, `:abg` and
+  the ridge chart `:tsr`, whose Jacobian is applied to the equations as well as to the unknowns.
+  `LevenbergMarquardt` is the family's solver — damped by a shift on the singular values, with the
+  bubble's output weights eliminable by an inner Newton solve — and `Newton()` stays available with
+  the minimum-norm step of a pivoted QR cut at `1e-12`. The family's steps converge on U12's rule at
+  `f_abstol = 0` and `f_reltol = 1e-8`, and `fixed_boundary_f_reltol(T)` is the one place that
+  constant lives. A failed step is carried, with its statistics recorded, as every family's is.
+- **`scripts/experiments.jl` registers the fixed-boundary family.** Thirty rows — `Wave` and
+  `SineGordon` at three time steps, on the dead branch and on the four combinations of the bubble's
+  form and its solve — and the two rows of the plateau probe, one of them at `Sx = 12`, `St = 16` and
+  one at `BigFloat` with `GenericLinearAlgebra` in `scripts/Project.toml` alone. The plateau's
+  numbers are recorded, never asserted.
 
 ### Changed
 

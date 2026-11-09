@@ -169,10 +169,11 @@ if !@isdefined(FixedBoundaryData)
 
     The relative tolerance of a fixed-boundary step's convergence rule, at element type `T`.
 
-    `Float64` is `1e-8`: on `Wave` at `h = 0.05` the dead branch's twenty steps reach a worst ratio
-    of `8.07e-9` under this rule, and the constant sits `1.24` times above it. `Float32` is the value
-    measured on the family's affine control at that element type, never the `Float64` value
-    converted.
+    `Float64` is `1e-8`. On `Wave` at `h = 0.05` the dead branch's twenty steps reach a worst ratio of
+    `2.96e-10` under this rule, with the rank cut of the pivoted QR at `1e-12`; the tolerance is not
+    what limits that run, since the cut at the factorisation's default leaves one step at `3.0e-8`.
+    `Float32` is the value measured on the family's affine control at that element type, never the
+    `Float64` value converted.
     """
     function fixed_boundary_f_reltol(::Type{Float64})
         return 1e-8
@@ -332,11 +333,17 @@ else
     A fixed-boundary slab's rows are the derivative of a discrete action, so its Jacobian is a
     saddle point whose rank is below its size: `Newton()` takes the minimum-norm step of a complete
     orthogonal factorization, as the multiplier network does.
+
+    The factorization's rank cut is `1e-12` rather than the default `√eps(T)`: the step's residual
+    stalls in the singular directions between the two, so the default cut leaves the worst step at a
+    ratio of `3.0e-8` while the cut at `1e-12` reaches `3.0e-10` and converges every step of the
+    twenty-step run. A caller's own `linear_solver_method` still overrides it.
     """
     function initsolver(
             solvermethod::Newton, method::SpaceTimeGalerkin{<:FixedBoundaryNetwork},
             caches::CacheDict; kwargs...)
-        options = merge((; linear_solver_method = SimpleSolvers.LapackPivotedQR()),
+        options = merge(
+            (; linear_solver_method = SimpleSolvers.LapackPivotedQR(rtol = 1e-12)),
             values(kwargs))
         return invoke(initsolver,
             Tuple{NonlinearSolverMethod, GeometricMethod, CacheDict},
@@ -759,7 +766,7 @@ else
 
                 k += 1
                 b[k] = sqrt(weights[r]) *
-                       (spatial_network(a, φ, nodes[r], ga1[d], gb1[d]) - top[r, d])
+                       (spatial_network(a, φ, nodes[r], ga1[d], gb1[d], d) - top[r, d])
             end
             b
         end

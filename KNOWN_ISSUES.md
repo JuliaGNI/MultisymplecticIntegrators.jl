@@ -249,3 +249,35 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   with the trace, and the unweighted sum drifts by `8.97`.
 - kind: defect
 - found: 2026-11-08
+
+### K49 · No live-branch variant of the fixed-boundary network converges, and none makes the error fall with `h`.
+
+- location: `src/couplings/fixed_boundary.jl`, `src/core/levenberg_marquardt.jl`,
+  `scripts/experiments.jl`
+- evidence: the family's live branch is `FitTo(Predictor())` with Levenberg–Marquardt, in both
+  bubble forms and with and without the projected solve. The matrix's thirty rows for it are built by
+  `scripts/experiments.jl` and none of them was run here, so this entry records what the runs that
+  were taken show and not a measured floor of every row: a two-step run at `max_iterations = 3` on
+  `Wave` at `h = 0.05` fails U12's rule at both steps in all four combinations, at residuals of
+  `9.6e-3` and `7.6e-4` from initial residuals of `0.22` and `0.19`, while the dead branch — `Continuation()`
+  with `Newton()` on a pivoted QR cut at `1e-12` — converges 20 of 20 steps at a worst ratio of
+  `2.9564e-10` and an error of `6.615e-4` at `t = 1`. The design task's findings §19 measured that no
+  variant of the live solve reaches `1e-11`, and this part does not contradict it. Nothing is fixed
+  here: the plan treats the non-convergence as a measured, recorded result of the method and compares
+  it in the matrix, and a fix, if there is one, is a different solve and not a different tolerance.
+- kind: defect
+- found: 2026-11-09
+
+### K50 · The projected solve's inner iteration stops when a step no longer lowers `‖∂S/∂a‖`, so a solve that starts on the floor records that it never moved.
+
+- location: `src/core/levenberg_marquardt.jl`
+- evidence: `project!` stops the inner Newton solve at the first step that does not lower the
+  eliminated block's residual, which is the plan's rule, and its warm start is the `a` the guess
+  left. A guess whose bubble output weights are already at the floor — the first slab of a
+  `FitTo(Predictor())` run whose greedy fit solved that block to round-off — therefore takes no
+  inner step, and the row that records the projected solve records the outer solve's work alone.
+  The recorded residual is still the whole system's, so the row compares one quantity with the joint
+  rows; what it does not show is how much of the work the inner solve did. Measured on `Wave` at
+  `h = 0.05`; the effect on the plateau's rows is not separated from the solve floor `K49` records.
+- kind: limit
+- found: 2026-11-09
