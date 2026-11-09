@@ -819,8 +819,10 @@ else
             end
         end
         f.method = method
-        # the remainder of the target beyond the two levels and the lift, at the slab's nodes
-        φ0, φ1 = data.phi, view(s.params, 1:nspatial(a))
+        # the remainder of the target beyond the two levels and the lift, at the slab's nodes: the
+        # solved level is the one this fit is building, not the block's buffer, which the guess's
+        # own fit has already overwritten
+        φ0, φ1 = data.phi, view(w, 1:nspatial(a))
         for q in 1:qt, r in 1:qx
 
             k = (q - 1) * qx + r
