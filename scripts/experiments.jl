@@ -118,8 +118,8 @@ end
 # The names the family's rows and runner build, taken from their owners so that this section loads
 # under any driver that includes the registry.
 using MultisymplecticIntegrators: Continuation, FitTo, FixedBoundary, FixedBoundaryNetwork,
-                                 LevenbergMarquardt, Predictor, SineGordon,
-                                 SpaceTimeGalerkin, Wave, integrate
+                                  LevenbergMarquardt, Predictor, SineGordon,
+                                  SpaceTimeGalerkin, Wave, integrate
 using SimpleSolvers: Newton
 
 """
@@ -147,11 +147,11 @@ plateau probe takes one step.
 """
 const FIXED_BOUNDARY = vcat(
     vec([(stem = "$(problem)-fixed-boundary-$(branch.name)-h$(step)",
-          label = "$(problem), $(branch.name), h = $(step)", problem, step,
-          steps = round(Int, 1 / step), form = branch.form, solver = branch.solver,
-          Sx = 8, St = 10, T = Float64)
+             label = "$(problem), $(branch.name), h = $(step)", problem, step,
+             steps = round(Int, 1 / step), form = branch.form, solver = branch.solver,
+             Sx = 8, St = 10, T = Float64)
          for problem in FIXED_BOUNDARY_PROBLEMS, step in FIXED_BOUNDARY_STEPS,
-         branch in FIXED_BOUNDARY_BRANCHES]),
+    branch in FIXED_BOUNDARY_BRANCHES]),
     [
         (stem = "wave-fixed-boundary-plateau-h0.025", label = "wave, plateau, h = 0.025",
             problem = "wave", step = 0.025, steps = 40, form = :tsr, solver = :joint,

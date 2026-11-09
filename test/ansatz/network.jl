@@ -531,7 +531,7 @@ function fixed_boundary_field(problem, a, φ0, φ1, Θ, t̂, x, h)
     level(φ, ga_, gb_) = begin
         m, mŝ = M.spatial_values(φ, a.Sx, a.D, 1, ŝ)
         ((1 - ŝ) * ga_ + ŝ * gb_ + bump * m,
-         (gb_ - ga_) / span + slope * m + bump * mŝ / span)
+            (gb_ - ga_) / span + slope * m + bump * mŝ / span)
     end
     n0, n0x = level(φ0, ga0, gb0)
     n1, n1x = level(φ1, ga1, gb1)
@@ -557,7 +557,6 @@ end
 
 @testset "the fixed-boundary ansatz's two charts" begin
     for form in (:abg, :tsr)
-
         a = fixed_boundary_ansatz(Float64; form = form)
         Θ = M.bubble_start(a, Float64)
         # one unit, read in its own coordinates, has the radius those coordinates carry
@@ -586,7 +585,6 @@ end
 @testset "the fixed-boundary ansatz's field and its top" begin
     problem = wave_problem(Float64)
     for form in (:abg, :tsr)
-
         a = fixed_boundary_ansatz(Float64; form = form)
         method = SpaceTimeGalerkin(a, FixedBoundary())
         int = GeometricIntegrator(problem, method)
@@ -604,6 +602,7 @@ end
         tb = a.tabulation
         worst = (u = 0.0, v = 0.0, w = 0.0)
         for q in eachindex(tb.tnode), r in eachindex(tb.xnode)
+
             u, v, w = fixed_boundary_field(problem, a, φ0, φ1, Θ, tb.tnode[q],
                 tb.xnode[r], h)
             worst = (u = max(worst.u, abs(u - c.u[q, r, 1])),

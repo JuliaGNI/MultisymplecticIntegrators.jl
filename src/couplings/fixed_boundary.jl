@@ -380,7 +380,8 @@ else
             caches::CacheDict; kwargs...)
         T = eltype(nlsolution(caches))
         options = merge(
-            (; linear_solver_method = SimpleSolvers.LapackPivotedQR(
+            (;
+                linear_solver_method = SimpleSolvers.LapackPivotedQR(
                 rtol = fixed_boundary_qr_cut(T))),
             values(kwargs))
         return invoke(initsolver,

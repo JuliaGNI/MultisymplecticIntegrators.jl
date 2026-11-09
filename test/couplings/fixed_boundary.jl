@@ -173,7 +173,8 @@ const PROBLEMS = Dict(
         M.nfree(last_layer)) == (12, 4, 8)
     # At `D = 2` a level frees `Sx·D` output weights, which are not the first `Sx` of them: the
     # level's parameters are `Sx` weights, `Sx` biases and then `Sx·D` output weights.
-    wide = FixedBoundaryNetwork(Sx = 8, St = 10, xspan = (0.0, 1.0), mode = :last_layer, D = 2)
+    wide = FixedBoundaryNetwork(
+        Sx = 8, St = 10, xspan = (0.0, 1.0), mode = :last_layer, D = 2)
     @test M.nspatial(wide) == 2 * 8 + 8 * 2
     @test M.spatial_free(wide) == (2 * 8 + 1):(2 * 8 + 8 * 2)
     @test M.bubble_free(wide) == (3 * 10 + 1):(3 * 10 + 10 * 2)
@@ -187,7 +188,8 @@ const PROBLEMS = Dict(
         problem, SpaceTimeGalerkin(spline, FixedBoundary()))
     for coupling in (WeakInitialAndBoundaryConditions(), WeakInitialCondition(),
         CoefficientRestriction())
-        @test_throws r"^a FixedBoundaryNetwork takes the FixedBoundary coupling, got $(nameof(typeof(coupling)))$" GeometricIntegrator(
+        @test_throws Regex("^a FixedBoundaryNetwork takes the FixedBoundary coupling, got " *
+                           "$(nameof(typeof(coupling)))\$") GeometricIntegrator(
             problem, SpaceTimeGalerkin(a, coupling))
     end
     method = SpaceTimeGalerkin(a, FixedBoundary())
@@ -207,7 +209,6 @@ end
     @testset "generated entry, $T, $form, $mode" for T in (Float64, Float32),
         entry in generate_problems(T; rng = Xoshiro(SEED)), form in (:abg, :tsr),
         mode in (:all, :last_layer)
-
         ansatz = fixed_ansatz(entry.problem; form = form, mode = mode)
         problem = entry.problem
         slab = fixed_slab(problem, ansatz)
@@ -256,8 +257,9 @@ end
     # the cost; the chart's columns and the layout are what differs between the leg, and neither
     # depends on how many cells the rule has.
     entries = generate_problems(Float64; rng = Xoshiro(SEED))
-    legs = vcat([(label = name === :wave ? "wave" : "sinegordon",
-                  problem = clause_problem(name), ncells = 20) for name in (:wave, :sinegordon)],
+    legs = vcat(
+        [(label = name === :wave ? "wave" : "sinegordon",
+             problem = clause_problem(name), ncells = 20) for name in (:wave, :sinegordon)],
         [(label = "entry $i", problem = entry.problem, ncells = 3)
          for (i, entry) in enumerate(entries) if entry.kind === :general][1:4])
     for leg in legs, form in (:abg, :tsr), mode in (:all, :last_layer)
@@ -287,6 +289,7 @@ end
     # N6: the datum of a run's first slab — the fit of the level to `u₀`, and `p₀` against the
     # oracle's own integral of the density's momentum, on the free parameters of the mode
     for name in (:wave, :sinegordon), mode in (:all, :last_layer)
+
         problem = clause_problem(name)
         ansatz = clause_ansatz(problem; mode = mode)
         slab = fixed_slab(problem, ansatz)
@@ -564,7 +567,8 @@ end
     # solution (K49).
     for T in (Float64, Float32), form in (:abg, :tsr)
 
-        linear = [entry.problem for entry in generate_problems(T; rng = Xoshiro(SEED))
+        linear = [entry.problem
+                  for entry in generate_problems(T; rng = Xoshiro(SEED))
                   if entry.potential == 2]
         for (i, problem) in enumerate(vcat([clause_problem(:wave; T = T)], linear))
             ansatz = clause_ansatz(problem; mode = :last_layer, form = form)
@@ -774,7 +778,8 @@ end
     transport = M.LinearTransport.problem(timespan = (0.0, 0.1), timestep = 0.05,
         xstep = 0.05, xspan = (0.0, 1.0))
     ansatz = fixed_ansatz(transport; Sx = 2, St = 2)
-    @test_throws r"^Predictor\(\) needs a density whose ∂L/∂v" GeometricIntegrator(transport,
+    @test_throws r"^Predictor\(\) needs a density whose ∂L/∂v" GeometricIntegrator(
+        transport,
         SpaceTimeGalerkin(ansatz, FixedBoundary(); initial_guess = FitTo(Predictor())))
     # A density whose `∂L/∂v` is nonlinear vanishes at zero velocity and gives one value at
     # `v = 1` too: only a second velocity shows that its ratio is not the constant `m`.
@@ -880,7 +885,7 @@ end
     @test maximum(abs, ca.w - ct.w) ≤ 1e3 * eps(Float64) * maximum(abs, ct.w)
     # the chart, written here from its definition: `(α, β, γ) = (e^ρ cos θ, e^ρ sin θ, −e^ρ s)`
     chart(θ, s, ρ) = (exp(ρ) * cos(θ), exp(ρ) * sin(θ), -exp(ρ) * s)
-    St, D, nsp = tsr.St, tsr.D, M.nspatial(tsr)
+    St, nsp = tsr.St, M.nspatial(tsr)
     nf = length(ct.x)
     G = zeros(Float64, nf, nf)
     for k in 1:nf
@@ -890,6 +895,7 @@ end
         θ, s, ρ = ct.x[nsp + k], ct.x[nsp + St + k], ct.x[nsp + 2St + k]
         J = ForwardDiff.jacobian(z -> collect(chart(z[1], z[2], z[3])), [θ, s, ρ])
         for i in 1:3, j in 1:3
+
             G[nsp + (i - 1) * St + k, nsp + (j - 1) * St + k] = J[i, j]
         end
     end
@@ -939,7 +945,7 @@ end
     result = integrate(problem, method; solver = LevenbergMarquardt(), max_iterations = 1,
         verbosity = 0)
     @test length(result.stats.converged) == 2
-    @test result.stats.converged[1] == false
+    @test !result.stats.converged[1]
     @test length(result.traces) == 2
     @test_logs (:warn, r"did not converge at timestep n=1") match_mode = :any integrate(
         problem, method; solver = LevenbergMarquardt(), max_iterations = 1, verbosity = 0,
@@ -975,7 +981,6 @@ end
     drift = maximum(abs, c.ansatz.params[1:(2 * ansatz.Sx)])
     xs = collect(range(xspan(problem)[1], xspan(problem)[2]; length = 21))
     t_end = timesteps(solution)[end]
-    nx = length(solution.u[end])
     final_error = maximum(abs(WF.solution_u(t_end, x, parameters(problem)) -
                               solution.u[end][i])
     for (i, x) in enumerate(xs))
@@ -998,11 +1003,13 @@ end
     @test length(entries) == 32
     @test length(unique(entry.stem for entry in entries)) == 32
     @test all(entry -> entry.steps ≥ 1, entries)
-    matrix = filter(entry -> occursin("fixed-boundary", entry.stem) &&
-                             !occursin("plateau", entry.stem), entries)
+    matrix = filter(
+        entry -> occursin("fixed-boundary", entry.stem) &&
+                 !occursin("plateau", entry.stem),
+        entries)
     @test length(matrix) == 30
     @test length(Set((entry.problem, entry.form, entry.solver, entry.step)
-                     for entry in matrix)) == 30
+    for entry in matrix)) == 30
     # a matrix row integrates its ladder up to `t = 1`, so that the three resolutions of one
     # problem compare one span
     @test all(entry -> entry.steps * entry.step ≥ 1 - 1e-12, matrix)

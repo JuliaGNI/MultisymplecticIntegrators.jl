@@ -1748,7 +1748,7 @@ on any other ansatz is refused, because another ansatz has no slab predictor to 
 """
 function check_method(problem::LagrangianPDEProblem,
         method::SpaceTimeGalerkin{A, C, G}) where {A <: SpaceTimeAnsatz, C <: SlabCoupling,
-                                                   G <: FitTo}
+        G <: FitTo}
     invoke(check_method, Tuple{LagrangianPDEProblem, SpaceTimeGalerkin}, problem, method)
     guess = initial_guess(method)
     target = guess.target
@@ -1767,8 +1767,10 @@ function check_method(problem::LagrangianPDEProblem,
 end
 
 """Refuse a `Predictor` on an ansatz that has no slab predictor to run."""
-refuse_predictor(a::SpaceTimeAnsatz) = throw(ArgumentError(
-    "Predictor() needs a FixedBoundaryNetwork; $(nameof(typeof(a))) has no slab predictor"))
+function refuse_predictor(a::SpaceTimeAnsatz)
+    throw(ArgumentError(
+        "Predictor() needs a FixedBoundaryNetwork; $(nameof(typeof(a))) has no slab predictor"))
+end
 
 """Whether a target of a [`FixedBoundaryNetwork`](@ref) has a field map."""
 supported_target(::InitialCondition) = true
