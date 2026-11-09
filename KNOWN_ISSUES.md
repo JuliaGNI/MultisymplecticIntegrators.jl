@@ -187,10 +187,65 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - evidence: about 180 lines of the network family nearly repeat the code of `SymbolicAnsatz`:
   `edge!`, `slab_weak_form!`, `free_residual!`, `keep_top!`, `top_values!`, `initsolver` (an
   identical body), the `check_coupling` refusals, `coupling_term!` and `coupling_guess!`. They differ
-  only in the surface rule and in the names of the scratch buffers. `network_target_values!` repeats
-  `target_values!` of `src/initial_guess/guess.jl`, whose `ansatz` argument is unused, and the
+  only in the surface rule and in the names of the scratch buffers. `network_target_values!`, through
+  its helper `point_target!`, repeats `target_values!` of `src/initial_guess/guess.jl`, whose
+  `ansatz` argument is unused, and the
   network's `evaluate!(::InitialCondition)` differs from the tensor one only in `trace_basis`. A
   shared supertype with a surface-rule accessor removes the copy; a reuse of `target_values!` widens
   its signature.
 - kind: defect
 - found: #44
+
+### K44 · The `WAVE_ELM_LSGD` sounding is an unconverged iterate of another architecture.
+
+- location: `test/helpers/reference_values.jl:61`, `src/initial_guess/trained_hidden_layer.jl`
+- evidence: the entry is the old stack's `LSGD` branch on `Wave` at `h = 0.05` over five steps, a
+  network of two hidden layers of twenty units whose field's derivative came from `Zygote`, and its
+  own record is `iterations = [4, 6, 7, 4, 4]` at `residual = [3.46e-6, 2.25e-4, 2.13e-3, 2.69e-2,
+  6.22e-1]`, with `energy_error` rising to `2.74e14`. This tree's counterpart is the `:last_layer`
+  network at `S = 20` fitted by `TrainedHiddenLayer(epochs = 100, learning_rate = 1e-5)` from the
+  seed 1234, `degree = 3` and `ncells = (10, 10)`, the old constructor's cells: it takes
+  `iterations = [3, 3, 3, 3, 5]` at `residual = [9.61e-5, 8.91e-5, 1.55e-4, 2.21e-4, 3.87e-4]`,
+  each from an initial residual of `[7.72, 6.92, 8.65, 10.43, 12.42]`, and `converged = false` at
+  every step under the default `f_reltol = √eps(Float64)`. Its sup-norm deviation from the entry's
+  `u` is `1.79e6`, measured in `Float64` in a cold process on `arm64-apple-darwin27.0.0`
+  (`apple-m4`) at Julia 1.13.3, four BLAS threads and `--check-bounds=auto`. The record is that run
+  and not a reference: the two are unconverged iterates of two architectures, one with two hidden
+  layers and one with one.
+- kind: defect
+- found: 2026-11-08
+
+### K45 · The `SINE_GORDON_ELM_LSGD` sounding is an unconverged iterate of another architecture.
+
+- location: `test/helpers/reference_values.jl:71`, `src/initial_guess/trained_hidden_layer.jl`
+- evidence: the entry is the same `LSGD` branch on `SineGordon` over three steps at `h = 0.05`, and
+  its own record is `iterations = [13, 3, 27]` at `residual = [1.56e-7, 2.17e-2, 5.56e-3]`, with
+  `energy_error` rising to `4.89e6`. This tree's counterpart, the same `:last_layer` method of K44
+  on the same cells, takes `iterations = [4, 6, 4]` at `residual = [1.23e-5, 1.22e-5, 1.66e-5]`,
+  each from an initial residual of `[4.31, 4.46, 4.37]`, and `converged = false` at every step. Its
+  sup-norm deviation from the entry's `u` is `151.3`, on the machine and with the settings of K44.
+  As for K44 the record is that run and not a reference.
+- kind: defect
+- found: 2026-11-08
+
+### K46 · The rotation charge of a `:last_layer` run drifts, and no cutoff conserves it.
+
+- location: `test/initial_guess/trained_hidden_layer.jl`, `src/ansatz/network.jl`
+- evidence: `J_h = Σⱼ (u¹ⱼ λ²ⱼ − u²ⱼ λ¹ⱼ)` over the top trace and the top multiplier of a
+  `VectorWave` run at `β = 0`, `S = 20`, `D = 2`, `degree = 3`, `ncells = (2, 5)`,
+  `f_abstol = 0` and `f_reltol = trained_f_reltol(T)` drifts from `-0.4362` to `-0.5558` over ten
+  steps in `Float64`, a largest deviation of `0.1196`, and from `-0.4101` to `-0.4783` in
+  `Float32`, `0.0682`; both runs converge at every step in two iterations, at largest step ratios
+  of `3.26e-5` and `4.26e-3`. `λ_top` lies in the near-null space of the `:last_layer` saddle
+  point, whose constraint block reaches only the output weights — the `LinearTransport` Jacobian
+  at `S = 10` and `D = 2` has rank 40 of 52 — so resolving it makes the run unstable and
+  truncating it leaves the slab's equations unsatisfied there: at a cutoff of `1e-14` the
+  residual reaches round-off and the charge grows to `7.3e16`, at `1e-10` and `1e-12` to `-1763`,
+  and the drift is identical to five digits at `1e-2` uncapped, at a cap of two iterations, and at
+  `1e-12` with fifty. The factorisation's cutoff is LAPACK's default, `sqrt(eps(T))`, because
+  `initsolver` builds `LapackPivotedQR()` with no argument. Measured in `Float64` and `Float32` on
+  `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3, four BLAS threads and
+  `--check-bounds=auto`. The weights are the coupling's own: the trace rule's weights pair `λ_top`
+  with the trace, and the unweighted sum drifts by `8.97`.
+- kind: defect
+- found: 2026-11-08

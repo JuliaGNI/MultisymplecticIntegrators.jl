@@ -211,6 +211,8 @@ end
 
 is_linear_in_coefficients(::NetworkAnsatz) = false
 
+has_affine_step(a::NetworkAnsatz) = a.mode === :last_layer
+
 default_fit(::NetworkAnsatz) = OrthogonalGreedy()
 
 """
@@ -244,6 +246,115 @@ function fit!(w::AbstractVector{ST}, method::OrthogonalGreedy, ansatz::NetworkAn
 end
 
 """
+    fit!(w, method::TrainedHiddenLayer, ansatz::NetworkAnsatz, sample, cache)
+
+Fit the hidden layer and the output layer of a `:last_layer` network to a slab's sampled target, by
+[`fit_trained!`](@ref) on the workspace of the cache's block. `sample` is the named tuple
+`(; interior, faces)` that [`fit_sample`](@ref) returns for the method: the target at the nodes of
+the ansatz's own rule, of size `(Qt, Qx, D)`, and at the four surfaces of the slab, one row per
+point.
+
+The mode is `:last_layer` alone: in `:all` mode Newton determines every parameter, so a fit that
+trained the hidden layer as well would hand the same weights a second owner.
+"""
+function fit!(w::AbstractVector{ST}, method::TrainedHiddenLayer, ansatz::NetworkAnsatz,
+        sample::NamedTuple, c::SpaceTimeGalerkinCache) where {ST}
+    ansatz.mode === :last_layer || throw(ArgumentError(
+        "TrainedHiddenLayer needs an ansatz in :last_layer mode; Newton solves every layer in " *
+        ":$(ansatz.mode) mode"))
+    fit_trained!(c.ansatz.train, method, w, ansatz, sample, c.ansatz)
+    return w
+end
+
+"""
+    fit_sample(method, interior, target, cache, ansatz, problem, sol)
+
+The sample a fit method takes, from the target's `interior` sample at the nodes of the ansatz's own
+rule. A fit that takes the interior sample alone takes `interior`. A
+[`TrainedHiddenLayer`](@ref) takes the named tuple `(; interior, faces)`, whose `faces` is the
+target at the four surfaces of the slab, one row per point, at the point sets of
+[`trace_basis`](@ref)`(ansatz)`: the two surfaces in time at the space rule, then the two in space
+at the time rule.
+"""
+fit_sample(::SlabFitMethod, interior, target, c, ansatz, problem, sol) = interior
+
+function fit_sample(::TrainedHiddenLayer, interior::AbstractArray{ST, 3}, target, c,
+        ansatz::NetworkAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
+    xt, tt = c.ansatz.trace_tabulation.space, c.ansatz.trace_tabulation.time
+    qxt, qtt = nquadrature(xt), nquadrature(tt)
+    faces = zeros(ST, 2 * qxt + 2 * qtt, ansatz.D)
+    row = 0
+    for t̂ in (zero(ST), one(ST)), r in 1:qxt
+
+        row += 1
+        target_point!(view(faces, row, :), target, c, ansatz, problem, sol, t̂, xt.node[r])
+    end
+    for r in 1:2, q in 1:qtt
+
+        row += 1
+        target_point!(view(faces, row, :), target, c, ansatz, problem, sol, tt.node[q],
+            xspan(ansatz)[r])
+    end
+    return (; interior, faces)
+end
+
+"""
+    target_point!(values, target, cache, ansatz, problem, sol, t̂, x)
+
+The `D` components of `target` at one point of the slab, whose physical time is `t₀ + h t̂`.
+
+The four targets of the guess each answer at a point, as they answer on the slab's quadrature:
+[`InitialCondition`](@ref) is the problem's initial condition, [`PreviousSlab`](@ref) the previous
+slab's field continued beyond its top, and [`ExactSolution`](@ref) and [`TargetFunction`](@ref) are
+read at the physical time of the point.
+"""
+function target_point!(values::AbstractVector{ST}, ::InitialCondition,
+        c::SpaceTimeGalerkinCache, ansatz::NetworkAnsatz, problem::LagrangianPDEProblem,
+        sol, t̂, x) where {ST}
+    initial = problem.ics_function([x], parameters(problem))
+    for d in eachindex(values)
+        values[d] = convert(ST, initial.u[1, d])
+    end
+    return nothing
+end
+
+function target_point!(values::AbstractVector{ST}, ::ExactSolution,
+        c::SpaceTimeGalerkinCache, ansatz::NetworkAnsatz, problem::LagrangianPDEProblem,
+        sol, t̂, x) where {ST}
+    return point_target!(values, problem.solutions.u, problem, sol, t̂, x)
+end
+
+function target_point!(values::AbstractVector{ST}, target::TargetFunction,
+        c::SpaceTimeGalerkinCache, ansatz::NetworkAnsatz, problem::LagrangianPDEProblem,
+        sol, t̂, x) where {ST}
+    return point_target!(values, target.f, problem, sol, t̂, x)
+end
+
+function target_point!(values::AbstractVector{ST}, ::PreviousSlab,
+        c::SpaceTimeGalerkinCache, ansatz::NetworkAnsatz, problem::LagrangianPDEProblem,
+        sol, t̂, x) where {ST}
+    if c.steps == 0
+        return target_point!(values, InitialCondition(), c, ansatz, problem, sol, t̂, x)
+    end
+    s = c.ansatz
+    evaluate_at!(s, one(ST), convert(ST, x))
+    for d in eachindex(values)
+        values[d] = s.values[d] + convert(ST, t̂) * s.values[ansatz.D + d]
+    end
+    return nothing
+end
+
+# One point of a pointwise target `f(t, x, params)`, converted to the element type.
+function point_target!(values::AbstractVector{ST}, f,
+        problem::LagrangianPDEProblem, sol, t̂, x) where {ST}
+    value = f(slab_start(problem, sol) + timestep(problem) * t̂, x, parameters(problem))
+    for d in eachindex(values)
+        values[d] = convert(ST, value isa Number ? value : value[d])
+    end
+    return nothing
+end
+
+"""
     NetworkPoints{T}
 
 A set of space points at which a network block evaluates its field: the two surfaces of the slab at
@@ -273,7 +384,8 @@ core evaluates the top of the slab at, and `fit` the workspace of the greedy fit
 `values` and `gradient` are the scratch of one evaluation — the `3D` values of the field, its two
 derivatives and their parameter derivative — `input` its two-entry argument, and `parameter_set`
 the parameters laid out as the network's kernels read them, which every evaluation refreshes from
-`params`.
+`params`. `train` is the workspace of the [`TrainedHiddenLayer`](@ref) fit, which trains the hidden
+layer in place.
 """
 struct NetworkSlab{ST, T, A <: NetworkAnsatz{T}, P}
     ansatz::A
@@ -306,6 +418,7 @@ struct NetworkSlab{ST, T, A <: NetworkAnsatz{T}, P}
     gradient::Matrix{ST}
     parameter_set::P
     fit::NetworkFit{ST}
+    train::TrainedFit{ST}
 end
 
 """
@@ -334,7 +447,8 @@ function ansatz_data(a::NetworkAnsatz{T}, problem::LagrangianPDEProblem,
         tabulation, trace_tabulation,
         NetworkPoints(collect(T, xgrid(problem))),
         NetworkPoints(collect(T, trace_tabulation.space.node)),
-        zeros(ST, 2), zeros(ST, 3D), zeros(ST, 3D, a.np), ps, NetworkFit(ST))
+        zeros(ST, 2), zeros(ST, 3D), zeros(ST, 3D, a.np), ps, NetworkFit(ST),
+        TrainedFit(ST))
 end
 
 """
@@ -540,6 +654,11 @@ function copy_ansatz_data!(c::NetworkSlab{ST}, d::NetworkSlab) where {ST}
     return nothing
 end
 
+# The parameters a `:last_layer` network's step holds fixed are the hidden layer's weights and
+# biases, `L1.W` then `L1.b`, which are the `first_free - 1` entries before the free output
+# weights: a guess that retrains the hidden layer moves the step's Jacobian.
+held_parameters(s::NetworkSlab) = view(s.params, 1:(s.ansatz.first_free - 1))
+
 """
     nunknowns(ansatz::NetworkAnsatz, coupling, problem)
 
@@ -626,19 +745,13 @@ function evaluate!(sample::AbstractArray{ST, 3}, ::ExactSolution,
 end
 
 # A pointwise target `f(t, x, params)` at the nodes of the block's own rule, in physical time,
-# converted to the problem's element type. A `f` that returns a number gives every component that
-# number; one that returns a vector gives component `d` its `d`-th entry.
+# converted to the problem's element type, one point at a time.
 function network_target_values!(sample::AbstractArray{ST, 3}, f, s::NetworkSlab,
         problem::LagrangianPDEProblem, sol) where {ST}
     tq, xq = s.tabulation.time, s.tabulation.space
-    t₀ = slab_start(problem, sol)
-    h = timestep(problem)
     for q in 1:nquadrature(tq), r in 1:nquadrature(xq)
 
-        value = f(t₀ + h * tq.node[q], xq.node[r], parameters(problem))
-        for d in axes(sample, 3)
-            sample[q, r, d] = convert(ST, value isa Number ? value : value[d])
-        end
+        point_target!(view(sample, q, r, :), f, problem, sol, tq.node[q], xq.node[r])
     end
     return nothing
 end
@@ -651,7 +764,9 @@ Fill the solver's vector of a network slab from the method's initial guess.
 A continuation carries the previous slab's parameters into the new one, which the block still holds
 where the previous step left them; at the first slab there is nothing to carry, and the guess falls
 back to `FitTo(InitialCondition())`. A `FitTo` samples its target at the nodes of the ansatz's own
-rule, fits the network to it, and takes the free part of the fitted parameters as its unknowns.
+rule, samples it at the four surfaces of the slab as well where the fit takes them
+([`fit_sample`](@ref)), fits the network to it, and takes the free part of the fitted parameters as
+its unknowns.
 """
 function apply_guess!(c::SpaceTimeGalerkinCache{ST}, guess::Continuation,
         ansatz::NetworkAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
@@ -672,7 +787,9 @@ function apply_guess!(c::SpaceTimeGalerkinCache{ST}, guess::FitTo,
     sample = zeros(ST, length(tnodes), length(xnodes), D)
     evaluate!(sample, guess.target, c, ansatz, problem, sol)
     w = copy(c.ansatz.params)
-    fit!(w, fit_method(guess, ansatz), ansatz, sample, c)
+    fitmethod = fit_method(guess, ansatz)
+    fit!(w, fitmethod, ansatz,
+        fit_sample(fitmethod, sample, guess.target, c, ansatz, problem, sol), c)
     set_parameters!(c.ansatz, w)
     for k in 1:nfree(ansatz)
         c.x[k] = w[ansatz.first_free + k - 1]

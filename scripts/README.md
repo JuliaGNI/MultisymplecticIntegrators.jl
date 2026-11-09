@@ -52,6 +52,7 @@ failed run.
 | `experiments.jl` | the registry: `register_family!`, `family_entries`, `family_run`, and the two selection rules `smallest_entry` and `entry_by_stem`, plus the ladders of the two scans. It holds no family's entries and builds nothing on `include`. |
 | `spline_model.jl` | the spline family: its registry entries, the problem and the method of one of them, one run timed, the archive of a run, and the error of a run against the exact solution at its last stored step. It ends by registering `:spline`. |
 | `symbolic_model.jl` | the symbolic family: its registry entry, the closed-form expression in the slab's normalised time, the problem and the method of the entry, the archive of a run, and the energy error over it. It ends by registering `:symbolic`. |
+| `elm_model.jl` | the ELM family: its two registry entries, the problem, the ansatz and the method of one of them, one run timed, and the archive of a run. It ends by registering `:elm`. |
 | `run_family.jl` | the one driver: it includes every `*_model.jl` file here in sorted order, takes the family name and the stems of its entries, archives each run under `runs/`, and exits non-zero if one failed. |
 | `figures.jl` | globs `runs/`, draws each archive as the kind it declares, and writes `results/<stem>.pdf` through `atomic_write`. **The only place `save` is called.** |
 | `spline_energy_scan.jl` | the relative energy error over time at a ladder of time steps, archived as one `"energy"` run that `figures.jl` draws as a comparison. |

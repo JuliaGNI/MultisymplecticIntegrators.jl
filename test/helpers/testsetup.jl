@@ -33,6 +33,18 @@ read from the `options` the caller passes.
 newton_tolerance(::Type{T}, options) where {T} = T(options.f_abstol / eps(Float64)) * eps(T)
 
 """
+    trained_f_reltol(::Type{T})
+
+The relative tolerance of an ELM family step, measured on the family's run of `Wave` at `S = 20`
+with `f_abstol = 0` and the one guess `FitTo(PreviousSlab(); method = TrainedHiddenLayer(epochs =
+20))`: the largest of its five step ratios `residual / initial residual` is `5.6e-5` in `Float64` and
+`1.2e-2` in `Float32`. Every step converged under the bound, which sits above each ratio by a factor
+of `180` and `8.6`.
+"""
+trained_f_reltol(::Type{Float64}) = 1.0e-2
+trained_f_reltol(::Type{Float32}) = 1.0e-1
+
+"""
     assert_no_upcast(x, ::Type{T})
 
 Assert that `x` — an array, a named tuple of arrays or a scalar — holds only values of element type

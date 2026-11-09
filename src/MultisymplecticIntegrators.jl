@@ -4,11 +4,11 @@ using GeometricBase
 using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: Diagonal, I, LU, UpperTriangular, axpy!, dot, ldiv!, lu, mul!, norm,
-                     rdiv!
+using LinearAlgebra: Diagonal, I, UpperTriangular, axpy!, dot, ldiv!, mul!, norm, rdiv!
 using SimpleSplines
 using SimpleSolvers
 using SparseArrays
+using Random: AbstractRNG, Xoshiro
 using Symbolics
 
 import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrature,
@@ -16,7 +16,7 @@ import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrat
                       basis_values, degree, nbasis, ncells, quadrature_nodes,
                       quadrature_weights, l2_projection!, nodes as spline_nodes
 import SimpleSolvers: initial_residual, method, solve_with_status!, NonlinearSolverException
-import SimpleSolvers: config, jacobian!, jacobianmatrix
+import SimpleSolvers: config, jacobian!, jacobianmatrix, linearsolver
 import AbstractNeuralNetworks: Chain, Dense, NeuralNetwork, layers, params
 import NeuralNetworkParameters: flatten, unflatten, unflatten!
 import SymbolicNeuralNetworks: SymbolicNeuralNetwork, Jacobian, derivative,
@@ -71,10 +71,12 @@ export SpaceTimeGalerkin, SpaceTimeGalerkinCache, ansatz, coupling, total_free_c
 include("ansatz/symbolic.jl")
 export SymbolicAnsatz
 
-# the initial guess: the roles first, then the fit a network uses and the ansatz it seeds
+# the initial guess: the roles first, then the fits a network uses and the ansatz they seed
 include("initial_guess/fit_methods.jl")
 include("initial_guess/guess.jl")
 include("initial_guess/orthogonal_greedy.jl")
+include("initial_guess/trained_hidden_layer.jl")
+export TrainedHiddenLayer
 
 # the network ansatz, which the coupling's carrier and the guess hooks extend
 include("ansatz/network.jl")
