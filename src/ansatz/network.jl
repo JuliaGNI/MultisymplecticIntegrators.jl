@@ -211,6 +211,8 @@ end
 
 is_linear_in_coefficients(::NetworkAnsatz) = false
 
+has_affine_step(a::NetworkAnsatz) = a.mode === :last_layer
+
 default_fit(::NetworkAnsatz) = OrthogonalGreedy()
 
 """
@@ -247,13 +249,16 @@ end
     fit!(w, method::TrainedHiddenLayer, ansatz::NetworkAnsatz, sample, cache)
 
 Fit the hidden layer and the output layer of a `:last_layer` network to a slab's sampled target, by
-[`fit_trained!`](@ref) on the workspace of the cache's block.
+[`fit_trained!`](@ref) on the workspace of the cache's block. `sample` is the named tuple
+`(; interior, faces)` that [`fit_sample`](@ref) returns for the method: the target at the nodes of
+the ansatz's own rule, of size `(Qt, Qx, D)`, and at the four surfaces of the slab, one row per
+point.
 
 The mode is `:last_layer` alone: in `:all` mode Newton determines every parameter, so a fit that
 trained the hidden layer as well would hand the same weights a second owner.
 """
 function fit!(w::AbstractVector{ST}, method::TrainedHiddenLayer, ansatz::NetworkAnsatz,
-        sample::AbstractArray{ST, 3}, c::SpaceTimeGalerkinCache) where {ST}
+        sample::NamedTuple, c::SpaceTimeGalerkinCache) where {ST}
     ansatz.mode === :last_layer || throw(ArgumentError(
         "TrainedHiddenLayer needs an ansatz in :last_layer mode; Newton solves every layer in " *
         ":$(ansatz.mode) mode"))
@@ -262,37 +267,35 @@ function fit!(w::AbstractVector{ST}, method::TrainedHiddenLayer, ansatz::Network
 end
 
 """
-    fit_sample!(workspace, method, target, cache, ansatz, problem, sol)
+    fit_sample(method, interior, target, cache, ansatz, problem, sol)
 
-Fill the sample a fit takes beyond the interior one, before the fit runs. A
-[`TrainedHiddenLayer`](@ref) takes the target at the four surfaces of the slab as well, which it
-samples at the point sets of [`trace_basis`](@ref)`(ansatz)`: the two surfaces in time at the space
-rule and the two in space at the time rule. A fit that takes the interior sample alone fills
-nothing.
+The sample a fit method takes, from the target's `interior` sample at the nodes of the ansatz's own
+rule. A fit that takes the interior sample alone takes `interior`. A
+[`TrainedHiddenLayer`](@ref) takes the named tuple `(; interior, faces)`, whose `faces` is the
+target at the four surfaces of the slab, one row per point, at the point sets of
+[`trace_basis`](@ref)`(ansatz)`: the two surfaces in time at the space rule, then the two in space
+at the time rule.
 """
-fit_sample!(::TrainedFit, ::SlabFitMethod, target, c, ansatz, problem, sol) = nothing
+fit_sample(::SlabFitMethod, interior, target, c, ansatz, problem, sol) = interior
 
-function fit_sample!(f::TrainedFit{ST}, ::TrainedHiddenLayer, target, c,
+function fit_sample(::TrainedHiddenLayer, interior::AbstractArray{ST, 3}, target, c,
         ansatz::NetworkAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
-    D = ansatz.D
     xt, tt = c.ansatz.trace_tabulation.space, c.ansatz.trace_tabulation.time
     qxt, qtt = nquadrature(xt), nquadrature(tt)
-    size(f.face_target) == (2 * qxt + 2 * qtt, D) ||
-        (f.face_target = zeros(ST, 2 * qxt + 2 * qtt, D))
+    faces = zeros(ST, 2 * qxt + 2 * qtt, ansatz.D)
     row = 0
     for t̂ in (zero(ST), one(ST)), r in 1:qxt
 
         row += 1
-        target_point!(view(f.face_target, row, :), target, c, ansatz, problem, sol, t̂,
-            xt.node[r])
+        target_point!(view(faces, row, :), target, c, ansatz, problem, sol, t̂, xt.node[r])
     end
     for r in 1:2, q in 1:qtt
 
         row += 1
-        target_point!(view(f.face_target, row, :), target, c, ansatz, problem, sol,
-            tt.node[q], xspan(ansatz)[r])
+        target_point!(view(faces, row, :), target, c, ansatz, problem, sol, tt.node[q],
+            xspan(ansatz)[r])
     end
-    return nothing
+    return (; interior, faces)
 end
 
 """
@@ -654,19 +657,7 @@ end
 # The parameters a `:last_layer` network's step holds fixed are the hidden layer's weights and
 # biases, `L1.W` then `L1.b`, which are the `first_free - 1` entries before the free output
 # weights: a guess that retrains the hidden layer moves the step's Jacobian.
-nheld_parameters(s::NetworkSlab) = s.ansatz.first_free - 1
-
-function held_parameters_changed(held::AbstractVector, s::NetworkSlab)
-    for k in eachindex(held)
-        s.params[k] == held[k] || return true
-    end
-    return false
-end
-
-function copy_held_parameters!(held::AbstractVector, s::NetworkSlab)
-    copyto!(held, 1, s.params, 1, length(held))
-    return nothing
-end
+held_parameters(s::NetworkSlab) = view(s.params, 1:(s.ansatz.first_free - 1))
 
 """
     nunknowns(ansatz::NetworkAnsatz, coupling, problem)
@@ -774,7 +765,7 @@ A continuation carries the previous slab's parameters into the new one, which th
 where the previous step left them; at the first slab there is nothing to carry, and the guess falls
 back to `FitTo(InitialCondition())`. A `FitTo` samples its target at the nodes of the ansatz's own
 rule, samples it at the four surfaces of the slab as well where the fit takes them
-([`fit_sample!`](@ref)), fits the network to it, and takes the free part of the fitted parameters as
+([`fit_sample`](@ref)), fits the network to it, and takes the free part of the fitted parameters as
 its unknowns.
 """
 function apply_guess!(c::SpaceTimeGalerkinCache{ST}, guess::Continuation,
@@ -797,8 +788,8 @@ function apply_guess!(c::SpaceTimeGalerkinCache{ST}, guess::FitTo,
     evaluate!(sample, guess.target, c, ansatz, problem, sol)
     w = copy(c.ansatz.params)
     fitmethod = fit_method(guess, ansatz)
-    fit_sample!(c.ansatz.train, fitmethod, guess.target, c, ansatz, problem, sol)
-    fit!(w, fitmethod, ansatz, sample, c)
+    fit!(w, fitmethod, ansatz,
+        fit_sample(fitmethod, sample, guess.target, c, ansatz, problem, sol), c)
     set_parameters!(c.ansatz, w)
     for k in 1:nfree(ansatz)
         c.x[k] = w[ansatz.first_free + k - 1]

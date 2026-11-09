@@ -8,27 +8,21 @@
 """
     TrainedFit{ST}
 
-The workspace of a [`TrainedHiddenLayer`](@ref) fit in the block of a network ansatz.
+The workspace of a [`TrainedHiddenLayer`](@ref) fit in the block of a network ansatz: the sample
+the fit is taken on and the buffers of its two steps, which a fit of other sizes builds again.
 
-`initial` is the hidden layer the method's generator drew — `Xoshiro(1234)` unless the method names
-another — which is what the buffers were built for: a fit whose method, sizes or draw differ from
-these builds them again, so that two methods of one size on one block give the two fits that fresh
-blocks give. `face_target` is the target at the four surfaces of the slab, which the guess fills
-beside the interior one. The remaining fields are the sample the fit is taken on and the buffers of
-its two steps: `points` holds the normalised time and the space coordinate of every point of the
-sample, `measure` the weight the slab's measure gives that point, and `target` and `values` the
-target and the field there, one row per point and one column per component. `features` holds the
-hidden layer's activations at the points, weighted by the square root of `measure`, and `rhs` the
-target weighted the same way; `features \\ rhs` is the least-squares problem whose solution is the
-output layer. `gradient` is the misfit's derivative with respect to the hidden parameters, and
-`misfit` the misfit of the fitted field.
+`points` holds the normalised time and the space coordinate of every point of the sample, `measure`
+the weight the slab's measure gives that point, and `target` and `values` the target and the field
+there, one row per point and one column per component. `features` holds the hidden layer's
+activations at the points, weighted by the square root of `measure`, and `rhs` the target weighted
+the same way; `features \\ rhs` is the least-squares problem whose solution is the output layer.
+`gradient` is the misfit's derivative with respect to the hidden parameters, and `misfit` the misfit
+of the fitted field.
 
-The buffers are of the problem's element type, and the method holds no state of the fit.
+The buffers are of the problem's element type. `points` and `measure` depend on the block's rules
+alone, and every fit overwrites the rest, so the method holds no state of the fit.
 """
 mutable struct TrainedFit{ST}
-    method::Union{Nothing, TrainedHiddenLayer}
-    initial::Vector{ST}
-    face_target::Matrix{ST}
     points::Matrix{ST}
     measure::Vector{ST}
     target::Matrix{ST}
@@ -40,8 +34,8 @@ mutable struct TrainedFit{ST}
 end
 
 function TrainedFit(::Type{ST}) where {ST}
-    return TrainedFit{ST}(nothing, ST[], zeros(ST, 0, 0), zeros(ST, 2, 0), ST[],
-        zeros(ST, 0, 0), zeros(ST, 0, 0), zeros(ST, 0, 0), zeros(ST, 0, 0), ST[], zero(ST))
+    return TrainedFit{ST}(zeros(ST, 2, 0), ST[], zeros(ST, 0, 0), zeros(ST, 0, 0),
+        zeros(ST, 0, 0), zeros(ST, 0, 0), ST[], zero(ST))
 end
 
 """
@@ -58,34 +52,27 @@ function misfit(f::TrainedFit{ST}) where {ST}
     return total
 end
 
-# Whether the workspace has to be built again for this method, this draw and these sizes.
-function fit_stale(f::TrainedFit{ST}, method::TrainedHiddenLayer, draw::AbstractVector{ST},
-        S::Integer, D::Integer, N::Integer) where {ST}
-    f.method === nothing && return true
-    f.method.epochs == method.epochs || return true
-    f.method.learning_rate == method.learning_rate || return true
-    f.initial == draw || return true
+# Whether the workspace has to be built again for these sizes.
+function fit_stale(f::TrainedFit, S::Integer, D::Integer, N::Integer)
     length(f.measure) == N || return true
     size(f.target) == (N, D) || return true
     return size(f.features) != (N, S)
 end
 
 """
-    fit_layout!(f, method, draw, ansatz, s)
+    fit_layout!(f, ansatz, s)
 
 Build the sample the fit is taken on: the points of the ansatz's own interior rule, then the four
 surfaces at the nodes of the trace basis' rules, and the weight the slab's measure gives each of
 them — `ωₜ ωₓ` in the interior, `ωₓ` at the two surfaces in time and `ωₜ` at the two in space.
 """
-function fit_layout!(f::TrainedFit{ST}, method::TrainedHiddenLayer,
-        draw::AbstractVector{ST}, ansatz, s) where {ST}
+function fit_layout!(f::TrainedFit{ST}, ansatz, s) where {ST}
     S, D = ansatz.S, ansatz.D
     tq, xq = s.tabulation.time, s.tabulation.space
     tt, xt = s.trace_tabulation.time, s.trace_tabulation.space
     qt, qx, qtt, qxt = nquadrature(tq), nquadrature(xq), nquadrature(tt), nquadrature(xt)
     N = qt * qx + 2 * qxt + 2 * qtt
-    if fit_stale(f, method, draw, S, D, N)
-        f.method, f.initial = method, collect(draw)
+    if fit_stale(f, S, D, N)
         f.points, f.measure = zeros(ST, 2, N), zeros(ST, N)
         f.target, f.values = zeros(ST, N, D), zeros(ST, N, D)
         f.rhs, f.features = zeros(ST, N, D), zeros(ST, N, S)
@@ -111,28 +98,30 @@ function fit_layout!(f::TrainedFit{ST}, method::TrainedHiddenLayer,
             f.measure[k] = tt.weight[q]
         end
     end
-    size(f.face_target) == (2 * qxt + 2 * qtt, D) && return nothing
-    f.face_target = zeros(ST, 2 * qxt + 2 * qtt, D)
     return nothing
 end
 
-# The target of every point of the sample: the interior one as the guess sampled it, and the four
-# surfaces from the target the fit was given.
-function sample_target!(f::TrainedFit{ST}, sample::AbstractArray{ST, 3}, s) where {ST}
-    tq, xq = s.tabulation.time, s.tabulation.space
-    qt, qx, D = nquadrature(tq), nquadrature(xq), size(sample, 3)
+# The target of every point of the sample, from the fit's sample `(; interior, faces)`: the interior
+# one as the guess sampled it, and then the four surfaces.
+function sample_target!(f::TrainedFit{ST}, sample::NamedTuple, s) where {ST}
+    (; interior, faces) = sample
+    qt, qx, D = size(interior)
+    size(f.target) == (qt * qx + size(faces, 1), D) && size(faces, 2) == D ||
+        throw(DimensionMismatch("the sample has $(qt * qx) interior and $(size(faces, 1)) face " *
+                                "points of $D component(s); the fit is laid out for " *
+                                "$(size(f.target, 1)) points of $(size(f.target, 2))"))
     k = 0
     for q in 1:qt, r in 1:qx
 
         k += 1
         for d in 1:D
-            f.target[k, d] = sample[q, r, d]
+            f.target[k, d] = interior[q, r, d]
         end
     end
-    for row in axes(f.face_target, 1)
+    for row in axes(faces, 1)
         k += 1
         for d in 1:D
-            f.target[k, d] = f.face_target[row, d]
+            f.target[k, d] = faces[row, d]
         end
     end
     for k in 1:length(f.measure), d in 1:D
@@ -199,21 +188,23 @@ layer from the method's generator, read the output weights of that draw by least
 once per epoch, take one gradient-descent step on the hidden parameters and read the output weights
 again. `epochs = 0` leaves the drawn hidden layer in place and fits the output layer alone.
 
+`sample` is the fit's sample `(; interior, faces)` of [`fit_sample`](@ref). The draw is taken once
+in `Float64` and rounded to the element type, so that one generator gives one hidden layer in every
+precision, up to rounding.
+
 The parameters are written into `w` in the order `L1.W`, `L1.b`, `L2.W`; `w`'s hidden part — the
 entries before `first_free`, which the mode does not free — is the draw's, whatever it held before.
 """
 function fit_trained!(f::TrainedFit{ST}, method::TrainedHiddenLayer, w::AbstractVector{ST},
-        ansatz, sample::AbstractArray{ST, 3}, s) where {ST}
+        ansatz, sample::NamedTuple, s) where {ST}
     S, D = ansatz.S, ansatz.D
     nh = ansatz.np - S * D
     rng = copy(method.rng)
-    draw = Vector{ST}(undef, nh)
-    for θ in eachindex(draw)
-        draw[θ] = 2 * rand(rng, ST) - 1
+    for θ in 1:nh
+        w[θ] = convert(ST, 2 * rand(rng) - 1)
     end
-    fit_layout!(f, method, draw, ansatz, s)
+    fit_layout!(f, ansatz, s)
     sample_target!(f, sample, s)
-    copyto!(w, 1, draw, 1, nh)
     solve_output_layer!(f, w, ansatz, s)
     if method.epochs > 0
         δ = convert(ST, method.learning_rate)

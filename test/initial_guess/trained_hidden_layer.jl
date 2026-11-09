@@ -56,10 +56,10 @@ const TRAINED_MISFIT_FRACTION = 1 // 2
 The two misfits of E1a's fit, by element type and components: `drawn` is the fit that solves the
 output layer alone on the hidden layer `Xoshiro(1234)` draws, and `trained` the same fit after 60
 epochs at `learning_rate = 1e-2`. Measured on `arm64-apple-darwin27.0.0` at Julia 1.13.3:
-`0.5551 → 0.04409` in `Float64` at both `D = 1` and `D = 2`, `0.5551 → 0.04443` in `Float32` at
-`D = 1`, and `0.5551 → 0.04402` in `Float32` at `D = 2`, where the least-squares solve carries a
-second, zero column and its QR path differs. The same fits at Julia 1.12.7 leave `0.04485` in
-`Float32` at `D = 1` and `0.04438` at `D = 2`.
+`0.5551 → 0.04409` in `Float64` at both `D = 1` and `D = 2`, `0.5551 → 0.04453` in `Float32` at
+`D = 1`, and `0.5551 → 0.04431` in `Float32` at `D = 2`, where the least-squares solve carries a
+second, zero column and its QR path differs. The same fits at Julia 1.12.7 leave `0.04407` in
+`Float32` at `D = 1` and `0.04389` at `D = 2`.
 
 The values are recorded, not asserted: a `Float32` misfit moves in its third significant digit
 between the two Julia versions and under a one-ulp change of its learning rate, so no bound on it
@@ -73,7 +73,7 @@ const TRAINED_MISFITS = (
         (Float32, 1) => 0.5551, (Float32, 2) => 0.5551),
     trained = Dict{Tuple{DataType, Int}, Float64}(
         (Float64, 1) => 0.04409, (Float64, 2) => 0.04409,
-        (Float32, 1) => 0.04443, (Float32, 2) => 0.04402))
+        (Float32, 1) => 0.04453, (Float32, 2) => 0.04431))
 
 function trained_ansatz(::Type{T}; S = FIT_S, D = 1, mode = :last_layer, degree = 3,
         ncells = (2, 5), xspan = (zero(T), one(T))) where {T}
@@ -148,23 +148,24 @@ function trained_slab(problem, method)
 end
 
 """
-The interior sample the fit reads, of size `(Qt, Qx, D)`, rebuilt from the fit's own workspace in
-the order the workspace lays its points out: the space index runs fastest inside a time row.
+The sample `(; interior, faces)` the fit reads, rebuilt from the fit's own workspace in the order
+the workspace lays its points out: the interior, of size `(Qt, Qx, D)`, whose space index runs
+fastest inside a time row, and then the rows of the four faces.
 """
-function interior_sample(f, block)
+function workspace_sample(f, block)
     qt = length(block.tabulation.time.node)
     qx = length(block.tabulation.space.node)
     D = size(f.target, 2)
-    sample = similar(f.target, qt, qx, D)
+    interior = similar(f.target, qt, qx, D)
     k = 0
     for q in 1:qt, r in 1:qx
 
         k += 1
         for d in 1:D
-            sample[q, r, d] = f.target[k, d]
+            interior[q, r, d] = f.target[k, d]
         end
     end
-    return sample
+    return (; interior, faces = f.target[(k + 1):end, :])
 end
 
 """The misfit of a fitted parameter vector on the fit's own sample, `Σ_k ω_k (u_k − f_k)²`, read
@@ -326,8 +327,9 @@ end
         qxt, qtt = length(xt.weight), length(tt.weight)
         @test length(f.measure) == SAMPLE_ENTRIES
         @test length(f.target) == SAMPLE_ENTRIES
+        face_rows = view(f.target, (interior + 1):SAMPLE_ENTRIES, 1)
         @test maximum(abs, view(f.target, 1:interior, 1)) < 1 // 10^6
-        @test maximum(abs, f.face_target) > zero(T)
+        @test maximum(abs, face_rows) > zero(T)
         # the weight of every point of the sample: the interior's tensor product of the two rules,
         # and each of the four faces by the weights of the other direction
         expected = T[]
@@ -357,7 +359,7 @@ end
             M.evaluate_at!(c.ansatz, tt.node[q], xspan(ansatz)[r])
             push!(faces, c.ansatz.values[1])
         end
-        @test maximum(abs, faces) > T(1 // 1000) * maximum(abs, f.face_target)
+        @test maximum(abs, faces) > T(1 // 1000) * maximum(abs, face_rows)
     end
 
     # The draw is the method's own: two guesses of one method object agree whatever the process's
@@ -405,11 +407,10 @@ end
                 guess = FitTo(InitialCondition(); method = TrainedHiddenLayer(epochs = 0)))))
         f = c.ansatz.train
         w = copy(c.ansatz.params)
-        @test f.method.epochs == 0
-        # the hidden parameters are the draw, one scalar at a time from the method's own generator
+        # the hidden parameters are the draw of the method's own generator, taken in `Float64` and
+        # rounded to the element type
         rng = copy(Xoshiro(1234))
-        @test w[1:(3 * FIT_S)] ==
-              T[T(2) * rand(rng, T) - one(T) for _ in 1:(3 * FIT_S)]
+        @test w[1:(3 * FIT_S)] == T[T(2 * rand(rng) - 1) for _ in 1:(3 * FIT_S)]
         @test any(x -> !iszero(x), w[(3 * FIT_S + 1):end])
         @test f.misfit ≤ fitted_misfit(c.ansatz, w) * (one(T) + sqrt(eps(T)))
         # the output layer is the least-squares solution, so the misfit's derivative with respect to
@@ -553,7 +554,7 @@ end
                 initial_guess = FitTo(InitialCondition();
                     method = TrainedHiddenLayer(epochs = 4)))))
         f = c.ansatz.train
-        sample = interior_sample(f, c.ansatz)
+        sample = workspace_sample(f, c.ansatz)
         w = copy(c.ansatz.params)
         M.fit!(w, TrainedHiddenLayer(epochs = 4), ansatz, sample, c)
         four = copy(w)
@@ -561,12 +562,36 @@ end
         @test w == fresh(8)
         @test four == fresh(4)
         @test w != four
-        # the workspace names the method it was last built for, so the key holds `epochs`
-        @test f.method.epochs == 8
+    end
+
+    # A direct fit takes its faces from the sample it is given, never from a workspace that a guess
+    # filled before it: a block whose guess never fitted takes the four faces of the initial
+    # condition from the sample alone, and an interior sample without faces is refused.
+    @testset "E2b a direct fit takes the faces of its sample" for T in (Float64, Float32)
+        problem = wave_problem(T)
+        ansatz = trained_ansatz(T)
+        c = cache(trained_slab(problem,
+            trained_method(T; guess = FitTo(InitialCondition(); method = OrthogonalGreedy()))))
+        @test isempty(c.ansatz.train.target)
+        tnodes, xnodes = M.quadrature_points(c.ansatz)
+        interior = zeros(T, length(tnodes), length(xnodes), 1)
+        M.evaluate!(interior, InitialCondition(), c, ansatz, problem, nothing)
+        method = TrainedHiddenLayer(epochs = 0)
+        sample = M.fit_sample(
+            method, interior, InitialCondition(), c, ansatz, problem, nothing)
+        @test maximum(abs, sample.faces) > T(1 // 100)
+        w = copy(c.ansatz.params)
+        M.fit!(w, method, ansatz, sample, c)
+        f = c.ansatz.train
+        nint = length(interior)
+        @test f.target[(nint + 1):end, :] == sample.faces
+        @test f.target[1:nint, 1] == vec(permutedims(interior[:, :, 1]))
+        @test_throws MethodError M.fit!(copy(w), method, ansatz, interior, c)
     end
 
     # The direct linear solve is offered to a `:last_layer` network on a linear density, and to no
-    # other network; the mode is what the first refusal names and the density the second.
+    # other network; the ansatz is what the first refusal names and the density the second, and
+    # `has_affine_step` is the mode's answer.
     @testset "E3a the option is admitted for the mode alone" for T in (Float64, Float32)
         transport = linear_transport_problem(T)
         xspan = (T(-0.5), zero(T))
@@ -590,8 +615,10 @@ end
             e
         end
         @test all_mode isa ArgumentError
-        @test occursin(":all", all_mode.msg)
+        @test occursin("NetworkAnsatz", all_mode.msg)
         @test occursin("affine", all_mode.msg)
+        @test M.has_affine_step(trained_ansatz(T; mode = :last_layer))
+        @test !M.has_affine_step(trained_ansatz(T; mode = :all))
         nonlinear = try
             GeometricIntegrator(vector_wave_problem(T; β = 0.5),
                 SpaceTimeGalerkin(trained_ansatz(T; S = 20, D = 2),

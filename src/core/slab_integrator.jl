@@ -111,21 +111,15 @@ solve (`linear_solver = true`) on an ansatz whose step is not affine in its unkn
 that is not linear, and what the ansatz's [`check_ansatz`](@ref) and the coupling's
 [`check_coupling`](@ref) refuse.
 
-The direct linear solve is offered to two kinds of step: one whose unknowns enter its equations
-linearly, which is what `is_linear_in_coefficients` reports, and a [`NetworkAnsatz`](@ref) in
-`:last_layer` mode, whose free output weights enter its equations affinely while its hidden layer is
-data. Any other network is refused by mode, because Newton determines every layer in `:all` mode.
+The direct linear solve is offered to an ansatz whose step is affine in its unknowns, which
+[`has_affine_step`](@ref) reports.
 """
 function check_method(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin)
     a = ansatz(method)
     if method.linear_solver
-        if a isa NetworkAnsatz && a.mode !== :last_layer
-            throw(ArgumentError("linear_solver = true needs an ansatz whose step is affine in its unknowns; " *
-                                "NetworkAnsatz in :$(a.mode) mode is not"))
-        end
-        (is_linear_in_coefficients(a) || (a isa NetworkAnsatz && a.mode === :last_layer)) ||
-            throw(ArgumentError("linear_solver = true needs an ansatz that is linear in its " *
-                                "coefficients; $(nameof(typeof(a))) is not"))
+        has_affine_step(a) ||
+            throw(ArgumentError("linear_solver = true needs an ansatz whose step is affine in its " *
+                                "unknowns; $(nameof(typeof(a))) is not"))
         is_linear_density(problem.density) ||
             throw(ArgumentError("linear_solver = true needs a linear Lagrangian density; " *
                                 "the problem's density is not linear"))
@@ -281,30 +275,24 @@ layer in the block, which the block of another element type does not inherit.
 copy_ansatz_data!(cache_data, data) = nothing
 
 """
-    nheld_parameters(block)
+    has_affine_step(ansatz)
 
-The number of a block's leading parameters that a step holds fixed: the ones it reads and never
-frees, on which the step's Jacobian therefore depends. An ansatz whose every unknown is a row of the
-solver's vector holds none, and the default answers 0.
+Whether the ansatz's step is affine in its unknowns, which the direct linear solve
+(`linear_solver = true`) needs. An ansatz linear in its coefficients has one; a
+[`NetworkAnsatz`](@ref) has one in `:last_layer` mode alone, whose free output weights enter the
+step affinely while its hidden layer is data, and not in `:all` mode, where Newton determines every
+layer.
 """
-nheld_parameters(block) = 0
-
-"""
-    held_parameters_changed(held, block)
-
-Whether the parameters the block's step holds fixed differ from the copy `held`, of the length
-[`nheld_parameters`](@ref)`(block)` that a factorisation was taken with. A block that holds no
-parameter answers `false`.
-"""
-held_parameters_changed(held::AbstractVector, block) = false
+has_affine_step(a) = is_linear_in_coefficients(a)
 
 """
-    copy_held_parameters!(held, block)
+    held_parameters(block)
 
-Write the parameters the block's step holds fixed into `held`, the copy a factorisation was taken
-with. A block that holds no parameter writes nothing.
+The parameters the block's step holds fixed: the ones it reads and never frees, on which the step's
+Jacobian therefore depends. An ansatz whose every unknown is a row of the solver's vector holds
+none, and the default is the empty range.
 """
-copy_held_parameters!(held::AbstractVector, block) = nothing
+held_parameters(block) = 1:0
 
 """
     bottom_datum(data)
@@ -393,7 +381,6 @@ mutable struct SpaceTimeGalerkinCache{ST, AD, CD <: CouplingData} <: IntegratorC
     converged::Vector{Bool}
     steps::Int
     factorisations::Int
-    linear_lu::Union{Nothing, LinearSolver}
     linear_held::Vector{ST}
     linear_rhs::Vector{ST}
     linear_zero::Vector{ST}
@@ -412,7 +399,7 @@ function Cache{ST}(problem::LagrangianPDEProblem,
     D = components(problem)
     nfree = total_free_coefficients(method, problem)
     nlin = method.linear_solver ? nfree : 0
-    nheld = method.linear_solver ? nheld_parameters(slab) : 0
+    nheld = method.linear_solver ? length(held_parameters(slab)) : 0
     return SpaceTimeGalerkinCache{ST, typeof(slab),
         coupling_data_type(coupling(method), a, problem, ST)}(
         zeros(ST, nfree),
@@ -431,7 +418,6 @@ function Cache{ST}(problem::LagrangianPDEProblem,
         Bool[],
         0,
         0,
-        nothing,
         zeros(ST, nheld),
         zeros(ST, nlin),
         zeros(ST, nlin),
@@ -475,8 +461,8 @@ end
     reset!(cache::SpaceTimeGalerkinCache)
 
 Clear the state a run leaves in the cache: the step counter, which is what tells the coupling and
-the guess whether the slab is the run's first, the linear-solver factorisation with the counter and
-the copy of the parameters it was taken with, and the per-step records of the Newton solve.
+the guess whether the slab is the run's first, the counter of linear-solver factorisations, at zero
+of which the next step factorises again, and the per-step records of the Newton solve.
 
 A run starts at the problem's initial data, so a cache that still counted the previous run's steps
 would hand that run's last top row to the new first slab as its bottom datum.
@@ -484,11 +470,6 @@ would hand that run's last top row to the new first slab as its bottom datum.
 function reset!(c::SpaceTimeGalerkinCache)
     c.steps = 0
     c.factorisations = 0
-    c.linear_lu = nothing
-    # The copy is read only where `linear_lu` is set, and the factorisation that sets it rewrites
-    # the copy before the comparison reads it. A copy left uncleared here is therefore never
-    # consulted, and the clearing is what keeps the cache's two linear-path states in step.
-    fill!(c.linear_held, zero(eltype(c.linear_held)))
     empty!(c.iterations)
     empty!(c.residuals)
     empty!(c.initial_residuals)
@@ -673,21 +654,20 @@ function integrate_step!(sol, history, params,
         s = solver(int)
         residual!(c.linear_rhs, x, sol, params, int)
         r₀ = norm(c.linear_rhs)
-        lu_fac = c.linear_lu
-        if lu_fac === nothing || held_parameters_changed(c.linear_held, c.ansatz)
+        lsolver = linearsolver(s)
+        held = held_parameters(c.ansatz)
+        if c.factorisations == 0 || held != c.linear_held
             jacobian!(s, c.linear_zero, (sol, params, int))
-            lu_fac = linearsolver(s)
-            factorize!(lu_fac, jacobianmatrix(s))
-            c.linear_lu = lu_fac
+            factorize!(lsolver, jacobianmatrix(s))
             c.factorisations += 1
-            copy_held_parameters!(c.linear_held, c.ansatz)
+            copyto!(c.linear_held, held)
         end
         residual!(c.linear_rhs, c.linear_zero, sol, params, int)
-        ldiv!(c.linear_rhs, lu_fac, c.linear_rhs)
+        ldiv!(c.linear_rhs, lsolver, c.linear_rhs)
         x .= .-c.linear_rhs
         # one step of iterative refinement with the same factorisation
         residual!(c.linear_rhs, x, sol, params, int)
-        ldiv!(c.linear_rhs, lu_fac, c.linear_rhs)
+        ldiv!(c.linear_rhs, lsolver, c.linear_rhs)
         x .-= c.linear_rhs
         residual!(c.linear_rhs, x, sol, params, int)
         rfₐ = norm(c.linear_rhs)

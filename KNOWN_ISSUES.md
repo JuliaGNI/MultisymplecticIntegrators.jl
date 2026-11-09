@@ -234,9 +234,9 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - evidence: `J_h = Σⱼ (u¹ⱼ λ²ⱼ − u²ⱼ λ¹ⱼ)` over the top trace and the top multiplier of a
   `VectorWave` run at `β = 0`, `S = 20`, `D = 2`, `degree = 3`, `ncells = (2, 5)`,
   `f_abstol = 0` and `f_reltol = trained_f_reltol(T)` drifts from `-0.4362` to `-0.5558` over ten
-  steps in `Float64`, a largest deviation of `0.1196`, and from `-0.4101` to `-0.4782` in
-  `Float32`, `0.0681`; both runs converge at every step in two iterations, at largest step ratios
-  of `3.26e-5` and `4.27e-3`. `λ_top` lies in the near-null space of the `:last_layer` saddle
+  steps in `Float64`, a largest deviation of `0.1196`, and from `-0.4101` to `-0.4783` in
+  `Float32`, `0.0682`; both runs converge at every step in two iterations, at largest step ratios
+  of `3.26e-5` and `4.26e-3`. `λ_top` lies in the near-null space of the `:last_layer` saddle
   point, whose constraint block reaches only the output weights — the `LinearTransport` Jacobian
   at `S = 10` and `D = 2` has rank 40 of 52 — so resolving it makes the run unstable and
   truncating it leaves the slab's equations unsatisfied there: at a cutoff of `1e-14` the

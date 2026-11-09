@@ -527,8 +527,15 @@ makes it worth keeping.
   the four surfaces of the slab beside its interior — the two in time at the span's space rule and
   the two in space at the slab's time rule — with each face weighted by the other direction's
   weights, so the initial and boundary data enter the fit as they entered the old calibration grid.
-  The fit's buffers live in the block (`TrainedFit`), its generator is copied per call and never
-  advanced, and a network in `:all` mode is refused, because Newton determines every layer there.
+  The sample is the fit's argument, not the block's: the internal `fit_sample` returns the interior
+  sample for every other method and the named tuple `(; interior, faces)` for `TrainedHiddenLayer`,
+  so a direct `fit!` takes its faces from the sample it is given, and an interior array alone is
+  refused with a `MethodError`. The fit's buffers live in the block (`TrainedFit`), which keeps no
+  record of the method or of the draw: they are rebuilt only when the sizes change, and every field
+  is concretely typed. The generator is copied per call and never advanced, and the hidden layer
+  is drawn once in `Float64` and rounded to the element type, so one generator gives one hidden
+  layer in every precision up to rounding. A network in `:all` mode is refused, because Newton
+  determines every layer there.
   `Random` returns to `[deps]` with a `1` bound, for the generator of the draw alone; the
   `julia = "1.12"` entry under Breaking Changes records its removal.
   `test/initial_guess/trained_hidden_layer.jl` joins the `slow` group.
@@ -543,20 +550,27 @@ makes it worth keeping.
 - **The direct linear solve is a `:last_layer` network's option, and its factorisation is the
   solver's own.** `check_method` admits `linear_solver = true` for a `NetworkAnsatz` in
   `:last_layer` mode on a linear density beside the ansatz it already admitted — one whose step is
-  linear in its coefficients — and names the mode where it refuses a network in `:all` mode and the
-  density where the density is not linear. The step's factorisation is the solver's own
+  linear in its coefficients. The admission is one seam, `has_affine_step(ansatz)`:
+  `is_linear_in_coefficients` by default, and `mode === :last_layer` for a `NetworkAnsatz`. The
+  refusal names the ansatz type where the step is not affine ("needs an ansatz whose step is affine
+  in its unknowns; NetworkAnsatz is not", for a network in `:all` mode) and the density where the
+  density is not linear. The step's factorisation is the solver's own
   `linear_solver_method` rather than a hard-coded `lu`: for a network that is
   `SimpleSolvers.LapackPivotedQR`, whose minimum-norm step solves the rank-deficient saddle point
-  that a `:last_layer` Jacobian is, and the cache's `linear_lu` field holds it of whatever type it
-  is. The observable of the option is the step's residual — in `Float64` at most `1.5e-14` of its
-  initial residual over three slabs of `LinearTransport` at `S = 20` and `D = 2`, which is
-  `69 eps(Float64)`, and in `Float32` at most `2.4e-2` over the same three slabs, which is not
-  converged under the solver's default tolerances: two iterations per step, and each step warns
-  that the nonlinear solve did not converge — taken with one factorisation at the run's first step
-  and again at every step whose guess has moved the parameters the step holds fixed, which for a
-  `:last_layer` network is its hidden layer, and two recorded solves per step; the vector's distance
-  from a Newton solve's is not an observable, because the Jacobian's near-null space leaves it
-  undetermined. The ELM family's direct least-squares branch is this option.
+  that a `:last_layer` Jacobian is. The factorisation stays in the solver's own linear solver,
+  `linearsolver(s)`, and the cache keeps none: a step factorises when `factorisations` is zero,
+  which is a run's first step and the first after `reset!`, or when the parameters the step holds
+  fixed differ from the cache's copy. Those parameters are one seam, `held_parameters(block)`: the
+  empty range `1:0` by default, and the hidden parameters before `first_free` for a network, which
+  is its hidden layer. The observable of the option is the step's residual — in `Float64` at most
+  `1.5e-14` of its initial residual over three slabs of `LinearTransport` at `S = 20` and `D = 2`,
+  which is `69 eps(Float64)`, and in `Float32` at most `2.4e-2` over the same three slabs, which is
+  not converged under the solver's default tolerances: two iterations per step, and each step warns
+  that the nonlinear solve did not converge — with two recorded solves per step; the vector's
+  distance from a Newton solve's is not an observable, because the Jacobian's near-null space
+  leaves it undetermined. The option is available to an ELM, a `:last_layer` network fitted by
+  `TrainedHiddenLayer`; the registered ELM family, `scripts/elm_model.jl`, solves each slab with
+  Newton and leaves `linear_solver` at its default `false`.
 - **`LinearTransport`'s density is the doubled field's.** `L = ψ (v₁ + c w₁)` on `D = 2`, with
   component 1 the transported field `u` and component 2 the adjoint field `ψ` of zero data: `ψ`'s
   rows carry the transport equation for `u` and `u`'s rows the adjoint equation for `ψ`, where
