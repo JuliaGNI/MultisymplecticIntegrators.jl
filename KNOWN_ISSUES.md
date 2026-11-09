@@ -258,10 +258,10 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   bubble forms and with and without the projected solve, and the matrix's thirty rows for it are
   built by `scripts/experiments.jl` without being run. A two-step run at `max_iterations = 3` on
   `Wave` at `h = 0.05`, `Sx = 8`, `St = 10`, `ncells = 20` and `nq = (6, 4)` fails U12's rule at both
-  steps in all four combinations, at final residuals of `9.13e-4` and `1.53e-4` (joint, `:abg`),
-  `0.179` and `3.54e-3` (projected, `:abg`), `1.03e-4` and `1.03e-4` (joint, `:tsr`) and `0.217` and
-  `1.18e-3` (projected, `:tsr`), from initial residuals of `6.81e-3` (`:abg`) and `6.82e-3`
-  (`:tsr`) at the first step, and `0.0691`, `0.301`, `5.74e-3` and `0.301` at the second; while the
+  steps in all four combinations, at final residuals of `9.26e-4` and `1.78e-4` (joint, `:abg`),
+  `0.200` and `4.60e-3` (projected, `:abg`), `1.03e-4` and `1.03e-4` (joint, `:tsr`) and `0.234` and
+  `4.14e-3` (projected, `:tsr`), from initial residuals of `6.82e-3` (`:abg`) and `6.83e-3`
+  (`:tsr`) at the first step, and `0.0766`, `0.335`, `5.74e-3` and `0.335` at the second; while the
   dead branch — `Continuation()` with `Newton()` on a pivoted QR cut at `1e-12` — converges 20 of 20
   steps at a worst ratio of `2.96e-10` and an error of `6.6156e-4` at `t = 1`. The affine control
   under this guess has no solution at all: `FitTo(Predictor())` moves level 1's hidden layer away

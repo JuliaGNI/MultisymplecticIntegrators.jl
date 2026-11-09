@@ -56,10 +56,14 @@ function clause_ansatz(problem; Sx = 8, St = 10, form = :abg, mode = :all)
     return fixed_ansatz(problem; Sx = Sx, St = St, form = form, mode = mode, ncells = 20)
 end
 
-"""`Wave` or `SineGordon` at the clause's time step, on `[0, 1]` with `xstep = 0.05`."""
-function clause_problem(name::Symbol; timestep = 0.05, T = Float64)
+"""
+`Wave` or `SineGordon` at the clause's time step, on `[0, 1]` with `xstep = 0.05`, over `steps`
+slabs of `timestep` each. A testset that runs more than one step names the count its clause gives.
+"""
+function clause_problem(name::Symbol; timestep = 0.05, steps = 1, T = Float64)
     problem = name === :wave ? WF.problem : SG.problem
-    return problem(T = T, timespan = (zero(T), T(timestep)), timestep = T(timestep),
+    return problem(
+        T = T, timespan = (zero(T), T(steps * timestep)), timestep = T(timestep),
         xstep = T(0.05), xspan = (zero(T), one(T)))
 end
 
@@ -182,14 +186,16 @@ const PROBLEMS = Dict(
     @test M.free_indices(wide) == vcat(collect(17:32), 32 .+ collect(31:50))
     network = NetworkAnsatz(S = 4, xspan = (0.0, 1.0), ncells = (2, 5), degree = 3)
     spline = TensorBSplineAnsatz(degree = 3, ncells = (2, 5), xspan = (0.0, 1.0))
-    @test_throws r"^FixedBoundary takes a FixedBoundaryNetwork, got NetworkAnsatz$" GeometricIntegrator(
+    # `@test_throws` matches its `Regex` against `sprint(showerror, e)`, which prefixes the
+    # exception's type, so the anchors hold only when the type is part of the pattern.
+    @test_throws r"^ArgumentError: FixedBoundary takes a FixedBoundaryNetwork, got NetworkAnsatz$" GeometricIntegrator(
         problem, SpaceTimeGalerkin(network, FixedBoundary()))
-    @test_throws r"^FixedBoundary takes a FixedBoundaryNetwork, got TensorBSplineAnsatz$" GeometricIntegrator(
+    @test_throws r"^ArgumentError: FixedBoundary takes a FixedBoundaryNetwork, got TensorBSplineAnsatz$" GeometricIntegrator(
         problem, SpaceTimeGalerkin(spline, FixedBoundary()))
     for coupling in (WeakInitialAndBoundaryConditions(), WeakInitialCondition(),
         CoefficientRestriction())
-        @test_throws Regex("^a FixedBoundaryNetwork takes the FixedBoundary coupling, got " *
-                           "$(nameof(typeof(coupling)))\$") GeometricIntegrator(
+        @test_throws Regex("^ArgumentError: a FixedBoundaryNetwork takes the FixedBoundary " *
+                           "coupling, got $(nameof(typeof(coupling)))\$") GeometricIntegrator(
             problem, SpaceTimeGalerkin(a, coupling))
     end
     method = SpaceTimeGalerkin(a, FixedBoundary())
@@ -326,7 +332,7 @@ end
     # iterations and of one `Newton()` takes, unchanged by a further residual evaluation and by a
     # second step
     for solvermethod in (LevenbergMarquardt(), Newton())
-        problem = clause_problem(:wave)
+        problem = clause_problem(:wave; steps = 2)
         ansatz = clause_ansatz(problem)
         method = SpaceTimeGalerkin(ansatz, FixedBoundary(); initial_guess = Continuation())
         int = GeometricIntegrator(problem, method; solver = solvermethod,
@@ -345,17 +351,18 @@ end
         integrate!(solstep, int)
         solved = copy(c.x)
         handed = copy(c.coupling.p_next)
+        solved_level = copy(c.ansatz.params[1:M.nspatial(ansatz)])
         scale = maximum(abs, handed)
         @test all(isfinite, handed)
         @test maximum(abs,
             oracle_momentum(oracle, datum, solved) - handed) ≤ 100 * eps(Float64) * scale
-        # a further residual evaluation at another vector rewrites no part of the record
+        # a further residual evaluation at another vector rewrites no part of the record — the
+        # block's own parameters it does rewrite, which is why the level is read before it
         other = 2 .* rand(MersenneTwister(11), Float64, length(solved)) .- 1
         b = zeros(length(solved))
         M.residual!(b, other, nothing, p, int)
         @test c.coupling.p_next == handed
         # the second slab's datum is that block and that level, exactly
-        solved_level = copy(c.ansatz.params[1:M.nspatial(ansatz)])
         next_fixed_slab!((; problem, method, int, solution, solstep, ansatz), 2)
         @test c.coupling.momentum == handed
         @test c.coupling.phi == solved_level
@@ -373,7 +380,7 @@ end
     end
     for name in (:wave, :sinegordon), form in (:abg, :tsr)
 
-        problem = clause_problem(name)
+        problem = clause_problem(name; steps = 3)
         method = SpaceTimeGalerkin(clause_ansatz(problem; form = form), FixedBoundary())
         result = integrate(problem, method; max_iterations = 3, verbosity = 0)
         @test length(result.traces) == 3
@@ -669,7 +676,7 @@ end
     problem = PROBLEMS[:wave]()
     a = FixedBoundaryNetwork(Sx = 8, St = 9, bubble_form = :tsr, xspan = (0.0, 1.0),
         ncells = 3, nq = (4, 3))
-    @test_throws r"^the bubble's unit 5 has α = β = 0, that is r = 0, and no \(θ, s, ρ\) coordinates: exp\(ρ\) is never zero$" M.bubble_start(
+    @test_throws r"^ArgumentError: the bubble's unit 5 has α = β = 0, that is r = 0, and no \(θ, s, ρ\) coordinates: exp\(ρ\) is never zero$" M.bubble_start(
         a, Float64)
     abg = FixedBoundaryNetwork(Sx = 8, St = 9, bubble_form = :abg, xspan = (0.0, 1.0),
         ncells = 3, nq = (4, 3))
@@ -778,18 +785,18 @@ end
     transport = M.LinearTransport.problem(timespan = (0.0, 0.1), timestep = 0.05,
         xstep = 0.05, xspan = (0.0, 1.0))
     ansatz = fixed_ansatz(transport; Sx = 2, St = 2)
-    @test_throws r"^Predictor\(\) needs a density whose ∂L/∂v" GeometricIntegrator(
+    @test_throws r"^ArgumentError: Predictor\(\) needs a density whose ∂L/∂v" GeometricIntegrator(
         transport,
         SpaceTimeGalerkin(ansatz, FixedBoundary(); initial_guess = FitTo(Predictor())))
     # A density whose `∂L/∂v` is nonlinear vanishes at zero velocity and gives one value at
     # `v = 1` too: only a second velocity shows that its ratio is not the constant `m`.
     u_, v_, w_ = Symbolics.variable.((:u, :v, :w))
     cubic = LagrangianDensity(v_^3 / 3, u_, v_, w_)
-    @test_throws r"^Predictor\(\) needs one constant ∂L/∂v / v" M.predictor_mass(
+    @test_throws r"^ArgumentError: Predictor\(\) needs one constant ∂L/∂v / v" M.predictor_mass(
         cubic, NamedTuple(), Float64, 1)
     wave = PROBLEMS[:wave]()
     spline = TensorBSplineAnsatz(degree = 3, ncells = (1, 5), xspan = (0.0, 1.0))
-    @test_throws r"^Predictor\(\) needs a FixedBoundaryNetwork; TensorBSplineAnsatz has no slab predictor$" GeometricIntegrator(
+    @test_throws r"^ArgumentError: Predictor\(\) needs a FixedBoundaryNetwork; TensorBSplineAnsatz has no slab predictor$" GeometricIntegrator(
         wave, SpaceTimeGalerkin(spline, WeakInitialCondition();
             initial_guess = FitTo(Predictor())))
 end
@@ -919,7 +926,7 @@ end
     # N22: a step that does not reach the tolerance leaves its last accepted iterate, the momentum
     # of that iterate and its three numbers; the next slab starts from them, and `on_failure` is
     # the one place that acts on the record.
-    problem = clause_problem(:wave; timestep = 0.05)
+    problem = clause_problem(:wave; timestep = 0.05, steps = 2)
     method = SpaceTimeGalerkin(clause_ansatz(problem), FixedBoundary();
         initial_guess = FitTo(Predictor()))
     int = GeometricIntegrator(problem, method; solver = LevenbergMarquardt(),
@@ -962,10 +969,13 @@ end
     # The numbers are a record — the drift the gauge reaches, the steps that converge and the error
     # at the end — and the testset asserts none of them; the two statements the clause does make,
     # that the action holds no gauge term and that the solve re-fits no `φ` to a fixed field, are
-    # its source's and not a measurement.
+    # its source's and not a measurement. A two-period run at the clause's rule of 20 cells costs
+    # minutes, so the record is taken on half that rule; the record carries the resolution and the
+    # run it was taken on, and no number of it is compared with the spike's.
     problem = WF.problem(timespan = (0.0, 8.0), timestep = 0.05, xstep = 0.05,
         xspan = (0.0, 1.0))
-    ansatz = clause_ansatz(problem)
+    ansatz = FixedBoundaryNetwork(Sx = 8, St = 10, bubble_form = :abg, xspan = (0.0, 1.0),
+        ncells = 10, nq = (6, 4))
     method = SpaceTimeGalerkin(ansatz, FixedBoundary(); initial_guess = Continuation())
     int = GeometricIntegrator(problem, method; solver = Newton(), max_iterations = 60,
         f_abstol = 0.0, f_reltol = fixed_boundary_f_reltol(Float64), verbosity = 0)
@@ -985,7 +995,9 @@ end
                               solution.u[end][i])
     for (i, x) in enumerate(xs))
     record = (steps = length(c.converged), converged = count(c.converged), drift = drift,
-        error = final_error)
+        error = final_error, T = Float64, nodes = length(ansatz.tabulation.xnode),
+        h = timestep(problem), version = VERSION, threads = Threads.nthreads(),
+        check_bounds = Base.JLOptions().check_bounds)
     @info "FB17 the gauge's two periods" record
     @test steps == length(c.converged)
     @test all(isfinite, c.residuals)

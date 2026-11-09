@@ -444,13 +444,13 @@ else
     """
         predictor_mass(density, params, T, D)
 
-    The constant `m` of a density whose velocity derivative is `∂L/∂v = m v`, read at two seeded
-    points per component and at two velocities.
+    The constant `m` of a density whose velocity derivative is `∂L/∂v = m v`, one per component:
+    the ratio `∂L/∂v / v`, read at two seeded points and at two nonzero velocities.
 
-    A density whose `∂L/∂v` does not vanish at zero velocity, whose `m` is zero, or whose `m`
-    differs between two components or two velocities — as `m v³` or `m v²` would — has no such
-    constant, and a predictor on it would integrate a different equation than the slab solves: it
-    raises `ArgumentError` here, when the integrator is built.
+    A density whose `∂L/∂v` does not vanish at zero velocity, whose ratio is zero, or whose ratio
+    is not the same at the two velocities — as `m v³` or `m v²` give — has no such constant, and a
+    predictor on it would integrate a different equation than the slab solves: it raises
+    `ArgumentError` here, when the integrator is built.
     """
     function predictor_mass(density, params, ::Type{T}, D::Integer) where {T}
         mass = fill(convert(T, NaN), D)
@@ -463,13 +463,14 @@ else
                             "Predictor() needs a density whose ∂L/∂v vanishes at zero velocity; " *
                             "component $d of $(nameof(typeof(density))) gives $m there"))
                     else
-                        (isnan(mass[d]) || mass[d] == m) || throw(ArgumentError(
-                            "Predictor() needs one constant ∂L/∂v / v for every component; " *
-                            "$(nameof(typeof(density))) gives $(mass[d]) and $m"))
-                        iszero(m) && throw(ArgumentError(
+                        ratio = convert(T, m / v)
+                        (isnan(mass[d]) || mass[d] == ratio) || throw(ArgumentError(
+                            "Predictor() needs one constant ∂L/∂v / v for each velocity of a " *
+                            "component; $(nameof(typeof(density))) gives $(mass[d]) and $ratio"))
+                        iszero(ratio) && throw(ArgumentError(
                             "Predictor() needs a density whose ∂L/∂v is not zero; component $d " *
                             "of $(nameof(typeof(density))) gives $m"))
-                        mass[d] = convert(T, m)
+                        mass[d] = ratio
                     end
                 end
             end
