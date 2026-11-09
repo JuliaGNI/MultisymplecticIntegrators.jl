@@ -309,24 +309,69 @@ end
 @testset "FB5 variable projection" begin
     for name in (:wave, :sinegordon), form in (:abg, :tsr)
 
-        problem = PROBLEMS[name]()
-        ansatz = fixed_ansatz(problem; form = form)
+        problem = name === :wave ?
+                  WF.problem(timespan = (0.0, 0.1), timestep = 0.05, xstep = 0.05,
+            xspan = (0.0, 1.0)) :
+                  SG.problem(timespan = (0.0, 0.1), timestep = 0.05, xstep = 0.05,
+            xspan = (0.0, 1.0))
+        ansatz = FixedBoundaryNetwork(Sx = 8, St = 10, bubble_form = form,
+            xspan = (0.0, 1.0), ncells = 20, nq = (6, 4), D = components(problem))
         method = SpaceTimeGalerkin(ansatz, FixedBoundary();
             initial_guess = FitTo(Predictor()))
-        int = GeometricIntegrator(problem, method;
-            solver = LevenbergMarquardt(variable_projection = true),
-            max_iterations = 2, verbosity = 0)
+        slab = fixed_slab(problem, ansatz;
+            solver = LevenbergMarquardt(variable_projection = true), max_iterations = 5,
+            verbosity = 0)
+        int, c = slab.int, cache(slab.int)
+        p = parameters(problem)
         slot = length(M.variable_projection_indices(method))
         @test slot == ansatz.St * ansatz.D
         @test M.variable_projection_indices(method) ==
               collect((M.nfree(ansatz) - slot + 1):M.nfree(ansatz))
-        c = cache(int)
-        solution = GeometricSolution(problem)
-        solstep = solutionstep(int, solution[0])
-        reset!(solstep, 0.0)
-        M.initial_guess!(solstep, nothing, parameters(problem), int)
-        b = slab_residual(int, c.x, parameters(problem))
-        @test all(isfinite, b)
+        projected = M.variable_projection_indices(method)
+        n = length(c.x)
+        oracle = ActionOracle(problem, slab.method; block = c.ansatz)
+        datum = fixed_datum(c)
+        M.initial_guess!(current(slab.solstep), nothing, p, int)
+        θ₀ = copy(c.x)
+        f! = (b, z) -> (M.residual!(b, z, nothing, p, int); b)
+        # 1. the inner solve: after it, the eliminated block is at a root of its own equations, and
+        # the block was not already there — both at the oracle's gradient
+        g₀ = oracle_residual(oracle, datum, θ₀)
+        @test norm(view(g₀, projected)) ≥ 1 // 100
+        scale = max(1, norm(view(g₀, projected)))
+        x = copy(θ₀)
+        r = slab_residual(int, x, p)
+        reduced, _ = M.project!(x, f!, r, M.jacobian_of(f!, x, n), projected)
+        floor = norm(view(oracle_residual(oracle, datum, x), projected))
+        @test floor ≤ 100 * eps(Float64) * scale
+        # 2. the Schur complement against central differences of z ↦ F_o(z, a*(z)), each inner solve
+        # warm-started at the solved `a`
+        solved = M.lm_solved_indices(n, projected)
+        function reduced_residual(z)
+            rp = slab_residual(int, z, p)
+            M.project!(copy(z), f!, rp, M.jacobian_of(f!, z, n), projected)
+            return view(rp, solved)
+        end
+        z = copy(x)
+        for (k, j) in enumerate(solved)
+            δ = cbrt(eps(Float64)) / 10 * max(1, abs(x[j]))
+            up = copy(z)
+            up[j] += δ
+            down = copy(z)
+            down[j] -= δ
+            difference = (reduced_residual(up) .- reduced_residual(down)) ./ (2δ)
+            @test maximum(abs, difference - view(reduced, :, k)) ≤
+                  sqrt(eps(Float64)) * maximum(abs, reduced)
+        end
+        # 3. one projected step: its recorded residual is the test's own full-system `‖F‖`
+        guess = c.x
+        r₀ = norm(slab_residual(int, guess, p))
+        integrate!(slab.solstep, int)
+        x₁ = copy(c.x)
+        @test c.iterations[end] ≤ 5
+        @test abs(c.residuals[end] - norm(slab_residual(int, x₁, p))) ≤
+              8 * eps(Float64) * max(1, c.residuals[end])
+        @test abs(c.initial_residuals[end] - r₀) ≤ 8 * eps(Float64) * max(1, r₀)
     end
 end
 
@@ -337,25 +382,40 @@ end
     small = FixedBoundaryNetwork(
         Sx = 4, St = 4, xspan = (0.0, 1.0), ncells = 3, nq = (4, 3))
     @test default_solver(SpaceTimeGalerkin(small, FixedBoundary())) isa LevenbergMarquardt
-    for form in (:abg, :tsr), solve in (:lm, :newton)
+    for form in (:abg, :tsr), solve in (:lm, :newton, :projected)
 
         a = FixedBoundaryNetwork(Sx = 4, St = 4, bubble_form = form, xspan = (0.0, 1.0),
             ncells = 3, nq = (4, 3))
-        m = SpaceTimeGalerkin(a, FixedBoundary(); initial_guess = FitTo(Predictor()))
-        solvermethod = solve === :lm ? LevenbergMarquardt() : Newton()
+        m = SpaceTimeGalerkin(a, FixedBoundary())
+        solvermethod = if solve === :lm
+            LevenbergMarquardt()
+        elseif solve === :projected
+            LevenbergMarquardt(variable_projection = true)
+        else
+            Newton()
+        end
         int = GeometricIntegrator(problem, m; solver = solvermethod, max_iterations = 3,
             verbosity = 0)
-        result = integrate(problem, m; solver = solvermethod, max_iterations = 3,
-            verbosity = 0)
-        stats = result.stats
-        @test length(stats.iterations) == length(result.traces)
-        @test all(stats.iterations .≤ 3)
-        @test all(isfinite, stats.residuals)
-        @test all(isfinite, stats.initial_residuals)
+        c = cache(int)
+        p = parameters(problem)
+        solution = GeometricSolution(problem)
+        solstep = solutionstep(int, solution[0])
         options = config(solver(int))
-        for n in eachindex(stats.converged)
-            @test stats.converged[n] ==
-                  M.step_converged(stats.residuals[n], stats.initial_residuals[n], options)
+        for n in 1:2
+            reset!(solstep, timesteps(solution)[n])
+            M.slab_bottom!(c, c.coupling, problem, a, current(solstep))
+            M.initial_guess!(current(solstep), nothing, p, int)
+            r₀ = norm(slab_residual(int, c.x, p))
+            integrate!(solstep, int)
+            r₁ = norm(slab_residual(int, c.x, p))
+            @test length(c.iterations) == n
+            @test c.iterations[end] ≤ 3
+            # the record against the test's own full-system norms, at the guess and at the final one
+            @test abs(c.residuals[end] - r₁) ≤ 8 * eps(Float64) * max(1, r₁)
+            @test abs(c.initial_residuals[end] - r₀) ≤ 8 * eps(Float64) * max(1, r₀)
+            @test isfinite(c.residuals[end]) && isfinite(c.initial_residuals[end])
+            @test c.converged[end] ==
+                  M.step_converged(c.residuals[end], c.initial_residuals[end], options)
         end
     end
 end

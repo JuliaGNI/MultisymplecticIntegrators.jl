@@ -205,6 +205,7 @@ function lm_solve!(x::AbstractVector{T}, f!, n::Integer;
     r̂ = zeros(T, n)
     x̂ = similar(x)
     δ = similar(x)
+    δo = similar(x, projected === nothing ? 0 : n - length(projected))
     f!(r, x)
     r₀ = norm(r)
     iterations = 0
@@ -225,8 +226,8 @@ function lm_solve!(x::AbstractVector{T}, f!, n::Integer;
         while !accepted && iterations < max_iterations && μ < T(LM_MU_MAX)
             iterations += 1
             if F === nothing
-                lm_step!(δ, svd(reduced), reduced_residual, μ)
-                lm_widen!(x̂, x, δ, projected)
+                lm_step!(δo, svd(reduced), reduced_residual, μ)
+                lm_widen!(x̂, x, δo, projected)
             else
                 lm_step!(δ, F, r, μ)
                 x̂ .= x .+ δ
@@ -309,10 +310,11 @@ function project!(x::AbstractVector{T}, f!, r::AbstractVector{T}, J::AbstractMat
     cut = LM_TRUNCATION * maximum(abs, Jaa)
     keep = [k for k in eachindex(A.S) if A.S[k] > cut]
     Jao = J[projected, solved]
+    JoaV = J[solved, projected] * view(A.V, :, keep)
     reduced = J[solved, solved]
     UtJoa = transpose(view(A.U, :, keep)) * Jao
     for k in eachindex(keep), j in eachindex(solved), i in eachindex(solved)
-        reduced[i, j] -= A.V[i, keep[k]] * UtJoa[k, j] / A.S[keep[k]]
+        reduced[i, j] -= JoaV[i, k] * UtJoa[k, j] / A.S[keep[k]]
     end
     return reduced, view(r, solved)
 end
