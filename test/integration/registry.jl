@@ -4,6 +4,11 @@ using Test
 # tested through its file.
 include(joinpath(@__DIR__, "..", "..", "scripts", "experiments.jl"))
 
+# `scripts/elm_model.jl` is the ELM family's model file and no part of the package either: it
+# builds the family and registers it, and the one driver includes it after the registry, so the
+# test includes it in the same order.
+include(joinpath(@__DIR__, "..", "..", "scripts", "elm_model.jl"))
+
 @testset "Registry" begin
     archive(entry) = Dict{String, Any}("kind" => "solution")
     entries = ((stem = "a-h0.2", label = "a", timestep = 0.2),
@@ -35,5 +40,15 @@ include(joinpath(@__DIR__, "..", "..", "scripts", "experiments.jl"))
         register_family!(:third, later; run = archive)
         push!(later, (stem = "c", label = "another c"))
         @test family_entries(:third) == ((stem = "d", label = "d"),)
+    end
+
+    # The family is started from one guess: the previous slab's field fitted by a trained hidden
+    # layer, whose target falls back to the trained fit of the initial condition at the first slab.
+    @testset "the family is built from its one guess" begin
+        method = elm_method(first(family_entries(:elm)))
+        guess = MultisymplecticIntegrators.initial_guess(method)
+        @test guess isa FitTo
+        @test guess.target isa PreviousSlab
+        @test guess.method isa TrainedHiddenLayer
     end
 end
