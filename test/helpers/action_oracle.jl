@@ -832,3 +832,214 @@ function oracle_residual(o::NetworkActionOracle{T}, datum::NetworkDatum{T},
     R[(nf + nλ * D + nμ * D + 1):(nf + nλ * D + 2 * nμ * D)] .= g[(offset + 1):(offset + nμ * D)]
     return R
 end
+
+# ---- the fixed-boundary network -------------------------------------------
+#
+# The oracle of a fixed-boundary slab reads the slab's field from the formulas of the method alone —
+# the two levels' networks, the lift of the side data, and the bubble in one of its two coordinate
+# systems — integrates the problem's density over the slab's own rule, and differentiates the action
+# with ForwardDiff. It reads nothing of the package's assembly: the quadrature is the ansatz's data,
+# the density, the side data and the parameters are the problem's, and the datum `(φ₀, p₀)` is the
+# step's.
+
+"""
+    FixedBoundaryOracle(problem, method)
+
+The tables of the discrete action of one fixed-boundary slab. The action is
+
+    S = Σ_q Σ_r ωₜ_q ωₓ_r h L(u, ∂_{t̂}u / h, ∂ₓu)
+
+at the nodes of the slab's own rule, with
+
+    u = (1 − t̂) N(x; φ₀, t₀) + t̂ N(x; φ₁, t₁) + G(t̂, x) + t̂(1 − t̂) (x − a)(b − x) Ψ(t̂, ŝ; Θ),
+
+`N` the level's spatial network with its own time level's side data, `G` the lift that carries the
+slab's side data to its own time, and `Ψ` the bubble in the coordinates of the ansatz's form.
+"""
+struct FixedBoundaryOracle{T, P, A}
+    problem::P
+    ansatz::A
+    D::Int
+    h::T
+    tnode::Vector{T}
+    tweight::Vector{T}
+    xnode::Vector{T}
+    xweight::Vector{T}
+end
+
+function ActionOracle(problem, method::SpaceTimeGalerkin{<:FixedBoundaryNetwork};
+        block = nothing)
+    return FixedBoundaryOracle(problem, method)
+end
+
+function FixedBoundaryOracle(problem::LagrangianPDEProblem, method)
+    T = eltype(timespan(problem))
+    a = ansatz(method)
+    tb = a.tabulation
+    return FixedBoundaryOracle{T, typeof(problem), typeof(a)}(problem, a, a.D,
+        T(timestep(problem)), collect(T, tb.tnode), collect(T, tb.tweight),
+        collect(T, tb.xnode), collect(T, tb.xweight))
+end
+
+"""The length of the solver's vector of a fixed-boundary slab."""
+function unknown_count(o::FixedBoundaryOracle)
+    a = o.ansatz
+    return M.nfree(a)
+end
+
+# The oracle's own parameter vectors of one slab, from its vector
+# `z = (φ₀ free, φ₁ free, Θ free)`: the datum's bottom level with its free entries from `z`, the
+# solved level, and the bubble.
+function oracle_parameters(o::FixedBoundaryOracle, datum, z)
+    a = o.ansatz
+    nfp = length(M.spatial_free(a))
+    φ0 = collect(eltype(z), datum.phi)
+    for (k, i) in enumerate(M.spatial_free(a))
+        φ0[i] = z[k]
+    end
+    φ1 = zeros(eltype(z), M.nspatial(a))
+    for (k, i) in enumerate(M.spatial_free(a))
+        φ1[i] = z[nfp + k]
+    end
+    Θ = zeros(eltype(z), M.nbubble(a))
+    for (k, i) in enumerate(M.bubble_free(a))
+        Θ[i] = z[nfp + nfp + k]
+    end
+    return φ0, φ1, Θ
+end
+
+# The oracle's vector of a slab at the solver's vector `θ`: the datum's free parameters, the solved
+# level's, and the bubble's.
+function oracle_vector(o::FixedBoundaryOracle, datum, θ)
+    return vcat([datum.phi[i] for i in M.spatial_free(o.ansatz)], θ)
+end
+
+# One component of the oracle's field at one node, its two derivatives, from the oracle's own
+# formulas: the level's network, the lift, and the bubble.
+function oracle_component(o::FixedBoundaryOracle, a, d, φ0, φ1, Θ, t̂, x, h, sides,
+        Sx, St, form)
+    xa, xb = a.xspan
+    L = xb - xa
+    ŝ = (x - xa) / L
+    bump = (x - xa) * (xb - x)
+    slope = xa + xb - 2 * x
+    ga0, gb0, ga1, gb1, ga, gb, dga, dgb = sides
+    network(z, ga_z, gb_z) = begin
+        m = zero(eltype(z))
+        mŝ = zero(eltype(z))
+        for i in 1:Sx
+            tk = tanh(z[i] * ŝ + z[Sx + i])
+            c = z[2 * Sx + (i - 1) * o.D + d]
+            m += c * tk
+            mŝ += c * z[i] * (1 - tk^2)
+        end
+        return (1 - ŝ) * ga_z + ŝ * gb_z + bump * m,
+        (gb_z - ga_z) / L + slope * m + bump * mŝ / L
+    end
+    n0, n0x = network(φ0, ga0, gb0)
+    n1, n1x = network(φ1, ga1, gb1)
+    ψ = zero(eltype(Θ))
+    ψt = zero(eltype(Θ))
+    ψŝ = zero(eltype(Θ))
+    for k in 1:St
+        α, β, γ = if form === :tsr
+            r = exp(Θ[2 * St + k])
+            (r * cos(Θ[k]), r * sin(Θ[k]), -r * Θ[St + k])
+        else
+            (Θ[k], Θ[St + k], Θ[2 * St + k])
+        end
+        ak = Θ[3 * St + (k - 1) * o.D + d]
+        tk = tanh(α * t̂ + β * ŝ + γ)
+        ψ += ak * tk
+        ψt += ak * (1 - tk^2) * α
+        ψŝ += ak * (1 - tk^2) * β
+    end
+    ra = ga - (1 - t̂) * ga0 - t̂ * ga1
+    rb = gb - (1 - t̂) * gb0 - t̂ * gb1
+    rat = h * dga + ga0 - ga1
+    rbt = h * dgb + gb0 - gb1
+    b = t̂ * (1 - t̂)
+    u = (1 - t̂) * n0 + t̂ * n1 + (1 - ŝ) * ra + ŝ * rb + b * bump * ψ
+    ut = n1 - n0 + (1 - ŝ) * rat + ŝ * rbt + bump * ((1 - 2 * t̂) * ψ + b * ψt)
+    ux = (1 - t̂) * n0x + t̂ * n1x + (rb - ra) / L + b * (slope * ψ + bump * ψŝ / L)
+    return u, ut, ux
+end
+
+# The slab's side data at one node: both ends' values at the slab's two times and at the node's own
+# time, and the node's two time derivatives, component `d` of each. Read from the problem alone.
+function oracle_sides(o::FixedBoundaryOracle{T}, datum, q) where {T}
+    p = parameters(o.problem)
+    t₀ = T(datum.start)
+    t₁ = t₀ + o.h
+    τ = t₀ + o.h * o.tnode[q]
+    at0 = o.problem.bcs_function(t₀, p)
+    at1 = o.problem.bcs_function(t₁, p)
+    atnode = o.problem.bcs_function(τ, p)
+    dga = ntuple(
+        d -> T(ForwardDiff.derivative(
+            s -> o.problem.bcs_function(s, p).left.u[d], τ)), o.D)
+    dgb = ntuple(
+        d -> T(ForwardDiff.derivative(
+            s -> o.problem.bcs_function(s, p).right.u[d], τ)), o.D)
+    return (at0, at1, atnode, dga, dgb)
+end
+
+# The action of the oracle's slab at `z = (φ₀ free, Θ free, φ₁ free)`.
+function fixed_boundary_action(o::FixedBoundaryOracle{T}, datum, z) where {T}
+    a = o.ansatz
+    φ0, φ1, Θ = oracle_parameters(o, datum, z)
+    p = parameters(o.problem)
+    action = zero(T)
+    for q in eachindex(o.tnode)
+        at0, at1, atnode, dga, dgb = oracle_sides(o, datum, q)
+        for r in eachindex(o.xnode)
+            values = ntuple(o.D) do d
+                sides = (T(at0.left.u[d]), T(at0.right.u[d]), T(at1.left.u[d]),
+                    T(at1.right.u[d]), T(atnode.left.u[d]), T(atnode.right.u[d]),
+                    dga[d], dgb[d])
+                oracle_component(o, a, d, φ0, φ1, Θ, o.tnode[q], o.xnode[r], o.h, sides,
+                    a.Sx, a.St, a.bubble_form)
+            end
+            uv = ntuple(d -> values[d][1], o.D)
+            vv = ntuple(d -> values[d][2] / o.h, o.D)
+            wv = ntuple(d -> values[d][3], o.D)
+            action += o.h * o.tweight[q] * o.xweight[r] *
+                      node_lagrangian(o.problem.density, uv, vv, wv, p)
+        end
+    end
+    return action
+end
+
+"""
+    oracle_residual(o::FixedBoundaryOracle, datum, θ)
+
+The residual of a fixed-boundary slab at the solver's vector `θ`, from the gradient of
+[`fixed_boundary_action`](@ref): `p₀ + ∂S/∂φ₀` on the equations of the solved level, and `∂S/∂Θ`
+behind them. The third block of the gradient, `∂S/∂φ₁`, is the momentum the step hands on.
+"""
+function oracle_residual(o::FixedBoundaryOracle{T}, datum, θ::AbstractVector{T}) where {T}
+    a = o.ansatz
+    nfp, nf = length(M.spatial_free(a)), M.nfree(a)
+    g = action_gradient(z -> fixed_boundary_action(o, datum, z), oracle_vector(o, datum, θ))
+    R = zeros(T, nf)
+    for k in 1:nfp
+        R[k] = datum.momentum[k] + g[k]
+    end
+    for k in (nfp + 1):nf
+        R[k] = g[nfp + k]
+    end
+    return R
+end
+
+"""
+    oracle_momentum(o::FixedBoundaryOracle, datum, θ)
+
+The block of the action's gradient that the step hands on: `∂S/∂φ₁` at the free parameters of the
+solved level.
+"""
+function oracle_momentum(o::FixedBoundaryOracle{T}, datum, θ::AbstractVector{T}) where {T}
+    a = o.ansatz
+    nfp = length(M.spatial_free(a))
+    g = action_gradient(z -> fixed_boundary_action(o, datum, z), oracle_vector(o, datum, θ))
+    return g[(nfp + 1):(nfp + nfp)]
+end
