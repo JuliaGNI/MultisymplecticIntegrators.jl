@@ -23,8 +23,9 @@ the outer solve is Levenberg–Marquardt on the Schur complement `J_oo − J_oa 
 residuals the cache records stay those of the whole system, so that a joint row and a projected row
 of the benchmark matrix compare one quantity.
 
-U29 (user, 2026-10-31) chose the solve from part VP's findings §19: no variant of the fixed-boundary
-solve reaches a relative residual of `1e-11`, and the projected solve lowers the floor.
+A fixed-boundary slab's residual has a floor above the machine epsilon of its type under either
+variant, and the projected solve reaches a lower one than the joint solve; a row's convergence is
+recorded and not asserted, which is why both are offered.
 
 ```julia
 integrate(problem, SpaceTimeGalerkin(FixedBoundaryNetwork(xspan = (0.0, 1.0)), FixedBoundary());
@@ -110,7 +111,7 @@ struct LevenbergMarquardtStatus{ST}
     converged::Bool
 end
 
-SimpleSolvers.isconverged(status::LevenbergMarquardtStatus) = status.converged
+isconverged(status::LevenbergMarquardtStatus) = status.converged
 
 function Base.show(io::IO, status::LevenbergMarquardtStatus)
     print(io, "LevenbergMarquardtStatus(",
@@ -137,8 +138,9 @@ function lm_step!(δ::AbstractVector{T}, F, r::AbstractVector{T},
         σk = σ[k]
         σk ≤ cut && continue
         scale = σk / (σk^2 + μ)
+        c = scale * dot(view(F.U, :, k), r)
         for i in eachindex(δ)
-            δ[i] -= F.V[i, k] * scale * dot(view(F.U, :, k), r)
+            δ[i] -= F.V[i, k] * c
         end
     end
     return δ
@@ -151,7 +153,7 @@ The Jacobian, at `x`, of the `n`-residual `f!(b, x)`. The residual buffer is the
 that a caller's residual is not overwritten by the differentiation.
 """
 function jacobian_of(f!, x::AbstractVector{T}, n::Integer) where {T}
-    return ForwardDiff.jacobian(
+    return jacobian(
         z -> (b = Vector{eltype(z)}(undef, n); f!(b, z); b), x)
 end
 

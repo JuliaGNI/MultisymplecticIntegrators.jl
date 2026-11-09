@@ -157,20 +157,13 @@ function decode(o::ActionOracle, datum::SlabDatum, θ::AbstractVector)
 end
 
 # The Lagrangian at one node: summed over the components for a density of one component, and
-# called on the `D`-vectors of the node otherwise.
+# called on the `D`-vectors of the node otherwise. A `VectorWave.VectorDensity` is the second case:
+# its own call method sums the scalar density over the components and adds the quartic coupling.
 function node_lagrangian(L::LagrangianDensity, u, v, w, params)
     sum(
         L(u[d], v[d], w[d], params) for d in eachindex(u))
 end
 node_lagrangian(L, u, v, w, params) = L(u, v, w, params)
-
-# A coupled density carries a scalar density of one component and the quartic coupling of the
-# components, which is not a sum over them: read both, as that type exposes them.
-function node_lagrangian(density::VectorWave.VectorDensity, u, v, w, params)
-    scalar = sum(d -> density.density(u[d], v[d], w[d], params), 1:length(u))
-    r² = sum(d -> abs2(u[d]), 1:length(u))
-    return scalar - oftype(r², density.β) * r²^2 / 4
-end
 
 # The gradient of the action, with one chunk size for every slab, so that a slab of another size
 # compiles no new method. Every slab of the suite has at least 8 coefficients.
@@ -999,7 +992,7 @@ function oracle_sides(o::FixedBoundaryOracle{T}, datum, q) where {T}
     return (at0, at1, atnode, dga, dgb)
 end
 
-# The action of the oracle's slab at `z = (φ₀ free, Θ free, φ₁ free)`.
+# The action of the oracle's slab at `z = (φ₀ free, φ₁ free, Θ free)`.
 function fixed_boundary_action(o::FixedBoundaryOracle{T}, datum, z) where {T}
     a = o.ansatz
     φ0, φ1, Θ = oracle_parameters(o, datum, z)

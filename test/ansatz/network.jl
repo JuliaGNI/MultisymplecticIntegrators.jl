@@ -496,3 +496,136 @@ end
         record_deviation(:A1, :SINE_GORDON_NN_FULLY, T, deviation)
     end
 end
+
+# ---- the fixed-boundary ansatz -------------------------------------------------------
+#
+# The spatial-and-bubble network of `FixedBoundaryNetwork`: its two charts and its field map, read
+# here from their own formulas. Its slab is built with the coupling, which only carries the datum.
+
+"""A fixed-boundary ansatz on `Wave`'s span at the family's coarse rule."""
+function fixed_boundary_ansatz(::Type{T}; Sx = 8, St = 4, form = :abg, mode = :all,
+        ncells = 3, nq = (4, 3)) where {T}
+    return FixedBoundaryNetwork(Sx = Sx, St = St, bubble_form = form, mode = mode,
+        xspan = (zero(T), one(T)), ncells = ncells, nq = nq, D = 1)
+end
+
+"""
+The field of a fixed-boundary slab at one node, from its formula alone: the two levels' networks,
+the lift of the side data, and the bubble.
+"""
+function fixed_boundary_field(problem, a, φ0, φ1, Θ, t̂, x, h)
+    xa, xb = xspan(problem)
+    L, span = xb - xa, xb - xa
+    ŝ = (x - xa) / span
+    bump = (x - xa) * (xb - x)
+    slope = xa + xb - 2x
+    p = parameters(problem)
+    at0 = problem.bcs_function(0.0, p)
+    at1 = problem.bcs_function(h, p)
+    bcs = problem.bcs_function(h * t̂, p)
+    ga0, gb0 = at0.left.u[1], at0.right.u[1]
+    ga1, gb1 = at1.left.u[1], at1.right.u[1]
+    ga, gb = bcs.left.u[1], bcs.right.u[1]
+    dga = ForwardDiff.derivative(τ -> problem.bcs_function(τ, p).left.u[1], h * t̂)
+    dgb = ForwardDiff.derivative(τ -> problem.bcs_function(τ, p).right.u[1], h * t̂)
+    level(φ, ga_, gb_) = begin
+        m, mŝ = M.spatial_values(φ, a.Sx, a.D, 1, ŝ)
+        ((1 - ŝ) * ga_ + ŝ * gb_ + bump * m,
+         (gb_ - ga_) / span + slope * m + bump * mŝ / span)
+    end
+    n0, n0x = level(φ0, ga0, gb0)
+    n1, n1x = level(φ1, ga1, gb1)
+    ψ, ψt, ψŝ = zero(eltype(Θ)), zero(eltype(Θ)), zero(eltype(Θ))
+    for k in 1:a.St
+        α, β, γ, _ = M.bubble_unit(a, Θ, k)
+        ak = Θ[3a.St + k]
+        s = tanh(α * t̂ + β * ŝ + γ)
+        ψ += ak * s
+        ψt += ak * α * (1 - s^2)
+        ψŝ += ak * β * (1 - s^2)
+    end
+    ra = ga - (1 - t̂) * ga0 - t̂ * ga1
+    rb = gb - (1 - t̂) * gb0 - t̂ * gb1
+    rat = h * dga + ga0 - ga1
+    rbt = h * dgb + gb0 - gb1
+    b = t̂ * (1 - t̂)
+    u = (1 - t̂) * n0 + t̂ * n1 + (1 - ŝ) * ra + ŝ * rb + b * bump * ψ
+    ut = n1 - n0 + (1 - ŝ) * rat + ŝ * rbt + bump * ((1 - 2t̂) * ψ + b * ψt)
+    ux = (1 - t̂) * n0x + t̂ * n1x + (rb - ra) / L + b * (slope * ψ + bump * ψŝ / L)
+    return u, ut / h, ux
+end
+
+@testset "the fixed-boundary ansatz's two charts" begin
+    for form in (:abg, :tsr)
+
+        a = fixed_boundary_ansatz(Float64; form = form)
+        Θ = M.bubble_start(a, Float64)
+        # one unit, read in its own coordinates, has the radius those coordinates carry
+        for k in 1:a.St
+            α, β, γ, r = M.bubble_unit(a, Θ, k)
+            @test r == sqrt(α^2 + β^2)
+            @test isfinite(α) && isfinite(β) && isfinite(γ)
+        end
+        # the chart of an `:abg` atom is `:tsr`'s and back
+        grid = M.bubble_start(fixed_boundary_ansatz(Float64; form = :abg), Float64)
+        for k in 1:a.St
+            θ, s, ρ = M.bubble_chart(grid[k], grid[a.St + k], grid[2a.St + k], k)
+            @test exp(ρ) * cos(θ) ≈ grid[k]
+            @test exp(ρ) * sin(θ) ≈ grid[a.St + k]
+            @test -exp(ρ) * s ≈ grid[2a.St + k]
+        end
+        # no `(θ, s, ρ)` writes a unit at `r = 0`, and the refusal names it
+        @test_throws r"^the bubble's unit 3 has α = β = 0" M.bubble_chart(0.0, 0.0, 0.5, 3)
+        # the dictionary is one dictionary, less its atoms at `α = β = 0`
+        atoms = bubble_atoms(BubbleGreedy(), Float64)
+        @test size(atoms, 1) == 2184
+        @test !any(iszero(atoms[i, 1]) && iszero(atoms[i, 2]) for i in axes(atoms, 1))
+    end
+end
+
+@testset "the fixed-boundary ansatz's field and its top" begin
+    problem = wave_problem(Float64)
+    for form in (:abg, :tsr)
+
+        a = fixed_boundary_ansatz(Float64; form = form)
+        method = SpaceTimeGalerkin(a, FixedBoundary())
+        int = GeometricIntegrator(problem, method)
+        c = cache(int)
+        solution = GeometricSolution(problem)
+        solstep = solutionstep(int, solution[0])
+        reset!(solstep, timesteps(solution)[1])
+        M.slab_bottom!(c, c.coupling, problem, a, current(solstep))
+        M.initial_guess!(current(solstep), nothing, parameters(problem), int)
+        M.residual!(zeros(length(c.x)), c.x, nothing, parameters(problem), int)
+        h = timestep(problem)
+        φ0 = copy(c.coupling.phi)
+        φ1 = copy(c.ansatz.params[1:M.nspatial(a)])
+        Θ = copy(M.bubble_parameters(c.ansatz))
+        tb = a.tabulation
+        worst = (u = 0.0, v = 0.0, w = 0.0)
+        for q in eachindex(tb.tnode), r in eachindex(tb.xnode)
+            u, v, w = fixed_boundary_field(problem, a, φ0, φ1, Θ, tb.tnode[q],
+                tb.xnode[r], h)
+            worst = (u = max(worst.u, abs(u - c.u[q, r, 1])),
+                v = max(worst.v, abs(v - c.v[q, r, 1])),
+                w = max(worst.w, abs(w - c.w[q, r, 1])))
+        end
+        @test worst.u ≤ 1e3 * eps(Float64) * max(1, maximum(abs, c.u))
+        @test worst.v ≤ 1e3 * eps(Float64) * max(1, maximum(abs, c.v))
+        @test worst.w ≤ 1e3 * eps(Float64) * max(1, maximum(abs, c.w))
+        # the top of the slab is the solved level's network: the bubble's weights vanish there
+        ev = M.output_evaluation(c.ansatz)
+        u = zeros(length(ev.points), 1)
+        v = similar(u)
+        w = similar(u)
+        M.top_values!(u, v, w, c.ansatz, ev, h)
+        at1 = problem.bcs_function(h, parameters(problem))
+        for (i, x) in enumerate(ev.points)
+            ŝ = (x - xspan(problem)[1]) / (xspan(problem)[2] - xspan(problem)[1])
+            m, _ = M.spatial_values(φ1, a.Sx, a.D, 1, ŝ)
+            expect = (1 - ŝ) * at1.left.u[1] + ŝ * at1.right.u[1] +
+                     (x - xspan(problem)[1]) * (xspan(problem)[2] - x) * m
+            @test abs(u[i, 1] - expect) ≤ 1e3 * eps(Float64) * max(1, abs(expect))
+        end
+    end
+end

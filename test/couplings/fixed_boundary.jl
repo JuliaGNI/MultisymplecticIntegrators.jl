@@ -14,6 +14,9 @@ import GeometricBase: timesteps
 include("../helpers/problem_generator.jl")
 include("../helpers/action_oracle.jl")
 include("../helpers/testsetup.jl")
+# The registry of the scripts and no part of the package: the family's rows are built here, as
+# M's row testset builds them when the two branches meet.
+include(joinpath(@__DIR__, "..", "..", "scripts", "experiments.jl"))
 
 const M = MultisymplecticIntegrators
 const WF = M.Wave
@@ -37,10 +40,27 @@ function compare_gradient(b, ∇S, ::Type{T}) where {T}
 end
 
 """A fixed-boundary network on a problem's span and component count."""
-function fixed_ansatz(problem; Sx = 4, St = 4, form = :abg, mode = :all, ncells = 3,
-        nq = (4, 3))
+function fixed_ansatz(problem; Sx = 8, St = 10, form = :abg, mode = :all, ncells = 3,
+        nq = (6, 4))
     return FixedBoundaryNetwork(Sx = Sx, St = St, bubble_form = form, mode = mode,
         xspan = xspan(problem), nq = nq, ncells = ncells, D = components(problem))
+end
+
+"""
+The clause's own slab of a problem: the network and the bubble of `Sx = 8` and `St = 10` units, on
+`nq = (6, 4)` nodes and 20 cells of its span. Every testset that asserts one of the section's
+numbers runs on it; a testset that runs a hundred steps or compares 96 legs runs `fixed_ansatz`'s
+coarser rule with the same network and bubble.
+"""
+function clause_ansatz(problem; Sx = 8, St = 10, form = :abg, mode = :all)
+    return fixed_ansatz(problem; Sx = Sx, St = St, form = form, mode = mode, ncells = 20)
+end
+
+"""`Wave` or `SineGordon` at the clause's time step, on `[0, 1]` with `xstep = 0.05`."""
+function clause_problem(name::Symbol; timestep = 0.05, T = Float64)
+    problem = name === :wave ? WF.problem : SG.problem
+    return problem(T = T, timespan = (zero(T), T(timestep)), timestep = T(timestep),
+        xstep = T(0.05), xspan = (zero(T), one(T)))
 end
 
 """The integrator of one slab, and the solution step a run drives."""
@@ -151,15 +171,23 @@ const PROBLEMS = Dict(
     last_layer = FixedBoundaryNetwork(Sx = 4, St = 4, xspan = (0.0, 1.0), mode = :last_layer)
     @test (M.nspatial(last_layer), length(M.spatial_free(last_layer)),
         M.nfree(last_layer)) == (12, 4, 8)
+    # At `D = 2` a level frees `Sx·D` output weights, which are not the first `Sx` of them: the
+    # level's parameters are `Sx` weights, `Sx` biases and then `Sx·D` output weights.
+    wide = FixedBoundaryNetwork(Sx = 8, St = 10, xspan = (0.0, 1.0), mode = :last_layer, D = 2)
+    @test M.nspatial(wide) == 2 * 8 + 8 * 2
+    @test M.spatial_free(wide) == (2 * 8 + 1):(2 * 8 + 8 * 2)
+    @test M.bubble_free(wide) == (3 * 10 + 1):(3 * 10 + 10 * 2)
+    @test M.nfree(wide) == 8 * 2 + 10 * 2
+    @test M.free_indices(wide) == vcat(collect(17:32), 32 .+ collect(31:50))
     network = NetworkAnsatz(S = 4, xspan = (0.0, 1.0), ncells = (2, 5), degree = 3)
     spline = TensorBSplineAnsatz(degree = 3, ncells = (2, 5), xspan = (0.0, 1.0))
-    @test_throws r"FixedBoundary takes a FixedBoundaryNetwork, got NetworkAnsatz" GeometricIntegrator(
+    @test_throws r"^FixedBoundary takes a FixedBoundaryNetwork, got NetworkAnsatz$" GeometricIntegrator(
         problem, SpaceTimeGalerkin(network, FixedBoundary()))
-    @test_throws r"FixedBoundary takes a FixedBoundaryNetwork, got TensorBSplineAnsatz" GeometricIntegrator(
+    @test_throws r"^FixedBoundary takes a FixedBoundaryNetwork, got TensorBSplineAnsatz$" GeometricIntegrator(
         problem, SpaceTimeGalerkin(spline, FixedBoundary()))
     for coupling in (WeakInitialAndBoundaryConditions(), WeakInitialCondition(),
         CoefficientRestriction())
-        @test_throws r"a FixedBoundaryNetwork takes the FixedBoundary coupling" GeometricIntegrator(
+        @test_throws r"^a FixedBoundaryNetwork takes the FixedBoundary coupling, got $(nameof(typeof(coupling)))$" GeometricIntegrator(
             problem, SpaceTimeGalerkin(a, coupling))
     end
     method = SpaceTimeGalerkin(a, FixedBoundary())
@@ -176,22 +204,24 @@ end
 
 @testset "FB1 the residual is the action's gradient" begin
     rng = Xoshiro(7)
-    @testset "generated entry, $form, $mode" for entry in generate_problems(Float64;
-            rng = Xoshiro(SEED)), form in (:abg, :tsr), mode in (:all, :last_layer)
+    @testset "generated entry, $T, $form, $mode" for T in (Float64, Float32),
+        entry in generate_problems(T; rng = Xoshiro(SEED)), form in (:abg, :tsr),
+        mode in (:all, :last_layer)
+
         ansatz = fixed_ansatz(entry.problem; form = form, mode = mode)
         problem = entry.problem
         slab = fixed_slab(problem, ansatz)
         c = cache(slab.int)
         oracle = ActionOracle(problem, slab.method; block = c.ansatz)
         @test length(c.x) == unknown_count(oracle)
-        θ = 2 .* rand(rng, Float64, length(c.x)) .- 1
+        θ = 2 .* rand(rng, T, length(c.x)) .- 1
         compare_gradient(slab_residual(slab.int, θ, parameters(problem)),
-            oracle_residual(oracle, fixed_datum(c), θ), Float64)
+            oracle_residual(oracle, fixed_datum(c), θ), T)
         integrate!(slab.solstep, slab.int)
         next_fixed_slab!(slab, 2)
-        θ₂ = 2 .* rand(rng, Float64, length(c.x)) .- 1
+        θ₂ = 2 .* rand(rng, T, length(c.x)) .- 1
         compare_gradient(slab_residual(slab.int, θ₂, parameters(problem)),
-            oracle_residual(oracle, fixed_datum(c), θ₂), Float64)
+            oracle_residual(oracle, fixed_datum(c), θ₂), T)
     end
     @testset "the two problems, first and second slab, $name, $form, $mode" for name in (:wave, :sinegordon),
         form in (:abg, :tsr), mode in (:all, :last_layer)
@@ -219,34 +249,57 @@ end
     # `NonlinearSolver`. The family's Levenberg–Marquardt keeps no such matrix — it takes one SVD of
     # the Jacobian at each accepted iterate — so the Jacobian of the residual is read through the
     # `Newton()` solver the family also offers, on the same residual and the same block.
-    for name in (:wave, :sinegordon), form in (:abg, :tsr), mode in (:all, :last_layer)
-        problem = PROBLEMS[name]()
-        slab = fixed_slab(problem, fixed_ansatz(problem; form = form, mode = mode);
-            solver = Newton())
+    #
+    # The legs are `Wave`, `SineGordon` and four seeded entries, in both forms and both modes, at
+    # 16 vectors each. The two problems' domain states the clause's 20 cells and the entries run
+    # the family's coarser rule, whose nodes are the same count of unknown columns at a third of
+    # the cost; the chart's columns and the layout are what differs between the leg, and neither
+    # depends on how many cells the rule has.
+    entries = generate_problems(Float64; rng = Xoshiro(SEED))
+    legs = vcat([(label = name === :wave ? "wave" : "sinegordon",
+                  problem = clause_problem(name), ncells = 20) for name in (:wave, :sinegordon)],
+        [(label = "entry $i", problem = entry.problem, ncells = 3)
+         for (i, entry) in enumerate(entries) if entry.kind === :general][1:4])
+    for leg in legs, form in (:abg, :tsr), mode in (:all, :last_layer)
+        problem = leg.problem
+        ansatz = fixed_ansatz(problem; form = form, mode = mode, ncells = leg.ncells)
+        slab = fixed_slab(problem, ansatz; solver = Newton())
         c = cache(slab.int)
         s = solver(slab.int)
-        θ = 2 .* rand(rng, Float64, length(c.x)) .- 1
         p = parameters(problem)
         # at the slab's guess, as a run reaches the Jacobian: a `:last_layer` slab whose held hidden
         # layer is still zero has a zero Jacobian, whatever its residual is
         M.initial_guess!(current(slab.solstep), nothing, p, slab.int)
-        SimpleSolvers.jacobian!(s, θ, (current(slab.solstep), p, slab.int))
-        J = copy(SimpleSolvers.jacobianmatrix(s))
-        @test maximum(abs, J) ≥ 1 // 100
-        @test maximum(abs, J - residual_differences(slab.int, θ, p)) ≤
-              sqrt(eps(Float64)) * maximum(abs, J)
+        for _ in 1:16
+            θ = 2 .* rand(rng, Float64, length(c.x)) .- 1
+            SimpleSolvers.jacobian!(s, θ, (current(slab.solstep), p, slab.int))
+            J = copy(SimpleSolvers.jacobianmatrix(s))
+            @test maximum(abs, J) ≥ 1 // 100
+            @test maximum(abs, J - residual_differences(slab.int, θ, p)) ≤
+                  sqrt(eps(Float64)) * maximum(abs, J)
+        end
     end
 end
 
 # ---- FB3 -----------------------------------------------------------------------------
 
 @testset "FB3 the first momentum and the momentum handed on" begin
-    for name in (:wave, :sinegordon)
-        problem = PROBLEMS[name]()
-        slab = fixed_slab(problem, fixed_ansatz(problem))
+    # N6: the datum of a run's first slab — the fit of the level to `u₀`, and `p₀` against the
+    # oracle's own integral of the density's momentum, on the free parameters of the mode
+    for name in (:wave, :sinegordon), mode in (:all, :last_layer)
+        problem = clause_problem(name)
+        ansatz = clause_ansatz(problem; mode = mode)
+        slab = fixed_slab(problem, ansatz)
         c = cache(slab.int)
         p = parameters(problem)
-        ansatz = slab.ansatz
+        # the fit's sup error on the output grid, whose 21 points are `x = 0:0.05:1`
+        xs = collect(range(xspan(problem)[1], xspan(problem)[2]; length = 21))
+        initial = problem.ics_function(xs, p)
+        fitted = [level_network(problem, ansatz, c.coupling.phi, x, 0.0, d)
+                  for x in xs, d in 1:ansatz.D]
+        @test maximum(abs, fitted .- initial.u) ≤ 1e-5
+        # the covector of the mode's own parameters: `Sx·D` under `:last_layer`
+        @test length(c.coupling.momentum) == length(M.spatial_free(ansatz))
         nodes, weights = ansatz.tabulation.xnode, ansatz.tabulation.xweight
         ics = problem.ics_function(collect(nodes), p)
         expect = zeros(length(c.coupling.momentum))
@@ -262,28 +315,47 @@ end
                                  ics.v[r, d], ics.w[r, d], p) * g[i]
             end
         end
+        @test all(isfinite, expect)
         @test maximum(abs, c.coupling.momentum - expect) ≤
-              100 * eps(Float64) * max(1, maximum(abs, expect))
-        # the momentum handed on, at the final iterate of a step that is capped at three iterations
-        oracle = ActionOracle(problem, slab.method; block = c.ansatz)
-        datum = fixed_datum(c)
-        int = GeometricIntegrator(problem, slab.method; solver = LevenbergMarquardt(),
-            max_iterations = 3, verbosity = 0)
+              100 * eps(Float64) * maximum(abs, expect)
+    end
+    # N7: the momentum handed on, at the final iterate of a step that is capped at three LM
+    # iterations and of one `Newton()` takes, unchanged by a further residual evaluation and by a
+    # second step
+    for solvermethod in (LevenbergMarquardt(), Newton())
+        problem = clause_problem(:wave)
+        ansatz = clause_ansatz(problem)
+        method = SpaceTimeGalerkin(ansatz, FixedBoundary(); initial_guess = Continuation())
+        int = GeometricIntegrator(problem, method; solver = solvermethod,
+            max_iterations = solvermethod isa Newton ? 10 : 3, verbosity = 0)
         solution = GeometricSolution(problem)
         solstep = solutionstep(int, solution[0])
+        c = cache(int)
+        p = parameters(problem)
         # A step's own time is the end of the slab it solves — `slab_start` reads one timestep back
         # from it — so a run's first step is placed at `timesteps(solution)[1]`, the first slab's
         # end, as the helper `next_fixed_slab!` places it.
         reset!(solstep, timesteps(solution)[1])
+        M.slab_bottom!(c, c.coupling, problem, ansatz, current(solstep))
+        datum = fixed_datum(c)
+        oracle = ActionOracle(problem, method; block = c.ansatz)
         integrate!(solstep, int)
-        cf = cache(int)
-        next_fixed_slab!(
-            (; problem, method = slab.method, int, solution, solstep,
-                ansatz = ansatz), 2)
+        solved = copy(c.x)
+        handed = copy(c.coupling.p_next)
+        scale = maximum(abs, handed)
+        @test all(isfinite, handed)
         @test maximum(abs,
-            oracle_momentum(oracle, datum, copy(cf.ansatz.params[M.free_indices(ansatz)])) -
-            cf.coupling.p_next) ≤
-              1000 * eps(Float64) * max(1, maximum(abs, cf.coupling.p_next))
+            oracle_momentum(oracle, datum, solved) - handed) ≤ 100 * eps(Float64) * scale
+        # a further residual evaluation at another vector rewrites no part of the record
+        other = 2 .* rand(MersenneTwister(11), Float64, length(solved)) .- 1
+        b = zeros(length(solved))
+        M.residual!(b, other, nothing, p, int)
+        @test c.coupling.p_next == handed
+        # the second slab's datum is that block and that level, exactly
+        solved_level = copy(c.ansatz.params[1:M.nspatial(ansatz)])
+        next_fixed_slab!((; problem, method, int, solution, solstep, ansatz), 2)
+        @test c.coupling.momentum == handed
+        @test c.coupling.phi == solved_level
     end
 end
 
@@ -296,11 +368,12 @@ end
         nx = length(u) ÷ D
         return [(u[(d - 1) * nx + 1], u[d * nx]) for d in 1:D]
     end
-    for name in (:wave, :sinegordon), form in (:abg,)
+    for name in (:wave, :sinegordon), form in (:abg, :tsr)
 
-        problem = PROBLEMS[name]()
-        method = SpaceTimeGalerkin(fixed_ansatz(problem; form = form), FixedBoundary())
+        problem = clause_problem(name)
+        method = SpaceTimeGalerkin(clause_ansatz(problem; form = form), FixedBoundary())
         result = integrate(problem, method; max_iterations = 3, verbosity = 0)
+        @test length(result.traces) == 3
         for n in eachindex(result.stats.converged)
             t = result.solution.t[n]
             bcs = problem.bcs_function(t, parameters(problem))
@@ -312,15 +385,22 @@ end
             end
         end
     end
-    for entry in generate_problems(Float64; rng = Xoshiro(SEED))[13:15]
+    # The suite's `:general` and one `:symmetric` entry, at the family's coarse rule: a `D = 2`
+    # entry's three steps at the clause's 20 cells cost minutes, and the identity holds at every
+    # node of any rule.
+    for entry in generate_problems(Float64; rng = Xoshiro(SEED))[[13, 14, 15, 1]],
+        form in (:abg, :tsr)
+
         problem = entry.problem
-        method = SpaceTimeGalerkin(fixed_ansatz(problem), FixedBoundary())
+        method = SpaceTimeGalerkin(fixed_ansatz(problem; form = form), FixedBoundary())
         result = integrate(problem, method; max_iterations = 3, verbosity = 0)
         for n in eachindex(result.stats.converged)
             bcs = problem.bcs_function(result.solution.t[n], parameters(problem))
             scale = max(1, maximum(abs, result.solution.u[n]))
-            for (d, (left, _)) in enumerate(ends(result.solution.u[n], components(problem)))
+            for (d, (left, right)) in enumerate(ends(result.solution.u[n],
+                components(problem)))
                 @test abs(left - bcs.left.u[d]) ≤ 8 * eps(Float64) * scale
+                @test abs(right - bcs.right.u[d]) ≤ 8 * eps(Float64) * scale
             end
         end
     end
@@ -477,22 +557,39 @@ end
 # ---- FB8 -----------------------------------------------------------------------------
 
 @testset "FB8 the affine control in two iterations" begin
-    for name in (:wave,), form in (:abg, :tsr)
+    # N13: the plan's control is `:last_layer` on a linear density, with the spatial hidden layer
+    # held at `φ₀`'s fit for the whole run — which is the `Continuation()` guess — and the unknowns
+    # `c` and `a`, in both forms and in both element types. `FitTo(Predictor())` is not the control:
+    # it moves level 1's hidden layer away from level 0's, and the affine system then has no
+    # solution (K49).
+    for T in (Float64, Float32), form in (:abg, :tsr)
 
-        problem = PROBLEMS[name]()
-        a = FixedBoundaryNetwork(Sx = 4, St = 4, bubble_form = form, mode = :last_layer,
-            xspan = (0.0, 1.0), ncells = 3, nq = (4, 3))
-        m = SpaceTimeGalerkin(a, FixedBoundary(); initial_guess = FitTo(Predictor()))
-        result = integrate(problem, m; solver = Newton(), max_iterations = 2,
-            f_reltol = fixed_boundary_f_reltol(Float64), verbosity = 0)
-        stats = result.stats
-        @test all(stats.converged)
-        @test all(stats.iterations .≤ 2)
-        @test all(stats.initial_residuals .≥ 1 // 100)
+        linear = [entry.problem for entry in generate_problems(T; rng = Xoshiro(SEED))
+                  if entry.potential == 2]
+        for (i, problem) in enumerate(vcat([clause_problem(:wave; T = T)], linear))
+            ansatz = clause_ansatz(problem; mode = :last_layer, form = form)
+            method = SpaceTimeGalerkin(ansatz, FixedBoundary();
+                initial_guess = Continuation())
+            result = integrate(problem, method; solver = Newton(), max_iterations = 2,
+                f_reltol = fixed_boundary_f_reltol(T), verbosity = 0)
+            stats = result.stats
+            label = i == 1 ? "wave" : "entry $(i - 1)"
+            @testset "$label, $T, $form" begin
+                @test all(stats.converged)
+                @test all(stats.iterations .≤ 2)
+                @test all(stats.residuals ./ stats.initial_residuals .≤
+                          fixed_boundary_f_reltol(T))
+                @test all(stats.initial_residuals .≥ T(1 // 100))
+            end
+        end
     end
     @test fixed_boundary_f_reltol(Float64) == 1e-8
     @test fixed_boundary_f_reltol(Float32) ≥ 1e-8
     @test fixed_boundary_f_reltol(Float32) != Float32(1e-8)
+    # the family's rank cut is one value per element type, `1e-12` at `Float64` and `10 eps(T)`
+    # for another type
+    @test M.fixed_boundary_qr_cut(Float64) == 1e-12
+    @test M.fixed_boundary_qr_cut(Float32) == 10 * eps(Float32)
     problem = PROBLEMS[:wave]()
     int = GeometricIntegrator(problem,
         SpaceTimeGalerkin(fixed_ansatz(problem), FixedBoundary()))
@@ -524,6 +621,19 @@ end
     @info "FB9 the dead branch's twenty steps" error=error worst_ratio=maximum(stats.residuals ./
                                                                                stats.initial_residuals)
     @test 5.96e-4 ≤ error ≤ 7.28e-4
+    # N20's `Float32` arm: two steps, recorded, and only the element types asserted
+    problem32 = WF.problem(T = Float32, timespan = (0.0f0, 0.1f0), timestep = 0.05f0,
+        xstep = 0.05f0, xspan = (0.0f0, 1.0f0))
+    ansatz32 = FixedBoundaryNetwork(Sx = 8, St = 10, bubble_form = :abg,
+        xspan = (0.0f0, 1.0f0), ncells = 20, nq = (6, 4))
+    method32 = SpaceTimeGalerkin(ansatz32, FixedBoundary(); initial_guess = Continuation())
+    result32 = integrate(problem32, method32; solver = Newton(), max_iterations = 60,
+        f_abstol = 0.0f0, f_reltol = fixed_boundary_f_reltol(Float32), verbosity = 0)
+    @info "FB9 the dead branch's Float32 arm" ratios = result32.stats.residuals ./
+                                                       result32.stats.initial_residuals
+    @test length(result32.stats.converged) == 2
+    assert_no_upcast(result32.solution.u, Float32)
+    @test all(isreal, result32.stats.residuals)
 end
 
 # ---- FB10 ----------------------------------------------------------------------------
@@ -555,7 +665,8 @@ end
     problem = PROBLEMS[:wave]()
     a = FixedBoundaryNetwork(Sx = 8, St = 9, bubble_form = :tsr, xspan = (0.0, 1.0),
         ncells = 3, nq = (4, 3))
-    @test_throws r"unit 5" M.bubble_start(a, Float64)
+    @test_throws r"^the bubble's unit 5 has α = β = 0, that is r = 0, and no \(θ, s, ρ\) coordinates: exp\(ρ\) is never zero$" M.bubble_start(
+        a, Float64)
     abg = FixedBoundaryNetwork(Sx = 8, St = 9, bubble_form = :abg, xspan = (0.0, 1.0),
         ncells = 3, nq = (4, 3))
     @test length(M.bubble_start(abg, Float64)) == M.nbubble(abg)
@@ -581,7 +692,9 @@ end
         grid = collect(range(xspan(problem)[1], xspan(problem)[2]; length = 101))
         dx = grid[2] - grid[1]
         dt = h / 10
-        mass = M.predictor_mass(problem.density, p, Float64, 1)[1]
+        # The density's one constant `m`, computed here rather than read from the code under test:
+        # `∂L/∂v = m v`, so `m` is that derivative at `v = 1` with `u` and `w` at zero.
+        mass = derivative_v(problem.density, 0.0, 1.0, 0.0, p)
         # The test's own Störmer–Verlet: ten substeps, central differences, the side data imposed at
         # every substep of the slab that starts at `t₀`, and nothing of the package's predictor but
         # the density's own derivatives.
@@ -632,7 +745,8 @@ end
                 λ = position - (k - 1)
                 expect = (1 - λ) * at(U[k, :], tb.xnode[r]) +
                          λ * at(U[k + 1, :], tb.xnode[r])
-                @test abs(sample[q, r, 1] - expect) ≤ 1e-5 * max(1, abs(expect))
+                @test abs(sample[q, r, 1] - expect) ≤
+                      1e3 * eps(Float64) * max(1, abs(expect))
             end
             return nothing
         end
@@ -660,13 +774,19 @@ end
     transport = M.LinearTransport.problem(timespan = (0.0, 0.1), timestep = 0.05,
         xstep = 0.05, xspan = (0.0, 1.0))
     ansatz = fixed_ansatz(transport; Sx = 2, St = 2)
-    @test_throws r"∂L/∂v" GeometricIntegrator(transport,
+    @test_throws r"^Predictor\(\) needs a density whose ∂L/∂v" GeometricIntegrator(transport,
         SpaceTimeGalerkin(ansatz, FixedBoundary(); initial_guess = FitTo(Predictor())))
+    # A density whose `∂L/∂v` is nonlinear vanishes at zero velocity and gives one value at
+    # `v = 1` too: only a second velocity shows that its ratio is not the constant `m`.
+    u_, v_, w_ = Symbolics.variable.((:u, :v, :w))
+    cubic = LagrangianDensity(v_^3 / 3, u_, v_, w_)
+    @test_throws r"^Predictor\(\) needs one constant ∂L/∂v / v" M.predictor_mass(
+        cubic, NamedTuple(), Float64, 1)
     wave = PROBLEMS[:wave]()
     spline = TensorBSplineAnsatz(degree = 3, ncells = (1, 5), xspan = (0.0, 1.0))
-    c = cache(GeometricIntegrator(wave, SpaceTimeGalerkin(fixed_ansatz(wave), FixedBoundary())))
-    @test_throws r"Predictor" M.evaluate!(
-        zeros(2, 2, 1), Predictor(), c, spline, wave, nothing)
+    @test_throws r"^Predictor\(\) needs a FixedBoundaryNetwork; TensorBSplineAnsatz has no slab predictor$" GeometricIntegrator(
+        wave, SpaceTimeGalerkin(spline, WeakInitialCondition();
+            initial_guess = FitTo(Predictor())))
 end
 
 # ---- FB13 ----------------------------------------------------------------------------
@@ -702,17 +822,197 @@ end
         a = fixed_ansatz(problem; form = form)
         m = SpaceTimeGalerkin(a, FixedBoundary())
         solvermethod = solve === :lm ? LevenbergMarquardt() : Newton()
+        # The cache is read after two steps, not as `Cache` built it: the datum, the momentum the
+        # steps handed on and the fit's dictionary are written by the run.
         int = GeometricIntegrator(problem, m; solver = solvermethod, max_iterations = 2,
             verbosity = 0)
+        c = cache(int)
+        solution = GeometricSolution(problem)
+        solstep = solutionstep(int, solution[0])
+        for n in 1:2
+            reset!(solstep, timesteps(solution)[n])
+            M.slab_bottom!(c, c.coupling, problem, a, current(solstep))
+            M.initial_guess!(current(solstep), nothing, parameters(problem), int)
+            integrate!(solstep, int)
+        end
         result = integrate(problem, m; solver = solvermethod, max_iterations = 2,
             verbosity = 0)
         assert_no_upcast(result.solution.u, Float32)
-        c = cache(int)
         assert_no_upcast(c.x, Float32)
         assert_no_upcast(c.coupling.momentum, Float32)
         assert_no_upcast(c.coupling.phi, Float32)
+        assert_no_upcast(c.coupling.p_next, Float32)
+        assert_no_upcast(c.coupling.phi_next, Float32)
+        assert_no_upcast(c.coupling.v_top, Float32)
         assert_no_upcast(c.ansatz.params, Float32)
         assert_no_upcast(c.ansatz.momentum, Float32)
+        assert_no_upcast(c.ansatz.top_sample, Float32)
         assert_no_upcast(c.ansatz.fit.atoms, Float32)
+        assert_no_upcast(c.ansatz.fit.table, Float32)
+        assert_no_upcast(c.u, Float32)
+        assert_no_upcast(c.v, Float32)
+        assert_no_upcast(c.w, Float32)
+    end
+end
+
+# ---- FB15 ----------------------------------------------------------------------------
+
+@testset "FB15 the two forms are one scheme" begin
+    # N8: at the same hidden atoms the bubble is one bubble in two charts, so the field and its two
+    # derivatives agree at every node, the `:tsr` residual is the `:abg` residual after the chart's
+    # transpose, and no parameter of either form is wrapped into a range.
+    problem = clause_problem(:wave)
+    abg = fixed_ansatz(problem; form = :abg, ncells = 3)
+    tsr = fixed_ansatz(problem; form = :tsr, ncells = 3)
+    slab_abg = fixed_slab(problem, abg)
+    slab_tsr = fixed_slab(problem, tsr)
+    ca, ct = cache(slab_abg.int), cache(slab_tsr.int)
+    p = parameters(problem)
+    M.initial_guess!(current(slab_abg.solstep), nothing, p, slab_abg.int)
+    M.initial_guess!(current(slab_tsr.solstep), nothing, p, slab_tsr.int)
+    b_abg = zeros(Float64, length(ca.x))
+    b_tsr = zeros(Float64, length(ct.x))
+    M.residual!(b_abg, ca.x, nothing, p, slab_abg.int)
+    M.residual!(b_tsr, ct.x, nothing, p, slab_tsr.int)
+    scale = max(1, maximum(abs, ct.u))
+    @test maximum(abs, ca.u - ct.u) ≤ 1e3 * eps(Float64) * scale
+    @test maximum(abs, ca.v - ct.v) ≤ 1e3 * eps(Float64) * maximum(abs, ct.v)
+    @test maximum(abs, ca.w - ct.w) ≤ 1e3 * eps(Float64) * maximum(abs, ct.w)
+    # the chart, written here from its definition: `(α, β, γ) = (e^ρ cos θ, e^ρ sin θ, −e^ρ s)`
+    chart(θ, s, ρ) = (exp(ρ) * cos(θ), exp(ρ) * sin(θ), -exp(ρ) * s)
+    St, D, nsp = tsr.St, tsr.D, M.nspatial(tsr)
+    nf = length(ct.x)
+    G = zeros(Float64, nf, nf)
+    for k in 1:nf
+        G[k, k] = 1
+    end
+    for k in 1:St
+        θ, s, ρ = ct.x[nsp + k], ct.x[nsp + St + k], ct.x[nsp + 2St + k]
+        J = ForwardDiff.jacobian(z -> collect(chart(z[1], z[2], z[3])), [θ, s, ρ])
+        for i in 1:3, j in 1:3
+            G[nsp + (i - 1) * St + k, nsp + (j - 1) * St + k] = J[i, j]
+        end
+    end
+    r_abg = slab_residual(slab_abg.int, ca.x, p)
+    r_tsr = slab_residual(slab_tsr.int, ct.x, p)
+    @test maximum(abs, r_tsr - transpose(G) * r_abg) ≤
+          1e3 * eps(Float64) * maximum(abs, transpose(G) * r_abg)
+    # nothing is wrapped or clamped: the `:tsr` start's angles are the chart's own, unwrapped
+    start = M.bubble_start(tsr, Float64)
+    grid = M.bubble_start(abg, Float64)
+    for k in 1:St
+        α, β, γ = grid[k], grid[St + k], grid[2St + k]
+        @test start[k] === atan(β, α)
+        @test start[St + k] === -γ / sqrt(α^2 + β^2)
+    end
+end
+
+# ---- FB16 ----------------------------------------------------------------------------
+
+@testset "FB16 a failed step is carried and its record kept" begin
+    # N22: a step that does not reach the tolerance leaves its last accepted iterate, the momentum
+    # of that iterate and its three numbers; the next slab starts from them, and `on_failure` is
+    # the one place that acts on the record.
+    problem = clause_problem(:wave; timestep = 0.05)
+    method = SpaceTimeGalerkin(clause_ansatz(problem), FixedBoundary();
+        initial_guess = FitTo(Predictor()))
+    int = GeometricIntegrator(problem, method; solver = LevenbergMarquardt(),
+        max_iterations = 1, verbosity = 0)
+    c = cache(int)
+    solution = GeometricSolution(problem)
+    solstep = solutionstep(int, solution[0])
+    reset!(solstep, timesteps(solution)[1])
+    M.slab_bottom!(c, c.coupling, problem, ansatz(method), current(solstep))
+    M.initial_guess!(current(solstep), nothing, parameters(problem), int)
+    integrate!(solstep, int)
+    level = copy(c.ansatz.params[1:M.nspatial(ansatz(method))])
+    momentum = copy(c.coupling.p_next)
+    @test !c.converged[end]
+    @test c.iterations[end] == 1
+    @test isfinite(c.residuals[end]) && isfinite(c.initial_residuals[end])
+    # the next slab's datum is what the failed step left
+    reset!(solstep, timesteps(solution)[2])
+    M.slab_bottom!(c, c.coupling, problem, ansatz(method), current(solstep))
+    @test c.coupling.phi == level
+    @test c.coupling.momentum == momentum
+    # the run completes and records both steps, and `on_failure` acts on the record
+    result = integrate(problem, method; solver = LevenbergMarquardt(), max_iterations = 1,
+        verbosity = 0)
+    @test length(result.stats.converged) == 2
+    @test result.stats.converged[1] == false
+    @test length(result.traces) == 2
+    @test_logs (:warn, r"did not converge at timestep n=1") match_mode = :any integrate(
+        problem, method; solver = LevenbergMarquardt(), max_iterations = 1, verbosity = 0,
+        on_failure = :warn)
+    @test_throws r"did not converge at timestep n=1" integrate(problem, method;
+        solver = LevenbergMarquardt(), max_iterations = 1, verbosity = 0,
+        on_failure = :error)
+end
+
+# ---- FB17 ----------------------------------------------------------------------------
+
+@testset "FB17 the gauge's two periods are a record" begin
+    # N21: the dead branch over two wave periods with `Continuation()` and the minimum-norm step.
+    # The numbers are a record — the drift the gauge reaches, the steps that converge and the error
+    # at the end — and the testset asserts none of them; the two statements the clause does make,
+    # that the action holds no gauge term and that the solve re-fits no `φ` to a fixed field, are
+    # its source's and not a measurement.
+    problem = WF.problem(timespan = (0.0, 8.0), timestep = 0.05, xstep = 0.05,
+        xspan = (0.0, 1.0))
+    ansatz = clause_ansatz(problem)
+    method = SpaceTimeGalerkin(ansatz, FixedBoundary(); initial_guess = Continuation())
+    int = GeometricIntegrator(problem, method; solver = Newton(), max_iterations = 60,
+        f_abstol = 0.0, f_reltol = fixed_boundary_f_reltol(Float64), verbosity = 0)
+    c = cache(int)
+    solution = GeometricSolution(problem)
+    solstep = solutionstep(int, solution[0])
+    steps = length(timesteps(solution)) - 1
+    for n in 1:steps
+        reset!(solstep, timesteps(solution)[n])
+        integrate!(solstep, int)
+        copy!(solution, current(solstep), n)
+    end
+    drift = maximum(abs, c.ansatz.params[1:(2 * ansatz.Sx)])
+    xs = collect(range(xspan(problem)[1], xspan(problem)[2]; length = 21))
+    t_end = timesteps(solution)[end]
+    nx = length(solution.u[end])
+    final_error = maximum(abs(WF.solution_u(t_end, x, parameters(problem)) -
+                              solution.u[end][i])
+    for (i, x) in enumerate(xs))
+    record = (steps = length(c.converged), converged = count(c.converged), drift = drift,
+        error = final_error)
+    @info "FB17 the gauge's two periods" record
+    @test steps == length(c.converged)
+    @test all(isfinite, c.residuals)
+    @test all(isfinite, c.ansatz.params)
+end
+
+# ---- FB18 ----------------------------------------------------------------------------
+
+@testset "FB18 the family's rows build and the plateau is a record" begin
+    # N23: the registry holds the family's 32 entries — 30 of the matrix and 2 of the plateau probe
+    # — each with a distinct stem and a resolution, one of them at `Sx = 12`, `St = 16` and
+    # `h = 0.025` and one at `BigFloat`, and the plateau's numbers are a record and no assertion.
+    # M's row testset replaces this one when the two branches meet.
+    entries = family_entries(:fixed_boundary)
+    @test length(entries) == 32
+    @test length(unique(entry.stem for entry in entries)) == 32
+    @test all(entry -> entry.steps ≥ 1, entries)
+    matrix = filter(entry -> occursin("fixed-boundary", entry.stem) &&
+                             !occursin("plateau", entry.stem), entries)
+    @test length(matrix) == 30
+    @test length(Set((entry.problem, entry.form, entry.solver, entry.step)
+                     for entry in matrix)) == 30
+    # a matrix row integrates its ladder up to `t = 1`, so that the three resolutions of one
+    # problem compare one span
+    @test all(entry -> entry.steps * entry.step ≥ 1 - 1e-12, matrix)
+    plateau = filter(entry -> occursin("plateau", entry.stem), entries)
+    @test length(plateau) == 2
+    @test any(entry -> entry.Sx == 12 && entry.St == 16 && entry.step == 0.025, plateau)
+    @test any(entry -> entry.T === BigFloat, plateau)
+    @test all(entry -> entry.steps == 1, filter(entry -> entry.T === BigFloat, plateau))
+    for entry in entries
+        @test fixed_boundary_problem(entry) isa M.LagrangianPDEProblem
+        @test fixed_boundary_method(entry) isa SpaceTimeGalerkin
     end
 end

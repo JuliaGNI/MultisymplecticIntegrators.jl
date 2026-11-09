@@ -115,6 +115,13 @@ end
 
 # ---- the fixed-boundary network ------------------------------------------------------
 
+# The names the family's rows and runner build, taken from their owners so that this section loads
+# under any driver that includes the registry.
+using MultisymplecticIntegrators: Continuation, FitTo, FixedBoundary, FixedBoundaryNetwork,
+                                 LevenbergMarquardt, Predictor, SineGordon,
+                                 SpaceTimeGalerkin, Wave, integrate
+using SimpleSolvers: Newton
+
 """
 The branches of the fixed-boundary family: the dead branch — the previous level continued and solved
 by Newton in `(α, β, γ)` — and the live branch's four combinations of the bubble's form and its
@@ -133,34 +140,38 @@ const FIXED_BOUNDARY_STEPS = (0.1, 0.05, 0.025)
 """
 The fixed-boundary family: `Wave` and `SineGordon` at three time steps, on the dead branch and on
 the four combinations of the bubble's form and its solve, and the two rows of the plateau probe.
+
+`steps` is what a row integrates: the matrix's rows take the time step's ladder up to `t = 1`, so
+that the three resolutions of one problem compare one span, and the extended-precision row of the
+plateau probe takes one step.
 """
 const FIXED_BOUNDARY = vcat(
-    [(stem = "$(problem)-fixed-boundary-$(branch.name)-h$(step)",
-         label = "$(problem), $(branch.name), h = $(step)", problem, step,
-         form = branch.form, solver = branch.solver, Sx = 8, St = 10, T = Float64)
-     for problem in FIXED_BOUNDARY_PROBLEMS, step in FIXED_BOUNDARY_STEPS,
-    branch in FIXED_BOUNDARY_BRANCHES],
+    vec([(stem = "$(problem)-fixed-boundary-$(branch.name)-h$(step)",
+          label = "$(problem), $(branch.name), h = $(step)", problem, step,
+          steps = round(Int, 1 / step), form = branch.form, solver = branch.solver,
+          Sx = 8, St = 10, T = Float64)
+         for problem in FIXED_BOUNDARY_PROBLEMS, step in FIXED_BOUNDARY_STEPS,
+         branch in FIXED_BOUNDARY_BRANCHES]),
     [
         (stem = "wave-fixed-boundary-plateau-h0.025", label = "wave, plateau, h = 0.025",
-            problem = "wave", step = 0.025, form = :tsr, solver = :joint, Sx = 12, St = 16,
-            T = Float64),
+            problem = "wave", step = 0.025, steps = 40, form = :tsr, solver = :joint,
+            Sx = 12, St = 16, T = Float64),
         (stem = "wave-fixed-boundary-plateau-extended",
             label = "wave, plateau, extended precision",
-            problem = "wave", step = 0.025, form = :tsr, solver = :joint, Sx = 8, St = 10,
-            T = BigFloat)])
+            problem = "wave", step = 0.025, steps = 1, form = :tsr, solver = :joint,
+            Sx = 8, St = 10, T = BigFloat)])
 
 """
     fixed_boundary_problem(entry)
 
-The problem of a fixed-boundary entry: one step of the extended-precision row, and the run's time
-span otherwise.
+The problem of a fixed-boundary entry: its time step, and the time span of its `steps` steps.
 """
 function fixed_boundary_problem(entry)
     T = entry.T
     problem = entry.problem === "wave" ? Wave.problem : SineGordon.problem
     timestep = T(entry.step)
     return problem(
-        T = T, timespan = (zero(T), T(entry.solver === :newton ? 1 : 2) * timestep),
+        T = T, timespan = (zero(T), T(entry.steps) * timestep),
         timestep = timestep, xspan = (zero(T), one(T)), xstep = timestep)
 end
 

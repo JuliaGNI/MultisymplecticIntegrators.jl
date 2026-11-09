@@ -68,13 +68,13 @@ if !@isdefined(FixedBoundaryData)
     components, as the greedy fit of a network does, and its output weights are the least-squares
     solution on the atoms taken so far.
     """
-    struct BubbleGreedy <: SlabFitMethod
+    struct BubbleGreedy{R <: Tuple{Vararg{Real, 2}}} <: SlabFitMethod
         nα::Int
         nβ::Int
         nγ::Int
-        α_range::Tuple{Float64, Float64}
-        β_range::Tuple{Float64, Float64}
-        γ_range::Tuple{Float64, Float64}
+        α_range::R
+        β_range::R
+        γ_range::R
         iterations::Int
     end
 
@@ -89,10 +89,12 @@ if !@isdefined(FixedBoundaryData)
         end
         iterations ≥ 0 ||
             throw(ArgumentError("iterations must be at least 0, got $iterations"))
-        return BubbleGreedy(Int(nα), Int(nβ), Int(nγ),
-            (Float64(α_range[1]), Float64(α_range[2])),
-            (Float64(β_range[1]), Float64(β_range[2])),
-            (Float64(γ_range[1]), Float64(γ_range[2])), Int(iterations))
+        # The three ranges are stored at the element type their own values promote to, so that a
+        # dictionary of another precision is built from that precision's numbers and not from
+        # `Float64`'s.
+        E = float(promote_type(eltype(α_range), eltype(β_range), eltype(γ_range)))
+        ranges = map(r -> (E(r[1]), E(r[2])), (α_range, β_range, γ_range))
+        return BubbleGreedy(Int(nα), Int(nβ), Int(nγ), ranges..., Int(iterations))
     end
 
     """
@@ -172,23 +174,35 @@ if !@isdefined(FixedBoundaryData)
     const PREDICTOR_SUBSTEPS = 10
 
     """
+        fixed_boundary_qr_cut(::Type{T})
+
+    The relative rank cut of the pivoted QR a `Newton()` step takes, at element type `T`.
+
+    `Float64` is `1e-12`. The factorization's own default `√eps(T) = 1.49e-8` drops two singular
+    directions of a slab's Jacobian in which the residual stalls, so the cut is the floor the step
+    reaches rather than the factorization's guess. Another element type takes `10 eps(T)`, the same
+    floor in its own round-off: a cut below it would keep directions that the factorization at that
+    precision cannot resolve.
+    """
+    fixed_boundary_qr_cut(::Type{Float64}) = 1e-12
+    fixed_boundary_qr_cut(::Type{T}) where {T} = 10 * eps(T)
+
+    """
         fixed_boundary_f_reltol(::Type{T})
 
     The relative tolerance of a fixed-boundary step's convergence rule, at element type `T`.
 
     `Float64` is `1e-8`. On `Wave` at `h = 0.05` the dead branch's twenty steps reach a worst ratio of
     `2.96e-10` under this rule, with the rank cut of the pivoted QR at `1e-12`; the tolerance is not
-    what limits that run, since the cut at the factorisation's default leaves one step at `3.0e-8`.
-    `Float32` is the value measured on the family's affine control at that element type, never the
-    `Float64` value converted.
+    what limits that run, since the factorization's own cut leaves one step at `3.0e-8`.
+    `Float32` is `3.0f-2`, the value measured on the family's affine control at that element type,
+    whose worst ratio is `1.365e-2`; it is never the `Float64` value converted. An element type the
+    plan does not measure takes `√eps(T)`, the floor of its own round-off rather than a measurement,
+    and a run at such a type records the ratios it reaches instead of asserting them.
     """
-    function fixed_boundary_f_reltol(::Type{Float64})
-        return 1e-8
-    end
+    fixed_boundary_f_reltol(::Type{Float64}) = 1e-8
 
-    function fixed_boundary_f_reltol(::Type{Float32})
-        return 1.0f-2
-    end
+    fixed_boundary_f_reltol(::Type{Float32}) = 3.0f-2
 
     fixed_boundary_f_reltol(::Type{T}) where {T} = sqrt(eps(T))
 
@@ -342,28 +356,12 @@ else
     both the family's solver and the `Newton()` a caller may name instead, so that an affine control
     and a dead branch are measured under one rule.
     """
-    function GeometricIntegratorsBase.default_options(
+    function default_options(
             method::SpaceTimeGalerkin{<:FixedBoundaryNetwork},
             problem::LagrangianPDEProblem)
         T = datatype(problem)
         return (f_abstol = zero(T), f_reltol = fixed_boundary_f_reltol(T),
             max_iterations = LM_MAX_ITERATIONS)
-    end
-
-    """
-        initsolver(solvermethod::LevenbergMarquardt, method, caches; kwargs...)
-
-    Build the family's solver, with its own options under the caller's.
-    """
-    function initsolver(solvermethod::LevenbergMarquardt,
-            method::SpaceTimeGalerkin{<:FixedBoundaryNetwork}, caches::CacheDict; kwargs...)
-        T = eltype(nlsolution(caches))
-        options = merge(
-            (f_abstol = zero(T), f_reltol = fixed_boundary_f_reltol(T),
-                max_iterations = LM_MAX_ITERATIONS),
-            values(kwargs))
-        return invoke(initsolver, Tuple{LevenbergMarquardt, GeometricMethod, CacheDict},
-            solvermethod, method, caches; options...)
     end
 
     """
@@ -373,16 +371,17 @@ else
     saddle point whose rank is below its size: `Newton()` takes the minimum-norm step of a complete
     orthogonal factorization, as the multiplier network does.
 
-    The factorization's rank cut is `1e-12` rather than the default `√eps(T)`: the step's residual
-    stalls in the singular directions between the two, so the default cut leaves the worst step at a
-    ratio of `3.0e-8` while the cut at `1e-12` reaches `3.0e-10` and converges every step of the
-    twenty-step run. A caller's own `linear_solver_method` still overrides it.
+    The factorization's rank cut is [`fixed_boundary_qr_cut`](@ref), which the default cut `√eps(T)`
+    would leave the step's residual stalled above. A caller's own `linear_solver_method` still
+    overrides it.
     """
     function initsolver(
             solvermethod::Newton, method::SpaceTimeGalerkin{<:FixedBoundaryNetwork},
             caches::CacheDict; kwargs...)
+        T = eltype(nlsolution(caches))
         options = merge(
-            (; linear_solver_method = SimpleSolvers.LapackPivotedQR(rtol = 1e-12)),
+            (; linear_solver_method = SimpleSolvers.LapackPivotedQR(
+                rtol = fixed_boundary_qr_cut(T))),
             values(kwargs))
         return invoke(initsolver,
             Tuple{NonlinearSolverMethod, GeometricMethod, CacheDict},
@@ -445,16 +444,17 @@ else
         predictor_mass(density, params, T, D)
 
     The constant `m` of a density whose velocity derivative is `∂L/∂v = m v`, read at two seeded
-    points per component.
+    points per component and at two velocities.
 
-    A density whose `∂L/∂v` does not vanish at zero velocity, whose `m` is zero, or whose `m` differs
-    between two components, has no such constant, and a predictor on it would integrate a different
-    equation than the slab solves: it raises `ArgumentError` here, when the integrator is built.
+    A density whose `∂L/∂v` does not vanish at zero velocity, whose `m` is zero, or whose `m`
+    differs between two components or two velocities — as `m v³` or `m v²` would — has no such
+    constant, and a predictor on it would integrate a different equation than the slab solves: it
+    raises `ArgumentError` here, when the integrator is built.
     """
     function predictor_mass(density, params, ::Type{T}, D::Integer) where {T}
         mass = fill(convert(T, NaN), D)
         for (u, w) in predictor_points(T, D)
-            for v in (zero(T), one(T))
+            for v in (zero(T), one(T), T(2))
                 for d in 1:D
                     m = velocity_derivative(density, u, fill(v, D), w, params, d)
                     if iszero(v)
@@ -540,7 +540,7 @@ else
         end
         φ = zeros(ST, nspatial(a))
         hidden_start!(φ, a, ST)
-        least_squares!(φ, r!, length(nodes) * D; iterations = 400,
+        least_squares!(φ, r!, length(nodes) * D; iterations = 1000,
             μ₀ = convert(ST, 1e-3))
         copyto!(data.phi, φ)
         # the momentum of the initial data on the free parameters
@@ -550,7 +550,7 @@ else
             u = Tuple(initial.u[r, :])
             v = Tuple(initial.v[r, :])
             w = Tuple(initial.w[r, :])
-            g = ForwardDiff.gradient(
+            g = gradient(
                 z -> sum(velocity_derivative(problem.density, u, v, w, params, d) *
                          spatial_network(a, z, nodes[r], ga0[d], gb0[d], d) for d in 1:D),
                 φ)
@@ -764,9 +764,7 @@ else
     function evaluate!(sample::AbstractArray{ST, 3}, ::Predictor,
             c::SpaceTimeGalerkinCache, ansatz::SpaceTimeAnsatz,
             problem::LagrangianPDEProblem, sol) where {ST}
-        throw(ArgumentError(
-            "Predictor() needs a FixedBoundaryNetwork; $(nameof(typeof(ansatz))) has no slab " *
-            "predictor"))
+        return refuse_predictor(ansatz)
     end
 
     # ---- the fit that starts a slab ------------------------------------------------------

@@ -4,11 +4,11 @@ using GeometricBase
 using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: Diagonal, I, SymTridiagonal, UpperTriangular, axpy!, dot, eigen, ldiv!,
+using LinearAlgebra: Diagonal, I, UpperTriangular, axpy!, dot, ldiv!,
                      mul!, norm, rdiv!, svd
 using SimpleSplines
 using SimpleSolvers
-import SimpleSolvers: ForwardDiff
+import ForwardDiff: derivative as forward_derivative, gradient, jacobian
 using SparseArrays
 using Random: AbstractRNG, Xoshiro
 using Symbolics
@@ -18,7 +18,7 @@ import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrat
                       basis_values, degree, nbasis, ncells, quadrature_nodes,
                       quadrature_weights, l2_projection!, nodes as spline_nodes
 import SimpleSolvers: initial_residual, method, solve_with_status!, NonlinearSolverException
-import SimpleSolvers: config, jacobian!, jacobianmatrix, linearsolver
+import SimpleSolvers: config, jacobian!, jacobianmatrix, linearsolver, isconverged
 import AbstractNeuralNetworks: Chain, Dense, NeuralNetwork, layers, params
 import NeuralNetworkParameters: flatten, unflatten, unflatten!
 import SymbolicNeuralNetworks: SymbolicNeuralNetwork, Jacobian, derivative,

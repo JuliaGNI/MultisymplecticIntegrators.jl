@@ -19,5 +19,5 @@ out of the manual, which the build reports.
 ```@autodocs
 Modules = [MultisymplecticIntegrators]
 Pages = ["src/methods.jl", "src/core/integrate.jl", "src/core/slab_integrator.jl",
-    "src/core/weak_form.jl", "src/diagnostics.jl"]
+    "src/core/weak_form.jl", "src/core/levenberg_marquardt.jl", "src/diagnostics.jl"]
 ```

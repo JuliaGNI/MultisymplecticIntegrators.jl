@@ -815,17 +815,34 @@ const BUBBLE_FORMS = (:tsr, :abg)
 """
     gauss_legendre(n, T)
 
-The `n`-point Gauss–Legendre rule on `[0, 1]`: its nodes and its weights, by the symmetric
-tridiagonal eigenproblem whose eigenvalues are the nodes and whose first eigenvector entries squared
-are the weights.
+The `n`-point Gauss–Legendre rule on `[0, 1]`: its nodes and its weights, from Newton's iteration on
+the Legendre polynomial and its derivative, which needs nothing of the element type beyond
+arithmetic and `cos` and is therefore exact at any precision.
 """
 function gauss_legendre(n::Integer, ::Type{T}) where {T}
     n ≥ 1 || throw(ArgumentError("a Gauss rule needs at least one node, got $n"))
-    β = [T(k) / sqrt(T(4 * k^2) - 1) for k in 1:(n - 1)]
-    E = eigen(SymTridiagonal(zeros(T, n), β))
-    nodes = (E.values .+ 1) ./ 2
-    weights = E.vectors[1, :] .^ 2
-    return collect(T, nodes), collect(T, weights)
+    nodes = Vector{T}(undef, n)
+    weights = Vector{T}(undef, n)
+    # the roots are symmetric about 0 on [-1, 1], so half of them are found and mirrored
+    for i in 1:div(n + 1, 2)
+        z = cos(T(π) * (T(i) - T(1) / 4) / (T(n) + T(1) / 2))
+        derivative = zero(T)
+        for _ in 1:100
+            p1, p2 = one(T), zero(T)
+            for k in 1:n
+                p3 = p2
+                p2 = p1
+                p1 = ((2k - 1) * z * p2 - (k - 1) * p3) / k
+            end
+            derivative = n * (z * p1 - p2) / (z * z - 1)
+            step = p1 / derivative
+            z -= step
+            abs(step) ≤ eps(T) * max(one(T), abs(z)) && break
+        end
+        nodes[i], nodes[n + 1 - i] = (1 - z) / 2, (1 + z) / 2
+        weights[i] = weights[n + 1 - i] = one(T) / ((1 - z * z) * derivative * derivative)
+    end
+    return nodes, weights
 end
 
 """
@@ -941,7 +958,7 @@ nbubble(a::FixedBoundaryNetwork) = 3 * a.St + a.St * a.D
 
 """The positions, within a level's parameters, that the mode frees."""
 function spatial_free(a::FixedBoundaryNetwork)
-    a.mode === :all ? (1:nspatial(a)) : ((2 * a.Sx + 1):(3 * a.Sx))
+    a.mode === :all ? (1:nspatial(a)) : ((2 * a.Sx + 1):nspatial(a))
 end
 
 """The positions, within the bubble's parameters, that the mode frees."""
@@ -1254,7 +1271,7 @@ The lift of a slab differentiates the problem's side data in time, and the data 
 source of that derivative: a `bcs_function` that is not generic in its time argument therefore raises
 where the integrator is built.
 """
-side_derivative(f, t) = ForwardDiff.derivative(f, t)
+side_derivative(f, t) = forward_derivative(f, t)
 
 """
     spatial_derivative(ansatz, φ, i, d, ŝ, bump, slope, span)
@@ -1379,15 +1396,18 @@ function slab_field!(
         h) where {ST}
     a = s.ansatz
     data = bottom
-    for (k, i) in enumerate(free_indices(a))
+    D, nfp, nsp = a.D, length(spatial_free(a)), nspatial(a)
+    free_spatial, free_bubble = spatial_free(a), bubble_free(a)
+    for (k, i) in enumerate(free_spatial)
         s.params[i] = x[k]
     end
-    D, nfp = a.D, length(spatial_free(a))
+    for (k, i) in enumerate(free_bubble)
+        s.params[nsp + i] = x[nfp + k]
+    end
     tb = s.tabulation
     xa, xb = a.xspan
     span = xb - xa
     hh = convert(ST, h)
-    free_spatial, free_bubble = spatial_free(a), bubble_free(a)
     φ0, φ1, Θ = data.phi, view(s.params, 1:nspatial(a)), bubble_parameters(s)
     for r in eachindex(tb.xnode), q in eachindex(tb.tnode)
 
@@ -1517,12 +1537,17 @@ end
     copy_ansatz_data!(cache_data, data)
 
 Copy the parameters the solver does not free from the cache of the problem's element type into the
-cache the solver works in. Under `:last_layer` those are both hidden layers, which the guess and the
-fit place and the step never moves.
+cache the solver works in. Under `:last_layer` those are both hidden layers — the level's `Sx`
+weights and `Sx` biases, and the bubble's `3St` hidden entries — which the guess and the fit place
+and the step never moves; under `:all` the step frees every parameter, so there is nothing to copy.
 """
 function copy_ansatz_data!(c::FixedBoundarySlab{ST}, d::FixedBoundarySlab) where {ST}
-    for i in eachindex(c.params)
-        i in free_indices(c.ansatz) && continue
+    a = c.ansatz
+    a.mode === :all && return nothing
+    for i in 1:(2 * a.Sx)
+        c.params[i] = convert(ST, d.params[i])
+    end
+    for i in (nspatial(a) + 1):(nspatial(a) + 3 * a.St)
         c.params[i] = convert(ST, d.params[i])
     end
     return nothing
@@ -1539,12 +1564,8 @@ function nunknowns(ansatz::FixedBoundaryNetwork, coupling::SlabCoupling,
     return nfree(ansatz)
 end
 
-"""
-    is_linear_in_coefficients(ansatz::FixedBoundaryNetwork)
-
-A fixed-boundary network is nonlinear in its parameters in both modes, so a `Projection()` on it is
-refused, and the direct linear solve is not offered.
-"""
+# A fixed-boundary network is nonlinear in its parameters in both modes, so `Projection()` is
+# refused on it and the direct linear solve is not offered.
 is_linear_in_coefficients(::FixedBoundaryNetwork) = false
 
 """
@@ -1718,26 +1739,36 @@ function fixed_boundary_target!(sample::AbstractArray{ST, 3}, s::FixedBoundarySl
 end
 
 """
-    check_method(problem, method::SpaceTimeGalerkin{<:FixedBoundaryNetwork})
+    check_method(problem, method::SpaceTimeGalerkin{<:SpaceTimeAnsatz, <:SlabCoupling, <:FitTo})
 
-The refusals of a fixed-boundary method beyond the core's: a target the ansatz has no field map for,
-and a density whose velocity derivative the predictor cannot read.
+The refusals of a `FitTo` guess, on top of the core's: a fixed-boundary network takes
+`InitialCondition`, `ExactSolution`, `TargetFunction` and `Predictor` as targets and is fitted by
+[`BubbleGreedy`](@ref) alone, and a density its predictor cannot read is refused here; a `Predictor`
+on any other ansatz is refused, because another ansatz has no slab predictor to run.
 """
 function check_method(problem::LagrangianPDEProblem,
-        method::SpaceTimeGalerkin{<:FixedBoundaryNetwork})
+        method::SpaceTimeGalerkin{A, C, G}) where {A <: SpaceTimeAnsatz, C <: SlabCoupling,
+                                                   G <: FitTo}
     invoke(check_method, Tuple{LagrangianPDEProblem, SpaceTimeGalerkin}, problem, method)
     guess = initial_guess(method)
-    if guess isa FitTo
-        supported_target(guess.target) || throw(ArgumentError(
+    target = guess.target
+    if A <: FixedBoundaryNetwork
+        supported_target(target) || throw(ArgumentError(
             "a FixedBoundaryNetwork takes InitialCondition, ExactSolution, TargetFunction and " *
-            "Predictor as targets, got $(nameof(typeof(guess.target)))"))
+            "Predictor as targets, got $(nameof(typeof(target)))"))
         fit_method(guess, ansatz(method)) isa BubbleGreedy || throw(ArgumentError(
             "a FixedBoundaryNetwork is fitted by BubbleGreedy, got " *
             "$(nameof(typeof(fit_method(guess, ansatz(method)))))"))
-        guess.target isa Predictor && check_predictor_density(problem)
+        target isa Predictor && check_predictor_density(problem)
+    elseif target isa Predictor
+        refuse_predictor(ansatz(method))
     end
     return nothing
 end
+
+"""Refuse a `Predictor` on an ansatz that has no slab predictor to run."""
+refuse_predictor(a::SpaceTimeAnsatz) = throw(ArgumentError(
+    "Predictor() needs a FixedBoundaryNetwork; $(nameof(typeof(a))) has no slab predictor"))
 
 """Whether a target of a [`FixedBoundaryNetwork`](@ref) has a field map."""
 supported_target(::InitialCondition) = true
