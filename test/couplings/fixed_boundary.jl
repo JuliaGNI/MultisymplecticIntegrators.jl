@@ -154,23 +154,22 @@ end
 
 @testset "FB1 the residual is the action's gradient" begin
     rng = Xoshiro(7)
-    # The scalar-density entries: the oracle's `node_lagrangian` reads a `VectorDensity` through the
-    # package's `derivatives` and not through a call, so the `:noether` entries' coupled density is
-    # outside this check, and K49 records the gap.
-    scalar_entries = [e
-                      for e in generate_problems(Float64; rng = Xoshiro(SEED))
-                      if e.kind !== :noether]
-    @testset "generated entry, $form, $mode" for entry in scalar_entries[1:4],
-        form in (:abg, :tsr), mode in (:all, :last_layer)
+    @testset "generated entry, $form, $mode" for entry in generate_problems(Float64;
+            rng = Xoshiro(SEED)), form in (:abg, :tsr), mode in (:all, :last_layer)
         ansatz = fixed_ansatz(entry.problem; form = form, mode = mode)
         problem = entry.problem
-        slab = fixed_slab(entry.problem, ansatz)
+        slab = fixed_slab(problem, ansatz)
         c = cache(slab.int)
         oracle = ActionOracle(problem, slab.method; block = c.ansatz)
         @test length(c.x) == unknown_count(oracle)
         θ = 2 .* rand(rng, Float64, length(c.x)) .- 1
-        compare_gradient(slab_residual(slab.int, θ, parameters(entry.problem)),
+        compare_gradient(slab_residual(slab.int, θ, parameters(problem)),
             oracle_residual(oracle, fixed_datum(c), θ), Float64)
+        integrate!(slab.solstep, slab.int)
+        next_fixed_slab!(slab, 2)
+        θ₂ = 2 .* rand(rng, Float64, length(c.x)) .- 1
+        compare_gradient(slab_residual(slab.int, θ₂, parameters(problem)),
+            oracle_residual(oracle, fixed_datum(c), θ₂), Float64)
     end
     @testset "the two problems, first and second slab, $name, $form, $mode" for name in (:wave, :sinegordon),
         form in (:abg, :tsr), mode in (:all, :last_layer)
@@ -194,13 +193,21 @@ end
 
 @testset "FB2 the Jacobian is the derivative of the residual" begin
     rng = Xoshiro(11)
+    # `jacobian!` is SimpleSolvers' and writes the solver's own matrix, so it exists for a
+    # `NonlinearSolver`. The family's Levenberg–Marquardt keeps no such matrix — it takes one SVD of
+    # the Jacobian at each accepted iterate — so the Jacobian of the residual is read through the
+    # `Newton()` solver the family also offers, on the same residual and the same block.
     for name in (:wave, :sinegordon), form in (:abg, :tsr), mode in (:all, :last_layer)
         problem = PROBLEMS[name]()
-        slab = fixed_slab(problem, fixed_ansatz(problem; form = form, mode = mode))
+        slab = fixed_slab(problem, fixed_ansatz(problem; form = form, mode = mode);
+            solver = Newton())
         c = cache(slab.int)
         s = solver(slab.int)
         θ = 2 .* rand(rng, Float64, length(c.x)) .- 1
         p = parameters(problem)
+        # at the slab's guess, as a run reaches the Jacobian: a `:last_layer` slab whose held hidden
+        # layer is still zero has a zero Jacobian, whatever its residual is
+        M.initial_guess!(current(slab.solstep), nothing, p, slab.int)
         SimpleSolvers.jacobian!(s, θ, (current(slab.solstep), p, slab.int))
         J = copy(SimpleSolvers.jacobianmatrix(s))
         @test maximum(abs, J) ≥ 1 // 100
@@ -242,6 +249,10 @@ end
             max_iterations = 3, verbosity = 0)
         solution = GeometricSolution(problem)
         solstep = solutionstep(int, solution[0])
+        # A step's own time is the end of the slab it solves — `slab_start` reads one timestep back
+        # from it — so a run's first step is placed at `timesteps(solution)[1]`, the first slab's
+        # end, as the helper `next_fixed_slab!` places it.
+        reset!(solstep, timesteps(solution)[1])
         integrate!(solstep, int)
         cf = cache(int)
         next_fixed_slab!(
@@ -257,20 +268,25 @@ end
 # ---- FB4 -----------------------------------------------------------------------------
 
 @testset "FB4 the solution carries the side data at every step" begin
+    # The state is component-major: component `d`'s `nx` output-grid values start at
+    # `(d - 1) * nx + 1`, and the grid's ends are the span's.
+    function ends(u, D)
+        nx = length(u) ÷ D
+        return [(u[(d - 1) * nx + 1], u[d * nx]) for d in 1:D]
+    end
     for name in (:wave, :sinegordon), form in (:abg,)
 
         problem = PROBLEMS[name]()
         method = SpaceTimeGalerkin(fixed_ansatz(problem; form = form), FixedBoundary())
         result = integrate(problem, method; max_iterations = 3, verbosity = 0)
-        for n in 1:length(result.solution.u)
+        for n in eachindex(result.stats.converged)
             t = result.solution.t[n]
             bcs = problem.bcs_function(t, parameters(problem))
             scale = max(1, maximum(abs, result.solution.u[n]))
-            for d in 1:components(problem)
-                @test abs(result.solution.u[n][d] - bcs.left.u[d]) ≤
-                      8 * eps(Float64) * scale
-                @test abs(result.solution.u[n][end - d + 1] - bcs.right.u[d]) ≤
-                      8 * eps(Float64) * scale
+            for (d, (left, right)) in enumerate(ends(result.solution.u[n],
+                components(problem)))
+                @test abs(left - bcs.left.u[d]) ≤ 8 * eps(Float64) * scale
+                @test abs(right - bcs.right.u[d]) ≤ 8 * eps(Float64) * scale
             end
         end
     end
@@ -278,12 +294,11 @@ end
         problem = entry.problem
         method = SpaceTimeGalerkin(fixed_ansatz(problem), FixedBoundary())
         result = integrate(problem, method; max_iterations = 3, verbosity = 0)
-        for n in 1:length(result.solution.u)
+        for n in eachindex(result.stats.converged)
             bcs = problem.bcs_function(result.solution.t[n], parameters(problem))
             scale = max(1, maximum(abs, result.solution.u[n]))
-            for d in 1:components(problem)
-                @test abs(result.solution.u[n][d] - bcs.left.u[d]) ≤
-                      8 * eps(Float64) * scale
+            for (d, (left, _)) in enumerate(ends(result.solution.u[n], components(problem)))
+                @test abs(left - bcs.left.u[d]) ≤ 8 * eps(Float64) * scale
             end
         end
     end
@@ -333,7 +348,7 @@ end
         result = integrate(problem, m; solver = solvermethod, max_iterations = 3,
             verbosity = 0)
         stats = result.stats
-        @test length(stats.iterations) == length(result.solution.u)
+        @test length(stats.iterations) == length(result.traces)
         @test all(stats.iterations .≤ 3)
         @test all(isfinite, stats.residuals)
         @test all(isfinite, stats.initial_residuals)
@@ -464,7 +479,7 @@ end
         c = cache(slab.int)
         tb = ansatz.tabulation
         sample = zeros(Float64, length(tb.tnode), length(tb.xnode), ansatz.D)
-        evaluate!(sample, Predictor(), c, ansatz, problem, current(slab.solstep))
+        M.evaluate!(sample, Predictor(), c, ansatz, problem, current(slab.solstep))
         # the test's own Störmer–Verlet, from the same bottom level and the same velocity
         p = parameters(problem)
         grid = collect(range(xspan(problem)[1], xspan(problem)[2]; length = 101))
@@ -528,7 +543,7 @@ end
     wave = PROBLEMS[:wave]()
     spline = TensorBSplineAnsatz(degree = 3, ncells = (1, 5), xspan = (0.0, 1.0))
     c = cache(GeometricIntegrator(wave, SpaceTimeGalerkin(fixed_ansatz(wave), FixedBoundary())))
-    @test_throws r"Predictor" evaluate!(
+    @test_throws r"Predictor" M.evaluate!(
         zeros(2, 2, 1), Predictor(), c, spline, wave, nothing)
 end
 
@@ -541,17 +556,17 @@ end
     c = cache(slab.int)
     tb = ansatz.tabulation
     sample = zeros(Float64, length(tb.tnode), length(tb.xnode), ansatz.D)
-    evaluate!(sample, InitialCondition(), c, ansatz, problem, current(slab.solstep))
+    M.evaluate!(sample, InitialCondition(), c, ansatz, problem, current(slab.solstep))
     w = collect(c.ansatz.params)
-    fit!(w, BubbleGreedy(γ_range = (-6.0, 6.0)), ansatz, sample, c)
-    fit!(w, BubbleGreedy(γ_range = (-3.0, 3.0)), ansatz, sample, c)
+    M.fit!(w, BubbleGreedy(γ_range = (-6.0, 6.0)), ansatz, sample, c)
+    M.fit!(w, BubbleGreedy(γ_range = (-3.0, 3.0)), ansatz, sample, c)
     second = copy(w)
     chosen = c.ansatz.fit.selected[1:ansatz.St]
     @test all(c.ansatz.fit.atoms[i, 3] ≤ 3.0 for i in chosen)
     @test c.ansatz.fit.method.γ_range == (-3.0, 3.0)
     c.ansatz.fit.method = nothing
     w2 = collect(c.ansatz.params)
-    fit!(w2, BubbleGreedy(γ_range = (-3.0, 3.0)), ansatz, sample, c)
+    M.fit!(w2, BubbleGreedy(γ_range = (-3.0, 3.0)), ansatz, sample, c)
     @test second ≈ w2
 end
 
@@ -562,8 +577,7 @@ end
         xspan = (0.0, 1.0))
     for form in (:abg, :tsr), solve in (:newton, :lm)
 
-        a = FixedBoundaryNetwork(Sx = 4, St = 4, bubble_form = form, xspan = (0.0, 1.0),
-            ncells = 3, nq = (4, 3))
+        a = fixed_ansatz(problem; form = form)
         m = SpaceTimeGalerkin(a, FixedBoundary())
         solvermethod = solve === :lm ? LevenbergMarquardt() : Newton()
         int = GeometricIntegrator(problem, m; solver = solvermethod, max_iterations = 2,

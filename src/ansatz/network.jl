@@ -1200,6 +1200,14 @@ end
         datum.left1[d], datum.right1[d], datum.dleft1[d], datum.dright1[d])
 end
 
+# The same of the coupling's own block, which holds the slab's side data as soon as the slab's
+# datum is fixed. The block's copy is written by the first residual evaluation, so the guess that
+# runs before it reads this one.
+@inline function top_sides(data::FixedBoundaryData, d::Integer)
+    return (data.ga[1, d], data.gb[1, d], data.ga[end, d], data.gb[end, d],
+        data.ga[end, d], data.gb[end, d], data.dga[end, d], data.dgb[end, d])
+end
+
 """
     slab_component(ansatz, d, φ0, φ1, Θ, t̂, x, h, sides)
 
@@ -1254,6 +1262,10 @@ side_derivative(f, t) = ForwardDiff.derivative(f, t)
 One component of the derivative of a level's network `N(x; φ, t)` in `x`, and of its derivative in
 `x`, with respect to parameter `i` of `φ`: the weight, the bias or the output weight of one hidden
 unit.
+
+A hidden weight or bias reaches component `d` alone, and an output weight reaches the one component
+it belongs to, which its position in `φ` names: the derivative of component `d` with respect to
+another component's output weight is zero.
 """
 @inline function spatial_derivative(
         a::FixedBoundaryNetwork, φ::AbstractVector{T}, i::Integer,
@@ -1274,6 +1286,7 @@ unit.
         return (bump * c * s, slope * c * s - (bump / span) * 2 * c * φ[k] * t * s)
     else
         k = (i - 2 * Sx - 1) ÷ D + 1
+        (i - 2 * Sx - 1) % D + 1 == d || return (zero(T), zero(T))
         t = tanh(φ[k] * ŝ + φ[Sx + k])
         return (bump * t, slope * t + (bump / span) * φ[k] * (one(t) - t * t))
     end
@@ -1302,7 +1315,9 @@ parameter `i` of `Θ`: a hidden entry, in the coordinates of the ansatz's form, 
 
 The hidden entries' derivatives are taken in `(α, β, γ)` and carried to the form's coordinates by
 the chart's own Jacobian, so that a `:tsr` residual is the gradient of the action written in
-`(θ, s, ρ)` and its derivative is the chart applied to the equations as well as to the unknowns.
+`(θ, s, ρ)` and its derivative is the chart applied to the equations as well as to the unknowns. An
+output weight contributes to the one component it belongs to, which its position in `Θ` names: its
+derivative in another component is zero.
 """
 @inline function bubble_derivative(
         a::FixedBoundaryNetwork, Θ::AbstractVector{T}, i::Integer,
@@ -1337,6 +1352,7 @@ the chart's own Jacobian, so that a `:tsr` residual is the gradient of the actio
         return (dγ, dtγ, dŝγ)
     end
     k = (i - 3 * St - 1) ÷ D + 1
+    (i - 3 * St - 1) % D + 1 == d || return (zero(T), zero(T), zero(T))
     α, β, γ, _ = bubble_unit(a, Θ, k)
     t = tanh(α * t̂ + β * ŝ + γ)
     s = one(t) - t * t
@@ -1602,6 +1618,9 @@ function apply_guess!(c::SpaceTimeGalerkinCache{ST}, guess::Continuation,
         Θ = bubble_start(ansatz, ST)
         copyto!(c.ansatz.params, 1, c.coupling.phi, 1, nspatial(ansatz))
         copyto!(c.ansatz.params, nspatial(ansatz) + 1, Θ, 1, nbubble(ansatz))
+        for (k, i) in enumerate(bubble_free(ansatz))
+            c.x[nfp + k] = Θ[i]
+        end
     else
         for (k, i) in enumerate(bubble_free(ansatz))
             c.x[nfp + k] = c.ansatz.params[nspatial(ansatz) + i]

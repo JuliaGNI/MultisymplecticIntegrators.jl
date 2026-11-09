@@ -626,14 +626,19 @@ else
 
     Run the predictor of one slab — Störmer–Verlet with [`PREDICTOR_SUBSTEPS`](@ref) substeps over
     [`PREDICTOR_POINTS`](@ref) points of the span, with the side data imposed at every substep — and
-    fill `sample` at the nodes of the ansatz's rule by linear interpolation in `x` and in `t̂`, and
-    the block's `top_sample` at `t̂ = 1` on the space nodes.
+    fill `sample` at the nodes of the ansatz's rule by linear interpolation in `x` and in `t̂`, and the
+    block's `top_sample` at `t̂ = 1` on the space nodes.
 
-    The run starts from the bottom level's network and the initial data's velocity at the first slab,
-    and from the previous slab's top velocity after it.
+    The run reads the slab's datum from the coupling's block — the bottom level's parameters, the two
+    ends' side data and the slab's start time — and not from the block's own copy of it, which the first
+    residual evaluation writes after the guess that runs this predictor. It starts from the bottom
+    level's network and the initial data's velocity at the first slab, and from the previous slab's top
+    velocity after it.
     """
     function predictor_sample!(sample::AbstractArray{ST, 3}, s::FixedBoundarySlab{ST},
-            c::SpaceTimeGalerkinCache, problem::LagrangianPDEProblem, sol) where {ST}
+            c::SpaceTimeGalerkinCache{ST, AD, FixedBoundaryData{ST}},
+            problem::LagrangianPDEProblem, sol) where {ST, AD}
+        data = c.coupling
         a = s.ansatz
         D, tb = a.D, a.tabulation
         NG, K = PREDICTOR_POINTS, PREDICTOR_SUBSTEPS
@@ -644,13 +649,12 @@ else
         params = parameters(problem)
         density = problem.density
         mass = predictor_mass(density, params, ST, D)
-        φ0 = s.datum.phi
+        φ0 = data.phi
         u = zeros(ST, NG, D)
         v = zeros(ST, NG, D)
         for r in 1:NG, d in 1:D
 
-            u[r, d] = spatial_network(
-                a, φ0, grid[r], s.datum.left0[d], s.datum.right0[d], d)
+            u[r, d] = spatial_network(a, φ0, grid[r], data.ga[1, d], data.gb[1, d], d)
         end
         if c.steps == 0
             initial = problem.ics_function(grid, params)
@@ -663,7 +667,7 @@ else
             for r in 1:NG, d in 1:D
 
                 _, ut, _ = slab_component(a, d, φ0, φ1, Θ, one(ST), grid[r], h,
-                    top_sides(s.datum, d))
+                    top_sides(data, d))
                 v[r, d] = ut / h
             end
         end
@@ -680,7 +684,7 @@ else
                 v[r, d] += dt / 2 * acc[r, d]
                 u[r, d] += dt * v[r, d]
             end
-            bcs = problem.bcs_function(s.datum.start + k * dt, params)
+            bcs = problem.bcs_function(data.start + k * dt, params)
             for d in 1:D
                 u[1, d] = ST(bcs.left.u[d])
                 u[NG, d] = ST(bcs.right.u[d])
