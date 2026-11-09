@@ -381,8 +381,8 @@ core evaluates the top of the slab at, and `fit` the workspace of the greedy fit
 `values` and `gradient` are the scratch of one evaluation — the `3D` values of the field, its two
 derivatives and their parameter derivative — `input` its two-entry argument, and `parameter_set`
 the parameters laid out as the network's kernels read them, which every evaluation refreshes from
-`params`. `fit` is the workspace of the greedy fit and `train` that of the
-[`TrainedHiddenLayer`](@ref) fit, which trains the hidden layer in place.
+`params`. `train` is the workspace of the [`TrainedHiddenLayer`](@ref) fit, which trains the hidden
+layer in place.
 """
 struct NetworkSlab{ST, T, A <: NetworkAnsatz{T}, P}
     ansatz::A

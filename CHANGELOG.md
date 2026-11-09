@@ -548,13 +548,15 @@ makes it worth keeping.
   `linear_solver_method` rather than a hard-coded `lu`: for a network that is
   `SimpleSolvers.LapackPivotedQR`, whose minimum-norm step solves the rank-deficient saddle point
   that a `:last_layer` Jacobian is, and the cache's `linear_lu` field holds it of whatever type it
-  is. The observable of the option is the step's residual — at most `1.5e-14` of its initial
-  residual over three slabs of `LinearTransport` at `S = 20` and `D = 2`, which is
-  `69 eps(Float64)` — taken with one factorisation at the run's first step and again at every step
-  whose guess has moved the parameters the step holds fixed, which for a `:last_layer` network is
-  its hidden layer, and two recorded solves per step; the vector's distance from a Newton solve's
-  is not an observable, because the Jacobian's near-null space leaves it undetermined. The ELM
-  family's direct least-squares branch is this option.
+  is. The observable of the option is the step's residual — in `Float64` at most `1.5e-14` of its
+  initial residual over three slabs of `LinearTransport` at `S = 20` and `D = 2`, which is
+  `69 eps(Float64)`, and in `Float32` at most `2.4e-2` over the same three slabs, which is not
+  converged under the solver's default tolerances: two iterations per step, and each step warns
+  that the nonlinear solve did not converge — taken with one factorisation at the run's first step
+  and again at every step whose guess has moved the parameters the step holds fixed, which for a
+  `:last_layer` network is its hidden layer, and two recorded solves per step; the vector's distance
+  from a Newton solve's is not an observable, because the Jacobian's near-null space leaves it
+  undetermined. The ELM family's direct least-squares branch is this option.
 - **`LinearTransport`'s density is the doubled field's.** `L = ψ (v₁ + c w₁)` on `D = 2`, with
   component 1 the transported field `u` and component 2 the adjoint field `ψ` of zero data: `ψ`'s
   rows carry the transport equation for `u` and `u`'s rows the adjoint equation for `ψ`, where

@@ -41,9 +41,12 @@ a `:last_layer` network those are the hidden parameters before its free output w
 cache keeps a copy and compares it exactly. The Jacobian of such a step is a saddle point whose
 constraint rows reach only the free output weights of a `:last_layer` network, so the pivoted QR of a
 network solves it by its minimum-norm step, where a factorisation without rank detection raises on a
-zero pivot. The iterate count, the residual, the initial residual and the convergence of every step
-are recorded in the cache, and the trace `(u, v, w)` at the top of the slab, at the nodes of the
-space quadrature, is kept for the diagnostics.
+zero pivot. In `Float32` that step leaves a residual of order `1e-2` of the initial one — at most
+`2.4e-2` over three steps of `LinearTransport` at `S = 20` and `D = 2`, where `Float64` leaves
+`1.5e-14` — so the solver's default tolerances record such a step as not converged. The iterate
+count, the residual, the initial residual and the convergence of every step are recorded in the
+cache, and the trace `(u, v, w)` at the top of the slab, at the nodes of the space quadrature, is
+kept for the diagnostics.
 
 The roles of the ansatz, the coupling and the guess, and the functions through which the core
 reaches each of them, are on the page *The slab seam* of the manual.
