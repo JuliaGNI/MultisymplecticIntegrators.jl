@@ -282,3 +282,18 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   As for K47 the record is that run and not a reference.
 - kind: defect
 - found: 2026-11-09
+
+### K49 · `coupling_data`'s docstring says the block is built once per integrator.
+
+- location: `src/core/slab_integrator.jl:192`
+- evidence: the docstring of `coupling_data` reads "The coupling's block of the slab cache, built
+  once per integrator", and the core builds it inside `Cache{ST}` (`src/core/slab_integrator.jl:427`):
+  an integrator builds the cache of the problem's element type, and a solver then builds a cache of
+  the dual type on its first Jacobian, so the block is built once per cache. A coupling's own
+  `coupling_data` docstring that counts on the rate — the lifting's says which cache speaks —
+  therefore disagrees with the generic one. Recorded rather than fixed: the part's decision keeps
+  the core's diff against `0e2af8d` to the transform's signature, its docstring and its two call
+  sites, and this line is none of the three.
+- kind: docs
+- found: 2026-11-10
+

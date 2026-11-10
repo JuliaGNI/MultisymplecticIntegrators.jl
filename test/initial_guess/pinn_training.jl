@@ -17,6 +17,16 @@ const M = MultisymplecticIntegrators
 target(t, x, params) = sinpi(x) * cospi(t)
 
 """
+The two-component target of the scalar-and-vector scenarios, `u(t, x) = (sin(πx) cos(πt),
+sin(2πx) cos(πt) / 2)`: its components differ by up to `√3/2 · 3/2 = 1.299` on the slab, so a fit
+that reads one component's target value for both components is not the fit this target asks for.
+"""
+target₂(t, x, params) = (sinpi(x) * cospi(t), sinpi(2x) * cospi(t) / 2)
+
+"""The target of a fit with `D` components: the scalar one, or the two-component one."""
+pinn_target(D) = TargetFunction(D === 1 ? target : target₂)
+
+"""
     pinn_problem(::Type{T}, D)
 
 The problem of the fit's slab at `h = 0.05`: `Wave` for a scalar field and `VectorWave` for a
@@ -46,16 +56,16 @@ function pinn_slab(::Type{T}; S = 10, D = 1, mode = :all, epochs = 100, step = 1
     ansatz = NetworkAnsatz(S = S, mode = mode, xspan = (zero(T), one(T)), degree = 3,
         ncells = (2, 5), D = D)
     method = PINNTraining(epochs = epochs, step = step, batch = batch, nsamples = nsamples)
+    tgt = pinn_target(D)
     int = GeometricIntegrator(problem,
         SpaceTimeGalerkin(ansatz, HardConstraintLifting();
-            initial_guess = FitTo(TargetFunction(target); method = method)))
+            initial_guess = FitTo(tgt; method = method)))
     c = cache(int)
     solution = GeometricSolution(problem)
     solstep = solutionstep(int, solution[0])
     reset!(solstep, timesteps(solution)[1])
     now = current(solstep)
     M.slab_bottom!(c, c.coupling, problem, ansatz, now)
-    tgt = TargetFunction(target)
     tnodes, xnodes = M.quadrature_points(c.ansatz)
     interior = zeros(T, length(tnodes), length(xnodes), D)
     M.evaluate!(interior, tgt, c, ansatz, problem, now)
@@ -64,11 +74,11 @@ function pinn_slab(::Type{T}; S = 10, D = 1, mode = :all, epochs = 100, step = 1
 end
 
 """
-The relative `L²` error of the block's field against the target at the nodes of the ansatz's own
-rule: the misfit the fit descends, read from the block's own evaluation and not from the fit, over
-every component of the field.
+The relative `L²` error of the block's field against the pointwise target `f` at the nodes of the
+ansatz's own rule: the misfit the fit descends, read from the block's own evaluation and not from
+the fit, over every component of the field, each against its own entry of the target.
 """
-function misfit(c, problem, ::Type{T}, h) where {T}
+function misfit(c, problem, ::Type{T}, h, f) where {T}
     tq, xq = M.quadrature_points(c.ansatz)
     a = c.ansatz
     err = zero(T)
@@ -77,10 +87,11 @@ function misfit(c, problem, ::Type{T}, h) where {T}
     for (q, t̂) in enumerate(tq), (r, x) in enumerate(xq)
 
         M.evaluate_at!(a, t̂, x)
-        want = target(t₀ + h * t̂, x, parameters(problem))
+        want = f(t₀ + h * t̂, x, parameters(problem))
         for d in 1:a.ansatz.D
-            err += abs2(a.values[d] - want)
-            scale += abs2(want)
+            value = want isa Number ? want : want[d]
+            err += abs2(a.values[d] - value)
+            scale += abs2(value)
         end
     end
     return sqrt(err / scale)
@@ -94,7 +105,7 @@ end
 """The misfit of a fitted vector, read from the block after the vector is written into it."""
 function fitted_misfit(s, w, ::Type{T}) where {T}
     M.set_parameters!(s.c.ansatz, copy(w))
-    return misfit(s.c, s.problem, T, T(0.05))
+    return misfit(s.c, s.problem, T, T(0.05), s.tgt.f)
 end
 
 # `@allocated` through a function barrier of concrete argument types, after one warm-up call.
@@ -106,9 +117,9 @@ end
 """
 The bound of P1's factor, per precision: the misfit falls by at least this factor over the 100
 epochs of the default step, at both `D = 1` and `D = 2`. The factors this tree measures from a
-seeded start in `[-1, 1]` are `3.92` in `Float64` and `16.86` in `Float32` at `D = 1`, and `2.98`
-and `5.93` at `D = 2`, on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3; the bound sits
-below each of them.
+seeded start in `[-1, 1]` are `3.92` in `Float64` and `16.86` in `Float32` at `D = 1`, and `3.85`
+and `3.47` at `D = 2`, on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3 and 1.12.7 with
+four BLAS threads; the bound sits below each of them.
 """
 pinn_factor(::Type{Float64}) = 2.0
 pinn_factor(::Type{Float32}) = 2.0
@@ -155,14 +166,9 @@ end
         n = length(s.c.x)
         w₀ = seeded_start(T, n)
         M.set_parameters!(s.c.ansatz, copy(w₀))
-        before = misfit(s.c, s.problem, T, T(0.05))
+        before = misfit(s.c, s.problem, T, T(0.05), s.tgt.f)
         # the slab starts at the problem's own first time, so the sample is read over this slab
         @test M.slab_start(s.problem, s.now) == timespan(s.problem)[1]
-        # the two-component arm runs on `VectorWave`, whose components carry data of their own
-        if D > 1
-            data = s.problem.ics_function([T(0.5)], parameters(s.problem))
-            @test data.u[1, 1] != data.u[1, 2]
-        end
         # the same fit run twice with one method object: bit-identical points and parameters
         first_sample = M.fit_sample(s.method, s.interior, s.tgt, s.c, s.ansatz, s.problem,
             s.now)
@@ -173,6 +179,12 @@ end
         @test first_sample.start == second_sample.start
         @test size(first_sample.points) == (5_000, 2)
         @test size(first_sample.values) == (5_000, D)
+        # the two components' samples are separated, so a sample that carries one component's
+        # target value in both is not this sample: the two differ by up to `T(1.299)` on the slab
+        if D > 1
+            @test maximum(abs, first_sample.values[:, 1] - first_sample.values[:, 2]) ≥
+                  T(1 // 2)
+        end
         @test all(t̂ -> zero(T) ≤ t̂ ≤ one(T), first_sample.points[:, 1])
         @test all(x -> zero(T) ≤ x ≤ one(T), first_sample.points[:, 2])
         w₁ = copy(w₀)
@@ -196,7 +208,7 @@ end
         n = length(s.c.x)
         w₀ = seeded_start(T, n)
         M.set_parameters!(s.c.ansatz, copy(w₀))
-        before = misfit(s.c, s.problem, T, T(0.05))
+        before = misfit(s.c, s.problem, T, T(0.05), s.tgt.f)
         # `epochs = 0` leaves the parameters exactly at their initial values
         none = PINNTraining(epochs = 0)
         w = copy(w₀)
@@ -259,12 +271,12 @@ end
         # slab of a run moves
         s = pinn_slab(T; D = D)
         @test all(iszero, s.c.ansatz.params)
-        zero_misfit = misfit(s.c, s.problem, T, T(0.05))
+        zero_misfit = misfit(s.c, s.problem, T, T(0.05), s.tgt.f)
         M.initial_guess!(s.solstep, nothing, parameters(s.problem), s.int)
         n = s.ansatz.nfree
         fitted = s.ansatz.first_free:(s.ansatz.first_free + n - 1)
         @test all(!iszero, s.c.ansatz.params[fitted])
-        after = misfit(s.c, s.problem, T, T(0.05))
+        after = misfit(s.c, s.problem, T, T(0.05), s.tgt.f)
         @test isfinite(after)
         @test after < zero_misfit
         record_p5(s.tgt, T, D, zero_misfit, after)
@@ -318,15 +330,20 @@ end
     end
 
     @testset "the fit's refusal on an ansatz with no parameters" begin
-        # a coefficient ansatz has no free parameters for the descent, and the fit is refused when
-        # the integrator is built and not at the first step
+        # a coefficient ansatz has no free parameters for the descent, so a `PINNTraining` fit on
+        # one is refused at the first fit, where both ansatz paths reach `fit!`, and not when the
+        # integrator is built
         problem = Wave.problem(T = Float64, timespan = (0.0, 0.05), timestep = 0.05,
             xstep = 0.05)
         ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 5), xspan = (0.0, 1.0), n = 3)
         method = SpaceTimeGalerkin(ansatz, HardConstraintLifting();
             initial_guess = FitTo(TargetFunction(target); method = PINNTraining()))
+        int = GeometricIntegrator(problem, method)
+        solution = GeometricSolution(problem)
+        solstep = solutionstep(int, solution[0])
+        reset!(solstep, timesteps(solution)[1])
         err = try
-            GeometricIntegrator(problem, method)
+            M.initial_guess!(solstep, nothing, parameters(problem), int)
             nothing
         catch e
             e
