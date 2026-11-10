@@ -339,6 +339,14 @@ function check_coupling(::LagrangianPDEProblem, c::HardConstraintLifting,
                         "takes a NetworkAnsatz or a TensorBSplineAnsatz"))
 end
 
+# A fixed-boundary network takes the FixedBoundary coupling and nothing else; the partner is
+# named here, because this file is included after both types exist.
+function check_coupling(problem::LagrangianPDEProblem, c::HardConstraintLifting,
+        a::FixedBoundaryNetwork)
+    throw(ArgumentError(
+        "a FixedBoundaryNetwork takes the FixedBoundary coupling, got $(nameof(typeof(c)))"))
+end
+
 # The field and its parameter derivative at the two corners of the slab, `(0, a)` and `(0, b)`, into
 # the block's scratch: the field of the left corner and then of the right one as `[u; ∂_t̂u; ∂ₓu]`,
 # and behind them the derivative with respect to every free parameter of the same two triples.

@@ -861,6 +861,15 @@ else
             "a FixedBoundaryNetwork is fitted by BubbleGreedy, got $(nameof(typeof(method)))"))
     end
 
+    # A PINN fit and a fixed-boundary network belong to no pair: the network is fitted by
+    # BubbleGreedy. The refusal above takes the ansatz, `PINNTraining`'s takes the method, and this
+    # call gives both, so it needs the intersection.
+    function fit!(w::AbstractVector, method::PINNTraining, a::FixedBoundaryNetwork, sample,
+            c::SpaceTimeGalerkinCache)
+        throw(ArgumentError(
+            "a FixedBoundaryNetwork is fitted by BubbleGreedy, got $(nameof(typeof(method)))"))
+    end
+
     # The level: Levenberg–Marquardt from the datum's parameters to the target at the top of the
     # slab, on the space nodes of the rule weighted by the square root of its weights.
     function fit_spatial!(w::AbstractVector{ST}, method::BubbleGreedy,
