@@ -22,10 +22,13 @@ bottom of the slab, and `coupling_unknowns` is zero, so the solver's vector is t
 is the formulation of the family this coupling fuses, kept on purpose; a formulation that carries the
 incoming momentum at the bottom of each slab is not this one.
 
-A `NetworkAnsatz` and a `TensorBSplineAnsatz` are both accepted. For a network the transform
-projects the field's derivative with respect to every free parameter together with the field, so the
-residual is the gradient of the slab's discrete action on the free parameters; for a coefficient
-ansatz there is no parameter derivative and the transform places the data in the field alone.
+A `NetworkAnsatz` and a `TensorBSplineAnsatz` are both accepted, and an ansatz of any other kind is
+refused when the integrator is built. For a network the transform projects the field's derivative
+with respect to every free parameter together with the field, so the residual is the gradient of the
+slab's discrete action on the free parameters; for a coefficient ansatz there is no parameter
+derivative and the transform places the data in the field alone, which needs
+`x_boundary = Dirichlet()`: the transform reads the field of the slab's two ends at the time nodes
+of the residual, so a basis that is free there is refused.
 
 `SimpleSplines` counts the **degree** of a basis where the old constructors of this family took an
 **order**, so a trace basis whose old `k` was `4` is built here with `degree = 3`.
@@ -33,8 +36,10 @@ ansatz there is no parameter derivative and the transform places the data in the
 ## The fits
 
 `PINNTraining` descends a network's free parameters on its misfit against a sampled target, with a
-fixed step and no optimiser package: the sample's points are drawn once per fit from the method's own
-generator, and the gradient is the parameter derivative the ansatz's block already carries.
+fixed step and no optimiser package: the sample's points are drawn once per fit from a copy of the
+method's generator, so two fits that share one method object draw the same points, each pass over
+them takes one step per batch of `batch` points, and the gradient is the parameter derivative the
+ansatz's block already carries.
 
 ```@autodocs
 Modules = [MultisymplecticIntegrators]

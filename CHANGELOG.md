@@ -570,35 +570,41 @@ makes it worth keeping.
   transform's `v` and `w` are the derivatives of the lifted `u` — its derivative in the normalised
   time over `h`, and its space derivative — which the testset "L1b the lifted field's derivatives
   are the derivatives of its value" checks against central differences of the transform's own
-  field on linear data. A
-  `TensorBSplineAnsatz` is accepted as well and runs three steps with its boundary data in place;
-  its rows are its own basis functions rather than the projected test functions, so the exact
-  identity is asserted for the network and the coefficient slab's residual is recorded.
+  field on linear data. A `TensorBSplineAnsatz` is accepted as well, with
+  `x_boundary = Dirichlet()`, and runs three steps with its boundary data in place; its rows are its
+  own basis functions rather than the projected test functions, so the exact identity is asserted for
+  the network and the coefficient slab's residual is recorded. An ansatz of any other kind, and a
+  coefficient basis that is free at the ends of `xspan`, are refused when the integrator is built
+  rather than failing inside a step.
   `transform_field!` gains the ansatz's block as an argument, so that a coupling whose transform
   depends on the field's parameters can read them; the slab core passes `c.ansatz` at both of its
   call sites, and `test/core/slab_integrator.jl`'s `Lifted` fixture takes the argument.
   `test/couplings/hard_constraint_lifting.jl` joins the `slow` group.
 - **`PINNTraining` fits a network to a sampled target by gradient descent.** After the family's PINN
-  branch and `PINN_for_init.jl` at `294f023`: `epochs` plain steps of the fixed `step` on the mean
-  squared residual of the field against the target at `nsamples` points, taken in batches of
-  `batch`. The points are drawn once per fit, uniformly over `[0, 1] × xspan`, from a copy of the
-  method's own generator; the target is evaluated at each of them by `target_point!`, so every
-  target of the guess answers at the physical time of its point, and the method reads no target
-  itself. The gradient is the parameter derivative the ansatz's block already carries, so no
-  optimiser package and no differentiation enters the package. The buffers — the points, the target
-  values and the batch gradient — are allocated once per call, before the epoch loop, and no epoch
-  and no batch allocates: at `S = 10`, `nsamples = 5 000` and `batch = 100`, the counts of `epochs =
-  1` and `epochs = 10` are equal. From a seeded start in `[-1, 1]` on the sample of `sin(πx)
-  cos(πt)` over `[0, 1] × [0, 0.05]`, the fit's relative `L²` error falls from `1.562` to `0.536` in
-  `Float64` and from `1.979` to `0.459` in `Float32`, factors `2.92` and `4.31`, in a cold
-  `run-tests.jl` run on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3 with four BLAS
-  threads and `--check-bounds=auto`; the test asserts a factor of `2` and records the measured one.
-  `epochs = 0` leaves the parameters at their initial values, a `:last_layer` fit moves the output
-  weights alone, and an `:all` fit moves every parameter. The fit descends from the parameters the
-  caller hands it, which are the block's own; where every free entry of those is zero — a fresh
-  block, on which a `tanh` network's parameter derivative vanishes — it starts instead from the
-  start of its own sample, one draw in `[-1, 1]` per free parameter, so that a first slab is not a
-  saddle, and it leaves a `:last_layer` network's hidden layer untouched there as everywhere else.
+  branch and `PINN_for_init.jl` at `294f023`: `epochs` passes over the target's `nsamples` points,
+  each pass cut into consecutive batches of `batch` points in their drawn order, with one plain step
+  of the fixed `step` per batch on that batch's mean squared residual — the last, shorter batch
+  averaged over its own size. The points are drawn once per fit, uniformly over `[0, 1] × xspan`,
+  from a copy of the method's own generator; the target is evaluated at each of them by
+  `target_point!`, so every target of the guess answers at the physical time of its point, and the
+  method reads no target itself. The gradient is the parameter derivative the ansatz's block already
+  carries, so no optimiser package and no differentiation enters the package. The buffers — the
+  points, the target values and the batch gradient — are allocated once per call, before the epoch
+  loop, and no epoch and no batch allocates: at `S = 10`, `nsamples = 5 000` and `batch = 100`, the
+  counts of `epochs = 1` and `epochs = 10` are equal. From a seeded start in `[-1, 1]` on the sample
+  of `sin(πx) cos(πt)` over `[0, 1] × [0, 0.05]`, the fit's relative `L²` error falls from `1.562` to
+  `0.399` in `Float64` and from `1.979` to `0.117` in `Float32`, factors `3.92` and `16.86`, and on
+  the two-component problem `VectorWave` from `0.919` to `0.308` and from `1.005` to `0.169`,
+  factors `2.98` and `5.93`, in a cold `run-tests.jl` run on `arm64-apple-darwin27.0.0`
+  (`apple-m4`) at Julia 1.13.3 with four BLAS threads and `--check-bounds=auto`; the test asserts a
+  factor of `2` and records the measured one. `epochs = 0` leaves the parameters at their initial
+  values, a `:last_layer` fit moves the output weights alone, and an `:all` fit moves every
+  parameter. The fit descends from the parameters the caller hands it, which are the block's own;
+  where every free entry of those is zero — a fresh block, on which a `tanh` network's parameter
+  derivative vanishes — it starts instead from the start of its own sample, one draw in `[-1, 1]`
+  per free parameter, so that a first slab is not a saddle, and it leaves a `:last_layer` network's
+  hidden layer untouched there as everywhere else. A `FitTo` that names it on an ansatz that is not a
+  `NetworkAnsatz` is refused when the integrator is built.
   `test/initial_guess/pinn_training.jl` joins the `slow` group.
 - **`scripts/trialnn_model.jl` registers the TrialNN family in the append-only registry.** One model
   file builds the family's problem, ansatz, method and archive — `Wave` over five steps and

@@ -104,9 +104,9 @@ end
                  rng = Xoshiro(1234)) <: SlabFitMethod
 
 The fit method of a [`NetworkAnsatz`](@ref) that trains every free parameter of the network against
-a sample of the slab's target, by plain gradient descent: `epochs` steps of the fixed `step` on the
-mean squared residual of the field against the target at `nsamples` points of the slab, read in
-batches of `batch`.
+a sample of the slab's target, by plain gradient descent: `epochs` passes over the `nsamples` points
+of the slab's target, each pass cut into consecutive batches of `batch` points in their drawn order,
+with one step of the fixed `step` per batch on that batch's mean squared residual.
 
 The points are drawn once per fit, uniformly over `[0, 1] × xspan`, from a copy of `rng` taken at
 the call and never from the process's global generator, so one method object gives every integrator

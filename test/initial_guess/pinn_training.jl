@@ -7,7 +7,7 @@ using Random
 using Test
 
 import GeometricEquations: problem
-import GeometricIntegratorsBase: GeometricIntegrator, cache, solutionstep
+import GeometricIntegratorsBase: GeometricIntegrator, cache, current, reset!, solutionstep
 
 include("../helpers/testsetup.jl")
 
@@ -17,14 +17,32 @@ const M = MultisymplecticIntegrators
 target(t, x, params) = sinpi(x) * cospi(t)
 
 """
-The slab of a `PINNTraining` fit on `Wave` at `h = 0.05`: the cache, its block, the interior sample
-the other fits take, and the sample the fit takes from it.
+    pinn_problem(::Type{T}, D)
+
+The problem of the fit's slab at `h = 0.05`: `Wave` for a scalar field and `VectorWave` for a
+two-component one, so that the scenario runs on the scalar problem and on the vector problem alike.
+"""
+function pinn_problem(::Type{T}, D) where {T}
+    h = T(0.05)
+    if D === 1
+        return Wave.problem(T = T, D = D, timespan = (zero(T), h), timestep = h,
+            xstep = T(0.05))
+    end
+    return VectorWave.problem(T = T, timespan = (zero(T), h), timestep = h,
+        xstep = T(0.05))
+end
+
+"""
+    pinn_slab(::Type{T}; S, D, mode, epochs, step, nsamples, batch)
+
+The slab of a `PINNTraining` fit: the cache, its block, the interior sample the other fits take, and
+the sample the fit takes from it. The solution step is reset to the time the first step of the run
+ends, as the integration loop resets it, so the slab starts at the problem's own `timespan[1]` and
+the sample's target is read over this slab's own interval.
 """
 function pinn_slab(::Type{T}; S = 10, D = 1, mode = :all, epochs = 100, step = 1e-2,
         nsamples = 5_000, batch = 100) where {T}
-    h = T(0.05)
-    problem = Wave.problem(T = T, D = D, timespan = (zero(T), h), timestep = h,
-        xstep = T(0.05))
+    problem = pinn_problem(T, D)
     ansatz = NetworkAnsatz(S = S, mode = mode, xspan = (zero(T), one(T)), degree = 3,
         ncells = (2, 5), D = D)
     method = PINNTraining(epochs = epochs, step = step, batch = batch, nsamples = nsamples)
@@ -32,19 +50,23 @@ function pinn_slab(::Type{T}; S = 10, D = 1, mode = :all, epochs = 100, step = 1
         SpaceTimeGalerkin(ansatz, HardConstraintLifting();
             initial_guess = FitTo(TargetFunction(target); method = method)))
     c = cache(int)
-    solstep = solutionstep(int, GeometricSolution(problem)[0])
-    M.slab_bottom!(c, c.coupling, problem, ansatz, solstep)
+    solution = GeometricSolution(problem)
+    solstep = solutionstep(int, solution[0])
+    reset!(solstep, timesteps(solution)[1])
+    now = current(solstep)
+    M.slab_bottom!(c, c.coupling, problem, ansatz, now)
     tgt = TargetFunction(target)
     tnodes, xnodes = M.quadrature_points(c.ansatz)
     interior = zeros(T, length(tnodes), length(xnodes), D)
-    M.evaluate!(interior, tgt, c, ansatz, problem, solstep)
-    return (; problem, ansatz, int, c, solstep, method, tgt, interior,
-        sample = M.fit_sample(method, interior, tgt, c, ansatz, problem, solstep))
+    M.evaluate!(interior, tgt, c, ansatz, problem, now)
+    return (; problem, ansatz, int, c, solstep, now, method, tgt, interior,
+        sample = M.fit_sample(method, interior, tgt, c, ansatz, problem, now))
 end
 
 """
 The relative `L²` error of the block's field against the target at the nodes of the ansatz's own
-rule: the misfit the fit descends, read from the block's own evaluation and not from the fit.
+rule: the misfit the fit descends, read from the block's own evaluation and not from the fit, over
+every component of the field.
 """
 function misfit(c, problem, ::Type{T}, h) where {T}
     tq, xq = M.quadrature_points(c.ansatz)
@@ -56,8 +78,10 @@ function misfit(c, problem, ::Type{T}, h) where {T}
 
         M.evaluate_at!(a, t̂, x)
         want = target(t₀ + h * t̂, x, parameters(problem))
-        err += abs2(a.values[1] - want)
-        scale += abs2(want)
+        for d in 1:a.ansatz.D
+            err += abs2(a.values[d] - want)
+            scale += abs2(want)
+        end
     end
     return sqrt(err / scale)
 end
@@ -81,30 +105,74 @@ end
 
 """
 The bound of P1's factor, per precision: the misfit falls by at least this factor over the 100
-epochs of the default step. The factors this tree measures from a seeded start in `[-1, 1]` are
-`2.9` in `Float64` and `4.3` in `Float32`, on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia
-1.13.3; the bound sits below each of them.
+epochs of the default step, at both `D = 1` and `D = 2`. The factors this tree measures from a
+seeded start in `[-1, 1]` are `3.92` in `Float64` and `16.86` in `Float32` at `D = 1`, and `2.98`
+and `5.93` at `D = 2`, on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3; the bound sits
+below each of them.
 """
 pinn_factor(::Type{Float64}) = 2.0
 pinn_factor(::Type{Float32}) = 2.0
 
+"""
+The record of P1's fit: its misfit before and after the fit and the factor between them, beside the
+metadata every record of this file carries — the element type, the number of components, the target
+of the fit, the Julia version, the machine and CPU, the BLAS thread count and the `--check-bounds`
+setting. The testset "P7 the records carry the metadata that makes them readable" checks that
+metadata; the factor itself is recorded and never compared with another machine's.
+"""
+function record_p1(tgt, ::Type{T}, D, before, after, factor) where {T}
+    @info("the PINN fit on its own sample", :P1, T, D, before, after, factor, VERSION,
+        target=tgt, machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
+        blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
+end
+
+"""
+The record of P2: the fit's two misfits and the greedy fit's error on the same target and nodes,
+beside the metadata that P1's record carries. No bound is asserted against the greedy fit.
+"""
+function record_p2(tgt, ::Type{T}, D, before, after, greedy_error) where {T}
+    @info("the PINN fit against the greedy fit", :P2, T, D, before, after, greedy_error,
+        VERSION, target=tgt, machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
+        blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
+end
+
+"""
+The record of P5: the misfit of a fresh block's zero parameters and the fit's misfit after the guess,
+beside the metadata that P1's record carries.
+"""
+function record_p5(tgt, ::Type{T}, D, zero_misfit, after) where {T}
+    @info("the PINN fit of a zero network", :P5, T, D, zero_misfit, after, VERSION,
+        target=tgt, machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
+        blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
+end
+
 @testset "The PINN fit" begin
-    @testset "P1 the fit improves the network on a sampled target, $T" for T in (Float64,
-        Float32)
-        s = pinn_slab(T)
+    @testset "P1 the fit improves the network on a sampled target, $T, D = $D" for T in (
+            Float64, Float32),
+        D in (1, 2)
+
+        s = pinn_slab(T; D = D)
         n = length(s.c.x)
         w₀ = seeded_start(T, n)
         M.set_parameters!(s.c.ansatz, copy(w₀))
         before = misfit(s.c, s.problem, T, T(0.05))
+        # the slab starts at the problem's own first time, so the sample is read over this slab
+        @test M.slab_start(s.problem, s.now) == timespan(s.problem)[1]
+        # the two-component arm runs on `VectorWave`, whose components carry data of their own
+        if D > 1
+            data = s.problem.ics_function([T(0.5)], parameters(s.problem))
+            @test data.u[1, 1] != data.u[1, 2]
+        end
         # the same fit run twice with one method object: bit-identical points and parameters
         first_sample = M.fit_sample(s.method, s.interior, s.tgt, s.c, s.ansatz, s.problem,
-            s.solstep)
+            s.now)
         second_sample = M.fit_sample(s.method, s.interior, s.tgt, s.c, s.ansatz, s.problem,
-            s.solstep)
+            s.now)
         @test first_sample.points == second_sample.points
         @test first_sample.values == second_sample.values
+        @test first_sample.start == second_sample.start
         @test size(first_sample.points) == (5_000, 2)
-        @test size(first_sample.values) == (5_000, 1)
+        @test size(first_sample.values) == (5_000, D)
         @test all(t̂ -> zero(T) ≤ t̂ ≤ one(T), first_sample.points[:, 1])
         @test all(x -> zero(T) ≤ x ≤ one(T), first_sample.points[:, 2])
         w₁ = copy(w₀)
@@ -117,14 +185,14 @@ pinn_factor(::Type{Float32}) = 2.0
         factor = before / after
         @test isfinite(after)
         @test after < before / T(pinn_factor(T))
-        @info("the PINN fit on its own sample", :P1, T, before, after, factor, VERSION,
-            machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
-            blas_threads=BLAS.get_num_threads())
+        record_p1(s.tgt, T, D, before, after, factor)
     end
 
-    @testset "P2 epochs and the fit error against the greedy fit, $T" for T in (Float64,
-        Float32)
-        s = pinn_slab(T)
+    @testset "P2 epochs and the fit error against the greedy fit, $T, D = $D" for T in (Float64,
+            Float32),
+        D in (1, 2)
+
+        s = pinn_slab(T; D = D)
         n = length(s.c.x)
         w₀ = seeded_start(T, n)
         M.set_parameters!(s.c.ansatz, copy(w₀))
@@ -134,7 +202,7 @@ pinn_factor(::Type{Float32}) = 2.0
         w = copy(w₀)
         M.fit!(w, none, s.ansatz,
             M.fit_sample(none, s.interior, s.tgt, s.c, s.ansatz,
-                s.problem, s.solstep),
+                s.problem, s.now),
             s.c)
         @test w == w₀
         # the default's error is below that value
@@ -147,15 +215,13 @@ pinn_factor(::Type{Float32}) = 2.0
         M.fit!(greedy, OrthogonalGreedy(), s.ansatz, s.interior, s.c)
         greedy_error = fitted_misfit(s, greedy, T)
         @test isfinite(greedy_error)
-        @info("the PINN fit against the greedy fit",
-            T, before, after, greedy_error, VERSION,
-            machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
-            blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
+        record_p2(s.tgt, T, D, before, after, greedy_error)
     end
 
-    @testset "P3 the mode keeps its fixed parameters, $T" for T in (Float64,)
+    @testset "P3 the mode keeps its fixed parameters, $T, D = $D" for T in (Float64,),
+        D in (1, 2)
         # a `:last_layer` network frees its output weights alone; the hidden layer stays put
-        s = pinn_slab(T; mode = :last_layer)
+        s = pinn_slab(T; mode = :last_layer, D = D)
         w₀ = seeded_start(T, M.nparameters(s.ansatz))
         M.set_parameters!(s.c.ansatz, copy(w₀))
         w = copy(w₀)
@@ -164,7 +230,7 @@ pinn_factor(::Type{Float32}) = 2.0
         @test w[1:(lo - 1)] == w₀[1:(lo - 1)]
         @test any(w[lo:end] .!= w₀[lo:end])
         # and an `:all` network moves every parameter
-        a = pinn_slab(T)
+        a = pinn_slab(T; D = D)
         wₐ₀ = seeded_start(T, M.nparameters(a.ansatz); seed = 20261114)
         M.set_parameters!(a.c.ansatz, copy(wₐ₀))
         wₐ = copy(wₐ₀)
@@ -172,8 +238,10 @@ pinn_factor(::Type{Float32}) = 2.0
         @test all(wₐ .!= wₐ₀)
     end
 
-    @testset "P4 the descent allocates nothing per epoch, $T" for T in (Float64,)
-        s = pinn_slab(T)
+    @testset "P4 the descent allocates nothing per epoch, $T, D = $D" for T in (Float64,),
+        D in (1, 2)
+
+        s = pinn_slab(T; D = D)
         w = seeded_start(T, length(s.c.x))
         M.set_parameters!(s.c.ansatz, copy(w))
         one_epoch = allocations(w, PINNTraining(epochs = 1), s)
@@ -184,11 +252,12 @@ pinn_factor(::Type{Float32}) = 2.0
         @test one_epoch > 0
     end
 
-    @testset "P5 the fit seeds a zero network, $T" for T in (Float64, Float32)
+    @testset "P5 the fit seeds a zero network, $T, D = $D" for T in (Float64, Float32),
+        D in (1, 2)
         # the block of a fresh integrator holds zero parameters, where a `tanh` network is
         # stationary: the guess' fit draws its start from the sample's generator, so the first
         # slab of a run moves
-        s = pinn_slab(T)
+        s = pinn_slab(T; D = D)
         @test all(iszero, s.c.ansatz.params)
         zero_misfit = misfit(s.c, s.problem, T, T(0.05))
         M.initial_guess!(s.solstep, nothing, parameters(s.problem), s.int)
@@ -198,8 +267,71 @@ pinn_factor(::Type{Float32}) = 2.0
         after = misfit(s.c, s.problem, T, T(0.05))
         @test isfinite(after)
         @test after < zero_misfit
-        @info("the PINN fit of a zero network", T, zero_misfit, after, VERSION,
-            machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
-            blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
+        record_p5(s.tgt, T, D, zero_misfit, after)
+    end
+
+    @testset "P6 one epoch is one step per batch, $T" for T in (Float64, Float32)
+        # `nsamples = 5 000` at `batch = 300` is 16 batches of 300 points and a last one of 200,
+        # taken in the sample's own drawn order: the pass is the 17 single-batch fits below, so a
+        # step taken once per epoch, a rate over the sample's size instead of the batch's, and a
+        # rate over `batch` on the last batch each move the fitted parameters away from them
+        s = pinn_slab(T)
+        n = length(s.c.x)
+        w₀ = seeded_start(T, n)
+        M.set_parameters!(s.c.ansatz, copy(w₀))
+        whole = copy(w₀)
+        M.fit!(whole, PINNTraining(epochs = 1, batch = 300), s.ansatz, s.sample, s.c)
+        M.set_parameters!(s.c.ansatz, copy(w₀))
+        parts = copy(w₀)
+        points, values = s.sample.points, s.sample.values
+        for first in 1:300:size(points, 1)
+            finish = min(first + 299, size(points, 1))
+            sub = (; points = points[first:finish, :], values = values[first:finish, :],
+                start = s.sample.start)
+            M.fit!(parts, PINNTraining(epochs = 1, batch = 5_000), s.ansatz, sub, s.c)
+        end
+        @test whole == parts
+    end
+
+    @testset "P7 the records carry the metadata that makes them readable" begin
+        # a figure out of an iteration is recorded, never asserted: the record itself carries the
+        # element type, the components, the target, the version, the machine, the thread count and
+        # the bounds setting, and this testset is what holds them there
+        s = pinn_slab(Float64)
+        logs, _ = Test.collect_test_logs() do
+            record_p1(s.tgt, Float64, 1, 1.0, 0.5, 2.0)
+            record_p2(s.tgt, Float64, 1, 1.0, 0.5, 0.4)
+            record_p5(s.tgt, Float64, 1, 1.0, 0.5)
+        end
+        @test length(logs) == 3
+        for log in logs
+            kw = log.kwargs
+            @test kw[:target] === s.tgt
+            @test haskey(kw, :machine)
+            @test haskey(kw, :cpu)
+            @test kw[:blas_threads] == BLAS.get_num_threads()
+            @test kw[:check_bounds] == Base.JLOptions().check_bounds
+        end
+        @test [log.message for log in logs] ==
+              ["the PINN fit on its own sample", "the PINN fit against the greedy fit",
+            "the PINN fit of a zero network"]
+    end
+
+    @testset "the fit's refusal on an ansatz with no parameters" begin
+        # a coefficient ansatz has no free parameters for the descent, and the fit is refused when
+        # the integrator is built and not at the first step
+        problem = Wave.problem(T = Float64, timespan = (0.0, 0.05), timestep = 0.05,
+            xstep = 0.05)
+        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 5), xspan = (0.0, 1.0), n = 3)
+        method = SpaceTimeGalerkin(ansatz, HardConstraintLifting();
+            initial_guess = FitTo(TargetFunction(target); method = PINNTraining()))
+        err = try
+            GeometricIntegrator(problem, method)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("PINNTraining needs a NetworkAnsatz", err.msg)
     end
 end

@@ -40,11 +40,13 @@ first slab and the previous slab's top afterwards, so the coupling reads no exac
 boundary function that does not meet the initial condition at a corner is a warning, once per
 integrator, and never an error.
 
-A [`NetworkAnsatz`](@ref) and a [`TensorBSplineAnsatz`](@ref) are both accepted. For a network the
-transform projects the field's derivative with respect to every free parameter together with the
-field, because the projection is linear in the parameters. A coefficient ansatz carries no parameter
-derivative, and its rows are its own basis functions rather than the projected ones: there the
-transform places the data in the field and the residual is a record of what the placement leaves.
+A [`NetworkAnsatz`](@ref) and a [`TensorBSplineAnsatz`](@ref) are both accepted, and an ansatz of
+any other kind is refused when the integrator is built; the coefficient ansatz takes
+`x_boundary = Dirichlet()`. For a network the transform projects the field's derivative with respect
+to every free parameter together with the field, because the projection is linear in the parameters.
+A coefficient ansatz carries no parameter derivative, and its rows are its own basis functions
+rather than the projected ones: there the transform places the data in the field and the residual is
+a record of what the placement leaves.
 """
 struct HardConstraintLifting <: SlabCoupling end
 
@@ -54,7 +56,7 @@ function free_rows(::HardConstraintLifting, ansatz::NetworkAnsatz)
 end
 
 """
-    free_rows(::HardConstraintLifting, ansatz::TensorBSplineAnsatz)
+    free_rows(::HardConstraintLifting, ansatz::SpaceTimeAnsatz)
 
 The free rows of a coefficient slab are all its time functions: the coupling fixes no row of the
 coefficient array, and the slab's bottom is imposed on the field instead.
@@ -73,8 +75,6 @@ function coupling_unknowns(::HardConstraintLifting, ::SpaceTimeAnsatz,
         ::LagrangianPDEProblem)
     return 0
 end
-
-# The coupling fixes no row of the coefficient array.
 
 """
     HardConstraintLiftingData{ST, C} <: CouplingData
@@ -271,18 +271,53 @@ end
 """
     check_coupling(problem, ::HardConstraintLifting, ansatz)
 
-Accept both ansaetze, and report a corner at which the problem's boundary function and its initial
-condition disagree.
+Refuse an ansatz the lifting cannot take, and a coefficient basis whose ends are not the data's.
+
+The lifting's transform places the data in the field of a network slab and of a coefficient slab; a
+[`SymbolicAnsatz`](@ref) carries neither, so it is refused. A coefficient slab needs
+`x_boundary = Dirichlet()`: the transform reads the field of the slab's two ends at the time nodes of
+the residual, so a `Free()` space basis — free at the ends, and lifted there — would be lifted at
+the wrong time.
+
+The corner check itself is [`check_coupling`](@ref)`(problem, coupling, ansatz, ST)`, which runs on
+the cache of the problem's own element type alone.
+"""
+check_coupling(::LagrangianPDEProblem, ::HardConstraintLifting, ::NetworkAnsatz) = nothing
+
+function check_coupling(::LagrangianPDEProblem, c::HardConstraintLifting,
+        ansatz::TensorBSplineAnsatz)
+    b = x_boundary(ansatz)
+    b isa Dirichlet ||
+        throw(ArgumentError("$(nameof(typeof(c))) needs x_boundary = Dirichlet() on a coefficient " *
+                            "ansatz, got $(nameof(typeof(b)))"))
+    return nothing
+end
+
+function check_coupling(::LagrangianPDEProblem, c::HardConstraintLifting,
+        ansatz::SpaceTimeAnsatz)
+    throw(ArgumentError("$(nameof(typeof(c))) cannot pair with a $(nameof(typeof(ansatz))); it " *
+                        "takes a NetworkAnsatz or a TensorBSplineAnsatz"))
+end
+
+"""
+    check_coupling(problem, ::HardConstraintLifting, ansatz, ST)
+
+Report a corner at which the problem's boundary function and its initial condition disagree.
 
 The projection fixes the slab at the two ends in `x` and at its bottom, so the corners `(0, a)` and
 `(0, b)` carry two data. A problem whose boundary function is its exact solution meets its initial
 condition there exactly; a problem whose data disagree still runs, with the difference carried by
 the corner correction, and the warning names the corner and the difference so that such a run is
-visible in its log. It is emitted when the integrator is built, so one integrator warns once per
-corner.
+visible in its log.
+
+The warning is emitted by the cache of the problem's own element type `ST` alone: every integrator
+builds that cache, and the cache a solver builds for another element type — a `Dual` on its first
+Jacobian — is built on top of it, so one integrator warns once.
 """
-function check_coupling(problem::LagrangianPDEProblem{T}, ::HardConstraintLifting,
-        ansatz::SpaceTimeAnsatz) where {T}
+function check_coupling(problem::LagrangianPDEProblem{T}, c::HardConstraintLifting,
+        ansatz::SpaceTimeAnsatz, ::Type{ST}) where {T, ST}
+    check_coupling(problem, c, ansatz)
+    ST === T || return nothing
     xa, xb = xspan(problem)
     t₀ = timespan(problem)[1]
     initial = problem.ics_function([xa, xb], parameters(problem))

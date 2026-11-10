@@ -106,15 +106,26 @@ default_solver(::SpaceTimeGalerkin) = Newton()
 Reject a method that the problem cannot support, before any step runs.
 
 The refusals are `ArgumentError`s: a target that reads the exact solution of a problem that has
-none, a fit that needs an ansatz linear in its coefficients on one that is not, a direct linear
+none, a fit that needs an ansatz linear in its coefficients on one that is not, a
+`PINNTraining` fit on an ansatz that is not a [`NetworkAnsatz`](@ref), a direct linear
 solve (`linear_solver = true`) on an ansatz whose step is not affine in its unknowns or a density
 that is not linear, and what the ansatz's [`check_ansatz`](@ref) and the coupling's
 [`check_coupling`](@ref) refuse.
 
 The direct linear solve is offered to an ansatz whose step is affine in its unknowns, which
 [`has_affine_step`](@ref) reports.
+
+The call runs once per cache, and a solver builds a second cache — of the dual type, on its first
+Jacobian — on top of the problem's one, so a check that speaks takes the cache's element type `ST`
+and lets only the problem's own speak, in
+[`check_coupling`](@ref)`(problem, coupling, ansatz, ST)`.
 """
-function check_method(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin)
+function check_method(problem::LagrangianPDEProblem{T}, method::SpaceTimeGalerkin) where {T}
+    return check_method(problem, method, T)
+end
+
+function check_method(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin,
+        ::Type{ST}) where {ST}
     a = ansatz(method)
     if method.linear_solver
         has_affine_step(a) ||
@@ -130,14 +141,17 @@ function check_method(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin)
             throw(ArgumentError("FitTo(ExactSolution()) needs a problem with an exact solution; " *
                                 "this problem has solutions = nothing"))
         end
-        if fit_method(guess, ansatz(method)) isa Projection &&
-           !is_linear_in_coefficients(ansatz(method))
+        fit = fit_method(guess, a)
+        if fit isa Projection && !is_linear_in_coefficients(a)
             throw(ArgumentError("Projection() needs an ansatz that is linear in its " *
-                                "coefficients; $(nameof(typeof(ansatz(method)))) is not"))
+                                "coefficients; $(nameof(typeof(a))) is not"))
+        end
+        if fit isa PINNTraining && !(a isa NetworkAnsatz)
+            throw(ArgumentError("PINNTraining needs a NetworkAnsatz; $(nameof(typeof(a))) is not"))
         end
     end
     check_ansatz(problem, a)
-    check_coupling(problem, coupling(method), a)
+    check_coupling(problem, coupling(method), a, ST)
     return nothing
 end
 
@@ -303,6 +317,22 @@ for a coupling whose free rows are all `Nt` rows.
 bottom_datum(::NoCouplingData) = nothing
 
 """
+    transform_field!(u, v, w, data, block, t̂, x, h, problem)
+
+The coupling's transform of the field, applied to the ansatz's field `u` and its derivatives
+`v = ∂ₜu` and `w = ∂ₓu` at the points `(t̂[q], x[r])` of the slab, as `u[q, r, d]`, in place. `t̂` is
+the normalised time of the slab, so the physical-time derivative of a term `ℓ(t̂, x)` is
+`∂_{t̂}ℓ / h`. `data` is the coupling's block and `block` the ansatz's, so that a transform that is
+not a function of the point alone — one that projects the field, for instance — reads the
+parameters the step is solving for.
+
+The core applies it wherever it evaluates the field: in the residual, at the nodes of the slab's
+quadrature, and at the top of the slab, in the trace and in the solution. The default leaves the
+field as the ansatz gives it; a coupling that lifts the field adds its lift here.
+"""
+transform_field!(u, v, w, ::CouplingData, block, t̂, x, h, problem) = nothing
+
+"""
     coupling_internal(coupling, ansatz, problem)
 
 The coupling's own state of a step: the entries of the solution step's `internal` named tuple, which
@@ -317,6 +347,21 @@ coupling_internal(::SlabCoupling, ::SpaceTimeAnsatz, ::LagrangianPDEProblem) = N
 Reject a coupling that the ansatz cannot support, when the integrator is built.
 """
 check_coupling(::LagrangianPDEProblem, ::SlabCoupling, ::SpaceTimeAnsatz) = nothing
+
+"""
+    check_coupling(problem, coupling, ansatz, ST)
+
+The part of a coupling's check that depends on the element type `ST` of the cache being built, which
+the check of the problem's own element type alone may speak from: an integrator builds that one
+cache, and a solver builds a cache of another element type on top of it, so a warning emitted here
+fires once per integrator and not once per cache. A coupling that speaks of nothing
+element-type-dependent keeps the three-argument method alone, which this falls back to.
+"""
+function check_coupling(
+        problem::LagrangianPDEProblem, coupling::SlabCoupling, ansatz::SpaceTimeAnsatz,
+        ::Type)
+    check_coupling(problem, coupling, ansatz)
+end
 
 """
     slab_bottom!(cache, data, problem, ansatz, sol)
@@ -376,7 +421,7 @@ end
 
 function Cache{ST}(problem::LagrangianPDEProblem,
         method::SpaceTimeGalerkin; kwargs...) where {ST}
-    check_method(problem, method)
+    check_method(problem, method, ST)
     a = ansatz(method)
     slab = ansatz_data(a, problem, ST)
     tnodes, xnodes = quadrature_points(slab)
@@ -493,37 +538,6 @@ end
     return a + (j - 1) * nf + (d - 1) * nf * nx
 end
 
-# The field at the top of the slab, `t̂ = 1`, at the points of `evaluation`, with the coupling's
-# transform: `u`, `v` and `w` are indexed `[i, d]`, a row per point.
-function top_field!(u::AbstractMatrix, v::AbstractMatrix, w::AbstractMatrix,
-        c::SpaceTimeGalerkinCache{ST}, evaluation, problem::LagrangianPDEProblem) where {ST}
-    h = timestep(problem)
-    top_values!(u, v, w, c.ansatz, evaluation, h)
-    n, D = size(u)
-    transform_field!(reshape(u, 1, n, D), reshape(v, 1, n, D), reshape(w, 1, n, D),
-        c.coupling, c.ansatz, (one(ST),), evaluation_points(evaluation), h, problem)
-    return nothing
-end
-
-"""
-    transform_field!(u, v, w, c.coupling, c.ansatz, tnodes, xnodes, h, problem)
-
-The coupling's transform of the field, applied to the ansatz's field `u` and its derivatives
-`v = ∂ₜu` and `w = ∂ₓu` at the points `(t̂[q], x[r])` of the slab, as `u[q, r, d]`, in place. `t̂` is
-the normalised time of the slab, so the physical-time derivative of a term `ℓ(t̂, x)` is
-`∂_{t̂}ℓ / h`.
-
-The core applies it wherever it evaluates the field: in the residual, at the nodes of the slab's
-quadrature, and at the top of the slab, in the trace and in the solution. It hands the coupling's
-block and the ansatz's block, so a transform that is not a function of the point alone — one that
-projects the field, for instance — reads the parameters the step is solving for from the ansatz's
-block. The default leaves the field as the ansatz gives it; a coupling that lifts the field adds
-its lift here.
-"""
-function transform_field!(u, v, w, ::CouplingData, block, t̂, x, h, problem)
-    return nothing
-end
-
 """
     slab_residual!(cache, x, problem, nf)
 
@@ -584,6 +598,18 @@ function update!(sol, params, x::AbstractVector{ST},
     assign!(sol.u, sol.v, sol.w, c, p)
     coupling_update!(c.coupling, x, c, a, p)
     c.steps += 1
+    return nothing
+end
+
+# The field at the top of the slab, `t̂ = 1`, at the points of `evaluation`, with the coupling's
+# transform: `u`, `v` and `w` are indexed `[i, d]`, a row per point.
+function top_field!(u::AbstractMatrix, v::AbstractMatrix, w::AbstractMatrix,
+        c::SpaceTimeGalerkinCache{ST}, evaluation, problem::LagrangianPDEProblem) where {ST}
+    h = timestep(problem)
+    top_values!(u, v, w, c.ansatz, evaluation, h)
+    n, D = size(u)
+    transform_field!(reshape(u, 1, n, D), reshape(v, 1, n, D), reshape(w, 1, n, D),
+        c.coupling, c.ansatz, (one(ST),), evaluation_points(evaluation), h, problem)
     return nothing
 end
 

@@ -6,6 +6,7 @@ using MultisymplecticIntegrators
 using Random
 using SimpleSplines
 using SimpleSolvers
+using Symbolics
 using Test
 
 import GeometricEquations: problem
@@ -233,6 +234,22 @@ end
             @test abs(field.u[1] - values.u[r, 1]) ≤ tol
         end
         @test all(isfinite, b)
+        # the second slab: its bottom is the previous slab's top, which the run carried out of the
+        # first one, and the slab starts at the time the first one ended
+        one = GeometricIntegrator(lifting_problem(T; steps = 1), method)
+        integrate(one)
+        top = copy(cache(one).trace_u)
+        problem₂ = lifting_problem(T; steps = 2)
+        two = GeometricIntegrator(problem₂, method)
+        integrate(two)
+        c₂ = cache(two)
+        @test c₂.coupling.start == timespan(problem₂)[1] + h
+        tol₂ = tolerance(T) * maximum(abs, top)
+        for (r, xr) in enumerate(x)
+            field = lifting_point(c₂, problem₂, T, zero(T), xr, h)
+            @test abs(field.u[1] - top[r, 1]) ≤ tol₂
+        end
+        @test all(isfinite, top)
     end
 
     @testset "L1b the lifted field's derivatives are the derivatives of its value, $T" for T in (
@@ -490,7 +507,38 @@ end
         M.residual!(b, θ, nothing, parameters(problem), int)
         @test all(isfinite, b)
         @info("the lifting's coefficient arm", T, c.iterations, c.residuals, c.converged,
-            maximum(abs, b))
+            maximum(abs, b), VERSION, machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
+            blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
+    end
+
+    @testset "the lifting refuses the ansatz and the basis it cannot lift, $T" for T in (
+        Float64,)
+        problem = lifting_problem(T; steps = 1)
+        # a symbolic ansatz carries no field a coupling can place the data in
+        @variables τ ξ q[1:1]
+        symbolic = SymbolicAnsatz(q[1] * sin(ξ - τ), τ, ξ, q;
+            xspan = (zero(T), one(T)), start = [one(T)])
+        err = try
+            GeometricIntegrator(problem, SpaceTimeGalerkin(symbolic, HardConstraintLifting()))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("takes a NetworkAnsatz or a TensorBSplineAnsatz", err.msg)
+        # the coefficient arm reads the field of the slab's two ends at the time nodes of the
+        # residual, so a basis that is free at those ends is refused rather than lifted at the
+        # wrong time
+        free = TensorBSplineAnsatz(degree = 2, ncells = (2, 5), xspan = (zero(T), one(T)),
+            n = 3, x_boundary = Free())
+        err = try
+            GeometricIntegrator(problem, SpaceTimeGalerkin(free, HardConstraintLifting()))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("needs x_boundary = Dirichlet()", err.msg)
     end
 
     @testset "N1 a problem without an exact solution, $T" for T in (Float64,)
@@ -553,9 +601,11 @@ end
             xstep = plain.xstep, params = plain.params)
         method = lifting_method(T;
             guess = FitTo(InitialCondition(); method = OrthogonalGreedy()))
+        # one integrator, built and run, warns once: the cache the solver builds for another
+        # element type is built on top of the integrator's own and says nothing
         for _ in 1:2
             logs, _ = Test.collect_test_logs(min_level = Base.CoreLogging.Debug) do
-                GeometricIntegrator(problem, method)
+                integrate(problem, method)
             end
             warnings = filter(l -> occursin("corner", l.message), logs)
             @test length(warnings) == 1

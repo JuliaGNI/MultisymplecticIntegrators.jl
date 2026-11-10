@@ -269,10 +269,12 @@ end
 """
     fit!(w, method::PINNTraining, ansatz::NetworkAnsatz, sample, cache)
 
-Fit the network to a slab's sampled target by `epochs` gradient-descent steps of the method's fixed
-`step` on the mean squared residual of the field against the sample's `values`, taken in batches of
-`batch` over its `points`. `sample` is the named tuple `(; points, values)` that
-[`fit_sample`](@ref) returns for the method.
+Fit the network to a slab's sampled target by `epochs` passes over the sample's `points`, one
+gradient-descent step of the method's fixed `step` per batch of `batch` consecutive points, on that
+batch's mean squared residual of the field against the sample's `values`. The points keep the order
+they were drawn in, and the last batch, which is the shorter one, is averaged over its own size.
+`sample` is the named tuple `(; points, values, start)` that [`fit_sample`](@ref) returns for the
+method.
 
 The fit draws no point and evaluates no target: both are the sample's. It takes the sample's `start`
 where the free entries of `w` are all zero — a `tanh` network is stationary at the zero parameters
@@ -302,15 +304,16 @@ function fit!(w::AbstractVector{ST}, method::PINNTraining, ansatz::NetworkAnsatz
             w[lo + k - 1] = sample.start[k]
         end
     end
-    rate = convert(ST, 2 * method.step / n)
+    # the block's parameters are the ones the caller's vector holds, so that the first batch reads
+    # what `w` holds and not what the block was built with
     for k in 1:nf
         s.params[lo + k - 1] = w[lo + k - 1]
     end
     for _ in 1:method.epochs
-        fill!(gradient, zero(ST))
         first = 1
         while first <= n
             last = min(first + method.batch - 1, n)
+            fill!(gradient, zero(ST))
             for i in first:last
                 evaluate_at!(s, points[i, 1], points[i, 2])
                 for d in 1:D
@@ -320,11 +323,14 @@ function fit!(w::AbstractVector{ST}, method::PINNTraining, ansatz::NetworkAnsatz
                     end
                 end
             end
+            # one step per batch, on that batch's mean squared residual: the last batch is the
+            # shorter one and is averaged over its own size
+            rate = convert(ST, 2 * method.step / (last - first + 1))
+            for k in 1:nf
+                w[lo + k - 1] -= rate * gradient[k]
+                s.params[lo + k - 1] = w[lo + k - 1]
+            end
             first = last + 1
-        end
-        for k in 1:nf
-            w[lo + k - 1] -= rate * gradient[k]
-            s.params[lo + k - 1] = w[lo + k - 1]
         end
     end
     return w
