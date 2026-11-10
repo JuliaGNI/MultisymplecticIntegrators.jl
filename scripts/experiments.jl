@@ -180,10 +180,10 @@ function fixed_boundary_problem(entry)
 end
 
 """
-    fixed_boundary_method(entry; T = entry.T)
+    fixed_boundary_method(entry)
 
-The method of a fixed-boundary entry: its ansatz, the fixed-boundary coupling, and the guess its
-branch starts from.
+The method of a fixed-boundary entry, at the entry's own element type: its ansatz, the
+fixed-boundary coupling, and the guess its branch starts from.
 """
 function fixed_boundary_method(entry)
     T = entry.T

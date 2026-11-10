@@ -304,18 +304,18 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - evidence: the family's live branch is `FitTo(Predictor())` with Levenberg–Marquardt, in both
   bubble forms and with and without the projected solve, and the matrix's thirty rows for it are
   built by `scripts/experiments.jl` without being run. A two-step run at `max_iterations = 3` on
-  `Wave` at `h = 0.05`, `Sx = 8`, `St = 10`, `ncells = 20` and `nq = (6, 4)` fails U12's rule at both
-  steps in all four combinations, at final residuals of `9.26e-4` and `1.78e-4` (joint, `:abg`),
-  `0.200` and `4.60e-3` (projected, `:abg`), `1.03e-4` and `1.03e-4` (joint, `:tsr`) and `0.234` and
-  `4.14e-3` (projected, `:tsr`), from initial residuals of `6.82e-3` (`:abg`) and `6.83e-3`
-  (`:tsr`) at the first step, and `0.0766`, `0.335`, `5.74e-3` and `0.335` at the second; while the
-  dead branch — `Continuation()` with `Newton()` on a pivoted QR cut at `1e-12` — converges 20 of 20
-  steps at a worst ratio of `2.96e-10` and an error of `6.6156e-4` at `t = 1`. The affine control
-  under this guess has no solution at all: `FitTo(Predictor())` moves level 1's hidden layer away
-  from level 0's by `35.7` on a quadratic entry, and the Jacobian keeps four null directions at
-  `D = 1` and two at `D = 2` in the `c₁` columns and `c₀` rows, so that entry leaves `0.302` of
-  `r₀` unreachable by any step — an LU solve leaves `1.8e-2`. The family's own affine control is
-  therefore `Continuation()`, which holds the spatial hidden layer at `φ₀`'s fit. The
+  `Wave` at `h = 0.05`, `Sx = 8`, `St = 10`, `ncells = 20` and `nq = (6, 4)` fails the convergence
+  rule at both steps in all four combinations, at final residuals of `9.26e-4` and `1.78e-4` (joint,
+  `:abg`), `0.200` and `4.60e-3` (projected, `:abg`), `1.03e-4` and `1.03e-4` (joint, `:tsr`) and
+  `0.234` and `4.14e-3` (projected, `:tsr`), from initial residuals of `6.82e-3` (`:abg`) and
+  `6.83e-3` (`:tsr`) at the first step, and `0.0766`, `0.335`, `5.74e-3` and `0.335` at the second;
+  while the dead branch — `Continuation()` with `Newton()` on a pivoted QR cut at `1e-12` —
+  converges 20 of 20 steps at a worst ratio of `2.96e-10` and an error of `6.6156e-4` at `t = 1`.
+  The affine control under this guess has no solution at all: `FitTo(Predictor())` moves level 1's
+  hidden layer away from level 0's by `35.7` on a quadratic entry, and the Jacobian keeps four null
+  directions at `D = 1` and two at `D = 2` in the `c₁` columns and `c₀` rows, so that entry leaves
+  `0.302` of `r₀` unreachable by any step — an LU solve leaves `1.8e-2`. The family's own affine
+  control is therefore `Continuation()`, which holds the spatial hidden layer at `φ₀`'s fit. The
   non-convergence is a measured result of the method and not a defect of its solve: the matrix
   compares it, a row's `converged` is recorded and never asserted, and a fix would be a different
   solve rather than a different tolerance.
@@ -324,10 +324,10 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K51 · `integrate!` applies a method's initial guess twice, so a guess that reads state it writes starts the step from its own output.
 
-- location: `src/core/integrate.jl:90`, `src/core/slab_integrator.jl:651`
+- location: `src/core/integrate.jl:90`, `src/core/slab_integrator.jl:655`
 - evidence: `integrate_steps!` drives each step with the ecosystem's `integrate!(solstep, integrator)`,
   which calls `initial_guess!` (`GeometricIntegratorsBase`'s `src/integrate.jl:10`) and then
-  `integrate_step!`, which calls it again (`src/core/slab_integrator.jl:651`). A guess whose fit and
+  `integrate_step!`, which calls it again (`src/core/slab_integrator.jl:655`). A guess whose fit and
   target read the block's parameter vector measures its own first output on the second application.
   Measured on `Wave` over two steps, step 2's datum `φ₀` differs from step 1's solved `φ₁` by `5.90`
   at `Sx = St = 4` and by `0.427` at `Sx = 8`, `St = 10`, and by `0` through `integrate_step!`

@@ -158,7 +158,8 @@ end
 
 # The Lagrangian at one node: summed over the components for a density of one component, and
 # called on the `D`-vectors of the node otherwise. A `VectorWave.VectorDensity` is the second case:
-# its own call method sums the scalar density over the components and adds the quartic coupling.
+# its own call method sums the scalar density over the components and carries the quartic coupling
+# `−¼β|u|⁴` alongside it.
 function node_lagrangian(L::LagrangianDensity, u, v, w, params)
     sum(
         L(u[d], v[d], w[d], params) for d in eachindex(u))

@@ -957,7 +957,7 @@ end
 The nodes and the weights of a fixed-boundary slab's own rule: `nq[1]` Gauss nodes on the
 normalised time `[0, 1]`, and `nq[2]` Gauss nodes on each of `ncells` cells of the space interval.
 The space nodes are mapped onto the span when the interval is known, which is what
-[`FixedBoundaryTabulation`](@ref)`(a, T)` does.
+[`FixedBoundaryTabulation`](@ref)`(a)` does.
 """
 struct FixedBoundaryTabulation{T}
     tnode::Vector{T}
@@ -1386,9 +1386,9 @@ side_derivative(f, t) = gradient(x -> f(x[1]), [t])[1]
 """
     spatial_derivative(ansatz, φ, i, d, ŝ, bump, slope, span)
 
-One component of the derivative of a level's network `N(x; φ, t)` in `x`, and of its derivative in
-`x`, with respect to parameter `i` of `φ`: the weight, the bias or the output weight of one hidden
-unit.
+The derivative of one component of a level's network `N(x; φ, t)` with respect to parameter `i` of
+`φ` — the weight, the bias or the output weight of one hidden unit — and that derivative's own
+derivative in `x`.
 
 A hidden weight or bias reaches component `d` alone, and an output weight reaches the one component
 it belongs to, which its position in `φ` names: the derivative of component `d` with respect to

@@ -372,10 +372,10 @@ else
     """
         default_options(method, problem)
 
-    The family's solver options: a step converges on U12's rule at `f_abstol = 0` and the element
-    type's own relative tolerance, and a solve is capped at 300 iterations. They are the defaults of
-    both the family's solver and the `Newton()` a caller may name instead, so that an affine control
-    and a dead branch are measured under one rule.
+    The family's solver options: a step converges on the rule of `step_converged` at
+    `f_abstol = 0` and the element type's own relative tolerance, and a solve is capped at 300
+    iterations. They are the defaults of both the family's solver and the `Newton()` a caller may
+    name instead, so that an affine control and a dead branch are measured under one rule.
 
     The tolerance is handed on as `nothing`, because `GeometricIntegrator` merges these defaults
     into the caller's keywords before any solver is built: the family's `initsolver` resolves it from
@@ -578,7 +578,7 @@ else
     end
 
     """
-        first_datum!(data, cache, problem, ansatz, sol)
+        first_datum!(data, problem, ansatz, t₀)
 
     Fix the datum of a run's first slab: `φ₀` is a least-squares fit of the level's network to the
     initial condition at the nodes of the space rule, weighted by the square root of the rule's

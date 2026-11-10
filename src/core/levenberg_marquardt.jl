@@ -12,10 +12,11 @@ The step is damped by a shift on the singular values of the Jacobian,
 from one decomposition of the Jacobian per accepted iterate, with the identity as the damping
 matrix. `μ` starts at `1e-6`, is divided by 3 after an accepted step down to `1e-15`, and
 multiplied by 4 after a rejected one. A trial point whose residual is not finite is rejected, and a
-guess whose residual is not finite ends the step at once with no iteration. The solve stops on
-U12's rule with the integrator's own options, at `max_iterations` (300 by default), or once `μ`
-reaches `1e12`. Its iteration count is the number of trial steps, accepted or rejected, and its
-residual is `‖F‖` of the whole system, so the slab's record path is the one every family uses.
+guess whose residual is not finite ends the step at once with no iteration. The solve stops on the
+rule of `step_converged` with the integrator's own options, at `max_iterations` (300 by default),
+or once `μ` reaches `1e12`. Its iteration count is the number of trial steps, accepted or rejected,
+and its residual is `‖F‖` of the whole system, so the slab's record path is the one every family
+uses.
 
 With `variable_projection = true` the bubble's output weights are eliminated: an inner Newton solve
 brings their own residuals to the floor by the minimum-norm step of a truncated decomposition, and
@@ -158,7 +159,7 @@ function jacobian_of(f!, x::AbstractVector{T}, n::Integer) where {T}
 end
 
 """
-    least_squares!(x, f!, n; iterations, μ₀)
+    least_squares!(x, f!, n; iterations, μ₀, μ_min)
 
 Bring `x` to a least-squares minimum of `‖f(x)‖` — `f!` writes the `n` residuals of `x` — by
 Levenberg–Marquardt with the step of [`lm_step!`](@ref), and return `x`.

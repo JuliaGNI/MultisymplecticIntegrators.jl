@@ -14,8 +14,7 @@ import GeometricBase: timesteps
 include("../helpers/problem_generator.jl")
 include("../helpers/action_oracle.jl")
 include("../helpers/testsetup.jl")
-# The registry of the scripts and no part of the package: the family's rows are built here, as
-# M's row testset builds them when the two branches meet.
+# The registry of the scripts and no part of the package: the family's rows are built here.
 include(joinpath(@__DIR__, "..", "..", "scripts", "experiments.jl"))
 
 const M = MultisymplecticIntegrators
@@ -263,8 +262,9 @@ const PROBLEMS = Dict(
                            "coupling, got $(nameof(typeof(coupling)))\$") GeometricIntegrator(
             problem, SpaceTimeGalerkin(a, coupling))
     end
-    # A lifting coupling pairs with a network or a spline, so its own refusal names those two; on a
-    # fixed-boundary network the refusal is this intersection's, and it is this message.
+    # `HardConstraintLifting` takes a `NetworkAnsatz` or a `TensorBSplineAnsatz` and names those two
+    # in its own refusal; a `FixedBoundaryNetwork` is neither, so the refusal that answers is this
+    # intersection's.
     @test_throws r"^ArgumentError: a FixedBoundaryNetwork takes the FixedBoundary coupling, got HardConstraintLifting$" GeometricIntegrator(
         problem, SpaceTimeGalerkin(a, HardConstraintLifting()))
     method = SpaceTimeGalerkin(a, FixedBoundary())
@@ -575,10 +575,11 @@ end
         noise = oracle_floor(oracle, datum, x; rows = projected)
         @test noise ≤ 1e6 * eps(Float64) * scale
         @test floor ≤ max(100 * eps(Float64) * scale, noise)
-        @info("FB5 the inner solve", VERSION, name=name, form=form, scale=scale,
+        @info("FB5 the inner solve",
+            VERSION, T="Float64", name=name, form=form, scale=scale,
             floor=floor, noise=noise, machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
             blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
-        @info("FB5 the inner solve's floor", VERSION, name=name, form=form,
+        @info("FB5 the inner solve's floor", VERSION, T="Float64", name=name, form=form,
             ratio=Float64(noise/(eps(Float64)*scale)),
             machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
             blas_threads=BLAS.get_num_threads(),
@@ -606,7 +607,7 @@ end
             @test ratio ≤ 1
         end
         @info("FB5 the reduced Jacobian against differences",
-            VERSION, name=name, form=form,
+            VERSION, T="Float64", name=name, form=form,
             worst=worst, machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
             blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
         # 3. one projected step: its recorded residual is the test's own full-system `‖F‖`
@@ -798,7 +799,7 @@ end
     xs = collect(range(grid[1], grid[2]; length = 21))
     error = maximum(abs(WF.solution_u(t[end], x, parameters(problem)) - u[end][i])
     for (i, x) in enumerate(xs))
-    @info("FB9 the dead branch's twenty steps", VERSION, error=error,
+    @info("FB9 the dead branch's twenty steps", VERSION, T="Float64", error=error,
         worst_ratio=maximum(stats.residuals ./ stats.initial_residuals),
         machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
         blas_threads=BLAS.get_num_threads(),
@@ -812,7 +813,7 @@ end
     method32 = SpaceTimeGalerkin(ansatz32, FixedBoundary(); initial_guess = Continuation())
     result32 = integrate(problem32, method32; solver = Newton(), max_iterations = 60,
         f_abstol = 0.0f0, f_reltol = fixed_boundary_f_reltol(Float32), verbosity = 0)
-    @info("FB9 the dead branch's Float32 arm", VERSION,
+    @info("FB9 the dead branch's Float32 arm", VERSION, T="Float32",
         ratios=result32.stats.residuals ./ result32.stats.initial_residuals,
         machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
         blas_threads=BLAS.get_num_threads(),
@@ -1214,7 +1215,6 @@ end
     # N23: the registry holds the family's 32 entries — 30 of the matrix and 2 of the plateau probe
     # — each with a distinct stem and a resolution, one of them at `Sx = 12`, `St = 16` and
     # `h = 0.025` and one at `BigFloat`, and the plateau's numbers are a record and no assertion.
-    # M's row testset replaces this one when the two branches meet.
     entries = family_entries(:fixed_boundary)
     @test length(entries) == 32
     @test length(unique(entry.stem for entry in entries)) == 32

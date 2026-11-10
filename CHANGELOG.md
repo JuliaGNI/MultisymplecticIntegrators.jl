@@ -553,8 +553,10 @@ makes it worth keeping.
   the ridge chart `:tsr`, whose Jacobian is applied to the equations as well as to the unknowns.
   `LevenbergMarquardt` is the family's solver — damped by a shift on the singular values, with the
   bubble's output weights eliminable by an inner Newton solve — and `Newton()` stays available with
-  the minimum-norm step of a pivoted QR cut at `1e-12`. The family's steps converge on U12's rule at
-  `f_abstol = 0` and `f_reltol = 1e-8`, and `fixed_boundary_f_reltol(T)` is the one place that
+  the minimum-norm step of a pivoted QR cut at `1e-12`. A step converges when
+  `residual ≤ f_abstol + f_reltol · r₀`, at `f_abstol = 0` and the element type's own `f_reltol`: the
+  dead branch's twenty steps on `Wave` all reach it at `Float64`, and a live-branch row records its
+  convergence flags and asserts none of them. `fixed_boundary_f_reltol(T)` is the one place that
   constant lives, at the two element types the family measured it for: a third type is refused, and
   a caller at such a type names its own `f_reltol`. A failed step is carried, with its statistics
   recorded, as every family's is.

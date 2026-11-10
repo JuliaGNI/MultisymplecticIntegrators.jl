@@ -4,7 +4,7 @@ CurrentModule = MultisymplecticIntegrators
 
 # Couplings and initial guesses
 
-The couplings that close a slab's system, and the guess that seeds its solve: a target, the four
+The couplings that close a slab's system, and the guess that seeds its solve: a target, the five
 targets this package ships, and the fits that bring an ansatz to one of them.
 
 ## The hard-constraint lifting
