@@ -186,8 +186,47 @@ end
     return column[i] + t * (column[i + 1] - column[i])
 end
 
+# Report a corner at which the problem's boundary function and its initial condition disagree.
+function lifting_corner_check(problem::LagrangianPDEProblem{T}) where {T}
+    xa, xb = xspan(problem)
+    t₀ = timespan(problem)[1]
+    initial = problem.ics_function([xa, xb], parameters(problem))
+    sides = problem.bcs_function(t₀, parameters(problem))
+    for (corner, values) in ((:left, sides.left), (:right, sides.right))
+        r = corner === :left ? 1 : 2
+        for d in axes(initial.u, 2)
+            u₀ = convert(T, initial.u[r, d])
+            g = convert(T, values.u[d])
+            scale = max(one(T), abs(u₀), abs(g))
+            mismatch = abs(u₀ - g)
+            mismatch > 16 * eps(T) * scale &&
+                @warn("the lifting's data disagree at the corner x = $corner of component $d: the " *
+                      "initial condition is $u₀ where the boundary function is $g, a difference of " *
+                      "$mismatch", corner=corner, component=d, mismatch=mismatch)
+        end
+    end
+    return nothing
+end
+
+"""
+    coupling_data(c::HardConstraintLifting, ansatz, problem::LagrangianPDEProblem{T}, ST)
+
+The lifting's block, built once for each cache that an integrator builds.
+
+The cache of the problem's own element type `T` also reports a corner at which the problem's boundary
+function and its initial condition disagree, and the cache that a solver builds for another element
+type — a `Dual` on its first Jacobian — is built on top of that one and says nothing, so one
+integrator warns once.
+
+The projection fixes the slab at the two ends in `x` and at its bottom, so the corners `(0, a)` and
+`(0, b)` carry two data. A problem whose boundary function is its exact solution meets its initial
+condition there exactly; a problem whose data disagree still runs, with the difference carried by
+the corner correction, and the warning names the corner and the difference so that such a run is
+visible in its log.
+"""
 function coupling_data(c::HardConstraintLifting, ansatz::SpaceTimeAnsatz,
-        problem::LagrangianPDEProblem, ::Type{ST}) where {ST}
+        problem::LagrangianPDEProblem{T}, ::Type{ST}) where {T, ST}
+    ST === T && lifting_corner_check(problem)
     nx = length(lifting_space_nodes(ansatz))
     D = components(problem)
     nf = free_rows(c, ansatz)
@@ -279,8 +318,8 @@ The lifting's transform places the data in the field of a network slab and of a 
 the residual, so a `Free()` space basis — free at the ends, and lifted there — would be lifted at
 the wrong time.
 
-The corner check itself is [`check_coupling`](@ref)`(problem, coupling, ansatz, ST)`, which runs on
-the cache of the problem's own element type alone.
+The corner check of the slab's data is not a refusal and is not here: the block's
+[`coupling_data`](@ref) reports it, once per integrator, as a warning.
 """
 check_coupling(::LagrangianPDEProblem, ::HardConstraintLifting, ::NetworkAnsatz) = nothing
 
@@ -297,45 +336,6 @@ function check_coupling(::LagrangianPDEProblem, c::HardConstraintLifting,
         ansatz::SpaceTimeAnsatz)
     throw(ArgumentError("$(nameof(typeof(c))) cannot pair with a $(nameof(typeof(ansatz))); it " *
                         "takes a NetworkAnsatz or a TensorBSplineAnsatz"))
-end
-
-"""
-    check_coupling(problem, ::HardConstraintLifting, ansatz, ST)
-
-Report a corner at which the problem's boundary function and its initial condition disagree.
-
-The projection fixes the slab at the two ends in `x` and at its bottom, so the corners `(0, a)` and
-`(0, b)` carry two data. A problem whose boundary function is its exact solution meets its initial
-condition there exactly; a problem whose data disagree still runs, with the difference carried by
-the corner correction, and the warning names the corner and the difference so that such a run is
-visible in its log.
-
-The warning is emitted by the cache of the problem's own element type `ST` alone: every integrator
-builds that cache, and the cache a solver builds for another element type — a `Dual` on its first
-Jacobian — is built on top of it, so one integrator warns once.
-"""
-function check_coupling(problem::LagrangianPDEProblem{T}, c::HardConstraintLifting,
-        ansatz::SpaceTimeAnsatz, ::Type{ST}) where {T, ST}
-    check_coupling(problem, c, ansatz)
-    ST === T || return nothing
-    xa, xb = xspan(problem)
-    t₀ = timespan(problem)[1]
-    initial = problem.ics_function([xa, xb], parameters(problem))
-    sides = problem.bcs_function(t₀, parameters(problem))
-    for (corner, values) in ((:left, sides.left), (:right, sides.right))
-        r = corner === :left ? 1 : 2
-        for d in axes(initial.u, 2)
-            u₀ = convert(T, initial.u[r, d])
-            g = convert(T, values.u[d])
-            scale = max(one(T), abs(u₀), abs(g))
-            mismatch = abs(u₀ - g)
-            mismatch > 16 * eps(T) * scale &&
-                @warn("the lifting's data disagree at the corner x = $corner of component $d: the " *
-                      "initial condition is $u₀ where the boundary function is $g, a difference of " *
-                      "$mismatch", corner=corner, component=d, mismatch=mismatch)
-        end
-    end
-    return nothing
 end
 
 # The field and its parameter derivative at the two corners of the slab, `(0, a)` and `(0, b)`, into
