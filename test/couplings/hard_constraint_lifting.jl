@@ -263,7 +263,7 @@ end
             guess = FitTo(InitialCondition(); method = OrthogonalGreedy()))
         N = length(cache(GeometricIntegrator(problem, method)).x)
         θ = 2 .* rand(Xoshiro(20261115), T, N) .- 1
-        int, c, solstep, _ = lifting_slab(problem, method, θ)
+        _, c, _, _ = lifting_slab(problem, method, θ)
         tol = sqrt(eps(T)) * maximum(abs, c.u)
         for (t̂, x) in points
             at = lifting_point(c, problem, T, t̂, x, h)
@@ -282,7 +282,7 @@ end
             initial_guess = FitTo(InitialCondition()))
         Nc = length(cache(GeometricIntegrator(problem, cmethod)).x)
         θc = 2 .* rand(Xoshiro(20261116), T, Nc) .- 1
-        intc, cc, solstepc, _ = lifting_slab(problem, cmethod, θc)
+        _, cc, _, _ = lifting_slab(problem, cmethod, θc)
         tolc = sqrt(eps(T)) * maximum(abs, cc.u)
         for (t̂, x) in points
             at = spline_point(cc, problem, ansatz, T, t̂, x, h)
@@ -334,7 +334,7 @@ end
         moracle = ActionOracle(moving, mmethod)
         Nm = unknown_count(moracle)
         θm = 2 .* rand(Xoshiro(20261112), T, Nm) .- 1
-        mint, cm, msolstep, mb = lifting_slab(moving, mmethod, θm)
+        _, cm, msolstep, mb = lifting_slab(moving, mmethod, θm)
         @test M.slab_start(moving, current(msolstep)) == timespan(moving)[1]
         mh = timestep(moving)
         mt̂, _ = M.quadrature_points(cm.ansatz)
