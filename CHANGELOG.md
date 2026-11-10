@@ -576,6 +576,13 @@ makes it worth keeping.
   the network and the coefficient slab's residual is recorded. An ansatz of any other kind, and a
   coefficient basis that is free at the ends of `xspan`, are refused when the integrator is built
   rather than failing inside a step.
+  The lifted residual allocates, which the 0 bytes of the unlifted `residual!` under the pointwise
+  bullet do not: the transform calls the problem's boundary function at every time node and, for a
+  coefficient ansatz, builds scratch arrays. A warm `residual!` allocates 5440 B for
+  `TensorBSplineAnsatz(degree = 2, ncells = (2, 5))` and 9280 B for
+  `NetworkAnsatz(S = 10, degree = 3, ncells = (2, 5))` on `Wave` at `h = 0.05` (Julia 1.13.3,
+  `--check-bounds=auto`, a fresh process, the minimum of five calls); the slab's cache lookup adds
+  none of it.
   `transform_field!` gains the ansatz's block as an argument, so that a coupling whose transform
   depends on the field's parameters can read them; the slab core passes `c.ansatz` at both of its
   call sites, and `test/core/slab_integrator.jl`'s `Lifted` fixture takes the argument.
@@ -585,13 +592,15 @@ makes it worth keeping.
   each pass cut into consecutive batches of `batch` points in their drawn order, with one plain step
   of the fixed `step` per batch on that batch's mean squared residual — the last, shorter batch
   averaged over its own size. The points are drawn once per fit, uniformly over `[0, 1] × xspan`,
-  from a copy of the method's own generator; the target is evaluated at each of them by
-  `target_point!`, so every target of the guess answers at the physical time of its point, and the
-  method reads no target itself. The gradient is the parameter derivative the ansatz's block already
-  carries, so no optimiser package and no differentiation enters the package. The buffers — the
-  points, the target values and the batch gradient — are allocated once per call, before the epoch
-  loop, and no epoch and no batch allocates: at `S = 10`, `nsamples = 5 000` and `batch = 100`, the
-  counts of `epochs = 1` and `epochs = 10` are equal. From a seeded start in `[-1, 1]` on the sample
+  from a copy of the method's own generator, each coordinate one `Float64` draw rounded to the
+  element type, so a `Float32` fit reads the points of the same fit in `Float64`; the target is
+  evaluated at each of them by `target_point!`, so every target of the guess answers at the physical
+  time of its point, and the method reads no target itself. The gradient is the parameter derivative
+  the ansatz's block already carries, so no optimiser package and no differentiation enters the
+  package. The fit reads the sample's points and target values in place and copies neither; its
+  one buffer, the batch gradient, is allocated once per call, before the epoch loop, and no epoch
+  and no batch allocates: at `S = 10`, `nsamples = 5 000` and `batch = 100`, the counts of
+  `epochs = 1` and `epochs = 10` are equal. From a seeded start in `[-1, 1]` on the sample
   of `sin(πx) cos(πt)` over `[0, 1] × [0, 0.05]`, the fit's relative `L²` error falls from `1.562` to
   `0.399` in `Float64` and from `1.979` to `0.117` in `Float32`, factors `3.92` and `16.86`, and on
   the two-component problem `VectorWave`, whose target is `(sin(πx) cos(πt), sin(2πx) cos(πt) / 2)`,
@@ -603,10 +612,13 @@ makes it worth keeping.
   parameters the caller hands it, which are the block's own; where every free entry of those is zero
   — a fresh block, on which a `tanh` network's parameter derivative vanishes — it starts instead
   from the start of its own sample, one draw in `[-1, 1]` per free parameter, so that a first slab
-  is not a saddle, and it leaves a `:last_layer` network's hidden layer untouched there as everywhere
-  else. A `FitTo` that names it on a coefficient ansatz is refused at the first fit, by one `fit!`
-  method that both fitting `apply_guess!` methods call; a `SymbolicAnsatz`, whose `apply_guess!` has
-  no `FitTo` method at all, raises a `MethodError` there before any fit.
+  is not a saddle. That holds for an `:all` network alone. A `:last_layer` fit never writes the
+  hidden layer, which is zero on a fresh block, so every `tanh` unit is zero and the field and its
+  derivative with respect to every output weight stay zero: the fit leaves the field at zero, and
+  the first slab's misfit is `1.0` before and after, where `:all` brings it to `0.31`. A `FitTo`
+  that names it on a coefficient ansatz is refused at the first fit, by one `fit!` method that both
+  fitting `apply_guess!` methods call; a `SymbolicAnsatz`, whose `apply_guess!` has no `FitTo`
+  method at all, raises a `MethodError` there before any fit.
   `test/initial_guess/pinn_training.jl` joins the `slow` group.
 - **`scripts/trialnn_model.jl` registers the TrialNN family in the append-only registry.** One model
   file builds the family's problem, ansatz, method and archive — `Wave` over five steps and
@@ -614,6 +626,10 @@ makes it worth keeping.
   `register_family!(:trialnn, TRIALNN; run = trialnn_run)` puts them under `runs/` through
   `scripts/run_family.jl`, without an edit to `scripts/experiments.jl`. The two drivers of the old
   stack are those two entries, and their 547 comment lines are not carried over.
+  `trialnn_run` raises an error when the run holds fewer traces than the entry has steps, which is
+  when `integrate` stopped early at a `NonlinearSolverException` or a NaN, so `run_family.jl`
+  counts the entry as failed and archives nothing, rather than archiving the truncated run as a
+  success.
   The family's two §A soundings are unconverged iterates and are recorded as K47 and K48.
 
 ### Changed

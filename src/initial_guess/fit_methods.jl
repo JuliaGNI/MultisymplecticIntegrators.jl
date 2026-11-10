@@ -116,8 +116,10 @@ point. The gradient is the derivative of the field with respect to each free par
 ansatz's block already carries: the fit needs no differentiation and no optimiser package.
 
 The descent writes the free parameters alone and leaves the parameters the mode holds fixed at their
-values, so a `:last_layer` network keeps its hidden layer. Its buffers — the points, the target
-values and the batch gradient — are allocated once per call, before the epoch loop, and no epoch and
+values, so a `:last_layer` network keeps its hidden layer. A fresh block's hidden layer is zero and
+no `PINNTraining` fit writes it, so on a `:last_layer` network of `tanh` units the field and its
+derivative with respect to every output weight stay zero, and the fit leaves the field at zero. Its
+one buffer, the batch gradient, is allocated once per call, before the epoch loop, and no epoch and
 no batch allocates.
 
 ```julia

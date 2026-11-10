@@ -281,9 +281,9 @@ where the free entries of `w` are all zero — a `tanh` network is stationary at
 every block begins with — and the parameters it is given anywhere else, so a `:last_layer` fit
 leaves the block's hidden layer untouched either way. The gradient is the derivative of the field
 with respect to each free parameter, which the block's `gradient` holds at every point it evaluates,
-so the descent needs no differentiation of its own. The points, the target values and the batch
-gradient are allocated once, before the epoch loop, and each point is evaluated into the block's own
-scratch, so no epoch and no batch allocates.
+so the descent needs no differentiation of its own. The batch gradient is allocated once, before the
+epoch loop, and each point is evaluated into the block's own scratch, so no epoch and no batch
+allocates.
 
 The free parameters alone are written, and they are written into the block as well as into `w`, so
 that the evaluation of every point reads the parameters the descent has reached; a parameter the
@@ -293,8 +293,7 @@ function fit!(w::AbstractVector{ST}, method::PINNTraining, ansatz::NetworkAnsatz
         sample::NamedTuple, c::SpaceTimeGalerkinCache) where {ST}
     s = c.ansatz
     D, nf, lo = ansatz.D, ansatz.nfree, ansatz.first_free
-    points = copy(sample.points)
-    values = copy(sample.values)
+    points, values = sample.points, sample.values
     n = size(points, 1)
     gradient = zeros(ST, nf)
     # the block's parameters start at zero, and the derivative of a `tanh` network is zero there:
@@ -375,7 +374,9 @@ The sample of a [`PINNTraining`](@ref) fit: `nsamples` points of the slab drawn 
 `[0, 1] × xspan` from a copy of the method's generator, and the value of the target at each of them,
 read by [`target_point!`](@ref) so that every target of the guess answers at the physical time of
 its point. The points are drawn afresh at every call and the method's own generator is never
-advanced, so two fits that share one method object draw the same points.
+advanced, so two fits that share one method object draw the same points. Each coordinate is one
+`Float64` draw rounded to the element type, so a fit in `Float32` reads the points of the same fit
+in `Float64`.
 
 Beside them the sample carries `start`: one value in `[-1, 1]` per free parameter, drawn from the
 same copy of the generator after the points. A network whose parameters are all zero has a zero
@@ -390,8 +391,8 @@ function fit_sample(method::PINNTraining, interior::AbstractArray{ST, 3}, target
     points = Matrix{ST}(undef, n, 2)
     values = Matrix{ST}(undef, n, D)
     for i in 1:n
-        t̂ = rand(rng, ST)
-        x = convert(ST, xa) + convert(ST, xb - xa) * rand(rng, ST)
+        t̂ = convert(ST, rand(rng))
+        x = convert(ST, xa + (xb - xa) * rand(rng))
         points[i, 1] = t̂
         points[i, 2] = x
         target_point!(view(values, i, :), target, c, ansatz, problem, sol, t̂, x)

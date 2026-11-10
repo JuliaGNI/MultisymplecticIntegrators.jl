@@ -71,12 +71,15 @@ end
 
 The registry's `run` for the TrialNN family: integrate one entry, report the steps it took and what
 its solve did, and return its archive under the keys of the schema in `scripts/README.md`.
-`store_run!` adds the `"stem"`.
+`store_run!` adds the `"stem"`. A run that stops before the entry's `steps` — `integrate` ends early
+at a failed nonlinear solve or a NaN — raises an error, so the driver archives no partial run.
 """
 function trialnn_run(entry; T::Type = Float64)
     problem = trialnn_problem(entry; T = T)
     method = trialnn_method(entry; T = T)
     seconds = @elapsed result = integrate(problem, method)
+    length(result.traces) == entry.steps ||
+        error("$(entry.label) stopped after $(length(result.traces)) of $(entry.steps) steps")
     stats = result.stats
     report(entry.label, "$(length(result.traces)) steps in $(round(seconds; digits = 2)) s")
     stats === nothing ||
