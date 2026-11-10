@@ -290,3 +290,35 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   momentum or the velocity the next slab reads.
 - kind: upstream
 - found: 2026-11-09
+
+### K51 · The bubble's output block is rank deficient at `Continuation()`'s first slab, so a projected solve there eliminates an `a` that is not differentiable.
+
+- location: `src/couplings/fixed_boundary.jl`, `src/ansatz/network.jl` (`bubble_start`)
+- evidence: the bubble's start grid is antisymmetric under `k ↦ St + 1 − k`: the units at `k` and at
+  `St + 1 − k` are exact negatives, measured to `0.0` at `St = 10`, so a first slab solved from
+  `Continuation()` differentiates a bubble whose hidden atoms pair off. At `Wave`, `h = 0.05`,
+  `Sx = 8`, `St = 10`, `ncells = 20` and `nq = (6, 4)`, the `∂S/∂a` block `J_aa` of that slab has
+  rank 4 of 10 at the cut `√eps(T) · σmax` — 5 of 10 lie above `1e-9` — with singular values
+  `0.746, 5.34e-3, 6.94e-5, 7.24e-7, 5.93e-9, 3.7e-17 … 3.6e-25` under `:abg`. A projected step
+  from that guess therefore eliminates, by its inner solve, an `a*(z)` that a perturbation of a
+  hidden entry breaks, and its reduced Jacobian is not the derivative of `z ↦ F_o(z, a*(z))`. The
+  testset "FB5 variable projection" takes its measurements from `FitTo(Predictor())`, whose `J_aa`
+  is full rank, and no test asserts a projected solve from `Continuation()`. A `bubble_start`
+  without the pairing would be a different guess for every run of the family, and the guess is what
+  the matrix compares.
+- kind: defect
+- found: 2026-11-10
+
+### K52 · The plateau probe's extended-precision row cannot run, because `GeometricSolutions` cannot build a solution at `BigFloat`.
+
+- location: `scripts/experiments.jl` (the `BigFloat` plateau row);
+  `GeometricSolutions`, `src/timeseries.jl:8`
+- evidence: `TimeSeries(ti::AbstractVector, Δt)` builds `new{T, n, typeof(t)}` with
+  `n = length(ti) - 1`, and the `length` of a `BigFloat` range is a `BigInt` — it is a
+  `StepRangeLen{BigFloat, BigFloat, BigFloat, BigInt}` — so `GeometricSolution(problem)` on a
+  `BigFloat` `Wave` raises `TypeError: in Type, in parameter, expected Int64, got a value of type
+  BigInt` before a step is taken. The row stays in the registry and in the build-only testset
+  "FB18", which builds it and never runs it; the fix is a pull request of its own to
+  `GeometricSolutions`, and the step runs as a row of M's matrix once it lands.
+- kind: upstream
+- found: 2026-11-10

@@ -555,7 +555,12 @@ makes it worth keeping.
   bubble's output weights eliminable by an inner Newton solve — and `Newton()` stays available with
   the minimum-norm step of a pivoted QR cut at `1e-12`. The family's steps converge on U12's rule at
   `f_abstol = 0` and `f_reltol = 1e-8`, and `fixed_boundary_f_reltol(T)` is the one place that
-  constant lives. A failed step is carried, with its statistics recorded, as every family's is.
+  constant lives, at the two element types the family measured it for: a third type is refused, and
+  a caller at such a type names its own `f_reltol`. A failed step is carried, with its statistics
+  recorded, as every family's is.
+  `ForwardDiff` (compat `0.10.36, 1`) joins `[deps]`, because the family differentiates the side
+  data in `t` and reads the predictor's mass with it directly rather than through `SimpleSolvers`'
+  re-export; the manifest already held it through `SimpleSolvers`, so the load gains no package.
 - **`scripts/experiments.jl` registers the fixed-boundary family.** Thirty rows — `Wave` and
   `SineGordon` at three time steps, on the dead branch and on the four combinations of the bubble's
   form and its solve — and the two rows of the plateau probe, one of them at `Sx = 12`, `St = 16` and

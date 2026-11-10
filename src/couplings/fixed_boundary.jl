@@ -196,15 +196,36 @@ if !@isdefined(FixedBoundaryData)
     `2.96e-10` under this rule, with the rank cut of the pivoted QR at `1e-12`; the tolerance is not
     what limits that run, since the factorization's own cut leaves one step at `3.0e-8`.
     `Float32` is `3.0f-2`, the value measured on the family's affine control at that element type,
-    whose worst ratio is `1.365e-2`; it is never the `Float64` value converted. An element type the
-    plan does not measure takes `√eps(T)`, the floor of its own round-off rather than a measurement,
-    and a run at such a type records the ratios it reaches instead of asserting them.
+    whose worst ratio is `1.365e-2`; it is never the `Float64` value converted. Any other element
+    type is refused rather than given the floor of its own round-off: the rule is a measurement on
+    the family's control and not a formula, so a run at another type names the tolerance it is
+    solved at as an option of its own, and a run that names none is told the type it asked for.
     """
     fixed_boundary_f_reltol(::Type{Float64}) = 1e-8
 
     fixed_boundary_f_reltol(::Type{Float32}) = 3.0f-2
 
-    fixed_boundary_f_reltol(::Type{T}) where {T} = sqrt(eps(T))
+    function fixed_boundary_f_reltol(::Type{T}) where {T}
+        throw(ArgumentError("the fixed-boundary network has no measured f_reltol at $T; " *
+                            "name the tolerance as an option of its own"))
+    end
+
+    """
+        resolved_f_reltol(options, ::Type{T})
+
+    The solver options with their `f_reltol` filled in: the caller's own where it names one, and
+    [`fixed_boundary_f_reltol`](@ref) at the element type where it does not. [`default_options`](@ref)
+    hands the tolerance on as `nothing` rather than resolving it there, because
+    `GeometricIntegrator` merges the default bundle into the caller's keywords before any solver is
+    built: only here is a caller's own `f_reltol` known, and only a caller that names none reaches
+    the element type's measured value. Options with no `f_reltol` key at all belong to a method of
+    another family and come back as they are.
+    """
+    function resolved_f_reltol(options::NamedTuple, ::Type{T}) where {T}
+        haskey(options, :f_reltol) || return options
+        options.f_reltol === nothing || return options
+        return merge(options, (f_reltol = fixed_boundary_f_reltol(T),))
+    end
 
 else
     # ---- the second pass: the methods that dispatch on the network's ansatz and block ----------
@@ -355,12 +376,16 @@ else
     type's own relative tolerance, and a solve is capped at 300 iterations. They are the defaults of
     both the family's solver and the `Newton()` a caller may name instead, so that an affine control
     and a dead branch are measured under one rule.
+
+    The tolerance is handed on as `nothing`: [`resolved_f_reltol`](@ref) fills it in from
+    [`fixed_boundary_f_reltol`](@ref) once the caller's own keywords are known, so that a caller who
+    names an `f_reltol` at an element type the family has not measured is not refused for it.
     """
     function default_options(
             method::SpaceTimeGalerkin{<:FixedBoundaryNetwork},
             problem::LagrangianPDEProblem)
         T = datatype(problem)
-        return (f_abstol = zero(T), f_reltol = fixed_boundary_f_reltol(T),
+        return (f_abstol = zero(T), f_reltol = nothing,
             max_iterations = LM_MAX_ITERATIONS)
     end
 
@@ -379,11 +404,13 @@ else
             solvermethod::Newton, method::SpaceTimeGalerkin{<:FixedBoundaryNetwork},
             caches::CacheDict; kwargs...)
         T = eltype(nlsolution(caches))
-        options = merge(
-            (;
-                linear_solver_method = SimpleSolvers.LapackPivotedQR(
-                rtol = fixed_boundary_qr_cut(T))),
-            values(kwargs))
+        options = resolved_f_reltol(
+            merge(
+                (;
+                    linear_solver_method = SimpleSolvers.LapackPivotedQR(
+                    rtol = fixed_boundary_qr_cut(T))),
+                values(kwargs)),
+            T)
         return invoke(initsolver,
             Tuple{NonlinearSolverMethod, GeometricMethod, CacheDict},
             solvermethod, method, caches; options...)

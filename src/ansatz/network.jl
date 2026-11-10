@@ -1711,7 +1711,8 @@ end
 """
     evaluate!(sample, ::Predictor, cache, ansatz::FixedBoundaryNetwork, problem, sol)
 
-The cheap predictor of the slab, at the nodes of the ansatz's rule: [`predictor_sample!`](@ref).
+The cheap predictor of the slab, at the nodes of the ansatz's rule: `predictor_sample!`, which
+`src/couplings/fixed_boundary.jl` declares.
 """
 function evaluate!(sample::AbstractArray{ST, 3}, ::Predictor,
         c::SpaceTimeGalerkinCache, ansatz::FixedBoundaryNetwork,
@@ -1748,7 +1749,7 @@ end
 
 The refusals of a `FitTo` guess, on top of the core's: a fixed-boundary network takes
 `InitialCondition`, `ExactSolution`, `TargetFunction` and `Predictor` as targets and is fitted by
-[`BubbleGreedy`](@ref) alone, and a density its predictor cannot read is refused here; a `Predictor`
+`BubbleGreedy` alone, and a density its predictor cannot read is refused here; a `Predictor`
 on any other ansatz is refused, because another ansatz has no slab predictor to run.
 """
 function check_method(problem::LagrangianPDEProblem,
