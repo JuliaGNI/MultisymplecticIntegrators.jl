@@ -952,12 +952,9 @@ function lifted_point(o::NetworkLiftingOracle{T}, datum::LiftingDatum{T}, p, r::
     for d in 1:D
         # the projection, and its two derivatives
         pu = n[d] - ψL * na[d] - ψR * nb[d] - φ * (c[d] - ψL * ca[d] - ψR * cb[d])
-        pv = n[D + d] - ψL * na[D + d] - ψR * nb[D + d] + (c[d] - ψL * ca[d] - ψR * cb[d]) -
-             φ * (c[D + d] - ψL * ca[D + d] - ψR * cb[D + d])
-        pw = n[2D + d] + na[d] / span - ψL * na[2D + d] - nb[d] / span -
-             ψR * nb[2D + d] -
-             φ * (c[2D + d] + ca[d] / span - ψL * ca[2D + d] - cb[d] / span -
-              ψR * cb[2D + d])
+        pv = n[D + d] - ψL * na[D + d] - ψR * nb[D + d] + (c[d] - ψL * ca[d] - ψR * cb[d])
+        pw = n[2D + d] + na[d] / span - nb[d] / span -
+             φ * (c[2D + d] + ca[d] / span - cb[d] / span)
         # the lift, and its two derivatives
         lu = ψL * sides.left.u[d] + ψR * sides.right.u[d] +
              φ * (datum.bottom_u[r, d] - ψL * start_sides.left.u[d] -

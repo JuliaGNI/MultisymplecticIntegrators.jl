@@ -91,8 +91,8 @@ and it moves with the slab; the datum's two arrays move with it too.
   - their derivative with respect to the `nf` free parameters, `6D · nf` entries, entry `(i, k)` of
     the `k`-th parameter at `6D + (k - 1) · 6D + i`;
   - the traces of the basis of a coefficient ansatz at the three boundary parts: the space
-    functions at the two ends of `xspan` and their derivative there, `4 · Nx` entries, and the time
-    functions at the slab's bottom and their derivative, `2 · Nt` entries.
+    functions at the two ends of `xspan`, `2 · Nx` entries, and the time functions at the slab's
+    bottom, `Nt` entries.
 """
 mutable struct HardConstraintLiftingData{ST, C <: SlabCoupling} <: CouplingData
     coupling::C
@@ -116,7 +116,7 @@ bottom_datum(::HardConstraintLiftingData) = nothing
 # coefficient ansatz, the traces of its basis at the three boundary parts.
 lifting_tail_count(::NetworkAnsatz, nx::Integer) = nx
 function lifting_tail_count(ansatz::TensorBSplineAnsatz, nx::Integer)
-    return nx + 4 * nspace_functions(ansatz) + 2 * ntime_functions(ansatz)
+    return nx + 2 * nspace_functions(ansatz) + ntime_functions(ansatz)
 end
 
 # The nodes of the datum, and, for a coefficient ansatz, the traces of its basis at the three
@@ -146,13 +146,10 @@ function lifting_tables!(data, ansatz::TensorBSplineAnsatz{T}, offset::Integer,
     for j in 1:nb
         data.work[o + j] = evaluate(xb, j, convert(T, xa))
         data.work[o + nb + j] = evaluate(xb, j, convert(T, xb_end))
-        data.work[o + 2nb + j] = evaluate(xb, j, convert(T, xa), 1)
-        data.work[o + 3nb + j] = evaluate(xb, j, convert(T, xb_end), 1)
     end
-    o += 4nb
+    o += 2nb
     for i in 1:nt
         data.work[o + i] = evaluate(tb, i, zero(T))
-        data.work[o + nt + i] = evaluate(tb, i, zero(T), 1)
     end
     return nothing
 end
@@ -369,11 +366,9 @@ function transform_field!(
         ψR = (xr - convert(ST, xa)) / span
         evaluate_at!(block, zero(ST), xr)
         for d in 1:D
-            # the projection's bottom value and its two derivatives, corner-corrected
+            # the projection's bottom value and its space derivative, corner-corrected
             bu = block.values[d] - ψL * work[d] - ψR * work[3D + d]
-            bv = block.values[D + d] - ψL * work[D + d] - ψR * work[3D + D + d]
-            bw = block.values[2D + d] + work[d] / span - ψL * work[2D + d] -
-                 work[3D + d] / span - ψR * work[5D + d]
+            bw = block.values[2D + d] + work[d] / span - work[3D + d] / span
             # and the datum, less the sides' values at the slab's start
             ga₀ = convert(ST, start_sides.left.u[d])
             gb₀ = convert(ST, start_sides.right.u[d])
@@ -384,7 +379,7 @@ function transform_field!(
             for q in axes(u, 1)
                 φ = oneST - convert(ST, t̂[q])
                 u[q, r, d] -= φ * uc
-                v[q, r, d] += (uc - φ * bv) / hh
+                v[q, r, d] += uc / hh
                 w[q, r, d] -= φ * wc
             end
             project_J || continue
@@ -392,15 +387,12 @@ function transform_field!(
                 p = a.first_free + k - 1
                 o = 6D + (k - 1) * 6D
                 jbu = block.gradient[d, p] - ψL * work[o + d] - ψR * work[o + 3D + d]
-                jbv = block.gradient[D + d, p] - ψL * work[o + D + d] -
-                      ψR * work[o + 3D + D + d]
                 jbw = block.gradient[2D + d, p] + work[o + d] / span -
-                      ψL * work[o + 2D + d] - work[o + 3D + d] / span -
-                      ψR * work[o + 5D + d]
+                      work[o + 3D + d] / span
                 for q in axes(u, 1)
                     φ = oneST - convert(ST, t̂[q])
                     Ju[q, r, d, k] -= φ * jbu
-                    Jv[q, r, d, k] += (jbu - φ * jbv) / hh
+                    Jv[q, r, d, k] += jbu / hh
                     Jw[q, r, d, k] -= φ * jbw
                 end
             end
@@ -423,14 +415,13 @@ function transform_field!(
                     δv = block.values[D + d] / hh - convert(ST, values.v[d])
                     u[q, r, d] -= ψ * δu
                     v[q, r, d] -= ψ * δv
-                    w[q, r, d] -= ψ′ * δu + ψ * block.values[2D + d]
+                    w[q, r, d] -= ψ′ * δu
                     project_J || continue
                     for k in 1:nf
                         p = a.first_free + k - 1
                         Ju[q, r, d, k] -= ψ * block.gradient[d, p]
                         Jv[q, r, d, k] -= ψ * block.gradient[D + d, p] / hh
-                        Jw[q, r, d, k] -= ψ′ * block.gradient[d, p] +
-                                          ψ * block.gradient[2D + d, p]
+                        Jw[q, r, d, k] -= ψ′ * block.gradient[d, p]
                     end
                 end
             end
@@ -439,34 +430,28 @@ function transform_field!(
     return nothing
 end
 
-# The coefficient array reduced at one end of `xspan`: `out[i, d]` is the value and `out_w[i, d]`
-# the space derivative of the slab's field there, by time function — what the transform's side terms
-# read at every time node.
-function lifting_reduction!(out::AbstractMatrix{ST}, out_w::AbstractMatrix{ST},
-        coeffs::Array{ST, 3}, values::AbstractVector, slopes::AbstractVector) where {ST}
+# The coefficient array reduced at one end of `xspan`: `out[i, d]` is the value of the slab's field
+# there, by time function — what the transform's side terms read at every time node.
+function lifting_reduction!(out::AbstractMatrix{ST}, coeffs::Array{ST, 3},
+        values::AbstractVector) where {ST}
     nt, nx, D = size(coeffs)
     for d in 1:D, i in 1:nt
 
         value = zero(ST)
-        slope = zero(ST)
         for j in 1:nx
-            c = coeffs[i, j, d]
-            value += c * values[j]
-            slope += c * slopes[j]
+            value += coeffs[i, j, d] * values[j]
         end
         out[i, d] = value
-        out_w[i, d] = slope
     end
     return nothing
 end
 
 # The field of a coefficient slab at the time node `q` of its own rule, from a reduction at one end:
-# the value, its derivative in the normalised time and its space derivative.
+# the value and its derivative in the normalised time.
 function lifting_end_value(tabulation::SlabTabulation, reduction::AbstractMatrix,
-        reduction_w::AbstractMatrix, q::Integer, d::Integer)
+        q::Integer, d::Integer)
     u = zero(eltype(reduction))
     v = zero(eltype(reduction))
-    w = zero(eltype(reduction))
     t = tabulation.time
     for k in axes(t.index, 2)
         i = t.index[q, k]
@@ -475,25 +460,21 @@ function lifting_end_value(tabulation::SlabTabulation, reduction::AbstractMatrix
         φ′ = convert(eltype(reduction), t.slope[q, k])
         u += φ * reduction[i, d]
         v += φ′ * reduction[i, d]
-        w += φ * reduction_w[i, d]
     end
-    return u, v, w
+    return u, v
 end
 
-# The field of a coefficient slab at the bottom of the slab, at the space node `r`, from the two
-# traces of the time functions at zero.
+# The field of a coefficient slab at the bottom of the slab, at the space node `r`: its value and
+# its space derivative, from the traces of the time functions at zero.
 function lifting_bottom_value(tabulation::SlabTabulation, coeffs::Array{ST, 3},
-        zero_values::AbstractVector, zero_slopes::AbstractVector, r::Integer,
-        d::Integer) where {ST}
+        zero_values::AbstractVector, r::Integer, d::Integer) where {ST}
     nt = size(coeffs, 1)
     u = zero(ST)
-    v = zero(ST)
     w = zero(ST)
     x = tabulation.space
     for i in 1:nt
         φ = convert(ST, zero_values[i])
-        φ′ = convert(ST, zero_slopes[i])
-        (iszero(φ) && iszero(φ′)) && continue
+        iszero(φ) && continue
         value = zero(ST)
         slope = zero(ST)
         for l in axes(x.index, 2)
@@ -504,10 +485,9 @@ function lifting_bottom_value(tabulation::SlabTabulation, coeffs::Array{ST, 3},
             slope += c * convert(ST, x.slope[r, l])
         end
         u += φ * value
-        v += φ′ * value
         w += φ * slope
     end
-    return u, v, w
+    return u, w
 end
 
 """
@@ -541,54 +521,37 @@ function transform_field!(
     o += nn
     ψa = view(work, (o + 1):(o + nb))
     ψb = view(work, (o + nb + 1):(o + 2nb))
-    ψa′ = view(work, (o + 2nb + 1):(o + 3nb))
-    ψb′ = view(work, (o + 3nb + 1):(o + 4nb))
-    o += 4nb
+    o += 2nb
     φ₀ = view(work, (o + 1):(o + nt))
-    φ₀′ = view(work, (o + nt + 1):(o + 2nt))
     # the coefficient array reduced at the two ends, and at zero in time
     a = zeros(ST, nt, D)
-    aw = zeros(ST, nt, D)
     b = zeros(ST, nt, D)
-    bw = zeros(ST, nt, D)
-    lifting_reduction!(a, aw, coeffs, ψa, ψa′)
-    lifting_reduction!(b, bw, coeffs, ψb, ψb′)
+    lifting_reduction!(a, coeffs, ψa)
+    lifting_reduction!(b, coeffs, ψb)
     ca_u = zeros(ST, D)
-    ca_v = zeros(ST, D)
-    ca_w = zeros(ST, D)
     cb_u = zeros(ST, D)
-    cb_v = zeros(ST, D)
-    cb_w = zeros(ST, D)
     for d in 1:D
-        ua = uv = uw = zero(ST)
-        ub = vb = wb = zero(ST)
+        ua = ub = zero(ST)
         for i in 1:nt
             ua += φ₀[i] * a[i, d]
-            uv += φ₀′[i] * a[i, d]
-            uw += φ₀[i] * aw[i, d]
             ub += φ₀[i] * b[i, d]
-            vb += φ₀′[i] * b[i, d]
-            wb += φ₀[i] * bw[i, d]
         end
-        ca_u[d], ca_v[d], ca_w[d] = ua, uv, uw
-        cb_u[d], cb_v[d], cb_w[d] = ub, vb, wb
+        ca_u[d] = ua
+        cb_u[d] = ub
     end
-    # the field at the bottom of the slab and its two derivatives, at the nodes of the ansatz's own
-    # rule, corner-corrected — an evaluation off those nodes blends them, as the datum's is blended
+    # the field at the bottom of the slab, its value and its space derivative, at the nodes of the
+    # ansatz's own rule, corner-corrected — an evaluation off those nodes blends them, as the
+    # datum's is blended
     cu = zeros(ST, nn, D)
-    cv = zeros(ST, nn, D)
     cw = zeros(ST, nn, D)
     for r in 1:nn
         xr = convert(ST, nodes[r])
         ψL = (convert(ST, xb) - xr) / span
         ψR = (xr - convert(ST, xa)) / span
         for d in 1:D
-            cu[r, d], cv[r, d], cw[r, d] = lifting_bottom_value(
-                tabulation, coeffs, φ₀, φ₀′,
-                r, d)
+            cu[r, d], cw[r, d] = lifting_bottom_value(tabulation, coeffs, φ₀, r, d)
             cu[r, d] -= ψL * ca_u[d] + ψR * cb_u[d]
-            cv[r, d] -= ψL * ca_v[d] + ψR * cb_v[d]
-            cw[r, d] += ca_u[d] / span - ψL * ca_w[d] - cb_u[d] / span - ψR * cb_w[d]
+            cw[r, d] += ca_u[d] / span - cb_u[d] / span
         end
     end
     # ---- the bottom: the projection's corner-corrected value at t̂ = 0, and the datum it carries
@@ -609,10 +572,7 @@ function transform_field!(
             for q in axes(u, 1)
                 φ = oneST - convert(ST, t̂[q])
                 u[q, r, d] -= φ * uc
-                v[q, r, d] += (uc -
-                               φ * lifting_datum(
-                    view(cv, :, d), nodes, xr, zero(ST), zero(ST))) /
-                              hh
+                v[q, r, d] += uc / hh
                 w[q, r, d] -= φ * wc
             end
         end
@@ -629,13 +589,12 @@ function transform_field!(
                 ψ = corner == 1 ? (convert(ST, xb) - xr) / span :
                     (xr - convert(ST, xa)) / span
                 for d in 1:D
-                    eu, ev, ew = lifting_end_value(tabulation,
-                        corner == 1 ? a : b, corner == 1 ? aw : bw, q, d)
+                    eu, ev = lifting_end_value(tabulation, corner == 1 ? a : b, q, d)
                     δu = eu - convert(ST, values.u[d])
                     δv = ev / hh - convert(ST, values.v[d])
                     u[q, r, d] -= ψ * δu
                     v[q, r, d] -= ψ * δv
-                    w[q, r, d] -= ψ′ * δu + ψ * ew
+                    w[q, r, d] -= ψ′ * δu
                 end
             end
         end
