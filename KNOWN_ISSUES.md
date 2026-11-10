@@ -283,7 +283,21 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-11-09
 
-### K49 · No live-branch variant of the fixed-boundary network converges, and its `:last_layer` affine control has no solution under `FitTo(Predictor())`.
+### K49 · `coupling_data`'s docstring says the block is built once per integrator.
+
+- location: `src/core/slab_integrator.jl:192`
+- evidence: the docstring of `coupling_data` reads "The coupling's block of the slab cache, built
+  once per integrator", and the core builds it inside `Cache{ST}` (`src/core/slab_integrator.jl:427`):
+  an integrator builds the cache of the problem's element type, and a solver then builds a cache of
+  the dual type on its first Jacobian, so the block is built once per cache. A coupling's own
+  `coupling_data` docstring that counts on the rate — the lifting's says which cache speaks —
+  therefore disagrees with the generic one. Recorded rather than fixed: the part's decision keeps
+  the core's diff against `0e2af8d` to the transform's signature, its docstring and its two call
+  sites, and this line is none of the three.
+- kind: docs
+- found: 2026-11-10
+
+### K50 · No live-branch variant of the fixed-boundary network converges, and its `:last_layer` affine control has no solution under `FitTo(Predictor())`.
 
 - location: `src/couplings/fixed_boundary.jl`, `src/core/levenberg_marquardt.jl`,
   `scripts/experiments.jl`
@@ -308,7 +322,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-11-09
 
-### K50 · `integrate!` applies a method's initial guess twice, so a guess that reads state it writes starts the step from its own output.
+### K51 · `integrate!` applies a method's initial guess twice, so a guess that reads state it writes starts the step from its own output.
 
 - location: `src/core/integrate.jl:90`, `src/core/slab_integrator.jl:651`
 - evidence: `integrate_steps!` drives each step with the ecosystem's `integrate!(solstep, integrator)`,
@@ -324,7 +338,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: upstream
 - found: 2026-11-09
 
-### K51 · The bubble's output block is rank deficient at `Continuation()`'s first slab, so a projected solve there eliminates an `a` that is not differentiable.
+### K52 · The bubble's output block is rank deficient at `Continuation()`'s first slab, so a projected solve there eliminates an `a` that is not differentiable.
 
 - location: `src/couplings/fixed_boundary.jl`, `src/ansatz/network.jl` (`bubble_start`)
 - evidence: the bubble's start grid is antisymmetric under `k ↦ St + 1 − k`: the units at `k` and at
@@ -342,7 +356,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-11-10
 
-### K52 · The plateau probe's extended-precision row cannot run, because `GeometricSolutions` cannot build a solution at `BigFloat`.
+### K53 · The plateau probe's extended-precision row cannot run, because `GeometricSolutions` cannot build a solution at `BigFloat`.
 
 - location: `scripts/experiments.jl` (the `BigFloat` plateau row);
   `GeometricSolutions`, `src/timeseries.jl:8`
@@ -357,18 +371,4 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   build-only testset "FB18", which builds it and never runs it; the fix is a pull request of its own
   to `GeometricSolutions`, and the step runs as a row of M's matrix once it lands.
 - kind: upstream
-- found: 2026-11-10
-
-### K53 · `coupling_data`'s docstring says the block is built once per integrator.
-
-- location: `src/core/slab_integrator.jl:192`
-- evidence: the docstring of `coupling_data` reads "The coupling's block of the slab cache, built
-  once per integrator", and the core builds it inside `Cache{ST}` (`src/core/slab_integrator.jl:427`):
-  an integrator builds the cache of the problem's element type, and a solver then builds a cache of
-  the dual type on its first Jacobian, so the block is built once per cache. A coupling's own
-  `coupling_data` docstring that counts on the rate — the lifting's says which cache speaks —
-  therefore disagrees with the generic one. Recorded rather than fixed: the part's decision keeps
-  the core's diff against `0e2af8d` to the transform's signature, its docstring and its two call
-  sites, and this line is none of the three.
-- kind: docs
 - found: 2026-11-10

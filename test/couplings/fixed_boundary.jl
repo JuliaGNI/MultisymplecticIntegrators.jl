@@ -687,7 +687,7 @@ end
     # spatial hidden layer held at `φ₀`'s fit for the whole run — which is the `Continuation()`
     # guess — and the unknowns `c` and `a`, in both forms and in both element types.
     # `FitTo(Predictor())` is not the control: it moves level 1's hidden layer away from level 0's,
-    # and the affine system then has no solution (K49).
+    # and the affine system then has no solution (K50).
     for T in (Float64, Float32), form in (:abg, :tsr)
 
         linear = [entry.problem
