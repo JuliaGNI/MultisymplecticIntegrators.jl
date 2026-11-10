@@ -267,6 +267,60 @@ function fit!(w::AbstractVector{ST}, method::TrainedHiddenLayer, ansatz::Network
 end
 
 """
+    fit!(w, method::PINNTraining, ansatz::NetworkAnsatz, sample, cache)
+
+Fit the network to a slab's sampled target by `epochs` gradient-descent steps of the method's fixed
+`step` on the mean squared residual of the field against the sample's `values`, taken in batches of
+`batch` over its `points`. `sample` is the named tuple `(; points, values)` that
+[`fit_sample`](@ref) returns for the method.
+
+The fit draws no point and evaluates no target: both are the sample's. The gradient is the
+derivative of the field with respect to each free parameter, which the block's `gradient` holds at
+every point it evaluates, so the descent needs no differentiation of its own. The points, the target
+values and the batch gradient are allocated once, before the epoch loop, and each point is evaluated
+into the block's own scratch, so no epoch and no batch allocates.
+
+The free parameters alone are written, and they are written into the block as well as into `w`, so
+that the evaluation of every point reads the parameters the descent has reached; a parameter the
+mode holds fixed keeps its value.
+"""
+function fit!(w::AbstractVector{ST}, method::PINNTraining, ansatz::NetworkAnsatz,
+        sample::NamedTuple, c::SpaceTimeGalerkinCache) where {ST}
+    s = c.ansatz
+    D, nf, lo = ansatz.D, ansatz.nfree, ansatz.first_free
+    points = copy(sample.points)
+    values = copy(sample.values)
+    n = size(points, 1)
+    gradient = zeros(ST, nf)
+    rate = convert(ST, 2 * method.step / n)
+    for k in 1:nf
+        s.params[lo + k - 1] = w[lo + k - 1]
+    end
+    for _ in 1:method.epochs
+        fill!(gradient, zero(ST))
+        first = 1
+        while first <= n
+            last = min(first + method.batch - 1, n)
+            for i in first:last
+                evaluate_at!(s, points[i, 1], points[i, 2])
+                for d in 1:D
+                    misfit = s.values[d] - values[i, d]
+                    for k in 1:nf
+                        gradient[k] += misfit * s.gradient[d, lo + k - 1]
+                    end
+                end
+            end
+            first = last + 1
+        end
+        for k in 1:nf
+            w[lo + k - 1] -= rate * gradient[k]
+            s.params[lo + k - 1] = w[lo + k - 1]
+        end
+    end
+    return w
+end
+
+"""
     fit_sample(method, interior, target, cache, ansatz, problem, sol)
 
 The sample a fit method takes, from the target's `interior` sample at the nodes of the ansatz's own
@@ -296,6 +350,32 @@ function fit_sample(::TrainedHiddenLayer, interior::AbstractArray{ST, 3}, target
             xspan(ansatz)[r])
     end
     return (; interior, faces)
+end
+
+"""
+    fit_sample(::PINNTraining, interior, target, cache, ansatz, problem, sol)
+
+The sample of a [`PINNTraining`](@ref) fit: `nsamples` points of the slab drawn uniformly over
+`[0, 1] × xspan` from a copy of the method's generator, and the value of the target at each of them,
+read by [`target_point!`](@ref) so that every target of the guess answers at the physical time of
+its point. The points are drawn afresh at every call and the method's own generator is never
+advanced, so two fits that share one method object draw the same points.
+"""
+function fit_sample(method::PINNTraining, interior::AbstractArray{ST, 3}, target, c,
+        ansatz::NetworkAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
+    n, D = method.nsamples, ansatz.D
+    xa, xb = xspan(ansatz)
+    rng = copy(method.rng)
+    points = Matrix{ST}(undef, n, 2)
+    values = Matrix{ST}(undef, n, D)
+    for i in 1:n
+        t̂ = rand(rng, ST)
+        x = convert(ST, xa) + convert(ST, xb - xa) * rand(rng, ST)
+        points[i, 1] = t̂
+        points[i, 2] = x
+        target_point!(view(values, i, :), target, c, ansatz, problem, sol, t̂, x)
+    end
+    return (; points, values)
 end
 
 """

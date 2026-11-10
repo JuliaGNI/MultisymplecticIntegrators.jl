@@ -303,20 +303,6 @@ for a coupling whose free rows are all `Nt` rows.
 bottom_datum(::NoCouplingData) = nothing
 
 """
-    transform_field!(u, v, w, data, t̂, x, h, problem)
-
-The coupling's transform of the field, applied to the ansatz's field `u` and its derivatives
-`v = ∂ₜu` and `w = ∂ₓu` at the points `(t̂[q], x[r])` of the slab, as `u[q, r, d]`, in place. `t̂` is
-the normalised time of the slab, so the physical-time derivative of a term `ℓ(t̂, x)` is
-`∂_{t̂}ℓ / h`.
-
-The core applies it wherever it evaluates the field: in the residual, at the nodes of the slab's
-quadrature, and at the top of the slab, in the trace and in the solution. The default leaves the
-field as the ansatz gives it; a coupling that lifts the field adds its lift here.
-"""
-transform_field!(u, v, w, ::CouplingData, t̂, x, h, problem) = nothing
-
-"""
     coupling_internal(coupling, ansatz, problem)
 
 The coupling's own state of a step: the entries of the solution step's `internal` named tuple, which
@@ -507,6 +493,37 @@ end
     return a + (j - 1) * nf + (d - 1) * nf * nx
 end
 
+# The field at the top of the slab, `t̂ = 1`, at the points of `evaluation`, with the coupling's
+# transform: `u`, `v` and `w` are indexed `[i, d]`, a row per point.
+function top_field!(u::AbstractMatrix, v::AbstractMatrix, w::AbstractMatrix,
+        c::SpaceTimeGalerkinCache{ST}, evaluation, problem::LagrangianPDEProblem) where {ST}
+    h = timestep(problem)
+    top_values!(u, v, w, c.ansatz, evaluation, h)
+    n, D = size(u)
+    transform_field!(reshape(u, 1, n, D), reshape(v, 1, n, D), reshape(w, 1, n, D),
+        c.coupling, c.ansatz, (one(ST),), evaluation_points(evaluation), h, problem)
+    return nothing
+end
+
+"""
+    transform_field!(u, v, w, c.coupling, c.ansatz, tnodes, xnodes, h, problem)
+
+The coupling's transform of the field, applied to the ansatz's field `u` and its derivatives
+`v = ∂ₜu` and `w = ∂ₓu` at the points `(t̂[q], x[r])` of the slab, as `u[q, r, d]`, in place. `t̂` is
+the normalised time of the slab, so the physical-time derivative of a term `ℓ(t̂, x)` is
+`∂_{t̂}ℓ / h`.
+
+The core applies it wherever it evaluates the field: in the residual, at the nodes of the slab's
+quadrature, and at the top of the slab, in the trace and in the solution. It hands the coupling's
+block and the ansatz's block, so a transform that is not a function of the point alone — one that
+projects the field, for instance — reads the parameters the step is solving for from the ansatz's
+block. The default leaves the field as the ansatz gives it; a coupling that lifts the field adds
+its lift here.
+"""
+function transform_field!(u, v, w, ::CouplingData, block, t̂, x, h, problem)
+    return nothing
+end
+
 """
     slab_residual!(cache, x, problem, nf)
 
@@ -520,7 +537,7 @@ function slab_residual!(
     h = timestep(problem)
     slab_field!(c.u, c.v, c.w, c.ansatz, x, bottom_datum(c.coupling), nf, h)
     tnodes, xnodes = quadrature_points(c.ansatz)
-    transform_field!(c.u, c.v, c.w, c.coupling, tnodes, xnodes, h, problem)
+    transform_field!(c.u, c.v, c.w, c.coupling, c.ansatz, tnodes, xnodes, h, problem)
     density_derivatives!(c.du, c.dv, c.dw, problem.density, c.u, c.v, c.w,
         parameters(problem))
     slab_weak_form!(c.ansatz, c.du, c.dv, c.dw, h)
@@ -567,18 +584,6 @@ function update!(sol, params, x::AbstractVector{ST},
     assign!(sol.u, sol.v, sol.w, c, p)
     coupling_update!(c.coupling, x, c, a, p)
     c.steps += 1
-    return nothing
-end
-
-# The field at the top of the slab, `t̂ = 1`, at the points of `evaluation`, with the coupling's
-# transform: `u`, `v` and `w` are indexed `[i, d]`, a row per point.
-function top_field!(u::AbstractMatrix, v::AbstractMatrix, w::AbstractMatrix,
-        c::SpaceTimeGalerkinCache{ST}, evaluation, problem::LagrangianPDEProblem) where {ST}
-    h = timestep(problem)
-    top_values!(u, v, w, c.ansatz, evaluation, h)
-    n, D = size(u)
-    transform_field!(reshape(u, 1, n, D), reshape(v, 1, n, D), reshape(w, 1, n, D),
-        c.coupling, (one(ST),), evaluation_points(evaluation), h, problem)
     return nothing
 end
 

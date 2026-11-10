@@ -249,3 +249,36 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   with the trace, and the unweighted sum drifts by `8.97`.
 - kind: defect
 - found: 2026-11-08
+
+### K47 · The `WAVE_TRIALNN_OGA2D` sounding under the lifting is an unconverged iterate.
+
+- location: `test/helpers/reference_values.jl:63`, `src/couplings/hard_constraint_lifting.jl`
+- evidence: the §A case of the entry — `Wave` at `h = 0.05`, `xspan = (0, 1)`, `xstep = 0.05`,
+  `S = 10`, `tanh`, `degree = 3`, `ncells = (2, 5)`, the exact solution as the guess with
+  `OrthogonalGreedy(Nw = 50, Nb = 50)`, five steps — run under `HardConstraintLifting` takes
+  `iterations = [52, 74, 86, 57, 72]` at `residual = [0.0914, 0.2080, 0.3667, 0.2007, 0.0315]`,
+  each from an initial residual of `[0.7333, 3.120, 5.330, 4.123, 2.233]`, and `converged = false`
+  at every step, in `Float64`. The entry itself reports `status = :failed` after four steps, at a
+  `NonlinearSolverException`, so the run's sup-norm deviation from its `u` is taken over those four
+  steps and is `0.1328`, where the entry's `u` peaks at `1.2526`. Measured in `Float64` in a cold
+  `run-tests.jl` run on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3, four BLAS threads
+  and `--check-bounds=auto`; the test asserts that the deviation is finite and writes it with
+  `@info`, and no bound is asserted on it. The record is that run and not a reference: the
+  network's rows are the gradient of a discrete action the Newton solve cannot drive to round-off,
+  as for K38, and the two runs are iterates of two formulations.
+- kind: defect
+- found: 2026-11-09
+
+### K48 · The `SINE_GORDON_TRIALNN_OGA2D` sounding under the lifting is an unconverged iterate.
+
+- location: `test/helpers/reference_values.jl:73`, `src/couplings/hard_constraint_lifting.jl`
+- evidence: the same method on `SineGordon` over three steps at `h = 0.05` takes
+  `iterations = [51, 53, 85]` at `residual = [0.0301, 0.0221, 0.0140]`, each from an initial
+  residual of `[0.4512, 1.048, 1.530]`, and `converged = false` at every step, in `Float64`. The
+  entry reports `status = :ok` after its three steps, and the run's sup-norm deviation from its `u`
+  is `0.0209` there, where the entry's `u` peaks at `5.045`. Measured in `Float64` in a cold
+  `run-tests.jl` run on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3, four BLAS threads
+  and `--check-bounds=auto`; the deviation is recorded with `@info` and no bound is asserted on it.
+  As for K47 the record is that run and not a reference.
+- kind: defect
+- found: 2026-11-09

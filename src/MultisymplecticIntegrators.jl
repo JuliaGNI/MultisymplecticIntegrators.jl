@@ -76,7 +76,7 @@ include("initial_guess/fit_methods.jl")
 include("initial_guess/guess.jl")
 include("initial_guess/orthogonal_greedy.jl")
 include("initial_guess/trained_hidden_layer.jl")
-export TrainedHiddenLayer
+export TrainedHiddenLayer, PINNTraining
 
 # the network ansatz, which the coupling's carrier and the guess hooks extend
 include("ansatz/network.jl")
@@ -88,6 +88,9 @@ export CoefficientRestriction
 
 include("couplings/weak_multipliers.jl")
 export WeakInitialCondition, WeakInitialAndBoundaryConditions
+
+include("couplings/hard_constraint_lifting.jl")
+export HardConstraintLifting
 
 export Continuation, FitTo, Projection, InitialCondition, PreviousSlab
 export ExactSolution, TargetFunction

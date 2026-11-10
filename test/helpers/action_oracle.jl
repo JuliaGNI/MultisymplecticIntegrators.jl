@@ -741,8 +741,9 @@ end
 # `u_d = Σ_s W2[s, d] tanh(W1[s, 1] t̂ + W1[s, 2] x + b[s])`, and each derivative carries the slope
 # `1 - tanh²` of its hidden unit times its input weight. The parameters are read in the order
 # `L1.W`, `L1.b`, `L2.W`, with `L1.W` laid out as `[W1[:, 1]; W1[:, 2]]`.
-function network_field(o::NetworkActionOracle, p, t̂, x)
-    S, D = o.ansatz.S, o.D
+network_field(o::NetworkActionOracle, p, t̂, x) = network_values(o.ansatz.S, o.D, p, t̂, x)
+
+function network_values(S, D, p, t̂, x)
     values = zeros(eltype(p), 3D)
     for s in 1:S
         σ = tanh(p[s] * t̂ + p[S + s] * x + p[2S + s])
@@ -831,4 +832,207 @@ function oracle_residual(o::NetworkActionOracle{T}, datum::NetworkDatum{T},
     offset += nμ * D
     R[(nf + nλ * D + nμ * D + 1):(nf + nλ * D + 2 * nμ * D)] .= g[(offset + 1):(offset + nμ * D)]
     return R
+end
+
+# ---- the lifting coupling --------------------------------------------------
+#
+# The oracle of a network slab under a coupling that lifts the field onto the slab's data: the field
+# is `P[N] + ℓ`, and the action is the interior action of that field alone, because the coupling
+# adds no surface row and carries no unknown of its own. `P[N]` and `ℓ` are written out here from the
+# network's own field and the two transfinite formulas, so the oracle reads neither the coupling's
+# transform nor the coupling's block.
+
+"""
+    NetworkLiftingOracle(problem, method)
+
+The tables of the discrete action of one network slab whose field is lifted onto the slab's data.
+
+The field is `P[N] + ℓ`, with
+
+    P[N] = N - (ψ_L(x) N(t̂, a) + ψ_R(x) N(t̂, b) + (1 - t̂) N(0, x))
+             + (1 - t̂) (ψ_L(x) N(0, a) + ψ_R(x) N(0, b))
+
+the transfinite projection of the network's own field `N` and
+
+    ℓ = ψ_L(x) g_a(t) + ψ_R(x) g_b(t) + (1 - t̂) u_b(x)
+        - (1 - t̂) (ψ_L(x) g_a(t₀) + ψ_R(x) g_b(t₀))
+
+its lift, at the physical time `t = t₀ + h t̂`, with `ψ_L(x) = (b - x)/(b - a)`,
+`ψ_R(x) = (x - a)/(b - a)`, `g_a` and `g_b` the problem's `bcs_function` at the two ends, and `u_b`
+the datum the oracle carries itself. The action is
+
+    S(p) = Σ_q Σ_r ωₜ_q ωₓ_r h L(u, ∂_t u, ∂_x u)
+
+at the nodes of the ansatz's own rule, and the slab's unknown count is every parameter of the
+network: the lifting fixes no unknown of its own, so the oracle reads a `:all` method and refuses
+another.
+"""
+struct NetworkLiftingOracle{T, P, A}
+    problem::P
+    ansatz::A
+    np::Int
+    D::Int
+    h::T
+    ωt::Vector{T}
+    t̂::Vector{T}
+    ωx::Vector{T}
+    x::Vector{T}
+end
+
+function ActionOracle(problem, method::SpaceTimeGalerkin{<:NetworkAnsatz,
+        <:HardConstraintLifting})
+    return NetworkLiftingOracle(problem, method)
+end
+
+function NetworkLiftingOracle(problem, method)
+    T = eltype(timespan(problem))
+    a = ansatz(method)
+    M = MultisymplecticIntegrators
+    M.nfree(a) == M.nparameters(a) || throw(ArgumentError(
+        "the action oracle of a lifted slab reads every parameter, so it needs a network in " *
+        ":all mode; this one frees $(M.nfree(a)) of $(M.nparameters(a))"))
+    own = SimpleSplines.quadratures(M.quadrature(a))
+    return NetworkLiftingOracle{T, typeof(problem), typeof(a)}(
+        problem, a, M.nparameters(a),
+        a.D, T(timestep(problem)),
+        collect(T, SimpleSplines.quadrature_weights(own[1])),
+        collect(T, SimpleSplines.quadrature_nodes(own[1])),
+        collect(T, SimpleSplines.quadrature_weights(own[2])),
+        collect(T, SimpleSplines.quadrature_nodes(own[2])))
+end
+
+restricted(::NetworkLiftingOracle) = false
+
+network_field(o::NetworkLiftingOracle, p, t̂, x) = network_values(o.ansatz.S, o.D, p, t̂, x)
+
+"""The length of the solver's vector of a lifted network slab: every parameter of the network."""
+unknown_count(o::NetworkLiftingOracle) = o.np
+
+"""
+    LiftingDatum{T}
+
+The datum of one lifted slab, which the oracle computes itself: the slab's start time, and the
+bottom's `u` and its space derivative `w` at the nodes of the ansatz's own space rule.
+"""
+mutable struct LiftingDatum{T}
+    start::T
+    bottom_u::Matrix{T}
+    bottom_w::Matrix{T}
+end
+
+"""
+    lifted_point(o, datum, p, r, t̂)
+
+The field of every component at the point `(t̂, x[r])` of the slab and its two derivatives,
+`(u = …, v = …, w = …)` of `D`-vectors, as `P[N] + ℓ`: the network's own field projected by the
+transfinite formulas and lifted onto the side data at `datum.start + h t̂` and the datum's bottom.
+"""
+function lifted_point(o::NetworkLiftingOracle{T}, datum::LiftingDatum{T}, p, r::Integer,
+        t̂) where {T}
+    D, h = o.D, o.h
+    S = eltype(p)
+    x = o.x[r]
+    xa, xb = xspan(o.problem)
+    span = xb - xa
+    params = parameters(o.problem)
+    ψL = (xb - x) / span
+    ψR = (x - xa) / span
+    φ = one(S) - t̂
+    n = network_field(o, p, t̂, x)
+    na = network_field(o, p, t̂, xa)
+    nb = network_field(o, p, t̂, xb)
+    c = network_field(o, p, zero(S), x)
+    ca = network_field(o, p, zero(S), xa)
+    cb = network_field(o, p, zero(S), xb)
+    sides = o.problem.bcs_function(datum.start + h * t̂, params)
+    start_sides = o.problem.bcs_function(datum.start, params)
+    u = zeros(S, D)
+    v = zeros(S, D)
+    w = zeros(S, D)
+    for d in 1:D
+        # the projection, and its two derivatives
+        pu = n[d] - ψL * na[d] - ψR * nb[d] - φ * (c[d] - ψL * ca[d] - ψR * cb[d])
+        pv = n[D + d] - ψL * na[D + d] - ψR * nb[D + d] + (c[d] - ψL * ca[d] - ψR * cb[d]) -
+             φ * (c[D + d] - ψL * ca[D + d] - ψR * cb[D + d])
+        pw = n[2D + d] + na[d] / span - ψL * na[2D + d] - nb[d] / span -
+             ψR * nb[2D + d] -
+             φ * (c[2D + d] + ca[d] / span - ψL * ca[2D + d] - cb[d] / span -
+              ψR * cb[2D + d])
+        # the lift, and its two derivatives
+        lu = ψL * sides.left.u[d] + ψR * sides.right.u[d] +
+             φ * (datum.bottom_u[r, d] - ψL * start_sides.left.u[d] -
+              ψR * start_sides.right.u[d])
+        lv = h * (ψL * sides.left.v[d] + ψR * sides.right.v[d]) -
+             (datum.bottom_u[r, d] - ψL * start_sides.left.u[d] -
+              ψR * start_sides.right.u[d])
+        lw = (sides.right.u[d] - sides.left.u[d]) / span +
+             φ * (datum.bottom_w[r, d] +
+              (start_sides.left.u[d] - start_sides.right.u[d]) / span)
+        u[d] = pu + lu
+        v[d] = (pv + lv) / h
+        w[d] = pw + lw
+    end
+    return (u = u, v = v, w = w)
+end
+
+"""
+    lifting_action(o, datum, p)
+
+The discrete action of the oracle's slab at the parameter vector `p`: the interior action of the
+lifted field at the nodes of the ansatz's own rule, `Σ_q Σ_r ωₜ_q ωₓ_r h L(u, ∂_t u, ∂_x u)`.
+"""
+function lifting_action(o::NetworkLiftingOracle{T}, datum::LiftingDatum{T},
+        p::AbstractVector) where {T}
+    D, h = o.D, o.h
+    params = parameters(o.problem)
+    action = zero(T)
+    for r in eachindex(o.x), q in eachindex(o.t̂)
+
+        values = lifted_point(o, datum, p, r, o.t̂[q])
+        action += o.ωt[q] * o.ωx[r] * h *
+                  node_lagrangian(o.problem.density, values.u, values.v, values.w, params)
+    end
+    return action
+end
+
+"""
+    first_datum(o::NetworkLiftingOracle)
+
+The datum of the first lifted slab, from the problem alone: the initial condition's `u` and its
+space derivative `w` at the nodes of the ansatz's own space rule, at the start of the run.
+"""
+function first_datum(o::NetworkLiftingOracle{T}) where {T}
+    values = o.problem.ics_function(collect(o.x), parameters(o.problem))
+    return LiftingDatum{T}(timespan(o.problem)[1], T.(values.u), T.(values.w))
+end
+
+"""
+    next_datum(o::NetworkLiftingOracle, datum, θ)
+
+The datum of the slab after the one whose solved vector is `θ`: the lifted field's top, `t̂ = 1`, at
+the nodes of the ansatz's own space rule — which is where the coupling's truncation puts it — and
+the new slab's start time.
+"""
+function next_datum(o::NetworkLiftingOracle{T}, datum::LiftingDatum{T},
+        θ::AbstractVector{T}) where {T}
+    for r in eachindex(o.x)
+        values = lifted_point(o, datum, θ, r, one(T))
+        for d in 1:o.D
+            datum.bottom_u[r, d] = values.u[d]
+            datum.bottom_w[r, d] = values.w[d]
+        end
+    end
+    datum.start += o.h
+    return datum
+end
+
+"""
+    oracle_residual(o::NetworkLiftingOracle, datum, θ)
+
+The residual of the lifted slab at the solver's vector `θ`, which is the gradient of
+[`lifting_action`](@ref) on every row: the lifting carries no unknown of its own.
+"""
+function oracle_residual(o::NetworkLiftingOracle{T}, datum::LiftingDatum{T},
+        θ::AbstractVector{T}) where {T}
+    return action_gradient(p -> lifting_action(o, datum, p), θ)
 end

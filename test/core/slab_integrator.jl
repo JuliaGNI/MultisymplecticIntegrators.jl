@@ -8,6 +8,7 @@ using Test
 
 import GeometricEquations: problem
 import GeometricIntegratorsBase: GeometricIntegrator, cache, solutionstep
+import MultisymplecticIntegrators: transform_field!
 
 const M = MultisymplecticIntegrators
 
@@ -52,7 +53,14 @@ function lift(t̂, x, d)
     return (a * b, (1 + 2t̂) * b, a * (1 - 2x) / 4)
 end
 
-function M.transform_field!(u, v, w, ::M.RestrictionData{ST, Lifted}, t̂, x, h,
+"""
+    M.transform_field!(u, v, w, data, block, t̂, x, h, problem)
+
+The transform of the [`Lifted`](@ref) fixture: it adds [`lift`](@ref) to the field and its two
+derivatives at the nodes of the slab's quadrature, and reads the ansatz's block only to keep the
+signature the core calls.
+"""
+function transform_field!(u, v, w, data::M.RestrictionData{ST, Lifted}, block, t̂, x, h,
         problem) where {ST}
     for d in axes(u, 3), r in axes(u, 2), q in axes(u, 1)
         ℓ, ℓt, ℓx = lift(t̂[q], x[r], d)
