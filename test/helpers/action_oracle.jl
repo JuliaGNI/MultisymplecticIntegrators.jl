@@ -980,7 +980,7 @@ lifted field at the nodes of the ansatz's own rule, `Σ_q Σ_r ωₜ_q ωₓ_r h
 """
 function lifting_action(o::NetworkLiftingOracle{T}, datum::LiftingDatum{T},
         p::AbstractVector) where {T}
-    D, h = o.D, o.h
+    h = o.h
     params = parameters(o.problem)
     action = zero(T)
     for r in eachindex(o.x), q in eachindex(o.t̂)

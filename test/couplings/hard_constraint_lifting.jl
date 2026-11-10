@@ -46,13 +46,17 @@ end
     lifting_slab(problem, method, θ)
 
 The first slab of a run, set up as the residual reads it: the coupling's datum fixed and the
-solver's vector the seeded `θ`, with the residual of that vector taken.
+solver's vector the seeded `θ`, with the residual of that vector taken. The solution step is reset
+to the time the first step of the run ends, as the integration loop resets it, so the slab starts at
+the problem's own `timespan[1]`.
 """
 function lifting_slab(problem, method, θ)
     int = GeometricIntegrator(problem, method)
     c = cache(int)
-    solstep = solutionstep(int, GeometricSolution(problem)[0])
-    M.slab_bottom!(c, c.coupling, problem, ansatz(method), solstep)
+    solution = GeometricSolution(problem)
+    solstep = solutionstep(int, solution[0])
+    reset!(solstep, timesteps(solution)[1])
+    M.slab_bottom!(c, c.coupling, problem, ansatz(method), current(solstep))
     b = zeros(eltype(θ), length(θ))
     M.residual!(b, θ, nothing, parameters(problem), int)
     return int, c, solstep, b
@@ -231,6 +235,69 @@ end
         @test all(isfinite, b)
     end
 
+    @testset "L1b the lifted field's derivatives are the derivatives of its value, $T" for T in (
+        Float64,)
+        # linear data: `u = 0.3 + 0.5x` at the bottom and `0.3 + 0.4t` and `0.8 + 0.4t` at the two
+        # sides, with `v = 0.4` and `w = 0.5` there, so the corners agree and the lifted field is a
+        # linear function of both arguments. Its two derivatives are then the central differences
+        # of the transform's own `u`, whichever way the transform builds them.
+        params = (
+            c = T(0.5), l = T(1.0), A1 = T(0.8), A2 = T(0.0), B1 = T(0.8), B2 = T(0.0))
+        ics = function (x, p)
+            return (u = reshape(T(0.3) .+ T(0.5) .* x, :, 1),
+                v = zeros(T, length(x), 1), w = fill(T(0.5), length(x), 1))
+        end
+        bcs = function (t, p)
+            return (left = (u = [T(0.3) + T(0.4) * t], v = [T(0.4)], w = [T(0.5)]),
+                right = (u = [T(0.8) + T(0.4) * t], v = [T(0.4)], w = [T(0.5)]))
+        end
+        problem = LagrangianPDEProblem(Wave.density(; params = params); D = 1,
+            ics_function = ics, bcs_function = bcs,
+            timespan = (zero(T), T(0.1)), timestep = T(0.05), xspan = (zero(T), one(T)),
+            xstep = T(0.05), params = params)
+        h = timestep(problem)
+        δ = cbrt(eps(T))
+        points = ((T(0.37), T(0.41)), (T(0.8), T(0.73)), (T(0.15), T(0.22)))
+        # the network arm: every point of the slab, in both arguments
+        method = lifting_method(T;
+            guess = FitTo(InitialCondition(); method = OrthogonalGreedy()))
+        N = length(cache(GeometricIntegrator(problem, method)).x)
+        θ = 2 .* rand(Xoshiro(20261115), T, N) .- 1
+        int, c, solstep, _ = lifting_slab(problem, method, θ)
+        tol = sqrt(eps(T)) * maximum(abs, c.u)
+        for (t̂, x) in points
+            at = lifting_point(c, problem, T, t̂, x, h)
+            later = lifting_point(c, problem, T, t̂ + δ, x, h)
+            earlier = lifting_point(c, problem, T, t̂ - δ, x, h)
+            inward = lifting_point(c, problem, T, t̂, x - δ, h)
+            outward = lifting_point(c, problem, T, t̂, x + δ, h)
+            @test abs(at.v[1] - (later.u[1] - earlier.u[1]) / (2δ) / h) ≤ tol
+            @test abs(at.w[1] - (outward.u[1] - inward.u[1]) / (2δ)) ≤ tol
+        end
+        # the coefficient arm: its `v` at the same points, and its `w` at the top alone, because the
+        # bottom it places is blended between the rule's own space nodes
+        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 5),
+            xspan = (zero(T), one(T)), n = 3)
+        cmethod = SpaceTimeGalerkin(ansatz, HardConstraintLifting();
+            initial_guess = FitTo(InitialCondition()))
+        Nc = length(cache(GeometricIntegrator(problem, cmethod)).x)
+        θc = 2 .* rand(Xoshiro(20261116), T, Nc) .- 1
+        intc, cc, solstepc, _ = lifting_slab(problem, cmethod, θc)
+        tolc = sqrt(eps(T)) * maximum(abs, cc.u)
+        for (t̂, x) in points
+            at = spline_point(cc, problem, ansatz, T, t̂, x, h)
+            later = spline_point(cc, problem, ansatz, T, t̂ + δ, x, h)
+            earlier = spline_point(cc, problem, ansatz, T, t̂ - δ, x, h)
+            @test abs(at.v[1] - (later.u[1] - earlier.u[1]) / (2δ) / h) ≤ tolc
+        end
+        for (_, x) in points
+            at = spline_point(cc, problem, ansatz, T, one(T), x, h)
+            inward = spline_point(cc, problem, ansatz, T, one(T), x - δ, h)
+            outward = spline_point(cc, problem, ansatz, T, one(T), x + δ, h)
+            @test abs(at.w[1] - (outward.u[1] - inward.u[1]) / (2δ)) ≤ tolc
+        end
+    end
+
     @testset "L2 the residual of the lifted slab is the gradient of its action, $T" for T in (
         Float64, Float32)
         problem = lifting_problem(T; steps = 2)
@@ -257,6 +324,36 @@ end
         ∇S₂ = oracle_residual(oracle, datum, θ₂)
         @test maximum(abs, ∇S₂) ≥ T(1 // 100)
         @test maximum(abs, b₂ - ∇S₂) ≤ 100 * eps(T) * maximum(abs, ∇S₂)
+        # a first slab on a problem whose side data move in time: `Wave`'s sides vanish at both
+        # ends at every time, so a side read from the initial condition, or at the normalised time,
+        # moves nothing there. The kink travels at the default `velocity`, and the slab starts at
+        # the problem's own first time.
+        moving = SineGordon.problem(
+            T = T, timespan = (zero(T), T(0.1)), timestep = T(0.05), xstep = T(0.05))
+        mmethod = lifting_method(T)
+        moracle = ActionOracle(moving, mmethod)
+        Nm = unknown_count(moracle)
+        θm = 2 .* rand(Xoshiro(20261112), T, Nm) .- 1
+        mint, cm, msolstep, mb = lifting_slab(moving, mmethod, θm)
+        @test M.slab_start(moving, current(msolstep)) == timespan(moving)[1]
+        mh = timestep(moving)
+        mt̂, _ = M.quadrature_points(cm.ansatz)
+        xa, xb = xspan(moving)
+        mparams = parameters(moving)
+        mstart = M.slab_start(moving, current(msolstep))
+        initial = moving.ics_function([xa, xb], mparams)
+        apart = T(Inf)
+        for (r, which) in ((1, :left), (2, :right))
+            for tq in mt̂
+                side = getproperty(
+                    moving.bcs_function(mstart + mh * convert(T, tq), mparams), which)
+                apart = min(apart, abs(side.u[1] - initial.u[r, 1]))
+            end
+        end
+        @test apart > tolerance(T) * maximum(abs, cm.u)
+        ∇Sₘ = oracle_residual(moracle, first_datum(moracle), θm)
+        @test maximum(abs, ∇Sₘ) ≥ T(1 // 100)
+        @test maximum(abs, mb - ∇Sₘ) ≤ 100 * eps(T) * maximum(abs, ∇Sₘ)
     end
 
     @testset "L3 the Jacobian is central differences, $T" for T in (Float64,)

@@ -561,12 +561,16 @@ makes it worth keeping.
   For a network the transform projects the field's derivative with respect to every free parameter
   together with the field, so the residual is the gradient of the slab's discrete action on the free
   parameters: at `S = 10`, `degree = 3`, `ncells = (2, 5)` and `h = 0.05` on `Wave`, the residual of
-  a seeded random vector differs from the gradient of the action oracle by `6.7e-16` of the
-  gradient's largest entry in `Float64` and `9.5e-7` in `Float32` on the first slab, and by
-  `1.1e-15` and `4.8e-7` on the second, whose datum is the first slab's solved top. The solver's
-  Jacobian differs from central differences by at most `1.06e-10` of its largest entry over 16
+  a seeded random vector differs from the gradient of the action oracle by `1.0e-15` of the
+  gradient's largest entry in `Float64` and `5.8e-7` in `Float32` on the first slab, and by
+  `1.1e-15` and `5.5e-7` on the second, whose datum is the first slab's solved top. The solver's
+  Jacobian differs from central differences by at most `1.18e-10` of its largest entry over 16
   seeded vectors in `Float64`, against `√eps(Float64) = 1.49e-8`. The field equals the data at the
-  three boundary parts to `7.8e-17` of its scale in `Float64` and `1.9e-8` in `Float32`. A
+  three boundary parts to `1.9e-16` of its scale in `Float64` and `1.0e-7` in `Float32`. The
+  transform's `v` and `w` are the derivatives of the lifted `u` — its derivative in the normalised
+  time over `h`, and its space derivative — which the testset "L1b the lifted field's derivatives
+  are the derivatives of its value" checks against central differences of the transform's own
+  field on linear data. A
   `TensorBSplineAnsatz` is accepted as well and runs three steps with its boundary data in place;
   its rows are its own basis functions rather than the projected test functions, so the exact
   identity is asserted for the network and the coefficient slab's residual is recorded.
@@ -590,10 +594,11 @@ makes it worth keeping.
   `run-tests.jl` run on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3 with four BLAS
   threads and `--check-bounds=auto`; the test asserts a factor of `2` and records the measured one.
   `epochs = 0` leaves the parameters at their initial values, a `:last_layer` fit moves the output
-  weights alone, and an `:all` fit moves every parameter. The fit starts from the parameters the
-  caller hands it, which are the block's own, so a first slab whose parameters are all zero is a
-  saddle of the descent and no epoch moves them; a caller that wants a trained network gives it a
-  start.
+  weights alone, and an `:all` fit moves every parameter. The fit descends from the parameters the
+  caller hands it, which are the block's own; where every free entry of those is zero — a fresh
+  block, on which a `tanh` network's parameter derivative vanishes — it starts instead from the
+  start of its own sample, one draw in `[-1, 1]` per free parameter, so that a first slab is not a
+  saddle, and it leaves a `:last_layer` network's hidden layer untouched there as everywhere else.
   `test/initial_guess/pinn_training.jl` joins the `slow` group.
 - **`scripts/trialnn_model.jl` registers the TrialNN family in the append-only registry.** One model
   file builds the family's problem, ansatz, method and archive — `Wave` over five steps and
