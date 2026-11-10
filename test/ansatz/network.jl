@@ -574,7 +574,8 @@ end
             @test -exp(ρ) * s ≈ grid[2a.St + k]
         end
         # no `(θ, s, ρ)` writes a unit at `r = 0`, and the refusal names it
-        @test_throws r"^the bubble's unit 3 has α = β = 0" M.bubble_chart(0.0, 0.0, 0.5, 3)
+        @test_throws r"^ArgumentError: the bubble's unit 3 has α = β = 0" M.bubble_chart(
+            0.0, 0.0, 0.5, 3)
         # the dictionary is one dictionary, less its atoms at `α = β = 0`
         atoms = bubble_atoms(BubbleGreedy(), Float64)
         @test size(atoms, 1) == 2184

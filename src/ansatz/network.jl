@@ -1316,8 +1316,8 @@ end
 """
     bubble_unit(ansatz, Θ, k)
 
-The `(α, β, γ)` coordinates of hidden unit `k` of a bubble, and its radius `r = e^ρ`, in the
-coordinate system of the ansatz's form.
+The `(α, β, γ)` coordinates of hidden unit `k` of a bubble, and its radius
+`r = sqrt(α^2 + β^2) = e^ρ`, in the coordinate system of the ansatz's form.
 """
 @inline function bubble_unit(a::FixedBoundaryNetwork, Θ::AbstractVector{T}, k::Integer) where {T}
     if a.bubble_form === :tsr
@@ -1325,7 +1325,8 @@ coordinate system of the ansatz's form.
         r = exp(ρ)
         return (r * cos(θ), r * sin(θ), -r * s, r)
     end
-    return (Θ[k], Θ[a.St + k], Θ[2 * a.St + k], one(T))
+    α, β, γ = Θ[k], Θ[a.St + k], Θ[2 * a.St + k]
+    return (α, β, γ, sqrt(α^2 + β^2))
 end
 
 """
