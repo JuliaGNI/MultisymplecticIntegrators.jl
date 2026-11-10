@@ -145,6 +145,19 @@ function PINNTraining(; epochs::Integer = 100, step::Real = 1e-2, batch::Integer
 end
 
 """
+    fit!(coeffs, method::PINNTraining, ansatz, sample, cache)
+
+Refuse a [`PINNTraining`](@ref) fit on an ansatz that is not a [`NetworkAnsatz`](@ref): the descent
+reads the derivative of the field with respect to each free parameter, and only a network's block
+carries it. Both of the guess' fit paths call `fit!` — the coefficient ansatz's and the network's —
+so this fallback is where the refusal is one method, and it comes at the first fit rather than when
+the integrator is built.
+"""
+function fit!(coeffs, ::PINNTraining, ansatz::SpaceTimeAnsatz, sample, cache)
+    throw(ArgumentError("PINNTraining needs a NetworkAnsatz; $(nameof(typeof(ansatz))) is not"))
+end
+
+"""
     default_fit(ansatz)
 
 The fit method `FitTo(target)` uses when the caller names none.
