@@ -1224,14 +1224,18 @@ end
                  !occursin("plateau", entry.stem),
         entries)
     @test length(matrix) == 30
-    @test length(Set((entry.problem, entry.form, entry.solver, entry.step)
+    @test length(Set((entry.problem, entry.form, entry.solver, entry.timestep)
     for entry in matrix)) == 30
     # a matrix row integrates its ladder up to `t = 1`, so that the three resolutions of one
     # problem compare one span
-    @test all(entry -> entry.steps * entry.step ≥ 1 - 1e-12, matrix)
+    @test all(entry -> entry.steps * entry.timestep ≥ 1 - 1e-12, matrix)
+    # a driver given no stem runs the cheapest row: the largest time step, at `Float64`
+    cheapest = smallest_entry(entries)
+    @test cheapest.timestep == maximum(entry.timestep for entry in entries)
+    @test cheapest.T === Float64
     plateau = filter(entry -> occursin("plateau", entry.stem), entries)
     @test length(plateau) == 2
-    @test any(entry -> entry.Sx == 12 && entry.St == 16 && entry.step == 0.025, plateau)
+    @test any(entry -> entry.Sx == 12 && entry.St == 16 && entry.timestep == 0.025, plateau)
     @test any(entry -> entry.T === BigFloat, plateau)
     @test all(entry -> entry.steps == 1, filter(entry -> entry.T === BigFloat, plateau))
     # N23: the extended-precision row names its own tolerance, because the family measures none at

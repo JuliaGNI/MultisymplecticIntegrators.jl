@@ -150,19 +150,19 @@ plateau probe takes one step.
 solver is built at the tolerance the family measures at its own element type.
 """
 const FIXED_BOUNDARY = vcat(
-    vec([(stem = "$(problem)-fixed-boundary-$(branch.name)-h$(step)",
-             label = "$(problem), $(branch.name), h = $(step)", problem, step,
-             steps = round(Int, 1 / step), form = branch.form, solver = branch.solver,
+    vec([(stem = "$(problem)-fixed-boundary-$(branch.name)-h$(timestep)",
+             label = "$(problem), $(branch.name), h = $(timestep)", problem, timestep,
+             steps = round(Int, 1 / timestep), form = branch.form, solver = branch.solver,
              Sx = 8, St = 10, T = Float64, f_reltol = nothing)
-         for problem in FIXED_BOUNDARY_PROBLEMS, step in FIXED_BOUNDARY_STEPS,
+         for problem in FIXED_BOUNDARY_PROBLEMS, timestep in FIXED_BOUNDARY_STEPS,
     branch in FIXED_BOUNDARY_BRANCHES]),
     [
         (stem = "wave-fixed-boundary-plateau-h0.025", label = "wave, plateau, h = 0.025",
-            problem = "wave", step = 0.025, steps = 40, form = :tsr, solver = :joint,
+            problem = "wave", timestep = 0.025, steps = 40, form = :tsr, solver = :joint,
             Sx = 12, St = 16, T = Float64, f_reltol = nothing),
         (stem = "wave-fixed-boundary-plateau-extended",
             label = "wave, plateau, extended precision",
-            problem = "wave", step = 0.025, steps = 1, form = :tsr, solver = :joint,
+            problem = "wave", timestep = 0.025, steps = 1, form = :tsr, solver = :joint,
             Sx = 8, St = 10, T = BigFloat, f_reltol = big"1e-8")])
 
 """
@@ -173,7 +173,7 @@ The problem of a fixed-boundary entry: its time step, and the time span of its `
 function fixed_boundary_problem(entry)
     T = entry.T
     problem = entry.problem === "wave" ? Wave.problem : SineGordon.problem
-    timestep = T(entry.step)
+    timestep = T(entry.timestep)
     return problem(
         T = T, timespan = (zero(T), T(entry.steps) * timestep),
         timestep = timestep, xspan = (zero(T), one(T)), xstep = timestep)
@@ -238,7 +238,7 @@ function fixed_boundary_run(entry)
         "kind" => "solution",
         "label" => entry.label,
         "problem_label" => entry.problem,
-        "timestep" => Float64(entry.step),
+        "timestep" => Float64(entry.timestep),
         "t" => t,
         "x" => x,
         "u" => u,

@@ -164,8 +164,8 @@ end
 Bring `x` to a least-squares minimum of `‖f(x)‖` — `f!` writes the `n` residuals of `x` — by
 Levenberg–Marquardt with the step of [`lm_step!`](@ref), and return `x`.
 
-One routine serves the slab's solve and both fits of the family, so that one damping schedule and
-one acceptance rule hold everywhere.
+One routine serves both fits of the family, the datum's and the level's, so that one damping
+schedule and one acceptance rule hold for both; the slab's solve is [`lm_solve!`](@ref).
 """
 function least_squares!(x::AbstractVector{T}, f!, n::Integer;
         iterations::Integer = 400, μ₀ = LM_MU_START, μ_min = 1e-12) where {T}
@@ -295,8 +295,7 @@ function project!(x::AbstractVector{T}, f!, r::AbstractVector{T}, J::AbstractMat
     m = norm(view(r, projected))
     for _ in 1:LM_INNER_ITERATIONS
         Jaa = J[projected, projected]
-        lm_step!(δa, svd(Jaa), view(r, projected), zero(T),
-            LM_TRUNCATION * maximum(abs, Jaa))
+        lm_step!(δa, svd(Jaa), view(r, projected), zero(T), T(LM_TRUNCATION))
         copyto!(x̂, x)
         for (k, i) in enumerate(projected)
             x̂[i] += δa[k]
@@ -313,7 +312,7 @@ function project!(x::AbstractVector{T}, f!, r::AbstractVector{T}, J::AbstractMat
     J = jacobian_of(f!, x, length(r))
     Jaa = J[projected, projected]
     A = svd(Jaa)
-    cut = LM_TRUNCATION * maximum(abs, Jaa)
+    cut = T(LM_TRUNCATION) * (isempty(A.S) ? zero(T) : first(A.S))
     keep = [k for k in eachindex(A.S) if A.S[k] > cut]
     Jao = J[projected, solved]
     JoaV = J[solved, projected] * view(A.V, :, keep)
