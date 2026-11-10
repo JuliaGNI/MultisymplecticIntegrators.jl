@@ -280,6 +280,9 @@ Bring the eliminated block of `x` to a root of its own equations by Newton's met
 minimum-norm step of a truncated decomposition, and return the Schur complement
 `J_oo − J_oa J_aa⁺ J_ao` and the residual of the solved block.
 
+`J` stays the one the outer iterate was given for the whole loop, so the inner step is Newton's
+method of a frozen Jacobian; it is recomputed once, after the loop, for the Schur complement.
+
 The inner solve stops when a step no longer lowers the eliminated block's residual, when it starts
 there, or after [`LM_INNER_ITERATIONS`](@ref) steps.
 """
