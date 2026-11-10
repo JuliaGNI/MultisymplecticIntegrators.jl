@@ -675,6 +675,34 @@ end
     @test options.max_iterations == 300
 end
 
+# ---- N14 -----------------------------------------------------------------------------
+
+@testset "N14 the family's tolerance reaches every solver" begin
+    # N14: `default_options` hands the tolerance on unresolved, and the family's `initsolver` fills
+    # it in — the one method every nonlinear solver of the family reaches, because
+    # `GeometricIntegrator` merges `default_options` before the caller's keywords. A solver that
+    # names no tolerance of its own is solved at the element type's measured value, whichever
+    # nonlinear solver it is.
+    for T in (Float64, Float32), s in (SimpleSolvers.DogLeg(), SimpleSolvers.Picard())
+
+        problem = clause_problem(:wave; T = T)
+        int = GeometricIntegrator(problem,
+            SpaceTimeGalerkin(fixed_ansatz(problem), FixedBoundary());
+            solver = s, max_iterations = 5)
+        @test config(solver(int)).f_reltol == fixed_boundary_f_reltol(T)
+    end
+    # at an element type the family has not measured, a caller that names the tolerance keeps it ...
+    big = WF.problem(T = BigFloat, timespan = (big"0.0", big"0.1"), timestep = big"0.05",
+        xstep = big"0.05", xspan = (big"0.0", big"1.0"))
+    big_method = SpaceTimeGalerkin(fixed_ansatz(big; Sx = 4, St = 4), FixedBoundary())
+    named = GeometricIntegrator(big, big_method; solver = SimpleSolvers.DogLeg(),
+        f_reltol = big"1e-30")
+    @test config(solver(named)).f_reltol == big"1e-30"
+    # ... and a caller that names none is refused, whole and anchored, before a solver is built
+    @test_throws r"^ArgumentError: the fixed-boundary network has no measured f_reltol at BigFloat; name the tolerance as an option of its own$" GeometricIntegrator(
+        big, big_method; solver = SimpleSolvers.DogLeg())
+end
+
 # ---- FB9 -----------------------------------------------------------------------------
 
 @testset "FB9 the dead branch on Wave over twenty steps" begin
@@ -948,8 +976,8 @@ end
     M.initial_guess!(current(slab_abg.solstep), nothing, p, slab_abg.int)
     M.initial_guess!(current(slab_tsr.solstep), nothing, p, slab_tsr.int)
     # the same greedy atoms in both blocks, each in its own coordinates: the dictionary is one
-    # dictionary, so atom `k` is the same bubble in either form, and the output weights are the
-    # same numbers in both
+    # dictionary, so atom `k` is the same bubble in either form, and the output weights are one
+    # nonzero number in both
     atoms = bubble_atoms(BubbleGreedy(), Float64)
     St, nsp = tsr.St, M.nspatial(tsr)
     for k in 1:St
@@ -960,7 +988,9 @@ end
         ct.x[nsp + k], ct.x[nsp + St + k], ct.x[nsp + 2St + k] = θ, s, ρ
     end
     first_weight = nsp + 3St + 1
-    ct.x[first_weight:end] .= ca.x[first_weight:end]
+    ca.x[first_weight:end] .= 0.3
+    ct.x[first_weight:end] .= 0.3
+    hidden = (nsp + 1):(nsp + 3St)
     b_abg = zeros(Float64, length(ca.x))
     b_tsr = zeros(Float64, length(ct.x))
     M.residual!(b_abg, ca.x, nothing, p, slab_abg.int)
@@ -986,6 +1016,11 @@ end
     end
     r_abg = slab_residual(slab_abg.int, ca.x, p)
     r_tsr = slab_residual(slab_tsr.int, ct.x, p)
+    # the comparison below is evidence only while the field depends on the atoms and the residual's
+    # hidden rows are not zero: the first step's guess writes the output weights as zero, and at zero
+    # the chart's transpose blocks multiply nothing
+    @test maximum(abs, ca.x[first_weight:end]) > 0
+    @test maximum(abs, r_abg[hidden]) > 0
     @test maximum(abs, r_tsr - transpose(G) * r_abg) ≤
           1e3 * eps(Float64) * maximum(abs, transpose(G) * r_abg)
     # nothing is wrapped or clamped: the `:tsr` start's angles are the chart's own, unwrapped
@@ -1117,6 +1152,15 @@ end
     @test any(entry -> entry.Sx == 12 && entry.St == 16 && entry.step == 0.025, plateau)
     @test any(entry -> entry.T === BigFloat, plateau)
     @test all(entry -> entry.steps == 1, filter(entry -> entry.T === BigFloat, plateau))
+    # N23: the extended-precision row names its own tolerance, because the family measures none at
+    # `BigFloat`; the row's driver and this testset build the solver's keywords through one
+    # function, so the entry's value is the one the solver is built with
+    extended = only(filter(entry -> entry.T === BigFloat, plateau))
+    @test extended.f_reltol == big"1e-8"
+    extended_int = GeometricIntegrator(fixed_boundary_problem(extended),
+        fixed_boundary_method(extended); solver = M.LevenbergMarquardt(),
+        fixed_boundary_solver_keywords(extended)...)
+    @test config(solver(extended_int)).f_reltol == extended.f_reltol
     for entry in entries
         @test fixed_boundary_problem(entry) isa M.LagrangianPDEProblem
         @test fixed_boundary_method(entry) isa SpaceTimeGalerkin

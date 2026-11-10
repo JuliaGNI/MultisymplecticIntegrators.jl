@@ -369,7 +369,7 @@ function initsolver(solvermethod::LevenbergMarquardt, method::GeometricMethod,
         throw(ArgumentError("variable_projection = true needs a method whose ansatz names the " *
                             "block it eliminates; $(nameof(typeof(method))) names none"))
     end
-    options = resolved_f_reltol(merge(default_options(method, caches.problem), values(kwargs)), T)
+    options = merge(default_options(method, caches.problem), values(kwargs))
     return LevenbergMarquardtSolver{T, typeof(x)}(Options(T; options...), x,
         solvermethod.variable_projection, projected)
 end

@@ -377,7 +377,8 @@ else
     both the family's solver and the `Newton()` a caller may name instead, so that an affine control
     and a dead branch are measured under one rule.
 
-    The tolerance is handed on as `nothing`: [`resolved_f_reltol`](@ref) fills it in from
+    The tolerance is handed on as `nothing`, because `GeometricIntegrator` merges these defaults
+    into the caller's keywords before any solver is built: the family's `initsolver` resolves it from
     [`fixed_boundary_f_reltol`](@ref) once the caller's own keywords are known, so that a caller who
     names an `f_reltol` at an element type the family has not measured is not refused for it.
     """
@@ -387,6 +388,43 @@ else
         T = datatype(problem)
         return (f_abstol = zero(T), f_reltol = nothing,
             max_iterations = LM_MAX_ITERATIONS)
+    end
+
+    """
+        initsolver(solvermethod::NonlinearSolverMethod, method, caches; kwargs...)
+
+    A fixed-boundary integrator's solver, built from the options the integrator was handed: the
+    family's tolerance is resolved here, in the one method every nonlinear solver of the family
+    reaches.
+
+    [`default_options`](@ref) hands `f_reltol` on as `nothing`, because `GeometricIntegrator` merges
+    those defaults into the caller's keywords before any solver is built. Here the caller's own
+    keywords are known: a caller who names a tolerance keeps it, and one who names none is solved at
+    [`fixed_boundary_f_reltol`](@ref) of the problem's element type, whichever nonlinear solver it
+    named.
+    """
+    function initsolver(solvermethod::NonlinearSolverMethod,
+            method::SpaceTimeGalerkin{<:FixedBoundaryNetwork}, caches::CacheDict; kwargs...)
+        options = resolved_f_reltol(values(kwargs), eltype(nlsolution(caches)))
+        return invoke(initsolver,
+            Tuple{NonlinearSolverMethod, GeometricMethod, CacheDict},
+            solvermethod, method, caches; options...)
+    end
+
+    """
+        initsolver(solvermethod::LevenbergMarquardt, method, caches; kwargs...)
+
+    The family's default solver, its tolerance resolved as above.
+
+    It is a method of its own because the generic Levenberg–Marquardt method and the family's method
+    for every nonlinear solver would otherwise both apply to this method and this solver, and this
+    one is the more specific of the three.
+    """
+    function initsolver(solvermethod::LevenbergMarquardt,
+            method::SpaceTimeGalerkin{<:FixedBoundaryNetwork}, caches::CacheDict; kwargs...)
+        options = resolved_f_reltol(values(kwargs), eltype(nlsolution(caches)))
+        return invoke(initsolver, Tuple{LevenbergMarquardt, GeometricMethod, CacheDict},
+            solvermethod, method, caches; options...)
     end
 
     """

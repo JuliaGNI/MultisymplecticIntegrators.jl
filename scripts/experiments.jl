@@ -144,22 +144,26 @@ the four combinations of the bubble's form and its solve, and the two rows of th
 `steps` is what a row integrates: the matrix's rows take the time step's ladder up to `t = 1`, so
 that the three resolutions of one problem compare one span, and the extended-precision row of the
 plateau probe takes one step.
+
+`f_reltol` is the tolerance a row names for its solver: the extended-precision row names
+`big"1e-8"`, because the family measures none at `BigFloat`, and every other row names none, so its
+solver is built at the tolerance the family measures at its own element type.
 """
 const FIXED_BOUNDARY = vcat(
     vec([(stem = "$(problem)-fixed-boundary-$(branch.name)-h$(step)",
              label = "$(problem), $(branch.name), h = $(step)", problem, step,
              steps = round(Int, 1 / step), form = branch.form, solver = branch.solver,
-             Sx = 8, St = 10, T = Float64)
+             Sx = 8, St = 10, T = Float64, f_reltol = nothing)
          for problem in FIXED_BOUNDARY_PROBLEMS, step in FIXED_BOUNDARY_STEPS,
     branch in FIXED_BOUNDARY_BRANCHES]),
     [
         (stem = "wave-fixed-boundary-plateau-h0.025", label = "wave, plateau, h = 0.025",
             problem = "wave", step = 0.025, steps = 40, form = :tsr, solver = :joint,
-            Sx = 12, St = 16, T = Float64),
+            Sx = 12, St = 16, T = Float64, f_reltol = nothing),
         (stem = "wave-fixed-boundary-plateau-extended",
             label = "wave, plateau, extended precision",
             problem = "wave", step = 0.025, steps = 1, form = :tsr, solver = :joint,
-            Sx = 8, St = 10, T = BigFloat)])
+            Sx = 8, St = 10, T = BigFloat, f_reltol = big"1e-8")])
 
 """
     fixed_boundary_problem(entry)
@@ -190,6 +194,21 @@ function fixed_boundary_method(entry)
 end
 
 """
+    fixed_boundary_solver_keywords(entry)
+
+The solver keywords of a fixed-boundary entry: the tolerance the entry names, and nothing else.
+
+A row that names none is solved at the tolerance the family measures at its element type, which the
+family resolves when the integrator is built; the extended-precision row names `big"1e-8"`, because
+the family measures no tolerance at `BigFloat`. The row's driver and the build-only testset both
+build their keywords here, so an entry's `f_reltol` reaches its solver by one path.
+"""
+function fixed_boundary_solver_keywords(entry)
+    entry.f_reltol === nothing && return (;)
+    return (; f_reltol = entry.f_reltol)
+end
+
+"""
     fixed_boundary_run(entry) -> Dict{String, Any}
 
 The registry's `run` for the fixed-boundary family: integrate one entry with the solver its branch
@@ -207,7 +226,8 @@ function fixed_boundary_run(entry)
                    entry.solver === :projected ?
                    LevenbergMarquardt(variable_projection = true) :
                    LevenbergMarquardt()
-    seconds = @elapsed result = integrate(problem, method; solver = solvermethod, verbosity = 0)
+    seconds = @elapsed result = integrate(problem, method; solver = solvermethod,
+        fixed_boundary_solver_keywords(entry)..., verbosity = 0)
     stats = result.stats
     report(entry.label, "$(length(result.traces)) steps, " *
                         "$(count(stats.converged)) converged")

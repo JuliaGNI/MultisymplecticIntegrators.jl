@@ -317,8 +317,33 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `n = length(ti) - 1`, and the `length` of a `BigFloat` range is a `BigInt` — it is a
   `StepRangeLen{BigFloat, BigFloat, BigFloat, BigInt}` — so `GeometricSolution(problem)` on a
   `BigFloat` `Wave` raises `TypeError: in Type, in parameter, expected Int64, got a value of type
-  BigInt` before a step is taken. The row stays in the registry and in the build-only testset
-  "FB18", which builds it and never runs it; the fix is a pull request of its own to
-  `GeometricSolutions`, and the step runs as a row of M's matrix once it lands.
+  BigInt` before a step is taken. The row names its own `f_reltol = big"1e-8"`, because the family
+  measures no tolerance at `BigFloat` and refuses a caller there that names none, and
+  `fixed_boundary_solver_keywords` hands the entry's value to the solver, so the integrator builds
+  and `TimeSeries`'s `TypeError` is the whole block. The row stays in the registry and in the
+  build-only testset "FB18", which builds it and never runs it; the fix is a pull request of its own
+  to `GeometricSolutions`, and the step runs as a row of M's matrix once it lands.
 - kind: upstream
+- found: 2026-11-10
+
+### K53 · FB1's gradient bound is exceeded on four seeded entries whose first datum's fit leaves parameters of order `1e4`.
+
+- location: `test/couplings/fixed_boundary.jl` (`compare_gradient`, FB1);
+  `src/couplings/fixed_boundary.jl` (`first_datum!`, `least_squares!`)
+- evidence: on `5399dc7` and on every head after it, `couplings/fixed_boundary.jl` reports
+  `1770 passed, 22 failed` of 1792, and the 22 failures are all FB1's first-slab
+  `compare_gradient` in `:all` mode, in both element types. They are the entries whose first
+  datum's largest parameter is of order `1e4`: entry 9 `|φ| = 2.87e4` misses by `13.1×` the bound,
+  entry 15 `5.39e4` by `2.04×`, entry 16 `1.45e4` by `1.18×`, entry 21 `8.77e4` by `2.82×`,
+  entry 23 `8.71e4` by `1.83×`; the other twenty entries sit at `0.007×`–`0.31×`. The difference
+  is `1.4e-12` against a gradient whose largest entry is `4.86`, that is `3e-13` relative and
+  round-off at the datum's own scale, while the bound `100 eps(T) · max|∇S|` is set by the
+  gradient's scale alone. `first_datum!`'s fit of `φ₀` runs 1000 Levenberg–Marquardt iterations
+  from the spike's start and does not converge on those entries, so the datum it leaves is not the
+  one the bound was measured at. The red is the same on the critic's copy of `5399dc7`
+  (`round-3/tree`, `1770 passed, 22 failed`) and on the head, so no round of this part introduced
+  it; the record of 1792/1792 in round 3's evidence does not reproduce. Fixing it is a decision —
+  the fit's start or iteration count on those entries, or the bound's scale, which the plan sets
+  as the gradient's largest entry — and it changes a clause of the spec, so it is the user's.
+- kind: defect
 - found: 2026-11-10
