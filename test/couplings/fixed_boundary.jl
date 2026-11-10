@@ -25,17 +25,54 @@ const SG = M.SineGordon
 # ---- helpers -------------------------------------------------------------------------
 
 """
-    compare_gradient(b, ∇S, T)
+    oracle_floor(oracle, datum, θ; perturbations = 8, seed = 0x5eed)
+
+The round-off floor of the oracle's own gradient at `oracle_vector(oracle, datum, θ)`, which is the
+datum level's free parameters followed by `θ`: the largest change in that gradient, in the
+residual's layout, over `perturbations` seeded perturbations, each of `eps(T)` relative to an entry
+and an absolute `eps(T)` below one. It reads the oracle's action and nothing of the package.
+"""
+function oracle_floor(oracle::FixedBoundaryOracle, datum, θ::AbstractVector{T};
+        perturbations = 8, seed = 0x5eed) where {T}
+    a = oracle.ansatz
+    nfp, nf = length(M.spatial_free(a)), M.nfree(a)
+    z = oracle_vector(oracle, datum, θ)
+    function gradient(v)
+        g = action_gradient(w -> fixed_boundary_action(oracle, datum, w), v)
+        return vcat(view(g, 1:nfp), view(g, (nfp + 1):(nfp + nf)))
+    end
+    g₀ = gradient(z)
+    rng = Xoshiro(seed)
+    floor = zero(T)
+    for _ in 1:perturbations
+        direction = 2 .* rand(rng, T, length(z)) .- 1
+        z₊ = z .+ eps(T) .* direction .* max.(one(T), abs.(z))
+        floor = max(floor, maximum(abs, gradient(z₊) - g₀))
+    end
+    return floor
+end
+
+"""
+    compare_gradient(b, ∇S, T; oracle, datum, θ, label)
 
 The package's residual `b` against the oracle's gradient `∇S`: both finite, the gradient at least
-`1/100` in its largest entry, and the difference at most `100 eps(T)` of that entry.
+`1/100` in its largest entry, and the difference at most `max(100 eps(T) · scale, F)`, `scale` that
+largest entry and `F` the oracle's own gradient floor at this point, from
+[`oracle_floor`](@ref). `F` is asserted at most `1e6 eps(T) · scale` and recorded, with the miss,
+as a multiple of `eps(T) · scale` under `label`.
 """
-function compare_gradient(b, ∇S, ::Type{T}) where {T}
+function compare_gradient(b, ∇S, ::Type{T}; oracle, datum, θ, label = (;)) where {T}
     @test all(isfinite, b)
     @test all(isfinite, ∇S)
     scale = maximum(abs, ∇S)
     @test scale ≥ T(1 // 100)
-    @test maximum(abs, b - ∇S) ≤ 100 * eps(T) * scale
+    floor = oracle_floor(oracle, datum, θ)
+    @test floor ≤ 1e6 * eps(T) * scale
+    @test maximum(abs, b - ∇S) ≤ max(100 * eps(T) * scale, floor)
+    @info("FB1 the gradient's floor", T=string(T), entry=label.entry, form=label.form,
+        mode=label.mode, slab=label.slab, scale=scale, floor=floor,
+        ratio=Float64(floor/(eps(T)*scale)),
+        miss=Float64(maximum(abs, b-∇S)/(eps(T)*scale)))
     return nothing
 end
 
@@ -242,8 +279,9 @@ end
     # N4 and N18's first check: all 24 seeded entries at both element types, in both forms and both
     # modes, on the first and the second slab, at the clause's rule of 20 cells.
     @testset "generated entry, $T, $form, $mode" for T in (Float64, Float32),
-        entry in generate_problems(T; rng = Xoshiro(SEED)), form in (:abg, :tsr),
+        (i, entry) in enumerate(generate_problems(T; rng = Xoshiro(SEED))), form in (:abg, :tsr),
         mode in (:all, :last_layer)
+
         ansatz = clause_ansatz(entry.problem; form = form, mode = mode)
         problem = entry.problem
         # the step is capped: the second slab's datum is a step's final iterate, converged or not,
@@ -253,13 +291,18 @@ end
         oracle = ActionOracle(problem, slab.method; block = c.ansatz)
         @test length(c.x) == unknown_count(oracle)
         θ = 2 .* rand(rng, T, length(c.x)) .- 1
+        datum = fixed_datum(c)
+        label = (; entry = i, form = form, mode = mode)
         compare_gradient(slab_residual(slab.int, θ, parameters(problem)),
-            oracle_residual(oracle, fixed_datum(c), θ), T)
+            oracle_residual(oracle, datum, θ), T;
+            oracle = oracle, datum = datum, θ = θ, label = (; label..., slab = 1))
         integrate!(slab.solstep, slab.int)
         next_fixed_slab!(slab, 2)
         θ₂ = 2 .* rand(rng, T, length(c.x)) .- 1
+        datum₂ = fixed_datum(c)
         compare_gradient(slab_residual(slab.int, θ₂, parameters(problem)),
-            oracle_residual(oracle, fixed_datum(c), θ₂), T)
+            oracle_residual(oracle, datum₂, θ₂), T;
+            oracle = oracle, datum = datum₂, θ = θ₂, label = (; label..., slab = 2))
     end
     @testset "the two problems, first and second slab, $name, $form, $mode" for name in (:wave, :sinegordon),
         form in (:abg, :tsr), mode in (:all, :last_layer)
@@ -270,13 +313,18 @@ end
         c = cache(slab.int)
         oracle = ActionOracle(problem, slab.method; block = c.ansatz)
         θ = 2 .* rand(rng, Float64, length(c.x)) .- 1
+        datum = fixed_datum(c)
+        label = (; entry = name, form = form, mode = mode)
         compare_gradient(slab_residual(slab.int, θ, parameters(problem)),
-            oracle_residual(oracle, fixed_datum(c), θ), Float64)
+            oracle_residual(oracle, datum, θ), Float64;
+            oracle = oracle, datum = datum, θ = θ, label = (; label..., slab = 1))
         integrate!(slab.solstep, slab.int)
         next_fixed_slab!(slab, 2)
         θ₂ = 2 .* rand(rng, Float64, length(c.x)) .- 1
+        datum₂ = fixed_datum(c)
         compare_gradient(slab_residual(slab.int, θ₂, parameters(problem)),
-            oracle_residual(oracle, fixed_datum(c), θ₂), Float64)
+            oracle_residual(oracle, datum₂, θ₂), Float64;
+            oracle = oracle, datum = datum₂, θ = θ₂, label = (; label..., slab = 2))
     end
 end
 
@@ -508,8 +556,14 @@ end
         r = slab_residual(int, x, p)
         reduced, _ = M.project!(x, f!, r, M.jacobian_of(f!, x, n), projected)
         floor = maximum(abs, view(oracle_residual(oracle, datum, x), projected))
-        @test floor ≤ 100 * eps(Float64) * scale
-        @info "FB5 the inner solve" name=name form=form scale=scale floor=floor
+        # the same rule as FB1's: the inner solve's residual is compared with the larger of the
+        # old bound and the round-off floor of the oracle's own gradient at this point
+        noise = oracle_floor(oracle, datum, x)
+        @test noise ≤ 1e6 * eps(Float64) * scale
+        @test floor ≤ max(100 * eps(Float64) * scale, noise)
+        @info "FB5 the inner solve" name=name form=form scale=scale floor=floor noise=noise
+        @info("FB5 the inner solve's floor", name=name, form=form,
+            ratio=Float64(noise/(eps(Float64)*scale)))
         # 2. the Schur complement against central differences of z ↦ F_o(z, a*(z)), each inner solve
         # warm-started at the solved `a`
         solved = M.lm_solved_indices(n, projected)
