@@ -596,15 +596,17 @@ makes it worth keeping.
   `0.399` in `Float64` and from `1.979` to `0.117` in `Float32`, factors `3.92` and `16.86`, and on
   the two-component problem `VectorWave`, whose target is `(sin(πx) cos(πt), sin(2πx) cos(πt) / 2)`,
   from `1.501` to `0.390` and from `1.276` to `0.368`, factors `3.85` and `3.47`, in a cold process
-  on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3 and 1.12.7 with four BLAS threads; the
-  test asserts a factor of `2` and records the measured one. `epochs = 0` leaves the parameters at
-  their initial values, a `:last_layer` fit moves the output weights alone, and an `:all` fit moves
-  every parameter. The fit descends from the parameters the caller hands it, which are the block's
-  own; where every free entry of those is zero — a fresh block, on which a `tanh` network's parameter
-  derivative vanishes — it starts instead from the start of its own sample, one draw in `[-1, 1]`
-  per free parameter, so that a first slab is not a saddle, and it leaves a `:last_layer` network's
-  hidden layer untouched there as everywhere else. A `FitTo` that names it on an ansatz that is not a
-  `NetworkAnsatz` is refused at the first fit, by one `fit!` method that both ansatz paths reach.
+  on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3 with four BLAS threads; the same four
+  fits at Julia 1.12.7 round to the same four factors. The test asserts a factor of `2` and records
+  the measured one. `epochs = 0` leaves the parameters at their initial values, a `:last_layer` fit
+  moves the output weights alone, and an `:all` fit moves every parameter. The fit descends from the
+  parameters the caller hands it, which are the block's own; where every free entry of those is zero
+  — a fresh block, on which a `tanh` network's parameter derivative vanishes — it starts instead
+  from the start of its own sample, one draw in `[-1, 1]` per free parameter, so that a first slab
+  is not a saddle, and it leaves a `:last_layer` network's hidden layer untouched there as everywhere
+  else. A `FitTo` that names it on a coefficient ansatz is refused at the first fit, by one `fit!`
+  method that both fitting `apply_guess!` methods call; a `SymbolicAnsatz`, whose `apply_guess!` has
+  no `FitTo` method at all, raises a `MethodError` there before any fit.
   `test/initial_guess/pinn_training.jl` joins the `slow` group.
 - **`scripts/trialnn_model.jl` registers the TrialNN family in the append-only registry.** One model
   file builds the family's problem, ansatz, method and archive — `Wave` over five steps and

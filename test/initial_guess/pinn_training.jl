@@ -118,8 +118,9 @@ end
 The bound of P1's factor, per precision: the misfit falls by at least this factor over the 100
 epochs of the default step, at both `D = 1` and `D = 2`. The factors this tree measures from a
 seeded start in `[-1, 1]` are `3.92` in `Float64` and `16.86` in `Float32` at `D = 1`, and `3.85`
-and `3.47` at `D = 2`, on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3 and 1.12.7 with
-four BLAS threads; the bound sits below each of them.
+and `3.47` at `D = 2`, on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3 with four BLAS
+threads; the same four fits at Julia 1.12.7 round to the same four factors. The bound sits below
+each of them.
 """
 pinn_factor(::Type{Float64}) = 2.0
 pinn_factor(::Type{Float32}) = 2.0
@@ -331,8 +332,8 @@ end
 
     @testset "the fit's refusal on an ansatz with no parameters" begin
         # a coefficient ansatz has no free parameters for the descent, so a `PINNTraining` fit on
-        # one is refused at the first fit, where both ansatz paths reach `fit!`, and not when the
-        # integrator is built
+        # one is refused at the first fit, which both fitting `apply_guess!` methods reach, and not
+        # when the integrator is built
         problem = Wave.problem(T = Float64, timespan = (0.0, 0.05), timestep = 0.05,
             xstep = 0.05)
         ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 5), xspan = (0.0, 1.0), n = 3)

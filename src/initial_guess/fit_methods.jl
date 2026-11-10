@@ -149,9 +149,10 @@ end
 
 Refuse a [`PINNTraining`](@ref) fit on an ansatz that is not a [`NetworkAnsatz`](@ref): the descent
 reads the derivative of the field with respect to each free parameter, and only a network's block
-carries it. Both of the guess' fit paths call `fit!` — the coefficient ansatz's and the network's —
-so this fallback is where the refusal is one method, and it comes at the first fit rather than when
-the integrator is built.
+carries it. The two `apply_guess!` methods that fit — a coefficient ansatz's and a network's — call
+`fit!`, so the refusal is this one method, at the first fit rather than when the integrator is
+built. An ansatz whose `apply_guess!` has no `FitTo` method — a [`SymbolicAnsatz`](@ref), for one —
+raises a `MethodError` there, before any fit.
 """
 function fit!(coeffs, ::PINNTraining, ansatz::SpaceTimeAnsatz, sample, cache)
     throw(ArgumentError("PINNTraining needs a NetworkAnsatz; $(nameof(typeof(ansatz))) is not"))

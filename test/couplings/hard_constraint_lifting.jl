@@ -604,8 +604,7 @@ end
         # the warning is the integrator's, at its construction: the cache a solver builds for
         # another element type is built on top of it and says nothing, so building warns once and
         # running the integrator that was already built warns nothing more
-        int = GeometricIntegrator(problem, method)
-        built, _ = Test.collect_test_logs(min_level = Base.CoreLogging.Debug) do
+        built, int = Test.collect_test_logs(min_level = Base.CoreLogging.Debug) do
             GeometricIntegrator(problem, method)
         end
         @test length(filter(l -> occursin("corner", l.message), built)) == 1
