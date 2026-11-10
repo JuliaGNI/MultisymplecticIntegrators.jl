@@ -274,11 +274,14 @@ Fit the network to a slab's sampled target by `epochs` gradient-descent steps of
 `batch` over its `points`. `sample` is the named tuple `(; points, values)` that
 [`fit_sample`](@ref) returns for the method.
 
-The fit draws no point and evaluates no target: both are the sample's. The gradient is the
-derivative of the field with respect to each free parameter, which the block's `gradient` holds at
-every point it evaluates, so the descent needs no differentiation of its own. The points, the target
-values and the batch gradient are allocated once, before the epoch loop, and each point is evaluated
-into the block's own scratch, so no epoch and no batch allocates.
+The fit draws no point and evaluates no target: both are the sample's. It takes the sample's `start`
+where the free entries of `w` are all zero — a `tanh` network is stationary at the zero parameters
+every block begins with — and the parameters it is given anywhere else, so a `:last_layer` fit
+leaves the block's hidden layer untouched either way. The gradient is the derivative of the field
+with respect to each free parameter, which the block's `gradient` holds at every point it evaluates,
+so the descent needs no differentiation of its own. The points, the target values and the batch
+gradient are allocated once, before the epoch loop, and each point is evaluated into the block's own
+scratch, so no epoch and no batch allocates.
 
 The free parameters alone are written, and they are written into the block as well as into `w`, so
 that the evaluation of every point reads the parameters the descent has reached; a parameter the
@@ -292,6 +295,13 @@ function fit!(w::AbstractVector{ST}, method::PINNTraining, ansatz::NetworkAnsatz
     values = copy(sample.values)
     n = size(points, 1)
     gradient = zeros(ST, nf)
+    # the block's parameters start at zero, and the derivative of a `tanh` network is zero there:
+    # the sample's drawn start stands in for them, once, until a fit has moved them
+    if all(k -> iszero(w[lo + k - 1]), 1:nf)
+        for k in 1:nf
+            w[lo + k - 1] = sample.start[k]
+        end
+    end
     rate = convert(ST, 2 * method.step / n)
     for k in 1:nf
         s.params[lo + k - 1] = w[lo + k - 1]
@@ -360,6 +370,11 @@ The sample of a [`PINNTraining`](@ref) fit: `nsamples` points of the slab drawn 
 read by [`target_point!`](@ref) so that every target of the guess answers at the physical time of
 its point. The points are drawn afresh at every call and the method's own generator is never
 advanced, so two fits that share one method object draw the same points.
+
+Beside them the sample carries `start`: one value in `[-1, 1]` per free parameter, drawn from the
+same copy of the generator after the points. A network whose parameters are all zero has a zero
+derivative with respect to every one of them, so `fit!` starts from `start` there and from the
+parameters it is given anywhere else.
 """
 function fit_sample(method::PINNTraining, interior::AbstractArray{ST, 3}, target, c,
         ansatz::NetworkAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
@@ -375,7 +390,11 @@ function fit_sample(method::PINNTraining, interior::AbstractArray{ST, 3}, target
         points[i, 2] = x
         target_point!(view(values, i, :), target, c, ansatz, problem, sol, t̂, x)
     end
-    return (; points, values)
+    start = Vector{ST}(undef, ansatz.nfree)
+    for k in 1:ansatz.nfree
+        start[k] = convert(ST, 2 * rand(rng) - 1)
+    end
+    return (; points, values, start)
 end
 
 """

@@ -150,7 +150,7 @@ pinn_factor(::Type{Float32}) = 2.0
         @info("the PINN fit against the greedy fit",
             T, before, after, greedy_error, VERSION,
             machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
-            blas_threads=BLAS.get_num_threads())
+            blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
     end
 
     @testset "P3 the mode keeps its fixed parameters, $T" for T in (Float64,)
@@ -182,8 +182,24 @@ pinn_factor(::Type{Float32}) = 2.0
         # count the larger of the two
         @test one_epoch == ten_epochs
         @test one_epoch > 0
-        @info("the PINN fit's allocation", T, one_epoch, ten_epochs, VERSION,
+    end
+
+    @testset "P5 the fit seeds a zero network, $T" for T in (Float64, Float32)
+        # the block of a fresh integrator holds zero parameters, where a `tanh` network is
+        # stationary: the guess' fit draws its start from the sample's generator, so the first
+        # slab of a run moves
+        s = pinn_slab(T)
+        @test all(iszero, s.c.ansatz.params)
+        zero_misfit = misfit(s.c, s.problem, T, T(0.05))
+        M.initial_guess!(s.solstep, nothing, parameters(s.problem), s.int)
+        n = s.ansatz.nfree
+        fitted = s.ansatz.first_free:(s.ansatz.first_free + n - 1)
+        @test all(!iszero, s.c.ansatz.params[fitted])
+        after = misfit(s.c, s.problem, T, T(0.05))
+        @test isfinite(after)
+        @test after < zero_misfit
+        @info("the PINN fit of a zero network", T, zero_misfit, after, VERSION,
             machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
-            blas_threads=BLAS.get_num_threads())
+            blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
     end
 end

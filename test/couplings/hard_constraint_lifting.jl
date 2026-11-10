@@ -280,51 +280,75 @@ end
     @testset "L4 the lifting acts per component on VectorWave, $T" for T in (Float64, Float32)
         param₂ = (c = T(0.5), l = T(1.0), A1 = (T(0.8), T(0.8)), A2 = (T(0.0), T(0.0)),
             B1 = (T(0.8), T(0.8)), B2 = (T(0.0), T(0.0)))
-        param₁ = (c = T(0.5), l = T(1.0), A1 = T(0.8), A2 = T(0.0), B1 = T(0.8),
-            B2 = T(0.0))
         problem₂ = VectorWave.problem(
             T = T, params = param₂, timespan = (zero(T), T(0.25)),
             timestep = T(0.05), xstep = T(0.05))
         problem₁ = lifting_problem(T; steps = 5, timespan = (zero(T), T(0.25)))
         method₂ = lifting_method(T; D = 2)
         method₁ = lifting_method(T)
-        # the components' data are the scalar problem's, and the transform keeps them apart
-        grid = xgrid(problem₁)
-        n = length(grid)
-        int₂ = GeometricIntegrator(problem₂, method₂)
-        c₂ = cache(int₂)
-        solstep₂ = solutionstep(int₂, GeometricSolution(problem₂)[0])
-        M.slab_bottom!(c₂, c₂.coupling, problem₂, ansatz(method₂), solstep₂)
-        M.initial_guess!(solstep₂, nothing, parameters(problem₂), int₂)
-        b₂ = zeros(T, length(c₂.x))
-        M.residual!(b₂, copy(c₂.x), nothing, parameters(problem₂), int₂)
-        @test size(c₂.u, 3) == 2
-        # the two components carry the same data, so the transform leaves them equal: the rows of
-        # the two go through the block's kernel with the same weights, and the difference this tree
-        # measures is `4.2e-15`, about nineteen `eps` of the field's scale, which is the kernel's
-        # own association and not a copy of one component into the other
-        @test maximum(abs, c₂.u[:, :, 1] .- c₂.u[:, :, 2]) ≤
-              100 * eps(T) * maximum(abs, c₂.u)
-        # the same seed and the same data give the scalar run's field per component, up to the
-        # solver's own step, which is not symmetry preserving on this rank-deficient system
+        S = 10
+        nf₁ = M.nparameters(ansatz(method₁))
+        # the seeded scalar vector, and its embedding in the two-component network: one hidden
+        # layer, and each component's output weights the scalar's
+        θ = 2 .* rand(Xoshiro(20261112), T, nf₁) .- 1
+        W = Vector{T}(undef, nf₁ + S)
+        W[1:nf₁] = θ
+        for s in 1:S, d in 1:2
+
+            W[3S + (s - 1) * 2 + d] = θ[3S + s]
+        end
+        int₁, c₁, solstep₁, b₁ = lifting_slab(problem₁, method₁, θ)
+        int₂, c₂, solstep₂, b₂ = lifting_slab(problem₂, method₂, W)
+        # a transform that lifts one component alone leaves the other component's field, and its
+        # rows, off the scalar run's
+        tol = 10 * eps(T) *
+              max(maximum(abs, c₁.u), maximum(abs, c₁.v), maximum(abs, c₁.w))
+        for d in 1:2
+            @test maximum(abs, c₂.u[:, :, d] .- c₁.u[:, :, 1]) ≤ tol
+            @test maximum(abs, c₂.v[:, :, d] .- c₁.v[:, :, 1]) ≤ tol
+            @test maximum(abs, c₂.w[:, :, d] .- c₁.w[:, :, 1]) ≤ tol
+            @test maximum(abs, c₂.ansatz.Ju[:, :, d, 1:(3S)] .-
+                               c₁.ansatz.Ju[:, :, 1, 1:(3S)]) ≤
+                  tol
+            @test maximum(abs,
+                c₂.ansatz.Jv[:, :, d, 1:(3S)] .- c₁.ansatz.Jv[:, :, 1, 1:(3S)]) ≤ tol
+            @test maximum(abs,
+                c₂.ansatz.Jw[:, :, d, 1:(3S)] .- c₁.ansatz.Jw[:, :, 1, 1:(3S)]) ≤ tol
+            for j in 1:S
+                @test c₂.ansatz.Ju[:, :, d, 3S + (j - 1) * 2 + d] ≈
+                      c₁.ansatz.Ju[:, :, 1, 3S + j] atol = tol
+            end
+        end
+        # the hidden rows sum over both components, and each component's output row is the scalar
+        # run's there
+        @test maximum(abs, b₂[1:(3S)] .- 2 * b₁[1:(3S)]) ≤ 10 * eps(T) * maximum(abs, b₁)
+        for d in 1:2, j in 1:S
+
+            @test b₂[3S + (j - 1) * 2 + d] ≈ b₁[3S + j] atol = 10 * eps(T) *
+                                                               maximum(abs, b₁)
+        end
+        # the five steps of both runs record their deviation, which no bound holds: both are
+        # unconverged, and the minimum-norm step of a rank-deficient Jacobian moves the two
+        # minimisations apart even in exact arithmetic
         result₂ = integrate(problem₂, method₂)
         result₁ = integrate(problem₁, method₁)
         @test length(result₂.traces) == 5
         @test length(result₁.traces) == 5
+        grid = xgrid(problem₁)
+        n = length(grid)
         u₂ = result₂.solution.u[end]
         u₁ = result₁.solution.u[end]
+        @test length(u₂) == 2n
         scale = maximum(abs, u₁)
         deviations = (maximum(abs, u₂[1:n] .- u₁) / scale,
             maximum(abs, u₂[(n + 1):(2n)] .- u₁) / scale)
-        @test length(u₂) == 2n
         for deviation in deviations
             @test isfinite(deviation)
         end
         @info("the lifting's vector arm", T, deviations, scale,
             cache(GeometricIntegrator(problem₂, method₂)).iterations, VERSION,
             machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
-            blas_threads=BLAS.get_num_threads(),
-            check_bounds=Base.JLOptions().check_bounds)
+            blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
     end
 
     @testset "L5 a B-spline ansatz runs under the lifting, $T" for T in (Float64,)
