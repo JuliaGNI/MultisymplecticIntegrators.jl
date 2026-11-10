@@ -555,6 +555,27 @@ function fixed_boundary_field(problem, a, φ0, φ1, Θ, t̂, x, h)
     return u, ut / h, ux
 end
 
+@testset "the fixed-boundary ansatz's Gauss rule" begin
+    # The rule of the slab's own quadrature, at the two counts the family uses and at three element
+    # types: its nodes are the rule's own, sorted on `[0, 1]`, and it integrates `xᵏ` exactly for
+    # every `k` below `2n`. `BigFloat` is the leg that shows the Newton iteration's own
+    # convergence — a step that is only slowed still reaches the same root at `Float64` in
+    # `100` iterations, and does not at a 256-bit mantissa.
+    for T in (Float32, Float64, BigFloat), n in (4, 6)
+
+        nodes, weights = M.gauss_legendre(n, T)
+        @test eltype(nodes) === T
+        @test eltype(weights) === T
+        @test length(nodes) == n && length(weights) == n
+        @test issorted(nodes)
+        @test all(zero(T) .< nodes .< one(T))
+        @test all(>(zero(T)), weights)
+        for k in 0:(2n - 1)
+            @test abs(sum(weights .* nodes .^ k) - one(T) / (k + 1)) ≤ 8 * eps(T)
+        end
+    end
+end
+
 @testset "the fixed-boundary ansatz's two charts" begin
     for form in (:abg, :tsr)
         a = fixed_boundary_ansatz(Float64; form = form)
