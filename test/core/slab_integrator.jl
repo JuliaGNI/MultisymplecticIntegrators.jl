@@ -52,7 +52,7 @@ function lift(t̂, x, d)
     return (a * b, (1 + 2t̂) * b, a * (1 - 2x) / 4)
 end
 
-function M.transform_field!(u, v, w, ::M.RestrictionData{ST, Lifted}, t̂, x, h,
+function M.transform_field!(u, v, w, ::M.RestrictionData{ST, Lifted}, block, t̂, x, h,
         problem) where {ST}
     for d in axes(u, 3), r in axes(u, 2), q in axes(u, 1)
         ℓ, ℓt, ℓx = lift(t̂[q], x[r], d)

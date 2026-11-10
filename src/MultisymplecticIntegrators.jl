@@ -83,7 +83,7 @@ include("initial_guess/fit_methods.jl")
 include("initial_guess/guess.jl")
 include("initial_guess/orthogonal_greedy.jl")
 include("initial_guess/trained_hidden_layer.jl")
-export TrainedHiddenLayer
+export TrainedHiddenLayer, PINNTraining
 
 # The fixed-boundary coupling and the network block refer to each other: the block holds the
 # coupling's fit workspace, and the coupling's methods dispatch on the block. This file is therefore
@@ -105,6 +105,9 @@ export CoefficientRestriction
 
 include("couplings/weak_multipliers.jl")
 export WeakInitialCondition, WeakInitialAndBoundaryConditions
+
+include("couplings/hard_constraint_lifting.jl")
+export HardConstraintLifting
 
 export Continuation, FitTo, Projection, InitialCondition, PreviousSlab
 export ExactSolution, TargetFunction

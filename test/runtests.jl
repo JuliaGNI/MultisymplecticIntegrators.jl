@@ -27,6 +27,8 @@ if "slow" in GROUPS
     @safetestset "Network ansatz" include("ansatz/network.jl")
     @safetestset "Orthogonal greedy" include("initial_guess/orthogonal_greedy.jl")
     @safetestset "Trained hidden layer" include("initial_guess/trained_hidden_layer.jl")
+    @safetestset "PINN training" include("initial_guess/pinn_training.jl")
+    @safetestset "Hard constraint lifting" include("couplings/hard_constraint_lifting.jl")
     @safetestset "Property: generated problems" include("verification/properties/generator.jl")
     @safetestset "Property: gradient" include("verification/properties/gradient.jl")
     @safetestset "Property: Jacobian" include("verification/properties/jacobian.jl")
