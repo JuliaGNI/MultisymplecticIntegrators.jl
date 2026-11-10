@@ -239,8 +239,8 @@ end
 
 @testset "FB1 the residual is the action's gradient" begin
     rng = Xoshiro(7)
-    # N4: all 24 seeded entries at both element types, in both forms and both modes, on the first
-    # and the second slab, at the clause's rule of 20 cells.
+    # N4 and N18's first check: all 24 seeded entries at both element types, in both forms and both
+    # modes, on the first and the second slab, at the clause's rule of 20 cells.
     @testset "generated entry, $T, $form, $mode" for T in (Float64, Float32),
         entry in generate_problems(T; rng = Xoshiro(SEED)), form in (:abg, :tsr),
         mode in (:all, :last_layer)
@@ -289,12 +289,13 @@ end
     # the Jacobian at each accepted iterate — so the Jacobian of the residual is read through the
     # `Newton()` solver the family also offers, on the same residual and the same block.
     #
-    # N5's legs are `Wave`, `SineGordon` and all 24 seeded entries, in both forms and both modes, at
-    # 16 vectors each, and at both element types. The differences are taken on the `Float64` slab in
-    # both precisions, as the symbolic ansatz's are: the residual's round-off at `Float32` sits in
-    # differences `cbrt(eps(Float32))` apart, where its own truncation error is larger than the
-    # bound. The `Float64` slab is the same slab — `transplant_datum!` copies the datum across, so
-    # that both element types differentiate one function of the unknowns rather than two fits of it.
+    # N5's and N18's second check: the legs are `Wave`, `SineGordon` and all 24 seeded entries, in
+    # both forms and both modes, at 16 vectors each, and at both element types. The differences are
+    # taken on the `Float64` slab in both precisions, as the symbolic ansatz's are: the residual's
+    # round-off at `Float32` sits in differences `cbrt(eps(Float32))` apart, where its own truncation
+    # error is larger than the bound. The `Float64` slab is the same slab — `transplant_datum!`
+    # copies the datum across, so that both element types differentiate one function of the unknowns
+    # rather than two fits of it.
     for T in (Float64, Float32)
         entries = generate_problems(T; rng = Xoshiro(SEED))
         reference_entries = T === Float64 ? entries :
@@ -617,11 +618,11 @@ end
 # ---- FB8 -----------------------------------------------------------------------------
 
 @testset "FB8 the affine control in two iterations" begin
-    # N13: the plan's control is `:last_layer` on a linear density, with the spatial hidden layer
-    # held at `φ₀`'s fit for the whole run — which is the `Continuation()` guess — and the unknowns
-    # `c` and `a`, in both forms and in both element types. `FitTo(Predictor())` is not the control:
-    # it moves level 1's hidden layer away from level 0's, and the affine system then has no
-    # solution (K49).
+    # N13 and N18's third check: the plan's control is `:last_layer` on a linear density, with the
+    # spatial hidden layer held at `φ₀`'s fit for the whole run — which is the `Continuation()`
+    # guess — and the unknowns `c` and `a`, in both forms and in both element types.
+    # `FitTo(Predictor())` is not the control: it moves level 1's hidden layer away from level 0's,
+    # and the affine system then has no solution (K49).
     for T in (Float64, Float32), form in (:abg, :tsr)
 
         linear = [entry.problem
