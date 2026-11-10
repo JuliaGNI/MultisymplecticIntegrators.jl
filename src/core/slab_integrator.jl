@@ -106,26 +106,15 @@ default_solver(::SpaceTimeGalerkin) = Newton()
 Reject a method that the problem cannot support, before any step runs.
 
 The refusals are `ArgumentError`s: a target that reads the exact solution of a problem that has
-none, a fit that needs an ansatz linear in its coefficients on one that is not, a
-`PINNTraining` fit on an ansatz that is not a [`NetworkAnsatz`](@ref), a direct linear
+none, a fit that needs an ansatz linear in its coefficients on one that is not, a direct linear
 solve (`linear_solver = true`) on an ansatz whose step is not affine in its unknowns or a density
 that is not linear, and what the ansatz's [`check_ansatz`](@ref) and the coupling's
 [`check_coupling`](@ref) refuse.
 
 The direct linear solve is offered to an ansatz whose step is affine in its unknowns, which
 [`has_affine_step`](@ref) reports.
-
-The call runs once per cache, and a solver builds a second cache — of the dual type, on its first
-Jacobian — on top of the problem's one, so a check that speaks takes the cache's element type `ST`
-and lets only the problem's own speak, in
-[`check_coupling`](@ref)`(problem, coupling, ansatz, ST)`.
 """
-function check_method(problem::LagrangianPDEProblem{T}, method::SpaceTimeGalerkin) where {T}
-    return check_method(problem, method, T)
-end
-
-function check_method(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin,
-        ::Type{ST}) where {ST}
+function check_method(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin)
     a = ansatz(method)
     if method.linear_solver
         has_affine_step(a) ||
@@ -141,17 +130,14 @@ function check_method(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin,
             throw(ArgumentError("FitTo(ExactSolution()) needs a problem with an exact solution; " *
                                 "this problem has solutions = nothing"))
         end
-        fit = fit_method(guess, a)
-        if fit isa Projection && !is_linear_in_coefficients(a)
+        if fit_method(guess, ansatz(method)) isa Projection &&
+           !is_linear_in_coefficients(ansatz(method))
             throw(ArgumentError("Projection() needs an ansatz that is linear in its " *
-                                "coefficients; $(nameof(typeof(a))) is not"))
-        end
-        if fit isa PINNTraining && !(a isa NetworkAnsatz)
-            throw(ArgumentError("PINNTraining needs a NetworkAnsatz; $(nameof(typeof(a))) is not"))
+                                "coefficients; $(nameof(typeof(ansatz(method)))) is not"))
         end
     end
     check_ansatz(problem, a)
-    check_coupling(problem, coupling(method), a, ST)
+    check_coupling(problem, coupling(method), a)
     return nothing
 end
 
@@ -349,21 +335,6 @@ Reject a coupling that the ansatz cannot support, when the integrator is built.
 check_coupling(::LagrangianPDEProblem, ::SlabCoupling, ::SpaceTimeAnsatz) = nothing
 
 """
-    check_coupling(problem, coupling, ansatz, ST)
-
-The part of a coupling's check that depends on the element type `ST` of the cache being built, which
-the check of the problem's own element type alone may speak from: an integrator builds that one
-cache, and a solver builds a cache of another element type on top of it, so a warning emitted here
-fires once per integrator and not once per cache. A coupling that speaks of nothing
-element-type-dependent keeps the three-argument method alone, which this falls back to.
-"""
-function check_coupling(
-        problem::LagrangianPDEProblem, coupling::SlabCoupling, ansatz::SpaceTimeAnsatz,
-        ::Type)
-    check_coupling(problem, coupling, ansatz)
-end
-
-"""
     slab_bottom!(cache, data, problem, ansatz, sol)
 
 Fix the coupling's datum of the slab, in its block `data`.
@@ -421,7 +392,7 @@ end
 
 function Cache{ST}(problem::LagrangianPDEProblem,
         method::SpaceTimeGalerkin; kwargs...) where {ST}
-    check_method(problem, method, ST)
+    check_method(problem, method)
     a = ansatz(method)
     slab = ansatz_data(a, problem, ST)
     tnodes, xnodes = quadrature_points(slab)
