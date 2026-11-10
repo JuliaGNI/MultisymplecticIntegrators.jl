@@ -19,8 +19,8 @@ residual.
 
 The slab carries **no momentum** between steps: the coupling adds no surface term and no load at the
 bottom of the slab, and `coupling_unknowns` is zero, so the solver's vector is the ansatz's own. That
-is the formulation of the family this coupling fuses, kept on purpose; a formulation that carries the
-incoming momentum at the bottom of each slab is not this one.
+is this coupling's formulation, kept on purpose; a formulation that carries the incoming momentum
+at the bottom of each slab is not this one.
 
 A `NetworkAnsatz` and a `TensorBSplineAnsatz` are both accepted, and an ansatz of any other kind is
 refused when the integrator is built. For a network the transform projects the field's derivative
@@ -30,8 +30,8 @@ derivative and the transform places the data in the field alone, which needs
 `x_boundary = Dirichlet()`: the transform reads the field of the slab's two ends at the time nodes
 of the residual, so a basis that is free there is refused.
 
-`SimpleSplines` counts the **degree** of a basis where the old constructors of this family took an
-**order**, so a trace basis whose old `k` was `4` is built here with `degree = 3`.
+`SimpleSplines` counts the **degree** of a basis and not its **order**, so a trace basis of order
+`4` is built with `degree = 3`.
 
 ## The fits
 

@@ -1,7 +1,7 @@
 using GeometricBase
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: BLAS, norm
+using LinearAlgebra: BLAS
 using MultisymplecticIntegrators
 using Random
 using Test

@@ -1,7 +1,7 @@
 using GeometricBase
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: BLAS, norm
+using LinearAlgebra: BLAS
 using MultisymplecticIntegrators
 using Random
 using SimpleSplines
@@ -177,7 +177,7 @@ function record_run(record::Symbol, ::Type{T}, name::Symbol, cache, deviation,
 end
 
 """
-    assert_boundary_data(problem, ansatz, sides, bottom)
+    assert_boundary_data(problem, xa, xb)
 
 The premise of the §A comparison: the boundary function is the exact solution at the two ends, and
 the initial condition is the exact solution at the start of the run.
@@ -207,7 +207,7 @@ end
         method = lifting_method(T)
         N = length(cache(GeometricIntegrator(problem, method)).x)
         θ = 2 .* rand(Xoshiro(20261110), T, N) .- 1
-        int, c, solstep, b = lifting_slab(problem, method, θ)
+        _, c, solstep, b = lifting_slab(problem, method, θ)
         h = timestep(problem)
         t̂, x = M.quadrature_points(c.ansatz)
         xa, xb = xspan(problem)
@@ -323,7 +323,7 @@ end
         N = unknown_count(oracle)
         # the first slab
         θ = 2 .* rand(Xoshiro(20261110), T, N) .- 1
-        int, c, solstep, b = lifting_slab(problem, method, θ)
+        _, c, _, b = lifting_slab(problem, method, θ)
         @test N == length(c.x)
         ∇S = oracle_residual(oracle, first_datum(oracle), θ)
         @test maximum(abs, ∇S) ≥ T(1 // 100)
@@ -381,7 +381,7 @@ end
         params = parameters(problem)
         for _ in 1:16
             θ = 2 .* rand(rng, T, N) .- 1
-            int, c, solstep, _ = lifting_slab(problem, method, θ)
+            int, _, solstep, _ = lifting_slab(problem, method, θ)
             s = solver(int)
             SimpleSolvers.jacobian!(s, θ, (current(solstep), params, int))
             J = copy(SimpleSolvers.jacobianmatrix(s))
@@ -411,8 +411,8 @@ end
 
             W[3S + (s - 1) * 2 + d] = θ[3S + s]
         end
-        int₁, c₁, solstep₁, b₁ = lifting_slab(problem₁, method₁, θ)
-        int₂, c₂, solstep₂, b₂ = lifting_slab(problem₂, method₂, W)
+        _, c₁, _, b₁ = lifting_slab(problem₁, method₁, θ)
+        _, c₂, _, b₂ = lifting_slab(problem₂, method₂, W)
         # a transform that lifts one component alone leaves the other component's field, and its
         # rows, off the scalar run's
         tol = 10 * eps(T) *
@@ -555,7 +555,7 @@ end
         # the residual is the oracle's gradient on a problem that has no exact solution at all
         N = unknown_count(ActionOracle(problem, method))
         θ = 2 .* rand(Xoshiro(20261114), T, N) .- 1
-        int, c, solstep, b = lifting_slab(problem, method, θ)
+        _, c, solstep, b = lifting_slab(problem, method, θ)
         oracle = ActionOracle(problem, method)
         ∇S = oracle_residual(oracle, first_datum(oracle), θ)
         @test maximum(abs, b - ∇S) ≤ 100 * eps(T) * maximum(abs, ∇S)
@@ -626,8 +626,6 @@ end
     end
 
     @testset "A1 the Wave sounding, $T" for T in (Float64,)
-        params = (c = T(0.5), l = T(1.0), A1 = T(0.8), A2 = T(0.0), B1 = T(0.8),
-            B2 = T(0.0))
         problem = lifting_problem(T; steps = 5, timespan = (zero(T), T(0.25)))
         xa, xb = xspan(problem)
         assert_boundary_data(problem, xa, xb)

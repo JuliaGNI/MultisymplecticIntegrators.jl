@@ -3,11 +3,10 @@
 #
 # The driver includes this file through its `*_model.jl` glob, so this is the only place the
 # family's constructor calls are written. The family is the network ansatz under the
-# hard-constraint lifting coupling, which imposes the slab's data on the field by construction: the
-# old `TrialNN_PDE_int` brought back, on the seam the other families share.
+# hard-constraint lifting coupling, which imposes the slab's data on the field by construction.
 #
-# `SimpleSplines` counts the degree where the old constructor took an order, so an entry's `degree`
-# is one less than the `k` of the old record it reproduces.
+# `SimpleSplines` counts the degree of a basis and not its order, so an entry's `degree` is one less
+# than the order `k` of the reference record it reproduces.
 
 using MultisymplecticIntegrators
 

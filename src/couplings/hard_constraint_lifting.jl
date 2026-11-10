@@ -85,11 +85,12 @@ space derivative `w` at the nodes of the rule the residual reads, and one scratc
 `start` is the physical time of the slab's bottom, so that a side value is read at `start + h t̂`,
 and it moves with the slab; the datum's two arrays move with it too.
 
-`work` is laid out in three parts, the last empty where the ansatz carries no basis of its own:
+`work` is laid out in four parts, the last empty where the ansatz carries no basis of its own:
 
   - the field of the two corners, `(0, a)` and `(0, b)`, as `[u; ∂_t̂u; ∂ₓu]`, `6D` entries;
   - their derivative with respect to the `nf` free parameters, `6D · nf` entries, entry `(i, k)` of
     the `k`-th parameter at `6D + (k - 1) · 6D + i`;
+  - the space nodes of the datum, one per row of `bottom_u`;
   - the traces of the basis of a coefficient ansatz at the three boundary parts: the space
     functions at the two ends of `xspan`, `2 · Nx` entries, and the time functions at the slab's
     bottom, `Nt` entries.
@@ -434,11 +435,11 @@ function transform_field!(
         end
     end
     # ---- the two ends: the projection's term there, and the side values the lift puts beside it
-    for (corner, point) in ((1, xa), (2, xb))
-        ψ′ = (corner == 1 ? -oneST : oneST) / span
-        for q in axes(u, 1)
-            tq = t̂[q]
-            sides = problem.bcs_function(data.start + hh * convert(ST, tq), params)
+    for q in axes(u, 1)
+        tq = t̂[q]
+        sides = problem.bcs_function(data.start + hh * convert(ST, tq), params)
+        for (corner, point) in ((1, xa), (2, xb))
+            ψ′ = (corner == 1 ? -oneST : oneST) / span
             values = corner == 1 ? sides.left : sides.right
             evaluate_at!(block, tq, convert(ST, point))
             for r in axes(u, 2)
@@ -613,11 +614,11 @@ function transform_field!(
         end
     end
     # ---- the two ends
-    for (corner, point) in ((1, xa), (2, xb))
-        ψ′ = (corner == 1 ? -oneST : oneST) / span
-        for q in axes(u, 1)
-            tq = t̂[q]
-            sides = problem.bcs_function(data.start + hh * convert(ST, tq), params)
+    for q in axes(u, 1)
+        tq = t̂[q]
+        sides = problem.bcs_function(data.start + hh * convert(ST, tq), params)
+        for (corner, point) in ((1, xa), (2, xb))
+            ψ′ = (corner == 1 ? -oneST : oneST) / span
             values = corner == 1 ? sides.left : sides.right
             for r in axes(u, 2)
                 xr = convert(ST, x[r])
