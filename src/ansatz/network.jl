@@ -267,6 +267,75 @@ function fit!(w::AbstractVector{ST}, method::TrainedHiddenLayer, ansatz::Network
 end
 
 """
+    fit!(w, method::PINNTraining, ansatz::NetworkAnsatz, sample, cache)
+
+Fit the network to a slab's sampled target by `epochs` passes over the sample's `points`, one
+gradient-descent step of the method's fixed `step` per batch of `batch` consecutive points, on that
+batch's mean squared residual of the field against the sample's `values`. The points keep the order
+they were drawn in, and the last batch, which is the shorter one, is averaged over its own size.
+`sample` is the named tuple `(; points, values, start)` that [`fit_sample`](@ref) returns for the
+method.
+
+The fit draws no point and evaluates no target: both are the sample's. It takes the sample's `start`
+where the free entries of `w` are all zero — a `tanh` network is stationary at the zero parameters
+every block begins with — and the parameters it is given anywhere else, so a `:last_layer` fit
+leaves the block's hidden layer untouched either way. The gradient is the derivative of the field
+with respect to each free parameter, which the block's `gradient` holds at every point it evaluates,
+so the descent needs no differentiation of its own. The batch gradient is allocated once, before the
+epoch loop, and each point is evaluated into the block's own scratch, so no epoch and no batch
+allocates.
+
+The free parameters alone are written, and they are written into the block as well as into `w`, so
+that the evaluation of every point reads the parameters the descent has reached; a parameter the
+mode holds fixed keeps its value.
+"""
+function fit!(w::AbstractVector{ST}, method::PINNTraining, ansatz::NetworkAnsatz,
+        sample::NamedTuple, c::SpaceTimeGalerkinCache) where {ST}
+    s = c.ansatz
+    D, nf, lo = ansatz.D, ansatz.nfree, ansatz.first_free
+    points, values = sample.points, sample.values
+    n = size(points, 1)
+    gradient = zeros(ST, nf)
+    # the block's parameters start at zero, and the derivative of a `tanh` network is zero there:
+    # the sample's drawn start stands in for them, once, until a fit has moved them
+    if all(k -> iszero(w[lo + k - 1]), 1:nf)
+        for k in 1:nf
+            w[lo + k - 1] = sample.start[k]
+        end
+    end
+    # the block's parameters are the ones the caller's vector holds, so that the first batch reads
+    # what `w` holds and not what the block was built with
+    for k in 1:nf
+        s.params[lo + k - 1] = w[lo + k - 1]
+    end
+    for _ in 1:method.epochs
+        first = 1
+        while first <= n
+            last = min(first + method.batch - 1, n)
+            fill!(gradient, zero(ST))
+            for i in first:last
+                evaluate_at!(s, points[i, 1], points[i, 2])
+                for d in 1:D
+                    misfit = s.values[d] - values[i, d]
+                    for k in 1:nf
+                        gradient[k] += misfit * s.gradient[d, lo + k - 1]
+                    end
+                end
+            end
+            # one step per batch, on that batch's mean squared residual: the last batch is the
+            # shorter one and is averaged over its own size
+            rate = convert(ST, 2 * method.step / (last - first + 1))
+            for k in 1:nf
+                w[lo + k - 1] -= rate * gradient[k]
+                s.params[lo + k - 1] = w[lo + k - 1]
+            end
+            first = last + 1
+        end
+    end
+    return w
+end
+
+"""
     fit_sample(method, interior, target, cache, ansatz, problem, sol)
 
 The sample a fit method takes, from the target's `interior` sample at the nodes of the ansatz's own
@@ -296,6 +365,43 @@ function fit_sample(::TrainedHiddenLayer, interior::AbstractArray{ST, 3}, target
             xspan(ansatz)[r])
     end
     return (; interior, faces)
+end
+
+"""
+    fit_sample(::PINNTraining, interior, target, cache, ansatz, problem, sol)
+
+The sample of a [`PINNTraining`](@ref) fit: `nsamples` points of the slab drawn uniformly over
+`[0, 1] × xspan` from a copy of the method's generator, and the value of the target at each of them,
+read by [`target_point!`](@ref) so that every target of the guess answers at the physical time of
+its point. The points are drawn afresh at every call and the method's own generator is never
+advanced, so two fits that share one method object draw the same points. Each coordinate is one
+`Float64` draw rounded to the element type, so a fit in `Float32` reads the points of the same fit
+in `Float64`.
+
+Beside them the sample carries `start`: one value in `[-1, 1]` per free parameter, drawn from the
+same copy of the generator after the points. A network whose parameters are all zero has a zero
+derivative with respect to every one of them, so `fit!` starts from `start` there and from the
+parameters it is given anywhere else.
+"""
+function fit_sample(method::PINNTraining, interior::AbstractArray{ST, 3}, target, c,
+        ansatz::NetworkAnsatz, problem::LagrangianPDEProblem, sol) where {ST}
+    n, D = method.nsamples, ansatz.D
+    xa, xb = xspan(ansatz)
+    rng = copy(method.rng)
+    points = Matrix{ST}(undef, n, 2)
+    values = Matrix{ST}(undef, n, D)
+    for i in 1:n
+        t̂ = convert(ST, rand(rng))
+        x = convert(ST, xa + (xb - xa) * rand(rng))
+        points[i, 1] = t̂
+        points[i, 2] = x
+        target_point!(view(values, i, :), target, c, ansatz, problem, sol, t̂, x)
+    end
+    start = Vector{ST}(undef, ansatz.nfree)
+    for k in 1:ansatz.nfree
+        start[k] = convert(ST, 2 * rand(rng) - 1)
+    end
+    return (; points, values, start)
 end
 
 """

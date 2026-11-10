@@ -100,6 +100,67 @@ function TrainedHiddenLayer(; epochs::Integer = 100, learning_rate::Real = 1e-5,
 end
 
 """
+    PINNTraining(; epochs = 100, step = 1e-2, batch = 100, nsamples = 5_000,
+                 rng = Xoshiro(1234)) <: SlabFitMethod
+
+The fit method of a [`NetworkAnsatz`](@ref) that trains every free parameter of the network against
+a sample of the slab's target, by plain gradient descent: `epochs` passes over the `nsamples` points
+of the slab's target, each pass cut into consecutive batches of `batch` points in their drawn order,
+with one step of the fixed `step` per batch on that batch's mean squared residual.
+
+The points are drawn once per fit, uniformly over `[0, 1] × xspan`, from a copy of `rng` taken at
+the call and never from the process's global generator, so one method object gives every integrator
+that shares it the same points and the same fitted parameters. The target is evaluated at each of
+them by [`target_point!`](@ref), so every target of the guess is read at the physical time of its
+point. The gradient is the derivative of the field with respect to each free parameter, which the
+ansatz's block already carries: the fit needs no differentiation and no optimiser package.
+
+The descent writes the free parameters alone and leaves the parameters the mode holds fixed at their
+values, so a `:last_layer` network keeps its hidden layer. A fresh block's hidden layer is zero and
+no `PINNTraining` fit writes it, so on a `:last_layer` network of `tanh` units the field and its
+derivative with respect to every output weight stay zero, and the fit leaves the field at zero. Its
+one buffer, the batch gradient, is allocated once per call, before the epoch loop, and no epoch and
+no batch allocates.
+
+```julia
+method = SpaceTimeGalerkin(NetworkAnsatz(S = 10, xspan = (0.0, 1.0), ncells = (2, 5),
+        degree = 3), WeakInitialAndBoundaryConditions();
+    initial_guess = FitTo(InitialCondition(); method = PINNTraining(epochs = 100)))
+```
+"""
+struct PINNTraining{R <: AbstractRNG} <: SlabFitMethod
+    epochs::Int
+    step::Float64
+    batch::Int
+    nsamples::Int
+    rng::R
+end
+
+function PINNTraining(; epochs::Integer = 100, step::Real = 1e-2, batch::Integer = 100,
+        nsamples::Integer = 5_000, rng::AbstractRNG = Xoshiro(1234))
+    epochs ≥ 0 || throw(ArgumentError("epochs must be at least 0, got $epochs"))
+    isfinite(step) && step ≥ 0 ||
+        throw(ArgumentError("step must be finite and at least 0, got $step"))
+    batch ≥ 1 || throw(ArgumentError("batch must be at least 1, got $batch"))
+    nsamples ≥ 1 || throw(ArgumentError("nsamples must be at least 1, got $nsamples"))
+    return PINNTraining(Int(epochs), Float64(step), Int(batch), Int(nsamples), rng)
+end
+
+"""
+    fit!(coeffs, method::PINNTraining, ansatz, sample, cache)
+
+Refuse a [`PINNTraining`](@ref) fit on an ansatz that is not a [`NetworkAnsatz`](@ref): the descent
+reads the derivative of the field with respect to each free parameter, and only a network's block
+carries it. The two `apply_guess!` methods that fit — a coefficient ansatz's and a network's — call
+`fit!`, so the refusal is this one method, at the first fit rather than when the integrator is
+built. An ansatz whose `apply_guess!` has no `FitTo` method — a [`SymbolicAnsatz`](@ref), for one —
+raises a `MethodError` there, before any fit.
+"""
+function fit!(coeffs, ::PINNTraining, ansatz::SpaceTimeAnsatz, sample, cache)
+    throw(ArgumentError("PINNTraining needs a NetworkAnsatz; $(nameof(typeof(ansatz))) is not"))
+end
+
+"""
     default_fit(ansatz)
 
 The fit method `FitTo(target)` uses when the caller names none.

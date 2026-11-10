@@ -303,18 +303,20 @@ for a coupling whose free rows are all `Nt` rows.
 bottom_datum(::NoCouplingData) = nothing
 
 """
-    transform_field!(u, v, w, data, t̂, x, h, problem)
+    transform_field!(u, v, w, data, block, t̂, x, h, problem)
 
 The coupling's transform of the field, applied to the ansatz's field `u` and its derivatives
 `v = ∂ₜu` and `w = ∂ₓu` at the points `(t̂[q], x[r])` of the slab, as `u[q, r, d]`, in place. `t̂` is
 the normalised time of the slab, so the physical-time derivative of a term `ℓ(t̂, x)` is
-`∂_{t̂}ℓ / h`.
+`∂_{t̂}ℓ / h`. `data` is the coupling's block and `block` the ansatz's, so that a transform that is
+not a function of the point alone — one that projects the field, for instance — reads the
+parameters the step is solving for.
 
 The core applies it wherever it evaluates the field: in the residual, at the nodes of the slab's
 quadrature, and at the top of the slab, in the trace and in the solution. The default leaves the
 field as the ansatz gives it; a coupling that lifts the field adds its lift here.
 """
-transform_field!(u, v, w, ::CouplingData, t̂, x, h, problem) = nothing
+transform_field!(u, v, w, ::CouplingData, block, t̂, x, h, problem) = nothing
 
 """
     coupling_internal(coupling, ansatz, problem)
@@ -438,8 +440,10 @@ The slab cache at element type `ST`, and at the problem's own element type.
 
 The ecosystem's accessor takes the element type as a value, which the compiler cannot specialise on,
 so the type assertion of the cache dictionary rebuilds the cache's type at every lookup. These two
-methods take it as a type parameter, which lets that assertion fold away, so that one slab's residual
-evaluation allocates nothing.
+methods take it as a type parameter, which lets that assertion fold away, so that the lookup adds no
+allocation to one slab's residual evaluation. The transform of [`HardConstraintLifting`](@ref)
+allocates on its own: it calls the problem's boundary function at every time node of the slab, and
+it builds its scratch arrays for a coefficient ansatz at every call.
 """
 @inline function cache(
         int::GeometricIntegrator{<:SpaceTimeGalerkin, <:LagrangianPDEProblem}, ::Type{ST}) where {ST}
@@ -520,7 +524,7 @@ function slab_residual!(
     h = timestep(problem)
     slab_field!(c.u, c.v, c.w, c.ansatz, x, bottom_datum(c.coupling), nf, h)
     tnodes, xnodes = quadrature_points(c.ansatz)
-    transform_field!(c.u, c.v, c.w, c.coupling, tnodes, xnodes, h, problem)
+    transform_field!(c.u, c.v, c.w, c.coupling, c.ansatz, tnodes, xnodes, h, problem)
     density_derivatives!(c.du, c.dv, c.dw, problem.density, c.u, c.v, c.w,
         parameters(problem))
     slab_weak_form!(c.ansatz, c.du, c.dv, c.dw, h)
@@ -578,7 +582,7 @@ function top_field!(u::AbstractMatrix, v::AbstractMatrix, w::AbstractMatrix,
     top_values!(u, v, w, c.ansatz, evaluation, h)
     n, D = size(u)
     transform_field!(reshape(u, 1, n, D), reshape(v, 1, n, D), reshape(w, 1, n, D),
-        c.coupling, (one(ST),), evaluation_points(evaluation), h, problem)
+        c.coupling, c.ansatz, (one(ST),), evaluation_points(evaluation), h, problem)
     return nothing
 end
 
