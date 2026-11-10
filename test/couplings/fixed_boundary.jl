@@ -263,11 +263,19 @@ const PROBLEMS = Dict(
                            "coupling, got $(nameof(typeof(coupling)))\$") GeometricIntegrator(
             problem, SpaceTimeGalerkin(a, coupling))
     end
+    # A lifting coupling pairs with a network or a spline, so its own refusal names those two; on a
+    # fixed-boundary network the refusal is this intersection's, and it is this message.
+    @test_throws r"^ArgumentError: a FixedBoundaryNetwork takes the FixedBoundary coupling, got HardConstraintLifting$" GeometricIntegrator(
+        problem, SpaceTimeGalerkin(a, HardConstraintLifting()))
     method = SpaceTimeGalerkin(a, FixedBoundary())
     int = GeometricIntegrator(problem, method)
     @test default_solver(method) isa LevenbergMarquardt
     @test solver(int) isa M.LevenbergMarquardtSolver
     @test length(cache(int).x) == 28
+    # A `PINNTraining` fit on a fixed-boundary network matches the network's refusal for any fit
+    # method and `PINNTraining`'s refusal for any ansatz, so it reaches this intersection's.
+    @test_throws r"^ArgumentError: a FixedBoundaryNetwork is fitted by BubbleGreedy, got PINNTraining$" M.fit!(
+        zeros(1), PINNTraining(epochs = 0), a, nothing, cache(int))
     @test M.coupling_unknowns(FixedBoundary(), a, problem) == 0
     @test M.free_rows(FixedBoundary(), a) == 28
     @test total_free_coefficients(method, problem) == 28
@@ -597,7 +605,10 @@ end
             worst = max(worst, ratio)
             @test ratio ≤ 1
         end
-        @info "FB5 the reduced Jacobian against differences" name=name form=form worst=worst
+        @info("FB5 the reduced Jacobian against differences",
+            VERSION, name=name, form=form,
+            worst=worst, machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
+            blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
         # 3. one projected step: its recorded residual is the test's own full-system `‖F‖`
         guess = c.x
         r₀ = norm(slab_residual(int, guess, p))
@@ -787,8 +798,11 @@ end
     xs = collect(range(grid[1], grid[2]; length = 21))
     error = maximum(abs(WF.solution_u(t[end], x, parameters(problem)) - u[end][i])
     for (i, x) in enumerate(xs))
-    @info "FB9 the dead branch's twenty steps" error=error worst_ratio=maximum(stats.residuals ./
-                                                                               stats.initial_residuals)
+    @info("FB9 the dead branch's twenty steps", VERSION, error=error,
+        worst_ratio=maximum(stats.residuals ./ stats.initial_residuals),
+        machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
+        blas_threads=BLAS.get_num_threads(),
+        check_bounds=Base.JLOptions().check_bounds)
     @test 5.96e-4 ≤ error ≤ 7.28e-4
     # N20's `Float32` arm: two steps, recorded, and only the element types asserted
     problem32 = WF.problem(T = Float32, timespan = (0.0f0, 0.1f0), timestep = 0.05f0,
@@ -798,8 +812,11 @@ end
     method32 = SpaceTimeGalerkin(ansatz32, FixedBoundary(); initial_guess = Continuation())
     result32 = integrate(problem32, method32; solver = Newton(), max_iterations = 60,
         f_abstol = 0.0f0, f_reltol = fixed_boundary_f_reltol(Float32), verbosity = 0)
-    @info "FB9 the dead branch's Float32 arm" ratios = result32.stats.residuals ./
-                                                       result32.stats.initial_residuals
+    @info("FB9 the dead branch's Float32 arm", VERSION,
+        ratios=result32.stats.residuals ./ result32.stats.initial_residuals,
+        machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
+        blas_threads=BLAS.get_num_threads(),
+        check_bounds=Base.JLOptions().check_bounds)
     @test length(result32.stats.converged) == 2
     assert_no_upcast(result32.solution.u, Float32)
     @test all(isreal, result32.stats.residuals)

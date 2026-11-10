@@ -1019,6 +1019,40 @@ function fixed_boundary_action(o::FixedBoundaryOracle{T}, datum, z) where {T}
     return action
 end
 
+"""
+    oracle_residual(o::FixedBoundaryOracle, datum, θ)
+
+The residual of a fixed-boundary slab at the solver's vector `θ`, from the gradient of
+[`fixed_boundary_action`](@ref): `p₀ + ∂S/∂φ₀` on the equations of the solved level, and `∂S/∂Θ`
+behind them. The third block of the gradient, `∂S/∂φ₁`, is the momentum the step hands on.
+"""
+function oracle_residual(o::FixedBoundaryOracle{T}, datum, θ::AbstractVector{T}) where {T}
+    a = o.ansatz
+    nfp, nf = length(M.spatial_free(a)), M.nfree(a)
+    g = action_gradient(z -> fixed_boundary_action(o, datum, z), oracle_vector(o, datum, θ))
+    R = zeros(T, nf)
+    for k in 1:nfp
+        R[k] = datum.momentum[k] + g[k]
+    end
+    for k in (nfp + 1):nf
+        R[k] = g[nfp + k]
+    end
+    return R
+end
+
+"""
+    oracle_momentum(o::FixedBoundaryOracle, datum, θ)
+
+The block of the action's gradient that the step hands on: `∂S/∂φ₁` at the free parameters of the
+solved level.
+"""
+function oracle_momentum(o::FixedBoundaryOracle{T}, datum, θ::AbstractVector{T}) where {T}
+    a = o.ansatz
+    nfp = length(M.spatial_free(a))
+    g = action_gradient(z -> fixed_boundary_action(o, datum, z), oracle_vector(o, datum, θ))
+    return g[(nfp + 1):(nfp + nfp)]
+end
+
 # ---- the lifting coupling --------------------------------------------------
 #
 # The oracle of a network slab under a coupling that lifts the field onto the slab's data: the field
@@ -1178,42 +1212,6 @@ function lifting_action(o::NetworkLiftingOracle{T}, datum::LiftingDatum{T},
 end
 
 """
-
-    oracle_residual(o::FixedBoundaryOracle, datum, θ)
-
-The residual of a fixed-boundary slab at the solver's vector `θ`, from the gradient of
-[`fixed_boundary_action`](@ref): `p₀ + ∂S/∂φ₀` on the equations of the solved level, and `∂S/∂Θ`
-behind them. The third block of the gradient, `∂S/∂φ₁`, is the momentum the step hands on.
-"""
-function oracle_residual(o::FixedBoundaryOracle{T}, datum, θ::AbstractVector{T}) where {T}
-    a = o.ansatz
-    nfp, nf = length(M.spatial_free(a)), M.nfree(a)
-    g = action_gradient(z -> fixed_boundary_action(o, datum, z), oracle_vector(o, datum, θ))
-    R = zeros(T, nf)
-    for k in 1:nfp
-        R[k] = datum.momentum[k] + g[k]
-    end
-    for k in (nfp + 1):nf
-        R[k] = g[nfp + k]
-    end
-    return R
-end
-
-"""
-    oracle_momentum(o::FixedBoundaryOracle, datum, θ)
-
-The block of the action's gradient that the step hands on: `∂S/∂φ₁` at the free parameters of the
-solved level.
-"""
-function oracle_momentum(o::FixedBoundaryOracle{T}, datum, θ::AbstractVector{T}) where {T}
-    a = o.ansatz
-    nfp = length(M.spatial_free(a))
-    g = action_gradient(z -> fixed_boundary_action(o, datum, z), oracle_vector(o, datum, θ))
-    return g[(nfp + 1):(nfp + nfp)]
-end
-
-"""
-
     first_datum(o::NetworkLiftingOracle)
 
 The datum of the first lifted slab, from the problem alone: the initial condition's `u` and its
