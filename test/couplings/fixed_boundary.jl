@@ -25,21 +25,23 @@ const SG = M.SineGordon
 # ---- helpers -------------------------------------------------------------------------
 
 """
-    oracle_floor(oracle, datum, θ; perturbations = 8, seed = 0x5eed)
+    oracle_floor(oracle, datum, θ; perturbations = 8, seed = 0x5eed, rows = :)
 
 The round-off floor of the oracle's own gradient at `oracle_vector(oracle, datum, θ)`, which is the
 datum level's free parameters followed by `θ`: the largest change in that gradient, in the
-residual's layout, over `perturbations` seeded perturbations, each of `eps(T)` relative to an entry
-and an absolute `eps(T)` below one. It reads the oracle's action and nothing of the package.
+residual's layout — `p₀`'s rows and then `∂S/∂Θ`'s, as [`oracle_residual`](@ref) builds them —
+over `perturbations` seeded perturbations, each of `eps(T)` relative to an entry and an absolute
+`eps(T)` below one, read at the residual's rows `rows` alone (`:` is every row). It reads the
+oracle's action and nothing of the package.
 """
 function oracle_floor(oracle::FixedBoundaryOracle, datum, θ::AbstractVector{T};
-        perturbations = 8, seed = 0x5eed) where {T}
+        perturbations = 8, seed = 0x5eed, rows = :) where {T}
     a = oracle.ansatz
     nfp, nf = length(M.spatial_free(a)), M.nfree(a)
     z = oracle_vector(oracle, datum, θ)
     function gradient(v)
         g = action_gradient(w -> fixed_boundary_action(oracle, datum, w), v)
-        return vcat(view(g, 1:nfp), view(g, (nfp + 1):(nfp + nf)))
+        return vcat(view(g, 1:nfp), view(g, (2nfp + 1):(nfp + nf)))
     end
     g₀ = gradient(z)
     rng = Xoshiro(seed)
@@ -47,7 +49,7 @@ function oracle_floor(oracle::FixedBoundaryOracle, datum, θ::AbstractVector{T};
     for _ in 1:perturbations
         direction = 2 .* rand(rng, T, length(z)) .- 1
         z₊ = z .+ eps(T) .* direction .* max.(one(T), abs.(z))
-        floor = max(floor, maximum(abs, gradient(z₊) - g₀))
+        floor = max(floor, maximum(abs, view(gradient(z₊) - g₀, rows)))
     end
     return floor
 end
@@ -69,10 +71,13 @@ function compare_gradient(b, ∇S, ::Type{T}; oracle, datum, θ, label = (;)) wh
     floor = oracle_floor(oracle, datum, θ)
     @test floor ≤ 1e6 * eps(T) * scale
     @test maximum(abs, b - ∇S) ≤ max(100 * eps(T) * scale, floor)
-    @info("FB1 the gradient's floor", T=string(T), entry=label.entry, form=label.form,
-        mode=label.mode, slab=label.slab, scale=scale, floor=floor,
+    @info("FB1 the gradient's floor", VERSION, T=string(T), entry=label.entry,
+        form=label.form, mode=label.mode, slab=label.slab, scale=scale, floor=floor,
         ratio=Float64(floor/(eps(T)*scale)),
-        miss=Float64(maximum(abs, b-∇S)/(eps(T)*scale)))
+        miss=Float64(maximum(abs, b-∇S)/(eps(T)*scale)),
+        machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
+        blas_threads=BLAS.get_num_threads(),
+        check_bounds=Base.JLOptions().check_bounds)
     return nothing
 end
 
@@ -556,14 +561,20 @@ end
         r = slab_residual(int, x, p)
         reduced, _ = M.project!(x, f!, r, M.jacobian_of(f!, x, n), projected)
         floor = maximum(abs, view(oracle_residual(oracle, datum, x), projected))
-        # the same rule as FB1's: the inner solve's residual is compared with the larger of the
-        # old bound and the round-off floor of the oracle's own gradient at this point
-        noise = oracle_floor(oracle, datum, x)
+        # the same rule as FB1's, at the rows FB5 measures: the inner solve's residual is compared
+        # with the larger of the old bound and the round-off floor of the oracle's own gradient at
+        # this point, read at the projected rows
+        noise = oracle_floor(oracle, datum, x; rows = projected)
         @test noise ≤ 1e6 * eps(Float64) * scale
         @test floor ≤ max(100 * eps(Float64) * scale, noise)
-        @info "FB5 the inner solve" name=name form=form scale=scale floor=floor noise=noise
-        @info("FB5 the inner solve's floor", name=name, form=form,
-            ratio=Float64(noise/(eps(Float64)*scale)))
+        @info("FB5 the inner solve", VERSION, name=name, form=form, scale=scale,
+            floor=floor, noise=noise, machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
+            blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
+        @info("FB5 the inner solve's floor", VERSION, name=name, form=form,
+            ratio=Float64(noise/(eps(Float64)*scale)),
+            machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
+            blas_threads=BLAS.get_num_threads(),
+            check_bounds=Base.JLOptions().check_bounds)
         # 2. the Schur complement against central differences of z ↦ F_o(z, a*(z)), each inner solve
         # warm-started at the solved `a`
         solved = M.lm_solved_indices(n, projected)
