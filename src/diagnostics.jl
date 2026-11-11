@@ -89,20 +89,15 @@ end
 The relative deviation of a box scheme run's energy from its value at the first stored step, one
 value per stored step and the first of which is zero.
 
-The rule is the ansatz method's, and the nodes and the weights are the method's own: a box scheme's
-trace is stored at the nodes of the output grid, so its energy is the density's Hamiltonian there,
-integrated by that grid's trapezoidal rule, [`box_quadrature_weights`](@ref). The energy of the
-first step is therefore the closed form's energy at that step up to the scheme's own error, which is
-second order in the time step and in the space step.
+The deviation is the ansatz method's rule, and the quadrature is the method's own: a box scheme's
+trace is stored at the nodes of the output grid, and its energy is [`box_energies`](@ref)' series —
+the density's Hamiltonian at the mean of each box's two nodes, summed over the boxes with the boxes'
+widths as weights, which is the midpoint rule [`box_quadrature_weights`](@ref) gives. The energy of
+the first step is therefore the closed form's energy at that step up to the scheme's own error,
+which is second order in the time step and in the space step.
 """
-function energy_error(problem::LagrangianPDEProblem{T}, method::BoxScheme, traces) where {T}
-    isempty(traces) &&
-        throw(ArgumentError("the run stored no trace, so it has no energy; `integrate` returns " *
-                            "an empty `traces` for a run that took no step"))
-    energies = Vector{T}(undef, length(traces))
-    step_energies!(energies, problem.density, problem.params,
-        box_quadrature_weights(problem), traces, Val(problem.D))
-    return relative_deviation(energies)
+function energy_error(problem::LagrangianPDEProblem, method::BoxScheme, traces)
+    return relative_deviation(box_energies(problem, traces))
 end
 
 """
@@ -142,8 +137,9 @@ end
 """
     noether_charge(problem, method, traces) -> Union{Vector, Nothing}
 
-The rotation charge of every stored step, `J = ∫ (u₁ v₂ − u₂ v₁) dx` at the nodes the trace is
-stored on with the method's own weights, and `nothing` for a density without the symmetry.
+The rotation charge of every stored step, `J = ∫ (u₁ v₂ − u₂ v₁) dx` integrated by the method's own
+rule — at the nodes the trace of a slab method is stored on, and at the mean of each box's two nodes
+for the box scheme — and `nothing` for a density without the symmetry.
 
 The charge is conserved by a density that a rotation of the field's two components leaves
 invariant, and the package's `VectorWave` is the problem with it: its density is the sum of the two
@@ -159,7 +155,7 @@ function noether_charge(problem::LagrangianPDEProblem{T}, method::SpaceTimeMetho
         traces) where {T}
     has_rotation_symmetry(problem) || return nothing
     weights = trace_quadrature_weights(problem, method)
-    nq = length(weights)
+    nq = trace_nodes_per_component(method, weights)
     charges = Vector{T}(undef, length(traces))
     for (n, trace) in enumerate(traces)
         trace === nothing &&
@@ -168,18 +164,43 @@ function noether_charge(problem::LagrangianPDEProblem{T}, method::SpaceTimeMetho
         length(trace.u) == 2nq ||
             throw(ArgumentError("the trace of step $n holds $(length(trace.u)) entries of `u`, " *
                                 "and the charge of two components needs $(2nq)"))
-        charge = zero(eltype(trace.u))
-        for j in 1:nq
-            charge += weights[j] *
-                      (trace.u[j] * trace.v[nq + j] - trace.u[nq + j] * trace.v[j])
-        end
-        charges[n] = T(charge)
+        charges[n] = T(trace_charge(method, weights, trace, nq))
     end
     return charges
 end
 
-# The weights the trace of a method is stored on: the ansatz's space quadrature for a slab method,
-# and the output grid's trapezoidal rule for the box scheme.
+# The number of nodes of one component of a trace, which the method's quadrature is read on: one
+# node per weight for a slab method, and the ends of the boxes for the box scheme.
+trace_nodes_per_component(::SpaceTimeMethod, weights) = length(weights)
+
+trace_nodes_per_component(::BoxScheme, weights) = length(weights) + 1
+
+# The rotation charge of one stored trace, `u₁ v₂ − u₂ v₁` integrated by the method's own rule: a
+# slab method reads the trace at its nodes, one weight each.
+function trace_charge(::SpaceTimeMethod, weights::AbstractVector, trace, nq::Integer)
+    charge = zero(eltype(trace.u))
+    for j in 1:nq
+        charge += weights[j] * (trace.u[j] * trace.v[nq + j] - trace.u[nq + j] * trace.v[j])
+    end
+    return charge
+end
+
+# The box scheme's charge takes the rule its energy takes: one weight per box, and the rotation
+# density at the mean of the box's two nodes.
+function trace_charge(::BoxScheme, weights::AbstractVector, trace, nq::Integer)
+    charge = zero(eltype(trace.u))
+    for j in 1:(nq - 1)
+        charge += weights[j] * (box_mean(trace.u[j], trace.u[j + 1]) *
+                   box_mean(trace.v[nq + j], trace.v[nq + j + 1]) -
+                   box_mean(trace.u[nq + j], trace.u[nq + j + 1]) *
+                   box_mean(trace.v[j], trace.v[j + 1]))
+    end
+    return charge
+end
+
+# The weights of the rule a method's charge is integrated by: the ansatz's space quadrature for a
+# slab method, one weight per node of the trace, and the box scheme's midpoint rule, one weight per
+# box.
 function trace_quadrature_weights(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin)
     return space_quadrature_weights(ansatz(method))
 end
@@ -289,12 +310,26 @@ function step_energies!(energies::AbstractVector, density, params, weights::Abst
     return energies
 end
 
-# The energy of one trace, as the quadrature sum of the energy density at its nodes. A trace with
-# `D` components is component-major, one block of `nq` entries per component, and the same number of
-# entries in `u`, `v` and `w`: a trace of another shape is refused before it is read, because a
-# floored node count would drop the surplus entries in silence.
+# The energy of one trace, as the quadrature sum of the energy density at its nodes, one weight per
+# node.
 function step_energy(density, params, weights::AbstractVector, trace, n::Integer,
         ::Val{D}) where {D}
+    nq = trace_node_count(trace, n, Val(D))
+    length(weights) == nq ||
+        throw(ArgumentError("the trace holds $(nq) nodes per component and the quadrature " *
+                            "$(length(weights))"))
+    energy = zero(eltype(trace.u))
+    for j in 1:nq
+        energy += weights[j] * node_energy_density(density, trace, j, nq, Val(D), params)
+    end
+    return energy
+end
+
+# The number of nodes per component of one stored trace. A trace with `D` components is
+# component-major, one block of `nq` entries per component, and the same number of entries in `u`,
+# `v` and `w`: a trace of another shape is refused before it is read, because a floored node count
+# would drop the surplus entries in silence.
+function trace_node_count(trace, n::Integer, ::Val{D}) where {D}
     trace === nothing &&
         throw(ArgumentError("the run stored no trace at step $n; the energy of a step needs " *
                             "the trace `(u, v, w)` at the nodes of the space quadrature"))
@@ -307,14 +342,7 @@ function step_energy(density, params, weights::AbstractVector, trace, n::Integer
     iszero(remainder) ||
         throw(ArgumentError("the trace of step $n holds $(entries) entries, which is not a " *
                             "whole number of the problem's $(D) components"))
-    length(weights) == nq ||
-        throw(ArgumentError("the trace holds $(nq) nodes per component and the quadrature " *
-                            "$(length(weights))"))
-    energy = zero(eltype(trace.u))
-    for j in 1:nq
-        energy += weights[j] * node_energy_density(density, trace, j, nq, Val(D), params)
-    end
-    return energy
+    return nq
 end
 
 # A density of one component at a time is applied to each component of the node, which is the split
@@ -350,6 +378,89 @@ end
     D === 1 && return values[j]
     return ntuple(d -> values[(d - 1) * nq + j], Val(D))
 end
+
+"""
+    box_energies(problem, traces) -> Vector
+
+The energy of every stored step of a box scheme run: the density's Hamiltonian read at the mean of
+each box's two nodes and summed over the boxes with the boxes' widths as weights,
+`Σ Δx · H(½(zⱼ + zⱼ₊₁))`, which is the midpoint rule.
+
+This is the series [`energy_error`](@ref)'s box method reports the deviation of, and it is the one
+value of the run a caller can hold against the density's closed form: at the initial level the trace
+is the problem's own initial data, so the sum there is the Hamiltonian at `t₀` and not a
+discretisation of it.
+"""
+function box_energies(problem::LagrangianPDEProblem{T}, traces) where {T}
+    isempty(traces) &&
+        throw(ArgumentError("the run stored no trace, so it has no energy; `integrate` returns " *
+                            "an empty `traces` for a run that took no step"))
+    energies = Vector{T}(undef, length(traces))
+    box_step_energies!(energies, problem.density, problem.params,
+        box_quadrature_weights(problem), traces, Val(problem.D))
+    return energies
+end
+
+# The energy of every trace of a run under the midpoint rule over the boxes of the output grid.
+function box_step_energies!(
+        energies::AbstractVector, density, params, weights::AbstractVector,
+        traces, ::Val{D}) where {D}
+    for (n, trace) in enumerate(traces)
+        energies[n] = box_step_energy(density, params, weights, trace, n, Val(D))
+    end
+    return energies
+end
+
+# The energy of one trace under the midpoint rule: one weight per box, and the density at the mean of
+# the box's two nodes, which is a state the nodes themselves do not hold on a density that is not
+# linear in `(u, v, w)`.
+function box_step_energy(density, params, weights::AbstractVector, trace, n::Integer,
+        ::Val{D}) where {D}
+    nq = trace_node_count(trace, n, Val(D))
+    length(weights) == nq - 1 ||
+        throw(ArgumentError("the trace holds $(nq) nodes per component and the box quadrature " *
+                            "$(length(weights)) boxes"))
+    energy = zero(eltype(trace.u))
+    for j in 1:(nq - 1)
+        energy += weights[j] * box_energy_density(density, trace, j, nq, Val(D), params)
+    end
+    return energy
+end
+
+# A density of one component at a time is applied to each component of the box's mean state, as the
+# node rule applies it to each component of a node.
+@inline function box_energy_density(density::LagrangianDensity, trace, j::Integer,
+        nq::Integer, ::Val{D}, params) where {D}
+    energy = zero(eltype(trace.u))
+    for d in 1:D
+        i = (d - 1) * nq + j
+        energy += energy_density(density,
+            box_mean(trace.u[i], trace.u[i + 1]), box_mean(trace.v[i], trace.v[i + 1]),
+            box_mean(trace.w[i], trace.w[i + 1]), params)
+    end
+    return energy
+end
+
+# A density that takes the `D` components of one point at once gets them as a tuple, as the node rule
+# hands them to it.
+@inline function box_energy_density(density, trace, j::Integer, nq::Integer, ::Val{D},
+        params) where {D}
+    return energy_density(density,
+        box_node_values(trace.u, j, nq, Val(D)),
+        box_node_values(trace.v, j, nq, Val(D)),
+        box_node_values(trace.w, j, nq, Val(D)), params)
+end
+
+# One component's value at the mean of the two nodes of box `j`: the mean itself for a scalar field,
+# and the `D` means as a tuple for a vector one, for the reason `node_values` gives.
+@inline function box_node_values(values::AbstractVector, j::Integer, nq::Integer,
+        ::Val{D}) where {D}
+    D === 1 && return box_mean(values[j], values[j + 1])
+    return ntuple(d -> box_mean(values[(d - 1) * nq + j], values[(d - 1) * nq + j + 1]), Val(D))
+end
+
+# The mean of two node values: the midpoint rule's point, which is no node of the grid.
+@inline box_mean(a, b) = (a + b) / 2
 
 """
     solution_data(problem, result) -> (t, x, u)

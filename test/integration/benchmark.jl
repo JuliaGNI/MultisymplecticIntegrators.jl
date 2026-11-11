@@ -182,6 +182,33 @@ end
         end
         @test all(isfinite, archives[:vector_wave]["energy_drift"])
         @test first(archives[:vector_wave]["energy_drift"]) == 0
+
+        # The box scheme's energy is the midpoint rule over its boxes and not the trapezoidal rule
+        # at their nodes: `H` at the mean of each box's two nodes, `Σ Δx · H(½(zⱼ + zⱼ₊₁))`. The
+        # run's first level is the problem's own initial data, so its energy is the closed form's
+        # at `t₀` to round-off, while the two readings of the rule on that level differ by
+        # `6.2e-3` relative: the assertion is of the rule and not of the scheme's order.
+        wave = problem(:wave)
+        boxed = integrate(wave, BoxScheme())
+        initial = boxed.solution[0]
+        grid = collect(xgrid(wave))
+        t₀ = boxed.solution.t[0]
+        c = wave.params.c
+        # The wave density's Hamiltonian is `½v² + ½(c w)²`, written here from the density's closed
+        # form: the oracle is never the code under test, and `energy_density` is that code.
+        hamiltonian(u, v, w) = (v^2 + (c * w)^2) / 2
+        midpoint(z, j) = (z[j] + z[j + 1]) / 2
+        exact = [wave.solutions.u(t₀, grid, wave.params),
+            wave.solutions.v(t₀, grid, wave.params), wave.solutions.w(t₀, grid, wave.params)]
+        closed = sum((grid[j + 1] - grid[j]) *
+                     hamiltonian(midpoint(exact[1], j), midpoint(exact[2], j),
+                         midpoint(exact[3], j)) for j in 1:(length(grid) - 1))
+        energies = MultisymplecticIntegrators.box_energies(wave, [initial])
+        @test isapprox(first(energies), closed; rtol = 8 * eps(T))
+        drift = energy_error(wave, BoxScheme(), boxed.traces)
+        @test length(drift) == length(boxed.traces)
+        @test first(drift) == 0
+        @test all(isfinite, drift)
     end
 
     @testset "the timing record" begin

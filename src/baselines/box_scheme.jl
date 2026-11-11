@@ -51,8 +51,8 @@ determines the step, so the solve's residuals and its convergence are the run's 
 # The energy
 
 The energy that [`energy_error`](@ref) reports for a box scheme is the density's Hamiltonian at the
-nodes of the output grid, integrated by that grid's trapezoidal rule, which is
-[`box_quadrature_weights`](@ref).
+mean of each box's two nodes, summed over the boxes with the boxes' widths as weights — the midpoint
+rule [`box_quadrature_weights`](@ref) gives.
 """
 struct BoxScheme <: SpaceTimeMethod end
 
@@ -88,18 +88,19 @@ end
 """
     box_quadrature_weights(problem)
 
-The weights of the output grid's trapezoidal rule, which is the rule the box scheme's energy is
-integrated by: the trace lives at the nodes, so a node's weight is half the distance to each
-neighbour, and an end node gets half of its one-sided gap.
+The weights of the box scheme's quadrature, the midpoint rule: one weight per box of the output
+grid, the distance between its two nodes.
+
+The rule reads the density at the mean of a box's two nodes and not at the nodes themselves, so the
+weights are the boxes' and a grid of `nx` nodes has `nx − 1` of them: the energy of a step is
+`Σ Δx · H(½(zⱼ + zⱼ₊₁))`, and a node's own weight is not what this reports.
 """
 function box_quadrature_weights(problem::LagrangianPDEProblem{T}) where {T}
     nodes = xgrid(problem)
     nx = length(nodes)
-    weights = Vector{T}(undef, nx)
-    for j in 1:nx
-        left = j == 1 ? zero(T) : nodes[j] - nodes[j - 1]
-        right = j == nx ? zero(T) : nodes[j + 1] - nodes[j]
-        weights[j] = (left + right) / 2
+    weights = Vector{T}(undef, nx - 1)
+    for j in 1:(nx - 1)
+        weights[j] = nodes[j + 1] - nodes[j]
     end
     return weights
 end

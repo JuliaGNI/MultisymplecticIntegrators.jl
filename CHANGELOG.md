@@ -184,8 +184,8 @@ makes it worth keeping.
   of the top of the slab. The manual's page *The slab seam* states the roles of the ansatz, the
   coupling and the guess, what each keeps in the cache, and the functions of the seam.
 - **`integrate` returns `(; solution, traces, stats)`.** The solution on the output grid, per step
-  the top trace at the nodes of the space quadrature, where the energy diagnostics integrate it,
-  and `stats = (; iterations, residuals, initial_residuals, converged)`, the record of each step's
+  the top trace at the nodes the method stores it on, and
+  `stats = (; iterations, residuals, initial_residuals, converged)`, the record of each step's
   Newton solve, with one entry per stored trace. A step has converged when its residual is at most
   `f_abstol + f_reltol · r₀`, with the tolerances of the integrator's own solver options; the term
   in `r₀` counts only for a finite `r₀`, so a residual that is not finite never converges. A step
@@ -279,10 +279,11 @@ makes it worth keeping.
   problem the package integrates has a conserved quantity without a formula of its own. A density
   of one component at a time is applied to each component of the field, and a density that couples
   the components — `VectorWave.vector_density` for one — takes the vectors of a point and closes
-  the product as their inner product. `energy_error(problem, method, traces)` integrates it over
-  the space quadrature at the nodes the trace is stored on, taking the weights from the ansatz, and
-  returns the relative deviation from the first stored step: one value per step, the first of which
-  is zero. A first step whose energy vanishes falls back to the absolute deviation rather than a
+  the product as their inner product. `energy_error(problem, method, traces)` integrates a slab
+  method's trace at the ansatz's quadrature nodes with the ansatz's weights, and a box scheme's at
+  the mean of each box's two nodes with the boxes' widths, and returns the relative deviation from
+  the first stored step: one value per step, the first of which is zero. A first step whose energy
+  vanishes falls back to the absolute deviation rather than a
   `NaN`, and a run that stored no trace raises an `ArgumentError`; so does a trace whose `u`, `v`
   and `w` hold different numbers of entries, or whose length is not a whole number of the field's
   components. `solution_data(problem, result)` is the plain `(t, x, u)` a figure is drawn from, so
@@ -682,9 +683,9 @@ makes it worth keeping.
   diagnostics gain `error(problem, method, result)`, the error of every stored step against the
   problem's exact solution and `nothing` where the problem has none, `noether_charge`, the rotation
   charge of a density with that symmetry and `nothing` for one without it,
-  `energy_error(problem, ::BoxScheme, traces)` at the output grid's own rule, and `benchmark_panels`,
-  the data of the two comparison panels: the error of a run's last stored step against its cost and
-  against its wall time, one series per method.
+  `energy_error(problem, ::BoxScheme, traces)` as the midpoint rule over the boxes of the output
+  grid, and `benchmark_panels`, the data of the two comparison panels: the error of a run's last
+  stored step against its cost and against its wall time, one series per method.
 
 ### Changed
 

@@ -322,6 +322,36 @@ end
         end
     end
 
+    @testset "S2a the box's midpoint rule of a scalar density of another type" begin
+        # The box scheme reads its density at the mean of a box's two nodes, and a density that is
+        # not a `LagrangianDensity` gets that mean state as a scalar at `D = 1`, as the ansatz's node
+        # rule hands it one value per node. For `L = ½kv²` the energy density is `½kv²`, so the
+        # energy of a trace is the box sum of `½k v̄²`, which the test builds itself.
+        for T in (Float64, Float32)
+            problem = LagrangianPDEProblem(QuadraticDensity(T(2)); D = 1,
+                ics_function = (x, p) -> (u = zeros(T, length(x), 1),
+                    v = zeros(T, length(x), 1), w = zeros(T, length(x), 1)),
+                bcs_function = (t, p) -> nothing,
+                timespan = (zero(T), one(T)), timestep = T(0.1),
+                xspan = (zero(T), one(T)), xstep = T(0.1))
+            nodes = collect(xgrid(problem))
+            weights = box_quadrature_weights(problem)
+            @test length(weights) == length(nodes) - 1
+            # A profile that varies from node to node, so that a box's mean is no node's value.
+            profile = [one(T) + T(0.5) * (j - 1) / (length(nodes) - 1)
+                       for j in eachindex(nodes)]
+            traces = [(u = zeros(T, length(nodes)), v = copy(profile),
+                w = zeros(T, length(nodes)))]
+            boxed = MultisymplecticIntegrators.box_energies(problem, traces)
+            closed = sum(weights[j] * T(1) * ((profile[j] + profile[j + 1]) / 2)^2
+            for j in eachindex(weights))
+            @test isapprox(first(boxed), closed; rtol = 8 * eps(T))
+            # One stored trace has no deviation from itself, and what `energy_error` reports is the
+            # deviation of the series and not the energies themselves.
+            @test energy_error(problem, BoxScheme(), traces) == [zero(T)]
+        end
+    end
+
     @testset "S2a a per-component density sums the components of a node" begin
         # `VectorWave.problem` carries a `LagrangianDensity`, which `node_energy_density` applies to
         # each component of a node in turn. The energy of a `D = 2` trace is the sum of the two
@@ -432,6 +462,48 @@ end
                 xstep = base.xstep, params = base.params)
             @test unsolved.solutions === nothing
             @test error(unsolved, method, exact_run(scalar, ε)) === nothing
+        end
+    end
+
+    @testset "the rotation charge of a density with and without the symmetry" begin
+        # `VectorWave`'s density is a function of the components' lengths, so a rotation of the two
+        # components leaves it invariant and `∫ (u₁ v₂ − u₂ v₁)` is the run's conserved quantity.
+        # `LinearTransport`'s doubled field has two components and no such symmetry: its density
+        # reads one component against the other's velocity and slope. Whether the charge exists is
+        # decided on the density's values, so the component count is not what tells the two apart,
+        # and the answer is `nothing` for a density without the symmetry and a series for the other.
+        T = Float64
+        span = (zero(T), T(1) / 10)
+        vector = VectorWave.problem(T = T, timespan = span, timestep = T(1) / 20,
+            xstep = T(1) / 20)
+        transport = LinearTransport.problem(T = T, timespan = span, timestep = T(1) / 20,
+            xspan = (T(-1) / 2, zero(T)), xstep = T(1) / 20)
+        ansatz = TensorBSplineAnsatz(
+            degree = 2, ncells = (2, 10), xspan = (zero(T), one(T)),
+            n = 3)
+        method = SpaceTimeGalerkin(ansatz, CoefficientRestriction())
+        splined = integrate(vector, method)
+        charge = noether_charge(vector, method, splined.traces)
+        @test charge isa Vector{T}
+        @test length(charge) == length(splined.traces)
+        @test all(isfinite, charge)
+        @test abs(first(charge)) > eps(T)
+        # The box scheme keeps one convention for its energy and its charge: the charge of its run
+        # is integrated by the midpoint rule over its boxes, so it too is a series.
+        boxed = integrate(vector, BoxScheme())
+        boxed_charge = noether_charge(vector, BoxScheme(), boxed.traces)
+        @test boxed_charge isa Vector{T}
+        @test length(boxed_charge) == length(boxed.traces)
+        @test all(isfinite, boxed_charge)
+        @test abs(first(boxed_charge)) > eps(T)
+        # A density without the symmetry answers `nothing` under either rule, and the trace is never
+        # read for it: the decision comes first.
+        for problem in (
+            Wave.problem(T = T, timespan = span, timestep = T(1) / 20,
+            xstep = T(1) / 20),
+            transport)
+            @test noether_charge(problem, method, [nothing]) === nothing
+            @test noether_charge(problem, BoxScheme(), [nothing]) === nothing
         end
     end
 end
