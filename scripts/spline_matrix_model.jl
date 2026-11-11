@@ -89,7 +89,6 @@ needs: a row of it on a single field would have no transport equation to solve, 
 not `D = 1`.
 """
 function spline_matrix_problem(entry)
-    T = Float64
     timespan = SPLINE_TIMESPAN
     if entry.problem === :wave
         return Wave.problem(timespan = timespan, timestep = entry.resolution.timestep,

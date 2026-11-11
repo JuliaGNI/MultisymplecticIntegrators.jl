@@ -336,11 +336,12 @@ The residual of one step, in the solver's layout: for every component and every 
 of the first-order form at the centre of the box,
 
 ```math
--\\delta_t v - \\delta_x w = V'(u), \\qquad \\delta_t u = v, \\qquad \\delta_x u = w,
+\\delta_t v - c^2 \\delta_x w = -V'(u), \\qquad \\delta_t u = v, \\qquad \\delta_x u = w,
 ```
 
-where `δₜ` and `δₓ` are the box's own differences and the value on a right-hand side is the mean of
-the box's four corners. The rows are ordered component-major, the three rows of one box together.
+where `w` is the slope `∂ₓu` that the trace carries, `δₜ` and `δₓ` are the box's own differences and
+`V'(u)` is read at the mean of the box's four corners. The rows are ordered component-major, the
+three rows of one box together.
 """
 function box_residual!(b::AbstractVector, x::AbstractVector, c::BoxSchemeCache,
         problem::LagrangianPDEProblem)

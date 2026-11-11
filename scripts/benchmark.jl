@@ -28,7 +28,7 @@ const BENCHMARK_KEYS = ("kind", "stem", "label", "method", "problem", "tag", "re
 
 # The eight records of §A that the matrix keeps as historical data: five of the wave equation and
 # three of the sine-Gordon equation, from `test/helpers/reference_values.jl`, which is their only
-# machine-readable copy. They are named here because the set is the plan's decision and not a
+# machine-readable copy. They are named here because the set is a choice of names and not a
 # property of a record: seven of the eight carry `status = :ok`, and none of them is an oracle.
 #
 # The helper is loaded here unless the caller has loaded it already, so that a test which includes
@@ -398,8 +398,8 @@ why it has no numbers.
 
 The eight historical records of §A that a problem holds are appended to its table, marked
 `historical` and `unconverged`: they are the old stack's own numbers, from
-`test/helpers/reference_values.jl`, and the matrix reproduces none of them. The set is the plan's
-decision and not a query of a record's status, so a record that converged is still marked — which is
+`test/helpers/reference_values.jl`, and the matrix reproduces none of them. The set is a choice of
+names and not a query of a record's status, so a record that converged is still marked — which is
 what makes the comparison honest, and why the table reads the records by name. A record's series is
 its energy error — the relative error of its slabs' quadrature energy, the quantity the matrix's
 drift measures — so it is printed where a live row prints its energy drift and the record's error

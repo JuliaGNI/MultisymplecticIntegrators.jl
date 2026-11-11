@@ -75,6 +75,16 @@ function energy_error(problem::LagrangianPDEProblem{T}, ansatz::TensorBSplineAns
     return relative_deviation(energies)
 end
 
+"""
+    energy_error(problem, ansatz::SymbolicAnsatz, traces)
+
+The relative energy deviation of a symbolic run, read from the traces through the trace basis'
+space rule, which is the rule the trace is stored on.
+"""
+function energy_error(problem::LagrangianPDEProblem, ansatz::SymbolicAnsatz, traces)
+    energy_error(problem, ansatz.trace, traces)
+end
+
 # The deviation of an energy series from its first entry: relative where that entry is a scale, and
 # absolute where it vanishes, so that an all-zero first trace still has a series.
 function relative_deviation(energies)
@@ -289,16 +299,6 @@ function group_series(points)
                 x = [point.x for point in points if point.label == label],
                 y = [point.y for point in points if point.label == label])
             for label in labels]
-end
-
-"""
-    energy_error(problem, ansatz::SymbolicAnsatz, traces)
-
-The relative energy deviation of a symbolic run, read from the traces through the trace basis'
-space rule, which is the rule the trace is stored on.
-"""
-function energy_error(problem::LagrangianPDEProblem, ansatz::SymbolicAnsatz, traces)
-    energy_error(problem, ansatz.trace, traces)
 end
 
 # The energy of every trace of a run, one `step_energy` each.
