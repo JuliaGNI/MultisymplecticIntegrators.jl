@@ -188,12 +188,20 @@ end
 
 # The boundary data of the level being solved: `u` at both end nodes and `v` at the first, the three
 # of them per component.
+#
+# A problem whose side data carries `u` alone supplies no velocity datum, and the first node's `v` is
+# then the value the level the step starts from holds there: the initial data's on the first step,
+# and the previous step's afterwards. The first node's `v` is a datum of the scheme either way,
+# because it is what removes the alternating mode of `v`; a problem that supplies none is integrated
+# with the velocity it started with at that one node.
 function boundary_data!(c, sol, problem::LagrangianPDEProblem)
     side = problem.bcs_function(first(sol.t), problem.params)
+    held = hasproperty(side.left, :v)
+    nx = length(xgrid(problem))
     for d in eachindex(c.left_u)
         c.left_u[d] = side.left.u[d]
         c.right_u[d] = side.right.u[d]
-        c.left_v[d] = side.left.v[d]
+        c.left_v[d] = held ? side.left.v[d] : c.v[(d - 1) * nx + 1]
     end
     return nothing
 end

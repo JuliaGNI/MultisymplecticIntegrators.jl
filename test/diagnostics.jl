@@ -367,4 +367,71 @@ end
         @test err[1] == 0.0f0
         @test err[2] > 16 * eps(Float32)
     end
+
+    @testset "the error of a run against the exact solution" begin
+        # A run built by hand: the exact solution at every stored step, and `n ε sin(πx)` added to
+        # the last one. The error of that step is arithmetic — `n ε` at the node where the sine is
+        # one — and the steps before it are zero, so the value comes from the closed form and not
+        # from a second run of the code.
+        #
+        # The two-component problem's perturbation sits on component 2 alone, so a value read from
+        # component 1 reports no error at all.
+        function exact_run(problem, ε; component = 1)
+            solution = MultisymplecticIntegrators.GeometricSolution(problem)
+            nodes = collect(MultisymplecticIntegrators.xgrid(problem))
+            nx = length(nodes)
+            steps = MultisymplecticIntegrators.ntime(problem)
+            for n in 1:steps
+                t = solution.t[n]
+                solution[n] = (u = problem.solutions.u(t, nodes, problem.params),
+                    v = problem.solutions.v(t, nodes, problem.params),
+                    w = problem.solutions.w(t, nodes, problem.params))
+            end
+            last = solution.t[steps]
+            u = problem.solutions.u(last, nodes, problem.params)
+            for j in 1:nx
+                u[(component - 1) * nx + j] += eltype(u)(steps) * ε * sinpi(nodes[j])
+            end
+            solution[steps] = (u = u,
+                v = problem.solutions.v(last, nodes, problem.params),
+                w = problem.solutions.w(last, nodes, problem.params))
+            return (; solution, traces = fill(nothing, steps))
+        end
+
+        for T in (Float32, Float64)
+            ε = T(1) / 20
+            steps = 5
+            scalar = Wave.problem(
+                T = T, timespan = (zero(T), T(1) / 4), timestep = T(1) / 20,
+                xstep = T(1) / 20)
+            method = SpaceTimeGalerkin(
+                TensorBSplineAnsatz(
+                    degree = 2, ncells = (2, 20), xspan = (zero(T), one(T)),
+                    n = 3),
+                CoefficientRestriction())
+
+            err = error(scalar, method, exact_run(scalar, ε))
+            @test eltype(err) === T
+            @test length(err) == steps
+            @test all(iszero, err[1:(end - 1)])
+            @test isapprox(err[end], T(steps) * ε; rtol = 8 * eps(T))
+
+            vector = VectorWave.problem(T = T, timespan = (zero(T), T(1) / 4),
+                timestep = T(1) / 20, xstep = T(1) / 20)
+            err2 = error(vector, method, exact_run(vector, ε; component = 2))
+            @test length(err2) == steps
+            @test all(iszero, err2[1:(end - 1)])
+            @test isapprox(err2[end], T(steps) * ε; rtol = 8 * eps(T))
+
+            # A problem without an exact solution has no error to report, and says so rather than
+            # returning a value of its own: the matrix measures such a run against a finer one.
+            base = scalar
+            unsolved = LagrangianPDEProblem(base.density; D = base.D,
+                ics_function = base.ics_function, bcs_function = base.bcs_function,
+                timespan = base.timespan, timestep = base.timestep, xspan = base.xspan,
+                xstep = base.xstep, params = base.params)
+            @test unsolved.solutions === nothing
+            @test error(unsolved, method, exact_run(scalar, ε)) === nothing
+        end
+    end
 end

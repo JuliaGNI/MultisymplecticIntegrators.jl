@@ -2,7 +2,7 @@ using GeometricBase: ntime, timesteps
 using JLD2
 using LinearAlgebra: BLAS
 using MultisymplecticIntegrators
-using MultisymplecticIntegrators: space_quadrature_weights, xgrid
+using MultisymplecticIntegrators: space_quadrature_nodes, space_quadrature_weights
 using Random: Xoshiro
 using Test
 
@@ -14,11 +14,18 @@ include(joinpath(@__DIR__, "..", "helpers", "reference_values.jl"))
 include(joinpath(@__DIR__, "..", "..", "scripts", "run_benchmark.jl"))
 include(joinpath(@__DIR__, "..", "helpers", "problem_generator.jl"))
 
+# The display names of the problems a test's rows name, which a family's own rows carry and a table
+# is keyed by.
+const PROBLEM_LABELS = Dict(:wave => "Wave", :vector_wave => "VectorWave",
+    :sine_gordon => "SineGordon", :linear_transport => "LinearTransport",
+    :generated => "generated")
+
 # One row's metadata, which a family's rows carry and a test builds for a run of its own.
 function row(stem, method, problem, tag, resolution; parameters = (k = 1,), kwargs...)
     merge(
-        (stem = stem, label = stem, method = method, problem = problem, tag = tag,
-            resolution = resolution, parameters = parameters),
+        (stem = stem, label = stem, method = method, problem = problem,
+            problem_label = get(PROBLEM_LABELS, problem, string(problem)),
+            tag = tag, resolution = resolution, parameters = parameters),
         (; kwargs...))
 end
 
@@ -30,15 +37,14 @@ function unsolved_problem(base, xstep)
         timestep = base.timestep, xspan = base.xspan, xstep = xstep, params = base.params)
 end
 
-# The largest absolute difference of two archived runs' fields at the steps they both stored, on the
-# nodes their grids share — computed here, from the archives, and not by the code under test.
+# The largest absolute difference of two archived runs' fields at each stored step, on the nodes
+# their grids share — computed here, from the archives, and not by the code under test. An archive's
+# `"error"` holds one entry per stored step, so the comparison is per step too.
 function archived_difference(coarse, fine)
     shared = [searchsortedfirst(fine["x"], node) for node in coarse["x"]]
-    worst = 0.0
-    for n in 1:coarse["steps"], d in eachindex(coarse["u"]), (j, k) in enumerate(shared)
-        worst = max(worst, abs(coarse["u"][d][n + 1, j] - fine["u"][d][n + 1, k]))
-    end
-    return worst
+    return [maximum(abs(coarse["u"][d][n + 1, j] - fine["u"][d][n + 1, k])
+            for d in eachindex(coarse["u"]), (j, k) in enumerate(shared))
+            for n in 1:coarse["steps"]]
 end
 
 @testset "Benchmark matrix" begin
@@ -123,8 +129,7 @@ end
         @test all(isnan, finest["error"])
         for (coarse, entry) in zip(runs[1:(end - 1)], entries[1:(end - 1)])
             @test coarse["reference_stem"] == finest["stem"]
-            @test coarse["error"] ≈
-                  fill(archived_difference(coarse, finest), coarse["steps"])
+            @test coarse["error"] ≈ archived_difference(coarse, finest)
         end
         @test runs[1]["error"][1] > 0
     end
@@ -161,8 +166,10 @@ end
         # The charge of the first stored step, from the exact data on the run's own nodes and
         # weights, is the one the archive holds.
         weights = space_quadrature_weights(ansatz)
-        nq = length(weights)
-        nodes = collect(xgrid(problem(:vector_wave)))
+        # The trace is stored at the ansatz's space quadrature nodes, so the closed form of the
+        # charge is read at those nodes and not on the output grid.
+        nodes = collect(space_quadrature_nodes(ansatz))
+        nq = length(nodes)
         balanced = problem(:vector_wave)
         exact_u = balanced.solutions.u(vector["t"][2], nodes, balanced.params)
         exact_v = balanced.solutions.v(vector["t"][2], nodes, balanced.params)

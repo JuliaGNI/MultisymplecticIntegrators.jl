@@ -10,7 +10,7 @@
 #
 # A `"benchmark"` archive is the one kind the extension does not draw: the matrix's comparison is of
 # several runs, and the extension draws one archive at a time. Its panels are drawn here, from the
-# data `Diagnostics.benchmark_panels` gives, and one Markdown table per problem is written beside
+# data the package's `benchmark_panels` gives, and one Markdown table per problem is written beside
 # them. The panels are drawn per problem — the runs of one problem compared by method — and each
 # archive's own PDF marks its own run among them, so that a figure per archive says what it is.
 

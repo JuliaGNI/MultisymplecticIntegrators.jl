@@ -183,6 +183,9 @@ end
         foreach(trace -> assert_no_upcast(trace, T), result.traces)
         @test eltype(result.stats.residuals) === T
         @test eltype(result.stats.initial_residuals) === T
+        # The rule the energy is integrated by is an array of the run's too, and a rule of another
+        # element type would promote every energy it integrates.
+        @test eltype(box_quadrature_weights(problem)) === T
     end
 
     @testset "the box scheme's stats" begin

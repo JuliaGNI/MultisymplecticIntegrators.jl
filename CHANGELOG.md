@@ -655,6 +655,36 @@ makes it worth keeping.
   counts the entry as failed and archives nothing, rather than archiving the truncated run as a
   success.
   The family's two §A soundings are unconverged iterates and are recorded as K47 and K48.
+- **The benchmark matrix, with the Preissmann box scheme as its baseline.** The scripts' registry
+  gains a second driver: `register_family!` takes `run` for the figure archives and `benchmark` for
+  the matrix's rows, a row names its `method`, its `problem`, its `tag` and its `resolution` beside
+  its stem and is refused without them, and `select_rows(; method, problem, tag)` returns the rows
+  whose fields equal every filter given, in stem order, naming the filter that no row matches before
+  any row runs. `scripts/run_benchmark.jl` runs a selection with one child Julia process per row, so
+  that no row's compilation flatters the next one's time, and archives each row as
+  `runs/<stem>.jld2` of the new `"benchmark"` kind: the solve's stats, the error, the energy drift,
+  the rotation charge, the cost in scalar unknowns and the wall time of every stored step, with the
+  load average, the two thread counts, the Julia version and the `--check-bounds` setting beside
+  them. A row that throws, and a row that ends on a step which did not converge, is archived with
+  its status rather than dropped, so the comparison includes the methods that fail, and a problem
+  without an exact solution is measured against its finest run. `scripts/benchmark.jl` writes one
+  Markdown table per problem, with the eight unconverged records of the old stack appended as
+  historical rows and no family's oracle drawn from them. `scripts/spline_matrix_model.jl` registers
+  36 rows — the three couplings on the four example problems at three resolutions each — and
+  `scripts/box_model.jl` the baseline's rows.
+  `BoxScheme <: SpaceTimeMethod` is the Preissmann box scheme of the first-order form
+  `K z_t + L z_x = ∇S(z)` of a density `λ(½|v|² − ½c²|w|² − V(u))` with `λ > 0`: `integrate`
+  advances it like any other method, its observed order is 2 in the time step and in the space step,
+  and it satisfies the discrete multisymplectic conservation law `δₜω + δₓκ = 0` per box. A density
+  outside its class raises an `ArgumentError`, and the class is decided on the partial derivatives
+  the density supplies rather than on the problem's type or its component count, so `SineGordon`'s
+  `½(c v² − w²) + 1 + cos u` is in it and `LinearTransport`'s doubled field is not. The package's
+  diagnostics gain `error(problem, method, result)`, the error of every stored step against the
+  problem's exact solution and `nothing` where the problem has none, `noether_charge`, the rotation
+  charge of a density with that symmetry and `nothing` for one without it,
+  `energy_error(problem, ::BoxScheme, traces)` at the output grid's own rule, and `benchmark_panels`,
+  the data of the two comparison panels: the error of a run's last stored step against its cost and
+  against its wall time, one series per method.
 
 ### Changed
 

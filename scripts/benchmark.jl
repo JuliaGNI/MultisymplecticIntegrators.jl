@@ -168,7 +168,11 @@ function benchmark_run(problem::LagrangianPDEProblem, method::SpaceTimeMethod, e
     status = run.status
     status === :ok && !all(converged) && (status = :unconverged)
     measured = (solution = run.solution, traces = run.traces)
-    errors = kept == 0 ? Float64[] : error(problem, method, measured)
+    # The kind of error a row can have is the problem's, and the values are the run's: a problem
+    # without an exact solution is measured against a finer run, which `attach_references!` fills in
+    # once the selection's archives exist, and a run that stored no step records no value either way.
+    exact = problem.solutions !== nothing
+    errors = exact && run.solution !== nothing ? error(problem, method, measured) : nothing
     drift = kept == 0 ? Float64[] : energy_error(problem, method, run.traces)
     charge = kept == 0 ? nothing : noether_charge(problem, method, run.traces)
     t, x, u = run.solution === nothing ? (Float64[], Float64[], [Float64[]]) :
@@ -189,7 +193,7 @@ function benchmark_run(problem::LagrangianPDEProblem, method::SpaceTimeMethod, e
             "initial_residuals" => initial_residuals,
             "iterations" => iterations,
             "error" => errors === nothing ? fill(NaN, kept) : errors,
-            "error_kind" => errors === nothing ? "reference" : "exact",
+            "error_kind" => exact ? "exact" : "reference",
             "reference_stem" => nothing,
             "energy_drift" => drift,
             "charge" => charge,
