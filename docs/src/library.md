@@ -25,7 +25,7 @@ Pages = ["src/methods.jl", "src/core/integrate.jl", "src/core/slab_integrator.jl
 
 The baseline every other method is compared against is a `SpaceTimeMethod` of its own: the
 Preissmann box scheme of a density's first-order form, the class of densities it admits, its cache
-and its energy at the nodes of the output grid.
+and its energy at the midpoints of the boxes between the nodes of the output grid.
 
 ```@autodocs
 Modules = [MultisymplecticIntegrators]

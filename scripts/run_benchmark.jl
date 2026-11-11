@@ -88,8 +88,9 @@ end
 Run one selected row in a child process of its own and return whether it now has an archive.
 
 The child's archive is what the parent reads: a row whose child wrote one is reported with its path,
-and a row whose child ended without one is archived by the parent as a failure carrying the child's
-exit code. Either way the row has an archive, which is what `main` counts.
+and a row whose child ended without one is archived by the parent as a failure carrying the exit code
+or the signal that ended the child, as the process reported it. Either way the row has an archive,
+which is what `main` counts.
 
 This is the piece of the driver a test drives with a row its child's registry does not hold, which is
 the case the fallback exists for.
@@ -98,21 +99,22 @@ function run_row(row)
     stem = row.entry.stem
     path = archive_path(stem)
     rm(path; force = true)
-    code = try
-        success(child_command(stem)) ? 0 : 1
+    code, signal = try
+        process = run(ignorestatus(child_command(stem)))
+        (Int(process.exitcode), Int(process.termsignal))
     catch raised
         report(stem, "FAILED to start: $(failure_message(raised))")
-        1
+        (1, 0)
     end
     if isfile(path)
         report_path("archive", path)
         return true
     end
-    store_run!(stem,
-        benchmark_archive(stem,
-            failed_archive(row.entry,
-                code == 0 ? "the child process wrote no archive" :
-                "the child process exited with code $(code)")))
+    reason = signal == 0 ?
+             (code == 0 ? "the child process wrote no archive" :
+              "the child process exited with code $(code)") :
+             "the child process was killed by signal $(signal)"
+    store_run!(stem, benchmark_archive(stem, failed_archive(row.entry, reason)))
     report_path("archive", path)
     report(stem, "failed, archived by the driver")
     return true

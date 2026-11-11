@@ -212,21 +212,23 @@ end
 """
     reference_error(coarse, fine) -> Vector
 
-The largest absolute difference of two archived runs' fields at the steps they both stored, on the
-nodes their grids share.
+The largest absolute difference of two archived runs' fields at the times the coarse run stored, on
+the nodes their grids share.
 
 `coarse` and `fine` are archives of one method on one problem, the second on a grid that holds the
-first's nodes; a node of the coarse grid that the fine grid does not hold is refused, because the
-comparison of a coarse run with a finer one is a comparison at the nodes the two share and not one
-by index.
+first's nodes and on a time step that holds the first's times; a node of the coarse grid, or a time
+of the coarse run, that the finer run does not hold is refused, because the comparison of a coarse
+run with a finer one is a comparison at the nodes and the times the two share and not one by index.
 
 The field of stored step `n` is row `n + 1` of an archive's `"u"`, because row `1` is the initial
-data.
+data. The finer run's rows are cut to the coarse run's times, so that the finer run's own step index
+names no row of the comparison.
 """
 function reference_error(coarse, fine)
     xc = coarse["x"]
     xf = fine["x"]
     steps = coarse["steps"]
+    iszero(steps) && return Float64[]
     shared = [searchsortedfirst(xf, node) for node in xc]
     for (j, node) in enumerate(xc)
         k = shared[j]
@@ -235,12 +237,14 @@ function reference_error(coarse, fine)
                                 "run's grid; a reference comparison is made at the nodes the two " *
                                 "share"))
     end
+    rows = fine_time_rows(coarse["t"], fine["t"], steps)
+    fields = [field[rows, :] for field in fine["u"]]
     errors = zeros(Float64, steps)
     for n in 1:steps
         worst = 0.0
         for d in eachindex(coarse["u"])
             uc = coarse["u"][d]
-            uf = fine["u"][d]
+            uf = fields[d]
             for (j, k) in enumerate(shared)
                 worst = max(worst, abs(Float64(uc[n + 1, j]) - Float64(uf[n + 1, k])))
             end
@@ -248,6 +252,36 @@ function reference_error(coarse, fine)
         errors[n] = worst
     end
     return errors
+end
+
+# The finer run's rows for the times the coarse run stored: row `n + 1` is the finer run's row of
+# the coarse run's stored step `n`, and row `1` is the initial data of both.
+#
+# A time of the coarse run that the finer run does not hold is refused rather than matched to the
+# nearest step: two resolutions of one method are compared at the times they share, and a run that
+# reaches no time of the other is not comparable with it at all.
+function fine_time_rows(tc, tf, steps)
+    rows = Vector{Int}(undef, steps + 1)
+    for n in 0:steps
+        t = tc[n + 1]
+        k = nearest_time(tf, t)
+        k > 0 && isapprox(tf[k], t; atol = 0, rtol = 1.0e-12) ||
+            throw(ArgumentError("the time $t of the coarse run is not a time of the finer run; " *
+                                "a reference comparison is made at the times the two store"))
+        rows[n + 1] = k
+    end
+    return rows
+end
+
+# The index of the time of `tf` nearest to `t`, or `0` for a run that stored no time. The two runs'
+# times are the same values, but a time each computes from its own step count can sit a unit in the
+# last place away, so the nearer of the sorted neighbours is the candidate and the caller checks it.
+function nearest_time(tf, t)
+    isempty(tf) && return 0
+    k = searchsortedfirst(tf, t)
+    k > length(tf) && return length(tf)
+    k > 1 && abs(tf[k - 1] - t) < abs(tf[k] - t) && return k - 1
+    return k
 end
 
 """
@@ -258,7 +292,7 @@ whose reference fields changed.
 
 A group is the runs of one method on one problem, and the finest of a group is the run on the
 largest grid: it names itself as its reference and records no error, and every coarser run names it
-and records the difference [`reference_error`](@ref) gives at the steps and the nodes the two share.
+and records the difference [`reference_error`](@ref) gives at the times and the nodes the two share.
 
 Nothing is written here, so that a test can ask for the comparison of archives it holds in memory;
 the driver stores the changed archives again.
@@ -366,7 +400,10 @@ The eight historical records of §A that a problem holds are appended to its tab
 `historical` and `unconverged`: they are the old stack's own numbers, from
 `test/helpers/reference_values.jl`, and the matrix reproduces none of them. The set is the plan's
 decision and not a query of a record's status, so a record that converged is still marked — which is
-what makes the comparison honest, and why the table reads the records by name.
+what makes the comparison honest, and why the table reads the records by name. A record's series is
+its energy error — the relative error of its slabs' quadrature energy, the quantity the matrix's
+drift measures — so it is printed where a live row prints its energy drift and the record's error
+cell is a dash.
 """
 function benchmark_tables(runs; records = HISTORICAL)
     problems = String[]
@@ -403,8 +440,7 @@ function benchmark_tables(runs; records = HISTORICAL)
             held == problem || continue
             record = getfield(@__MODULE__, name)
             print(text, "| ", name, " | historical | — | ", record.steps,
-                " | unconverged | ", _table_number(record.energy_error),
-                " | — | — | — |\n")
+                " | unconverged | — | ", _table_number(record.energy_error), " | — | — |\n")
         end
         tables[problem] = String(take!(text))
     end

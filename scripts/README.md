@@ -177,7 +177,7 @@ integrator, with the stats of the steps before it. `"converged"`, `"residuals"`,
 stored step; `"wall_per_step"` holds one entry per step after the first and `"wall_time"` their sum.
 `"error_kind"` is `"exact"` where the problem has an exact solution, and `"reference"` where it has
 none: the finest row of a method on that problem records `NaN` and names itself in
-`"reference_stem"`, and each coarser row records its difference from that row at the steps and nodes
+`"reference_stem"`, and each coarser row records its difference from that row at the times and nodes
 the two share. `"charge"` is the rotation charge of a density with that symmetry and `nothing` for
 one without it. `"parameters"` is the row's method-defining fields and not the problem's.
 `"pid"`, `"load"`, `"threads"`, `"blas_threads"`, `"julia"` and `"check_bounds"` are what the timing
@@ -186,7 +186,9 @@ means.
 `benchmark_tables` writes one Markdown table per problem of a selection, with a row per archive —
 its status included, so a run that failed is in the table — and the eight unconverged records of the
 old stack appended to the `Wave` and `SineGordon` tables as `historical`. Those records are data and
-not an oracle: the matrix reproduces none of them.
+not an oracle: the matrix reproduces none of them. A record's energy error is the old stack's
+relative error of its slabs' quadrature energy, so it stands in the energy-drift column where a live
+row's drift stands, and its error cell is a dash.
 
 Every file the scripts write under `--runs-dir` and `--results-dir` is written through
 `atomic_write`: a sibling temporary carrying the destination's extension, renamed over it. Its name

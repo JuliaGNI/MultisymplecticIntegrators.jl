@@ -4,7 +4,9 @@ using JLD2
 using LinearAlgebra: BLAS
 using MultisymplecticIntegrators
 using MultisymplecticIntegrators: space_quadrature_nodes, space_quadrature_weights
+using Printf: @sprintf
 using Random: Xoshiro
+using SimpleSplines: Dirichlet
 using Test
 
 # The scripts are no part of the package, so the whole harness is tested through its files. The
@@ -14,6 +16,11 @@ using Test
 include(joinpath(@__DIR__, "..", "helpers", "reference_values.jl"))
 include(joinpath(@__DIR__, "..", "..", "scripts", "run_benchmark.jl"))
 include(joinpath(@__DIR__, "..", "helpers", "problem_generator.jl"))
+
+# The module a copy of the driver is included into, for the one row whose child process ends on an
+# exit code the tree's own registry cannot produce: the parent reads the child's code, so the row
+# that ends on a code of its own needs a registry, and therefore a copy, of its own.
+module ExitingRow end
 
 # The display names of the problems a test's rows name, which a family's own rows carry and a table
 # is keyed by.
@@ -32,18 +39,22 @@ end
 
 # A problem whose density is the same but whose runs have no exact solution: the matrix measures
 # such a run against the finest run of its method instead.
-function unsolved_problem(base, xstep)
+function unsolved_problem(base, xstep; timestep = base.timestep)
     return LagrangianPDEProblem(base.density; D = base.D, ics_function = base.ics_function,
         bcs_function = base.bcs_function, timespan = base.timespan,
-        timestep = base.timestep, xspan = base.xspan, xstep = xstep, params = base.params)
+        timestep, xspan = base.xspan, xstep, params = base.params)
 end
 
-# The largest absolute difference of two archived runs' fields at each stored step, on the nodes
-# their grids share — computed here, from the archives, and not by the code under test. An archive's
-# `"error"` holds one entry per stored step, so the comparison is per step too.
-function archived_difference(coarse, fine)
+# The largest absolute difference of two archived runs' fields at the times the coarse run stored,
+# on the nodes their grids share — computed here, from the archives, and not by the code under
+# test. An archive's `"error"` holds one entry per stored step, so the comparison is per step too.
+# `by_index` compares the two runs at the same step index instead, the reading the archive must not
+# make once the resolutions refine the time step as well.
+function archived_difference(coarse, fine; by_index = false)
     shared = [searchsortedfirst(fine["x"], node) for node in coarse["x"]]
-    return [maximum(abs(coarse["u"][d][n + 1, j] - fine["u"][d][n + 1, k])
+    rows = by_index ? collect(1:(coarse["steps"] + 1)) :
+           [searchsortedfirst(fine["t"], time) for time in coarse["t"]]
+    return [maximum(abs(coarse["u"][d][n + 1, j] - fine["u"][d][rows[n + 1], k])
             for d in eachindex(coarse["u"]), (j, k) in enumerate(shared))
             for n in 1:coarse["steps"]]
 end
@@ -141,31 +152,89 @@ end
     end
 
     @testset "a problem without an exact solution is measured against its finest run" begin
-        # One generated problem of the property suite, which passes no `solutions`, at three nested
-        # grids of one time step: the coarse nodes are nodes of the fine ones.
-        base = first(filter(entry -> entry.problem.D == 1,
-            generate_problems(Float64; rng = Xoshiro(SEED)))).problem
+        # One generated problem of the property suite, which passes no `solutions`, at three
+        # resolutions that refine the time step and the space step together, as the box scheme's
+        # rows do: a coarse run's nodes are the finer run's, and so are its times.
+        entry = first(filter(held -> held.problem.D == 1,
+            generate_problems(Float64; rng = Xoshiro(SEED))))
+        base = entry.problem
         @test base.solutions === nothing
         span = base.xspan
-        steps = (12, 24, 48)
-        problems = [unsolved_problem(base, (span[2] - span[1]) / m) for m in steps]
-        entries = [row("generated-coarse", :box, :generated, :matrix, (xstep = m,))
-                   for m in steps]
+        cells = (12, 24, 48)
+        factors = (1, 2, 4)
+        xsteps = [(span[2] - span[1]) / m for m in cells]
+        problems = [unsolved_problem(base, xsteps[i]; timestep = base.timestep /
+                                                                 factors[i])
+                    for i in eachindex(cells)]
+        entries = [row("generated-box-$(m)", :box, :generated, :matrix,
+                       (timestep = base.timestep / f, xstep = x))
+                   for (m, f, x) in zip(cells, factors, xsteps)]
         runs = [benchmark_run(problems[i], BoxScheme(), entries[i])
-                for i in eachindex(steps)]
+                for i in eachindex(cells)]
+        # A second method on the same problem, at two resolutions of its own: a run's reference is
+        # the finest run of its own method, whose stem the other method's rows never carry.
+        spline = SpaceTimeGalerkin(
+            TensorBSplineAnsatz(
+                degree = entry.degree, ncells = (entry.ncells[1], cells[1]),
+                xspan = span, n = entry.n, x_boundary = Dirichlet()),
+            CoefficientRestriction())
+        spline_problems = [unsolved_problem(base, xsteps[i]) for i in (1, 2)]
+        spline_entries = [row("generated-spline-$(cells[i])",
+                              :spline_restriction, :generated,
+                              :matrix, (timestep = base.timestep, xstep = xsteps[i]))
+                          for i in (1, 2)]
+        spline_runs = [benchmark_run(spline_problems[i], spline, spline_entries[i])
+                       for i in (1, 2)]
+        append!(runs, spline_runs)
+        append!(entries, spline_entries)
         @test all(archive -> archive["error_kind"] == "reference", runs)
-        for (archive, entry) in zip(runs, entries)
-            archive["stem"] = entry.stem
+        for (archive, held) in zip(runs, entries)
+            archive["stem"] = held.stem
         end
         attach_references!(runs)
-        finest = runs[end]
-        @test finest["reference_stem"] == "generated-coarse"
+        finest = runs[3]
+        @test finest["reference_stem"] == "generated-box-48"
         @test all(isnan, finest["error"])
-        for (coarse, entry) in zip(runs[1:(end - 1)], entries[1:(end - 1)])
+        spline_finest = runs[5]
+        @test spline_finest["reference_stem"] == "generated-spline-24"
+        for coarse in runs[1:2]
             @test coarse["reference_stem"] == finest["stem"]
+            # The comparison is at the same TIME: the coarse run's step `n` is at `t₀ + n·h`, which
+            # the finer run reaches four steps later, and the two readings are different numbers.
             @test coarse["error"] ≈ archived_difference(coarse, finest)
+            @test !isapprox(coarse["error"], archived_difference(coarse, finest; by_index = true))
         end
         @test runs[1]["error"][1] > 0
+        @test runs[4]["reference_stem"] == "generated-spline-24"
+        @test runs[4]["error"] ≈ archived_difference(runs[4], spline_finest)
+        # A time that the two grids compute a unit in the last place apart is the same time: the
+        # nearer of the two sorted neighbours is the row the coarse run's step sits on.
+        nudged = copy(finest)
+        nudged["t"] = copy(finest["t"])
+        nudged["t"][5] = prevfloat(nudged["t"][5])
+        @test reference_error(runs[1], nudged) ≈ runs[1]["error"]
+        # A time of the coarse run that the finer run does not hold is refused rather than matched
+        # to a neighbouring step: in the middle of the finer grid, past its end, and where the finer
+        # run holds no time at all.
+        shifted = copy(finest)
+        shifted["t"] = finest["t"] .+ (finest["t"][2] - finest["t"][1]) / 2
+        truncated = copy(finest)
+        truncated["t"] = finest["t"][1:(end - 2)]
+        absent = copy(finest)
+        absent["t"] = Float64[]
+        for other in (shifted, truncated, absent)
+            @test_throws ArgumentError reference_error(runs[1], other)
+        end
+        # A row whose integrator the package refused before its first step is archived with no time
+        # and no field row at all, so a pair of such rows has no step to compare and its difference
+        # is empty rather than an index on a time vector that holds nothing.
+        blank = [failed_archive(entries[i], "the integrator was refused") for i in (1, 2)]
+        for (archive, held) in zip(blank, entries[1:2])
+            archive["stem"] = "blank-$(held.stem)"
+            archive["error_kind"] = "reference"
+        end
+        @test all(archive -> isempty(archive["t"]), blank)
+        @test isempty(reference_error(blank[2], blank[1]))
     end
 
     @testset "the drift and the charge a run archives" begin
@@ -373,6 +442,28 @@ end
         @test occursin("code", ghosted["message"])
         @test ghosted["steps"] == 0
         @test load(joinpath(selection_dir, "wave-box-h0.1.jld2"))["status"] == :ok
+        # The child's own exit code reaches the archive. A row whose benchmark ends its process
+        # cannot be registered in the tree's own registry, so the driver reads the row from a copy
+        # of the scripts, and its child ends on code 3 — which no guess of the parent's makes.
+        copy = mktempdir()
+        cp(joinpath(@__DIR__, "..", "..", "scripts"), joinpath(copy, "scripts"))
+        mkpath(joinpath(copy, "test"))
+        cp(joinpath(@__DIR__, "..", "helpers"), joinpath(copy, "test", "helpers"))
+        write(joinpath(copy, "scripts", "zz_exiting_model.jl"), """
+            const EXITING = ((stem = "exits-three", label = "exits", method = :exiting,
+                problem = :wave, problem_label = "Wave", tag = :matrix,
+                resolution = (timestep = $(T(1) / 20),), parameters = (k = 1,)),)
+            register_family!(:exiting, EXITING; benchmark = entry -> exit(3))
+            """)
+        Base.include(ExitingRow, joinpath(copy, "scripts", "run_benchmark.jl"))
+        copied_runs = joinpath(copy, "runs")
+        mkpath(copied_runs)
+        @test Base.invokelatest(ExitingRow.main, [
+            "--runs-dir", copied_runs, "exits-three"]) == 0
+        exited = load(joinpath(copied_runs, "exits-three.jld2"))
+        @test exited["status"] == :failed
+        @test occursin("code 3", exited["message"])
+        @test exited["steps"] == 0
     end
 
     @testset "a run that does not converge is a result" begin
@@ -423,6 +514,18 @@ end
         for name in ("SINE_GORDON_NN_FULLY", "SINE_GORDON_ELM_LSGD", "SINE_GORDON_TRIALNN_OGA2D")
             line = only(filter(text -> occursin(name, text), sine))
             @test occursin("historical", line) && occursin("unconverged", line)
+        end
+        # A record's own series is its energy error, and the table's error column holds the
+        # solution error: the record's value stands in the energy-drift column, where a live row's
+        # drift stands, and its error cell is a dash.
+        for (problem, name) in HISTORICAL
+            lines = split(tables[problem], '\n')
+            header = strip.(split(strip(lines[3], '|'), '|'))
+            cells = strip.(split(
+                strip(only(filter(text -> occursin(string(name), text), lines)), '|'), '|'))
+            @test cells[findfirst(==("error"), header)] == "—"
+            @test cells[findfirst(==("energy drift"), header)] ==
+                  @sprintf("%.3e", last(getfield(@__MODULE__, name).energy_error))
         end
         @test !any(text -> occursin("WAVE_SINDY", text), wave)
         @test !any(text -> occursin("WAVE_TRIALNN_OGA2D", text), sine)
