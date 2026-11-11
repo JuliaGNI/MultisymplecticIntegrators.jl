@@ -72,9 +72,202 @@ function energy_error(problem::LagrangianPDEProblem{T}, ansatz::TensorBSplineAns
     # built from a runtime `Int` is dynamic, and boxing the problem in it costs more than it saves.
     step_energies!(
         energies, problem.density, problem.params, weights, traces, Val(problem.D))
+    return relative_deviation(energies)
+end
+
+# The deviation of an energy series from its first entry: relative where that entry is a scale, and
+# absolute where it vanishes, so that an all-zero first trace still has a series.
+function relative_deviation(energies)
     reference = first(energies)
     return iszero(reference) ? abs.(energies .- reference) :
            abs.((energies .- reference) ./ reference)
+end
+
+"""
+    energy_error(problem, method::BoxScheme, traces)
+
+The relative deviation of a box scheme run's energy from its value at the first stored step, one
+value per stored step and the first of which is zero.
+
+The rule is the ansatz method's, and the nodes and the weights are the method's own: a box scheme's
+trace is stored at the nodes of the output grid, so its energy is the density's Hamiltonian there,
+integrated by that grid's trapezoidal rule, [`box_quadrature_weights`](@ref). The energy of the
+first step is therefore the closed form's energy at that step up to the scheme's own error, which is
+second order in the time step and in the space step.
+"""
+function energy_error(problem::LagrangianPDEProblem{T}, method::BoxScheme, traces) where {T}
+    isempty(traces) &&
+        throw(ArgumentError("the run stored no trace, so it has no energy; `integrate` returns " *
+                            "an empty `traces` for a run that took no step"))
+    energies = Vector{T}(undef, length(traces))
+    step_energies!(energies, problem.density, problem.params,
+        box_quadrature_weights(problem), traces, Val(problem.D))
+    return relative_deviation(energies)
+end
+
+"""
+    error(problem, method, result) -> Union{Vector, Nothing}
+
+The error of every stored step of a run against the problem's exact solution, as the largest
+absolute deviation over the components and the nodes of the output grid, and `nothing` where the
+problem has none.
+
+`result` is what [`integrate`](@ref) returns, or a record of a run that holds its `solution` and its
+`traces`: the field is read from the solution because that is where every method writes it, on the
+output grid the problem fixes, and the steps counted are the ones the run stored. A run that stopped
+early ends at its last stored step, and the steps of the grid that it never computed are not read.
+
+This is the error against the continuum and not against another run of the code under test: the
+closed form is the problem's own. A problem without one is measured against a finer run of the same
+method instead, which the matrix's runner does.
+"""
+function error(problem::LagrangianPDEProblem{T}, method::SpaceTimeMethod, result) where {T}
+    problem.solutions === nothing && return nothing
+    solution = result.solution
+    nodes = collect(xgrid(problem))
+    steps = min(ntime(solution), length(result.traces))
+    errors = Vector{T}(undef, steps)
+    for n in 1:steps
+        closed = problem.solutions.u(solution.t[n], nodes, problem.params)
+        state = solution.u[n]
+        worst = zero(T)
+        for i in eachindex(state)
+            worst = max(worst, abs(state[i] - closed[i]))
+        end
+        errors[n] = worst
+    end
+    return errors
+end
+
+"""
+    noether_charge(problem, method, traces) -> Union{Vector, Nothing}
+
+The rotation charge of every stored step, `J = ∫ (u₁ v₂ − u₂ v₁) dx` at the nodes the trace is
+stored on with the method's own weights, and `nothing` for a density without the symmetry.
+
+The charge is conserved by a density that a rotation of the field's two components leaves
+invariant, and the package's `VectorWave` is the problem with it: its density is the sum of the two
+components' `½v² − ½c²w²`, a function of the lengths of `u`, `v` and `w` alone. Whether the symmetry
+holds is decided on the density's values, never on the component count: `LinearTransport`'s doubled
+field has two components and is not invariant, because its density reads one component against the
+other's velocity and slope.
+
+The trace of a step exists only at the top of the slab it solved, so the first entry is the charge
+of the first stored step and not of the initial time.
+"""
+function noether_charge(problem::LagrangianPDEProblem{T}, method::SpaceTimeMethod,
+        traces) where {T}
+    has_rotation_symmetry(problem) || return nothing
+    weights = trace_quadrature_weights(problem, method)
+    nq = length(weights)
+    charges = Vector{T}(undef, length(traces))
+    for (n, trace) in enumerate(traces)
+        trace === nothing &&
+            throw(ArgumentError("the run stored no trace at step $n; the charge of a step needs " *
+                                "the trace `(u, v, w)` at the nodes of the space quadrature"))
+        length(trace.u) == 2nq ||
+            throw(ArgumentError("the trace of step $n holds $(length(trace.u)) entries of `u`, " *
+                                "and the charge of two components needs $(2nq)"))
+        charge = zero(eltype(trace.u))
+        for j in 1:nq
+            charge += weights[j] *
+                      (trace.u[j] * trace.v[nq + j] - trace.u[nq + j] * trace.v[j])
+        end
+        charges[n] = T(charge)
+    end
+    return charges
+end
+
+# The weights the trace of a method is stored on: the ansatz's space quadrature for a slab method,
+# and the output grid's trapezoidal rule for the box scheme.
+function trace_quadrature_weights(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin)
+    return space_quadrature_weights(ansatz(method))
+end
+
+function trace_quadrature_weights(problem::LagrangianPDEProblem, ::BoxScheme)
+    box_quadrature_weights(problem)
+end
+
+"""
+    has_rotation_symmetry(problem) -> Bool
+
+Whether the density of a two-component problem is invariant under a rotation of the field's
+components, which is the symmetry [`noether_charge`](@ref) is conserved by.
+
+The test is on the density's values: the density at a probe point and at the same point with `u`,
+`v` and `w` rotated by `π/4` must agree. A density of one component at a time is summed over the two
+components, as the energy quadrature applies it.
+"""
+function has_rotation_symmetry(problem::LagrangianPDEProblem{T}) where {T}
+    components(problem) == 2 || return false
+    density = problem.density
+    params = problem.params
+    u = (T(7) / 10, T(3) / 10)
+    v = (T(1) / 2, T(-9) / 10)
+    w = (T(-2) / 5, T(3) / 5)
+    angle = T(π) / 4
+    cosine = cos(angle)
+    sine = sin(angle)
+    rotate(x) = (cosine * x[1] - sine * x[2], sine * x[1] + cosine * x[2])
+    value = point_density(density, u, v, w, params)
+    turned = point_density(density, rotate(u), rotate(v), rotate(w), params)
+    return abs(turned - value) ≤ 64 * eps(T) * max(one(T), abs(value))
+end
+
+# The density of one point of a two-component field: each component's density for a density of one
+# component at a time, and the coupled value for a density that takes both components at once.
+function point_density(density::LagrangianDensity, u, v, w, params)
+    return density(u[1], v[1], w[1], params) + density(u[2], v[2], w[2], params)
+end
+
+point_density(density, u, v, w, params) = density(u, v, w, params)
+
+"""
+    benchmark_panels(runs) -> (; cost, time)
+
+The data of the matrix's two comparison panels, from the archives of the runs: one series per
+method, of the archived cost and of the archived wall time against the archived error.
+
+A series is a named tuple `(label, x, y)`: `label` the method's name, `x` the value the panel's own
+axis carries and `y` the error of the run's last stored step. The cost panel pairs the error with
+the number of scalar unknowns one of the run's solves handled, and the time panel pairs it with the
+run's measured wall time. The two are never exchanged, which is the whole point of drawing both.
+
+A run whose error is not finite has no point on a logarithmic axis, and it is left out of both
+series rather than drawn as a gap: the tables carry it, with the status that says why it has no
+error. A run with no stored step is left out with it, and neither makes the panel refuse to be
+drawn.
+"""
+function benchmark_panels(runs)
+    ordered = sort(collect(runs); by = run -> string(get(run, "stem", "")))
+    cost = NamedTuple{(:label, :x, :y), Tuple{String, Float64, Float64}}[]
+    time = copy(cost)
+    for run in ordered
+        errors = get(run, "error", Float64[])
+        isempty(errors) && continue
+        value = last(errors)
+        isfinite(value) || continue
+        rounds = get(run, "cost", Float64[])
+        isempty(rounds) && continue
+        seconds = get(run, "wall_time", NaN)
+        label = string(get(run, "method", ""))
+        push!(cost, (label = label, x = Float64(last(rounds)), y = Float64(value)))
+        isfinite(seconds) &&
+            push!(time, (label = label, x = Float64(seconds), y = Float64(value)))
+    end
+    return (; cost = group_series(cost), time = group_series(time))
+end
+
+# One series per method, in the order the methods first appear in the sorted archives.
+function group_series(points)
+    labels = String[]
+    for point in points
+        point.label in labels || push!(labels, point.label)
+    end
+    return [(label = label,
+                x = [point.x for point in points if point.label == label],
+                y = [point.y for point in points if point.label == label])
+            for label in labels]
 end
 
 """

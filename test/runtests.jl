@@ -17,11 +17,13 @@ if "core" in GROUPS
     @safetestset "Integrator shell" include("integration/integrator_shell.jl")
     @safetestset "Archives" include("integration/archives.jl")
     @safetestset "Registry" include("integration/registry.jl")
+    @safetestset "Box scheme" include("baselines/box_scheme.jl")
     @safetestset "Diagnostics" include("diagnostics.jl")
     @safetestset "Plotting" include("plots.jl")
 end
 
 if "slow" in GROUPS
+    @safetestset "Benchmark matrix" include("integration/benchmark.jl")
     @safetestset "Symbolic ansatz" include("ansatz/symbolic.jl")
     @safetestset "Weak multipliers" include("couplings/weak_multipliers.jl")
     @safetestset "Network ansatz" include("ansatz/network.jl")
