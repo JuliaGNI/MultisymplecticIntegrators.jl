@@ -291,8 +291,11 @@ Fill in the reference comparison of the runs that have no exact solution, and re
 whose reference fields changed.
 
 A group is the runs of one method on one problem, and the finest of a group is the run on the
-largest grid: it names itself as its reference and records no error, and every coarser run names it
-and records the difference [`reference_error`](@ref) gives at the times and the nodes the two share.
+largest grid, and of the runs on one grid the one with the smallest time step, so that the spline
+rows, which refine the time step and the ansatz on one output grid, find theirs whatever the order
+of `runs`. The finest run names itself as its reference and records no error, and every coarser run
+names it and records the difference [`reference_error`](@ref) gives at the times and the nodes the
+two share.
 
 Nothing is written here, so that a test can ask for the comparison of archives it holds in memory;
 the driver stores the changed archives again.
@@ -306,7 +309,8 @@ function attach_references!(runs)
         push!(get!(groups, key, Dict{String, Any}[]), run)
     end
     for group in values(groups)
-        finest = first(sort(group; by = run -> -length(run["x"])))
+        finest = first(sort(group;
+            by = run -> (-length(run["x"]), run["resolution"].timestep)))
         finest["reference_stem"] = finest["stem"]
         push!(changed, finest)
         for run in group

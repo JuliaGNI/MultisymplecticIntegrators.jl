@@ -164,7 +164,9 @@ end
             exception
         end
         @test thrown isa ArgumentError
-        @test !isempty(sprint(showerror, thrown))
+        # The refusal names the partial derivative that disqualified the density: the doubled
+        # field's `∂L/∂v` is not one `λ` for both components.
+        @test occursin("∂L/∂v", sprint(showerror, thrown))
         for name in ("Wave", "VectorWave", "SineGordon")
             problem, result = box_run(name; h = 0.1, dx = 0.05, span = 0.2)
             @test length(result.traces) == ntime(problem)

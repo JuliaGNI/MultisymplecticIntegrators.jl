@@ -239,6 +239,22 @@ end
         end
         @test all(archive -> isempty(archive["t"]), blank)
         @test isempty(reference_error(blank[2], blank[1]))
+        # Two runs on one output grid whose time steps differ, as the spline rows refine the time
+        # step and the ansatz on the family's fixed grid: the grids tie, so the finest run is the
+        # one with the smaller time step, and the coarser one arrives first here.
+        tied_entries = [row("tied-box-$(f)", :box, :generated, :matrix,
+                            (timestep = base.timestep / f, xstep = xsteps[1]))
+                        for f in (1, 2)]
+        tied = [benchmark_run(
+                    unsolved_problem(base, xsteps[1]; timestep = base.timestep / f),
+                    BoxScheme(), held)
+                for (f, held) in zip((1, 2), tied_entries)]
+        for (archive, held) in zip(tied, tied_entries)
+            archive["stem"] = held.stem
+        end
+        attach_references!(tied)
+        @test all(archive -> archive["reference_stem"] == "tied-box-2", tied)
+        @test tied[1]["error"] ≈ archived_difference(tied[1], tied[2])
     end
 
     @testset "the drift and the charge a run archives" begin
@@ -297,9 +313,9 @@ end
 
         # The box scheme's energy is the midpoint rule over its boxes and not the trapezoidal rule
         # at their nodes: `H` at the mean of each box's two nodes, `Σ Δx · H(½(zⱼ + zⱼ₊₁))`. The
-        # run's first level is the problem's own initial data, so its energy is the closed form's
-        # at `t₀` to round-off, while the two readings of the rule on that level differ by
-        # `6.2e-3` relative: the assertion is of the rule and not of the scheme's order.
+        # run's first level is the problem's own initial data, and on it the trapezoidal reading is
+        # the closed form's energy at `t₀` to round-off, while the midpoint reading is `6.2e-3`
+        # relative below it: the assertion is of the rule and not of the closed form.
         wave = problem(:wave)
         boxed = integrate(wave, BoxScheme())
         initial = boxed.solution[0]
