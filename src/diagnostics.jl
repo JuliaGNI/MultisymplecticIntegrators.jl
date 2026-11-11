@@ -102,9 +102,9 @@ value per stored step and the first of which is zero.
 The deviation is the ansatz method's rule, and the quadrature is the method's own: a box scheme's
 trace is stored at the nodes of the output grid, and its energy is [`box_energies`](@ref)' series —
 the density's Hamiltonian at the mean of each box's two nodes, summed over the boxes with the boxes'
-widths as weights, which is the midpoint rule [`box_quadrature_weights`](@ref) gives. The energy of
-the first step is therefore the closed form's energy at that step up to the scheme's own error,
-which is second order in the time step and in the space step.
+widths as weights, which is the midpoint rule [`box_quadrature_weights`](@ref) gives. The first
+step holds the problem's initial data, and its energy differs from the closed form's by the error of
+that rule alone, which is second order in the space step.
 """
 function energy_error(problem::LagrangianPDEProblem, method::BoxScheme, traces)
     return relative_deviation(box_energies(problem, traces))
@@ -386,10 +386,10 @@ The energy of every stored step of a box scheme run: the density's Hamiltonian r
 each box's two nodes and summed over the boxes with the boxes' widths as weights,
 `Σ Δx · H(½(zⱼ + zⱼ₊₁))`, which is the midpoint rule.
 
-This is the series [`energy_error`](@ref)'s box method reports the deviation of, and it is the one
-value of the run a caller can hold against the density's closed form: at the initial level the trace
-is the problem's own initial data, so the sum there is the Hamiltonian at `t₀` and not a
-discretisation of it.
+This is the series [`energy_error`](@ref)'s box method reports the deviation of. At the initial
+level the trace is the problem's own initial data, and the sum there is still a discretisation of
+the Hamiltonian at `t₀`: the density is read at the mean of two nodes and not at a point of the
+field, so the sum differs from the closed form by a term of second order in the space step.
 """
 function box_energies(problem::LagrangianPDEProblem{T}, traces) where {T}
     isempty(traces) &&

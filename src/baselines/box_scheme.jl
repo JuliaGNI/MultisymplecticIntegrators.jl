@@ -37,8 +37,8 @@ components and no such shape.
 
 The resolution is the problem's own: one box per `timestep` and `xstep`, and the state lives at the
 nodes of the output grid, `(u, v, w)` per component, so that the trace [`top_trace`](@ref) gives and
-the solution are on the grid the other methods write. The third state is `w = −c² ∂ₓu`, and the
-trace carries the physical slope `∂ₓu`.
+the solution are on the grid the other methods write. The third state the scheme stores and solves
+for is the slope `w = ∂ₓu`, the form's third state divided by `−c²`, and the trace carries it.
 
 The system of one step is square: `u` at the interior nodes, `v` at every node but the first and `w`
 at every node are the unknowns, and the three rows of every box are the step's equations. `u` at
@@ -427,7 +427,6 @@ function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol, params,
     copyto!(c.left_u, data.left_u)
     copyto!(c.right_u, data.right_u)
     copyto!(c.left_v, data.left_v)
-    assemble_new!(c, x, problem(int))
     box_residual!(b, x, c, problem(int))
     return nothing
 end
