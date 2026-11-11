@@ -442,6 +442,21 @@ end
         @test unbuilt["exception"] == "ArgumentError"
         @test unbuilt["failed_at_step"] == 0
         @test unbuilt["steps"] == 0
+        # A slab method whose coupling the ansatz does not support is refused when its integrator is
+        # built, and its cost count throws a `MethodError` as well: the row is archived as the
+        # construction's failure at step `0`, and the count never runs.
+        spline = TensorBSplineAnsatz(
+            degree = 2, ncells = (2, 10), xspan = (zero(T), one(T)),
+            n = 3)
+        uncounted = benchmark_run(base, SpaceTimeGalerkin(spline, FixedBoundary()),
+            row("uncounted-row", :spline_restriction,
+                :wave, :matrix, (timestep = T(1) / 20,)))
+        @test uncounted["status"] == :failed
+        @test uncounted["exception"] == "ArgumentError"
+        @test_throws MethodError row_cost(SpaceTimeGalerkin(spline, FixedBoundary()), base)
+        @test uncounted["failed_at_step"] == 0
+        @test uncounted["steps"] == 0
+        @test isempty(uncounted["cost"])
         # A child process that ends without its archive is archived by the parent, with its exit
         # code: the row below is one the child's registry does not hold.
         directory = mktempdir()

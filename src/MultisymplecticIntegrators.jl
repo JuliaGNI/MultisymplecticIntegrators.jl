@@ -20,7 +20,6 @@ import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrat
 import SimpleSolvers: initial_residual, method, solve_with_status!, NonlinearSolverException
 import SimpleSolvers: config, jacobian!, jacobianmatrix, linearsolver, isconverged
 import AbstractNeuralNetworks: Chain, Dense, NeuralNetwork, layers, params
-import Base: error
 import NeuralNetworkParameters: flatten, unflatten, unflatten!
 import SymbolicNeuralNetworks: SymbolicNeuralNetwork, Jacobian, derivative,
                                build_flat_function, flat_parameter_gradient
@@ -124,7 +123,8 @@ export BoxScheme, box_grid, box_quadrature_weights
 
 # the diagnostics
 include("diagnostics.jl")
-export energy_density, energy_error, solution_data, noether_charge, benchmark_panels
+export energy_density, energy_error, solution_error, solution_data, noether_charge,
+       benchmark_panels
 
 # the plotting API, implemented in the `MultisymplecticIntegratorsPlots` extension
 include("plots.jl")

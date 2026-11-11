@@ -434,13 +434,8 @@ end
             scalar = Wave.problem(
                 T = T, timespan = (zero(T), T(1) / 4), timestep = T(1) / 20,
                 xstep = T(1) / 20)
-            method = SpaceTimeGalerkin(
-                TensorBSplineAnsatz(
-                    degree = 2, ncells = (2, 20), xspan = (zero(T), one(T)),
-                    n = 3),
-                CoefficientRestriction())
 
-            err = error(scalar, method, exact_run(scalar, ε))
+            err = solution_error(scalar, exact_run(scalar, ε))
             @test eltype(err) === T
             @test length(err) == steps
             @test all(iszero, err[1:(end - 1)])
@@ -448,7 +443,7 @@ end
 
             vector = VectorWave.problem(T = T, timespan = (zero(T), T(1) / 4),
                 timestep = T(1) / 20, xstep = T(1) / 20)
-            err2 = error(vector, method, exact_run(vector, ε; component = 2))
+            err2 = solution_error(vector, exact_run(vector, ε; component = 2))
             @test length(err2) == steps
             @test all(iszero, err2[1:(end - 1)])
             @test isapprox(err2[end], T(steps) * ε; rtol = 8 * eps(T))
@@ -461,7 +456,10 @@ end
                 timespan = base.timespan, timestep = base.timestep, xspan = base.xspan,
                 xstep = base.xstep, params = base.params)
             @test unsolved.solutions === nothing
-            @test error(unsolved, method, exact_run(scalar, ε)) === nothing
+            @test solution_error(unsolved, exact_run(scalar, ε)) === nothing
+            # A call outside the method's signature is a `MethodError`, and not `Base.error` printing
+            # its arguments.
+            @test_throws MethodError solution_error(scalar, scalar, exact_run(scalar, ε))
         end
     end
 

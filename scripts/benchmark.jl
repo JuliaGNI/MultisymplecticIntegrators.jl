@@ -142,7 +142,6 @@ they are. A row that names none is solved at the method's own defaults.
 function benchmark_run(problem::LagrangianPDEProblem, method::SpaceTimeMethod, entry)
     load = collect(Sys.loadavg())
     pid = getpid()
-    rounds = row_cost(method, problem)
     keywords = get(entry, :solver, (;))
     run = try
         drive_steps(problem, method; solver_keywords = keywords)
@@ -152,6 +151,9 @@ function benchmark_run(problem::LagrangianPDEProblem, method::SpaceTimeMethod, e
             message = failure_message(raised), failed_at_step = 0)
     end
     kept = length(run.traces)
+    # A row whose integrator is not built has no cost: the count is read only once a step exists,
+    # because a method the problem does not support can throw in the count as well.
+    rounds = kept == 0 ? 0 : row_cost(method, problem)
     iterations = something(
         recorded(run.stats === nothing ? nothing : run.stats.iterations, kept),
         Int[])
@@ -172,7 +174,7 @@ function benchmark_run(problem::LagrangianPDEProblem, method::SpaceTimeMethod, e
     # without an exact solution is measured against a finer run, which `attach_references!` fills in
     # once the selection's archives exist, and a run that stored no step records no value either way.
     exact = problem.solutions !== nothing
-    errors = exact && run.solution !== nothing ? error(problem, method, measured) : nothing
+    errors = exact && run.solution !== nothing ? solution_error(problem, measured) : nothing
     drift = kept == 0 ? Float64[] : energy_error(problem, method, run.traces)
     charge = kept == 0 ? nothing : noether_charge(problem, method, run.traces)
     t, x, u = run.solution === nothing ? (Float64[], Float64[], [Float64[]]) :

@@ -111,7 +111,7 @@ function energy_error(problem::LagrangianPDEProblem, method::BoxScheme, traces)
 end
 
 """
-    error(problem, method, result) -> Union{Vector, Nothing}
+    solution_error(problem, result) -> Union{Vector, Nothing}
 
 The error of every stored step of a run against the problem's exact solution, as the largest
 absolute deviation over the components and the nodes of the output grid, and `nothing` where the
@@ -126,7 +126,7 @@ This is the error against the continuum and not against another run of the code 
 closed form is the problem's own. A problem without one is measured against a finer run of the same
 method instead, which the matrix's runner does.
 """
-function error(problem::LagrangianPDEProblem{T}, method::SpaceTimeMethod, result) where {T}
+function solution_error(problem::LagrangianPDEProblem{T}, result) where {T}
     problem.solutions === nothing && return nothing
     solution = result.solution
     nodes = collect(xgrid(problem))

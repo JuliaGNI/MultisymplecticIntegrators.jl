@@ -683,7 +683,7 @@ makes it worth keeping.
   outside its class raises an `ArgumentError`, and the class is decided on the partial derivatives
   the density supplies rather than on the problem's type or its component count, so `SineGordon`'s
   `½(c v² − w²) + 1 + cos u` is in it and `LinearTransport`'s doubled field is not. The package's
-  diagnostics gain `error(problem, method, result)`, the error of every stored step against the
+  diagnostics gain `solution_error(problem, result)`, the error of every stored step against the
   problem's exact solution and `nothing` where the problem has none, `noether_charge`, the rotation
   charge of a density with that symmetry and `nothing` for one without it,
   `energy_error(problem, ::BoxScheme, traces)` as the midpoint rule over the boxes of the output
@@ -735,6 +735,16 @@ makes it worth keeping.
   `test/problems/linear_transport.jl` asserts the measurement: both couplings at those three meshes,
   at most two Newton iterations per step, the 20-cell Jacobian at full rank with
   `σ_min/σ_max ≥ 1e-3`, and the masked and whole-grid orders at least `1.9` from 10 to 20 cells.
+- **The fixed-boundary affine control is held to its own floor.** The slab's Jacobian is
+  rank-deficient, and the part of the initial residual outside its range is a floor that no Newton
+  step removes: on entry 10 of the generated family it is `1.51e-10` of the initial residual at the
+  first slab, and one to five iterations all end there. The floor moves with the machine's
+  round-off, and on a `znver4` CI runner a step of the control ended near `4e-8`, above the
+  tolerance `1e-8` that the test held every step to. The test now measures each step's floor with a
+  dense SVD of the step's Jacobian, holds the step's ratio to the larger of the tolerance and ten
+  times that floor, and asserts convergence wherever the floor is a tenth of the tolerance or less.
+  `scripts/fb8_floor.jl` prints the floor, the conditioning and the ratio after one to five
+  iterations.
 - **CI coverage and cache.** CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of
   `Julia min`, and a test job saves the Julia cache only when it succeeds.
 - **Test floors for the merged downgrade check.** CI's Downgrade job resolves `Project.toml` and
