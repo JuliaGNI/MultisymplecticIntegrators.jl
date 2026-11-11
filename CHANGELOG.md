@@ -561,13 +561,17 @@ makes it worth keeping.
   a caller at such a type names its own `f_reltol`. A failed step is carried, with its statistics
   recorded, as every family's is.
   `ForwardDiff` (compat `0.10.36, 1`) joins `[deps]`, because the family differentiates the side
-  data in `t` and reads the predictor's mass with it directly rather than through `SimpleSolvers`'
-  re-export; the manifest already held it through `SimpleSolvers`, so the load gains no package.
+  data in `t`, the initial data's momentum on the level's parameters and the Jacobian of the
+  Levenberg–Marquardt routines with it directly rather than through `SimpleSolvers`' re-export; the
+  manifest already held it through `SimpleSolvers`, so the load gains no package.
 - **`scripts/experiments.jl` registers the fixed-boundary family.** Thirty rows — `Wave` and
   `SineGordon` at three time steps, on the dead branch and on the four combinations of the bubble's
   form and its solve — and the two rows of the plateau probe, one of them at `Sx = 12`, `St = 16` and
   one at `BigFloat` with `GenericLinearAlgebra` in `scripts/Project.toml` alone. The plateau's
-  numbers are recorded, never asserted.
+  numbers are recorded, never asserted. Every row names its time step `timestep`, the field
+  `smallest_entry` reads, so `run_family.jl fixed_boundary` without a stem runs the cheapest row —
+  the largest time step, at `Float64` — and not the `BigFloat` row, which cannot run (K53 in
+  `KNOWN_ISSUES.md`).
 - **The TrialNN family returns as the network ansatz under `HardConstraintLifting`.** The coupling
   makes the field of a slab `P[N] + ℓ`: the transfinite projection of the ansatz's field that
   vanishes at the two ends of `xspan` and at the bottom of the slab, plus the transfinite

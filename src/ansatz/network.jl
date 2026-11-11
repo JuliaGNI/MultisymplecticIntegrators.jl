@@ -1390,9 +1390,9 @@ The derivative of one component of a level's network `N(x; φ, t)` with respect 
 `φ` — the weight, the bias or the output weight of one hidden unit — and that derivative's own
 derivative in `x`.
 
-A hidden weight or bias reaches component `d` alone, and an output weight reaches the one component
-it belongs to, which its position in `φ` names: the derivative of component `d` with respect to
-another component's output weight is zero.
+A hidden weight or bias reaches every component, through the unit's output weight for that
+component, and an output weight reaches the one component it belongs to, which its position in `φ`
+names: the derivative of component `d` with respect to another component's output weight is zero.
 """
 @inline function spatial_derivative(
         a::FixedBoundaryNetwork, φ::AbstractVector{T}, i::Integer,

@@ -5,10 +5,11 @@
 # dispatch on the block, so the two files refer to each other. The module therefore includes this
 # file twice: the first pass, before `ansatz/network.jl`, declares the two blocks and the fits, and
 # the second pass, after it, declares the methods that dispatch on the network's ansatz and block.
-# The guard below is what tells the passes apart.
+# The guard below is what tells the passes apart. A docstring inside an `if` attaches to nothing
+# unless it is written with `@doc`, so every docstring of this file carries it.
 
 if !@isdefined(FixedBoundaryData)
-    """
+    @doc """
         FixedBoundary() <: SlabCoupling
 
     The coupling of the fixed-boundary network: it carries the datum of a slab — the previous
@@ -22,7 +23,7 @@ if !@isdefined(FixedBoundaryData)
     """
     struct FixedBoundary <: SlabCoupling end
 
-    """
+    @doc """
         FixedBoundaryData{ST} <: CouplingData
 
     The block of a [`FixedBoundary`](@ref) in the slab cache.
@@ -53,7 +54,7 @@ if !@isdefined(FixedBoundaryData)
         v_top::Matrix{ST}
     end
 
-    """
+    @doc """
         BubbleGreedy(; nα = 13, nβ = 13, nγ = 13, α_range = (-8.0, 8.0), β_range = (-8.0, 8.0),
                       γ_range = (-6.0, 6.0), iterations = 60)
 
@@ -97,7 +98,7 @@ if !@isdefined(FixedBoundaryData)
         return BubbleGreedy(Int(nα), Int(nβ), Int(nγ), ranges..., Int(iterations))
     end
 
-    """
+    @doc """
         bubble_atoms(method::BubbleGreedy, ::Type{T})
 
     The dictionary of a bubble fit, as `(α, β, γ)` rows of precision `T`: every combination of the
@@ -118,7 +119,7 @@ if !@isdefined(FixedBoundaryData)
         return atoms[keep, :]
     end
 
-    """
+    @doc """
         FixedBoundaryFit{ST}
 
     The workspace of the fit that starts a fixed-boundary slab: the dictionary its method builds, that
@@ -133,8 +134,6 @@ if !@isdefined(FixedBoundaryData)
         atoms::Matrix{ST}
         table::Matrix{ST}
         target::Matrix{ST}
-        chosen::Matrix{ST}
-        gram::Matrix{ST}
         correlations::Matrix{ST}
         residual::Matrix{ST}
         coefficients::Matrix{ST}
@@ -147,10 +146,10 @@ if !@isdefined(FixedBoundaryData)
         empty2 = zeros(ST, 0, 0)
         return FixedBoundaryFit{ST}(
             nothing, empty2, empty2, empty2, empty2, empty2, empty2,
-            empty2, empty2, Int[], Bool[], zeros(ST, 0))
+            Int[], Bool[], zeros(ST, 0))
     end
 
-    """
+    @doc """
         Predictor() <: SlabTarget
 
     A cheap predictor of the slab, as the target of a `FitTo`: Störmer–Verlet on a uniform grid of
@@ -167,13 +166,13 @@ if !@isdefined(FixedBoundaryData)
     """
     struct Predictor <: SlabTarget end
 
-    """The number of grid points of the predictor's space stencil."""
+    @doc """The number of grid points of the predictor's space stencil."""
     const PREDICTOR_POINTS = 101
 
-    """The number of Störmer–Verlet substeps of the predictor."""
+    @doc """The number of Störmer–Verlet substeps of the predictor."""
     const PREDICTOR_SUBSTEPS = 10
 
-    """
+    @doc """
         fixed_boundary_qr_cut(::Type{T})
 
     The relative rank cut of the pivoted QR a `Newton()` step takes, at element type `T`.
@@ -187,7 +186,7 @@ if !@isdefined(FixedBoundaryData)
     fixed_boundary_qr_cut(::Type{Float64}) = 1e-12
     fixed_boundary_qr_cut(::Type{T}) where {T} = 10 * eps(T)
 
-    """
+    @doc """
         fixed_boundary_f_reltol(::Type{T})
 
     The relative tolerance of a fixed-boundary step's convergence rule, at element type `T`.
@@ -210,7 +209,7 @@ if !@isdefined(FixedBoundaryData)
                             "name the tolerance as an option of its own"))
     end
 
-    """
+    @doc """
         resolved_f_reltol(options, ::Type{T})
 
     The solver options with their `f_reltol` filled in: the caller's own where it names one, and
@@ -230,7 +229,7 @@ if !@isdefined(FixedBoundaryData)
 else
     # ---- the second pass: the methods that dispatch on the network's ansatz and block ----------
 
-    """
+    @doc """
         coupling_data(coupling, ansatz, problem, ST)
 
     The coupling's block of the slab cache: the datum's arrays of the problem's element type and
@@ -251,16 +250,16 @@ else
         return FixedBoundaryData{ST}
     end
 
-    """The datum of a slab reaches the field through this function, as `slab_field!`'s `bottom`."""
+    @doc """The datum of a slab reaches the field through this function, as `slab_field!`'s `bottom`."""
     bottom_datum(data::FixedBoundaryData) = data
 
-    """The solver's vector holds the level's free parameters and the bubble's, with no multiplier."""
+    @doc """The solver's vector holds the level's free parameters and the bubble's, with no multiplier."""
     free_rows(::FixedBoundary, a::FixedBoundaryNetwork) = nfree(a)
 
-    """A fixed-boundary coupling has no unknown of its own."""
+    @doc """A fixed-boundary coupling has no unknown of its own."""
     coupling_unknowns(::FixedBoundary, ::FixedBoundaryNetwork, ::LagrangianPDEProblem) = 0
 
-    """
+    @doc """
         coupling_term!(b, x, data, cache, ansatz, problem)
 
     The datum's momentum adds to the first block of the action's gradient, which the ansatz wrote on
@@ -276,13 +275,13 @@ else
         return nothing
     end
 
-    """A fixed-boundary coupling guesses no unknown of its own: the datum is the coupling's guess."""
+    @doc """A fixed-boundary coupling guesses no unknown of its own: the datum is the coupling's guess."""
     function coupling_guess!(::FixedBoundaryData, cache, ansatz::SpaceTimeAnsatz,
             problem::LagrangianPDEProblem, sol)
         return nothing
     end
 
-    """
+    @doc """
         coupling_update!(data, x, cache, ansatz, problem)
 
     Keep what the solved slab hands on to the next one: the momentum the step passes on, the level
@@ -299,7 +298,7 @@ else
         return nothing
     end
 
-    """
+    @doc """
         top_velocity!(data, s, ansatz, problem)
 
     The velocity of the solved slab's field at its top time, `∂_{t̂}u / h`, at the predictor's grid:
@@ -324,7 +323,7 @@ else
         return nothing
     end
 
-    """Copy the datum of the problem's element type into the cache the solver works in."""
+    @doc """Copy the datum of the problem's element type into the cache the solver works in."""
     function copy_coupling_data!(c::FixedBoundaryData, data::FixedBoundaryData)
         copyto!(c.phi, data.phi)
         copyto!(c.momentum, data.momentum)
@@ -339,7 +338,7 @@ else
         return nothing
     end
 
-    """
+    @doc """
         check_coupling(problem, coupling::FixedBoundary, ansatz)
 
     Refuse either half of the pair on its own: the coupling takes a [`FixedBoundaryNetwork`](@ref)
@@ -347,9 +346,8 @@ else
     """
     function check_coupling(problem::LagrangianPDEProblem, c::FixedBoundary,
             a::SpaceTimeAnsatz)
-        a isa FixedBoundaryNetwork || throw(ArgumentError(
+        throw(ArgumentError(
             "FixedBoundary takes a FixedBoundaryNetwork, got $(nameof(typeof(a)))"))
-        return nothing
     end
 
     function check_coupling(problem::LagrangianPDEProblem, c::FixedBoundary,
@@ -363,13 +361,13 @@ else
             "a FixedBoundaryNetwork takes the FixedBoundary coupling, got $(nameof(typeof(c)))"))
     end
 
-    """A fixed-boundary slab is started by the fit of the bubble."""
+    @doc """A fixed-boundary slab is started by the fit of the bubble."""
     default_fit(::FixedBoundaryNetwork) = BubbleGreedy()
 
-    """A fixed-boundary slab is solved by Levenberg–Marquardt."""
+    @doc """A fixed-boundary slab is solved by Levenberg–Marquardt."""
     default_solver(::SpaceTimeGalerkin{<:FixedBoundaryNetwork}) = LevenbergMarquardt()
 
-    """
+    @doc """
         default_options(method, problem)
 
     The family's solver options: a step converges on the rule of `step_converged` at
@@ -390,7 +388,7 @@ else
             max_iterations = LM_MAX_ITERATIONS)
     end
 
-    """
+    @doc """
         initsolver(solvermethod::NonlinearSolverMethod, method, caches; kwargs...)
 
     A fixed-boundary integrator's solver, built from the options the integrator was handed: the
@@ -411,7 +409,7 @@ else
             solvermethod, method, caches; options...)
     end
 
-    """
+    @doc """
         initsolver(solvermethod::LevenbergMarquardt, method, caches; kwargs...)
 
     The family's default solver, its tolerance resolved as above.
@@ -427,7 +425,7 @@ else
             solvermethod, method, caches; options...)
     end
 
-    """
+    @doc """
         initsolver(solvermethod::Newton, method, caches; kwargs...)
 
     A fixed-boundary slab's rows are the derivative of a discrete action, so its Jacobian is a
@@ -454,7 +452,7 @@ else
             solvermethod, method, caches; options...)
     end
 
-    """
+    @doc """
         variable_projection_indices(method::SpaceTimeGalerkin{<:FixedBoundaryNetwork})
 
     The positions of the bubble's output weights in the solver's vector, which the projected variant
@@ -506,7 +504,7 @@ else
             (fill(T(-51) / T(100), D), fill(T(44) / T(100), D)))
     end
 
-    """
+    @doc """
         predictor_mass(density, params, T, D)
 
     The constant `m` of a density whose velocity derivative is `∂L/∂v = m v`, one per component:
@@ -577,7 +575,7 @@ else
         return (1 - ŝ) * ga + ŝ * gb + (x - a.xspan[1]) * (a.xspan[2] - x) * m
     end
 
-    """
+    @doc """
         first_datum!(data, problem, ansatz, t₀)
 
     Fix the datum of a run's first slab: `φ₀` is a least-squares fit of the level's network to the
@@ -638,7 +636,7 @@ else
         return φ
     end
 
-    """
+    @doc """
         slab_bottom!(cache, data::FixedBoundaryData, problem, ansatz, sol)
 
     Fix the datum of the slab: at the first slab the level's parameters and the momentum of the
@@ -669,13 +667,13 @@ else
 
     # ---- the predictor -------------------------------------------------------------------
 
-    """The uniform grid of [`PREDICTOR_POINTS`](@ref) points the predictor runs on, from the span's
+    @doc """The uniform grid of [`PREDICTOR_POINTS`](@ref) points the predictor runs on, from the span's
     two ends."""
     function predictor_grid(a::FixedBoundaryNetwork, ::Type{T}) where {T}
         return collect(T, range(a.xspan[1], a.xspan[2]; length = PREDICTOR_POINTS))
     end
 
-    """The value of one row of the predictor's history at a point `x` of the span, by linear
+    @doc """The value of one row of the predictor's history at a point `x` of the span, by linear
     interpolation on the uniform grid."""
     function predictor_interpolate(
             history::AbstractArray{ST, 3}, row::Integer, x, d::Integer,
@@ -685,7 +683,7 @@ else
         return (1 - λ) * history[row, j, d] + λ * history[row, j + 1, d]
     end
 
-    """
+    @doc """
         predictor_force!(acc, u, v, w, du, dw, density, params, dx, mass, D)
 
     The predictor's acceleration at the grid points, `(∂L/∂u − ∂ₓ(∂L/∂w)) / m`: the slope in space by
@@ -733,7 +731,7 @@ else
         return acc
     end
 
-    """
+    @doc """
         predictor_sample!(sample, slab, cache, problem, sol)
 
     Run the predictor of one slab — Störmer–Verlet with [`PREDICTOR_SUBSTEPS`](@ref) substeps over
@@ -821,7 +819,7 @@ else
         return nothing
     end
 
-    """
+    @doc """
         evaluate!(sample, ::Predictor, cache, ansatz, problem, sol)
 
     A `Predictor` is a target of a [`FixedBoundaryNetwork`](@ref) alone: another ansatz has no slab
@@ -836,7 +834,7 @@ else
 
     # ---- the fit that starts a slab ------------------------------------------------------
 
-    """
+    @doc """
         fit!(w, method::BubbleGreedy, ansatz::FixedBoundaryNetwork, sample, cache)
 
     Fit the whole parameter vector of a slab to the sampled target: the level's parameters by
@@ -905,7 +903,7 @@ else
         atoms = bubble_atoms(method, ST)
         f = s.fit
         if f.method != method || size(f.table) != (size(atoms, 1), N) ||
-           size(f.residual, 2) != D || size(f.chosen, 2) != St ||
+           size(f.residual, 2) != D || size(f.coefficients, 1) != St ||
            size(f.atoms) != size(atoms)
             f.atoms = atoms
             f.table = zeros(ST, size(atoms, 1), N)
@@ -916,8 +914,6 @@ else
             f.selected = zeros(Int, St)
             f.taken = falses(size(atoms, 1))
             f.weighted = zeros(ST, N)
-            f.chosen = zeros(ST, N, St)
-            f.gram = zeros(ST, St, St)
             for q in 1:qt, r in 1:qx
 
                 k = (q - 1) * qx + r
