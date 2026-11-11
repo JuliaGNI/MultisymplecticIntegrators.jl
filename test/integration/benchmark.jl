@@ -22,6 +22,10 @@ include(joinpath(@__DIR__, "..", "helpers", "problem_generator.jl"))
 # that ends on a code of its own needs a registry, and therefore a copy, of its own.
 module ExitingRow end
 
+# The same, for the row whose child the operating system kills: the parent reads the signal, and the
+# arm does not exist on Windows.
+module SignalledRow end
+
 # The display names of the problems a test's rows name, which a family's own rows carry and a table
 # is keyed by.
 const PROBLEM_LABELS = Dict(:wave => "Wave", :vector_wave => "VectorWave",
@@ -252,7 +256,7 @@ end
             timestep = T(1) / 20, xspan = (zero(T), one(T)), xstep = T(1) / 20) :
                         LinearTransport.problem(
             timespan = (zero(T), T(1) / 5), timestep = T(1) / 20,
-            xspan = (T(-1) / 2, zero(T)), xstep = T(1) / 20)
+            xspan = (zero(T), one(T)), xstep = T(1) / 20)
         ansatz = TensorBSplineAnsatz(
             degree = 2, ncells = (2, 10), xspan = (zero(T), one(T)),
             n = 3)
@@ -281,6 +285,11 @@ end
         for j in 1:nq)
         @test isapprox(first(vector["charge"]), closed; rtol = 1.0e-3)
         for name in (:wave, :sine_gordon, :linear_transport)
+            # A `nothing` charge has to come from the density's symmetry and not from a run that
+            # took no step: the transport row is the one whose density has no rotation symmetry,
+            # so its archive must hold real steps for the assertion to mean anything.
+            @test archives[name]["status"] !== :failed
+            @test archives[name]["steps"] > 0
             @test archives[name]["charge"] === nothing
         end
         @test all(isfinite, archives[:vector_wave]["energy_drift"])
@@ -464,6 +473,25 @@ end
         @test exited["status"] == :failed
         @test occursin("code 3", exited["message"])
         @test exited["steps"] == 0
+        # A child the operating system kills is archived as a signal rather than as a code, and the
+        # driver still returns 0. Windows has no signal to raise, so the arm is Unix's.
+        if !Sys.iswindows()
+            write(
+                joinpath(copy, "scripts", "zz_signalled_model.jl"), """
+              const SIGNALLED = ((stem = "killed-nine", label = "killed", method = :signalled,
+                  problem = :wave, problem_label = "Wave", tag = :matrix,
+                  resolution = (timestep = $(T(1) / 20),), parameters = (k = 1,)),)
+              register_family!(:signalled, SIGNALLED;
+                  benchmark = entry -> ccall(:raise, Cint, (Cint,), 9))
+              """)
+            Base.include(SignalledRow, joinpath(copy, "scripts", "run_benchmark.jl"))
+            @test Base.invokelatest(SignalledRow.main, [
+                "--runs-dir", copied_runs, "killed-nine"]) == 0
+            killed = load(joinpath(copied_runs, "killed-nine.jld2"))
+            @test killed["status"] == :failed
+            @test occursin("killed by signal 9", killed["message"])
+            @test killed["steps"] == 0
+        end
     end
 
     @testset "a run that does not converge is a result" begin

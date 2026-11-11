@@ -372,3 +372,26 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   to `GeometricSolutions`, and the step runs as a row of M's matrix once it lands.
 - kind: upstream
 - found: 2026-11-10
+
+### K54 · A reference run that itself failed part-way makes the driver throw after every row has archived.
+
+- location: `scripts/benchmark.jl:263` (`fine_time_rows`), reached from `main` through
+  `attach_references!`
+- evidence: a problem without an exact solution whose finest run fails at a step raises
+  `ArgumentError: the time 0.2 of the coarse run is not a time of the finer run` from
+  `fine_time_rows`, so the driver ends with an exception after every selected row has written its
+  archive. No registered row is measured against a reference run, so the input lies outside every
+  clause's domain and nothing in the suite reaches it; comparing at the times both runs stored, and
+  recording `NaN` past them, would make it a result.
+- kind: defect
+- found: 2026-11-11
+
+### K55 · The shared-node and shared-time matches are two routines that disagree at one ulp.
+
+- location: `scripts/benchmark.jl:232` and `:263`
+- evidence: the nodes are matched by one routine and the times by another; only the time one
+  tolerates a neighbour in the last place, so a grid compared on its nodes and a grid compared on its
+  times answer differently for the same pair. One `shared_index(sorted, value)` would serve both and
+  remove about twelve lines.
+- kind: dead code
+- found: 2026-11-11

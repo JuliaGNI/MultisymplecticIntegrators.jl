@@ -360,9 +360,9 @@ end
 The archive of a row whose child process ended without writing one, and the reason it did.
 
 A row that exits before archiving is a result of the comparison like a row that threw: the driver
-writes this record with the child's exit code, continues with the remaining rows, and still returns
-0, because what it reports is whether every selected row has an archive and not whether every row
-converged.
+writes this record with the child's exit code, or with the signal that ended it, continues with the
+remaining rows, and still returns 0, because what it reports is whether every selected row has an
+archive and not whether every row converged.
 """
 function failed_archive(entry, reason)
     data = row_identity(entry)
