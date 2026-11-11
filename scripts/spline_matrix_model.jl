@@ -8,6 +8,7 @@
 # families without paying for a solve.
 
 using MultisymplecticIntegrators
+using SimpleSplines: Dirichlet, Free
 
 """
 The three couplings of the family, as the `method` of a row: the coefficient restriction, the weak
@@ -118,11 +119,17 @@ method names.
 
 A coupling symbol the family does not hold raises an `ArgumentError` naming it: a mistyped coupling
 that ran as another one would be a result about the wrong method.
+
+The ansatz's space basis takes `Free()` for the weak initial-and-boundary conditions, whose
+boundary rows carry an unknown, and `Dirichlet()` for every other coupling, whose boundary
+conditions the recombined basis imposes; the package refuses either basis under the other coupling.
 """
 function spline_matrix_method(entry)
     xspan = entry.problem === :linear_transport ? TRANSPORT_XSPAN : SPLINE_XSPAN
+    x_boundary = entry.parameters.coupling === :initial_boundary ? Free() : Dirichlet()
     ansatz = TensorBSplineAnsatz(degree = entry.parameters.degree,
-        ncells = entry.parameters.ncells, xspan = xspan, n = entry.parameters.n)
+        ncells = entry.parameters.ncells, xspan = xspan, n = entry.parameters.n,
+        x_boundary = x_boundary)
     coupling = entry.parameters.coupling === :restriction ? CoefficientRestriction() :
                entry.parameters.coupling === :initial ? WeakInitialCondition() :
                entry.parameters.coupling === :initial_boundary ?

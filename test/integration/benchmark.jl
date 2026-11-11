@@ -1,4 +1,5 @@
 using GeometricBase: ntime, timesteps
+using GeometricIntegratorsBase: GeometricIntegrator
 using JLD2
 using LinearAlgebra: BLAS
 using MultisymplecticIntegrators
@@ -49,18 +50,22 @@ end
 
 @testset "Benchmark matrix" begin
     @testset "a selection by method, problem or tag" begin
+        # Registered in reverse stem order, so that the stem order a selection returns is not the
+        # order the registry holds its rows in.
         entries = (
-            row("sel-a", :method_one, :problem_one, :tag_one, (k = 1,)),
-            row("sel-b", :method_one, :problem_two, :tag_two, (k = 2,)),
-            row("sel-c", :method_two, :problem_one, :tag_one, (k = 3,)),
+            # `:tag_one` is a prefix of this tag, so a substring match on `:tag_one` takes this row
+            # with the rows that carry that tag, and a substring match on this tag takes them all.
+            row("sel-e", :method_two, :problem_one, :tag_one_more, (k = 5,)),
             row("sel-d", :method_two, :problem_two, :tag_two, (k = 4,)),
-            # a tag that holds the first one as a prefix, which a substring match would take with it
-            row("sel-e", :method_two, :problem_one, :tag_ten, (k = 5,)))
+            row("sel-c", :method_two, :problem_one, :tag_one, (k = 3,)),
+            row("sel-b", :method_one, :problem_two, :tag_two, (k = 2,)),
+            row("sel-a", :method_one, :problem_one, :tag_one, (k = 1,)))
         register_family!(:selection, entries; benchmark = _ -> Dict{String, Any}())
         stems(selected) = [row.entry.stem for row in selected]
         @test stems(select_rows(method = :method_one)) == ["sel-a", "sel-b"]
         @test stems(select_rows(problem = :problem_one)) == ["sel-a", "sel-c", "sel-e"]
         @test stems(select_rows(tag = :tag_one)) == ["sel-a", "sel-c"]
+        @test stems(select_rows(tag = :tag_one_more)) == ["sel-e"]
         @test stems(select_rows(method = :method_two, tag = :tag_one)) == ["sel-c"]
         @test !isempty(select_rows(tag = :tag_one))
         @test_throws ArgumentError select_rows(method = :no_such_method)
@@ -77,6 +82,35 @@ end
         RUNS_DIR[] = directory
         @test_throws ArgumentError main(["--tag", "no_such_tag", "--runs-dir", directory])
         @test isempty(filter(file -> endswith(file, ".jld2"), readdir(directory)))
+        # A family that registers neither a run nor a benchmark names itself in the refusal, and a
+        # row of the matrix that names no tag is refused by its stem and the field it lacks.
+        nameless = try
+            register_family!(:nameless, entries)
+            nothing
+        catch exception
+            exception
+        end
+        @test nameless isa ArgumentError
+        @test occursin(
+            Regex("^ArgumentError: the family `nameless` registers neither a `run` " *
+                  "nor a `benchmark`; `run_family\\.jl` and `run_benchmark\\.jl` would " *
+                  "both skip it\$"),
+            sprint(showerror, nameless))
+        untagged = (stem = "sel-f", label = "sel-f", method = :method_one,
+            problem = :problem_one, resolution = (k = 6,))
+        tagless = try
+            register_family!(:tagless, (untagged,);
+                benchmark = _ -> Dict{String, Any}())
+            nothing
+        catch exception
+            exception
+        end
+        @test tagless isa ArgumentError
+        @test occursin(
+            Regex("^ArgumentError: the row `sel-f` of the family `tagless` has no " *
+                  "`tag`; a row of the matrix names method, problem, tag and " *
+                  "resolution\$"),
+            sprint(showerror, tagless))
     end
 
     @testset "a run archives R's per-step stats" begin
@@ -302,6 +336,18 @@ end
         @test empty["steps"] == 0
         @test isempty(empty["residuals"])
         @test isempty(empty["wall_per_step"])
+        # A row whose method the problem does not support throws before its first step: the box
+        # scheme refuses a density outside its class when the integrator is built, so the archive
+        # holds no step and records the failure at step `0`.
+        transport = LinearTransport.problem(timespan = (zero(T), T(2) / 10),
+            timestep = T(1) / 10, xspan = (zero(T), one(T)), xstep = T(1) / 20)
+        construction = row("construction-row", :box, :linear_transport, :matrix,
+            (timestep = T(1) / 10,))
+        unbuilt = benchmark_run(transport, BoxScheme(), construction)
+        @test unbuilt["status"] == :failed
+        @test unbuilt["exception"] == "ArgumentError"
+        @test unbuilt["failed_at_step"] == 0
+        @test unbuilt["steps"] == 0
         # A child process that ends without its archive is archived by the parent, with its exit
         # code: the row below is one the child's registry does not hold.
         directory = mktempdir()
@@ -313,6 +359,20 @@ end
         @test occursin("code", on_disk["message"])
         @test on_disk["steps"] == 0
         @test benchmark_archive("unknown-row", on_disk) === on_disk
+        # The driver's own selection over a failed row: the row no child's registry holds is
+        # archived as failed and the row beside it is archived, so the driver returns 0 for a
+        # selection that holds a failure.
+        selection_dir = mktempdir()
+        RUNS_DIR[] = selection_dir
+        ghost = row("ghost-row", :box, :wave, :matrix,
+            (timestep = T(1) / 10, xstep = T(1) / 10))
+        register_family!(:ghost, (ghost,); benchmark = box_benchmark)
+        @test main(["--runs-dir", selection_dir, "ghost-row", "wave-box-h0.1"]) == 0
+        ghosted = load(joinpath(selection_dir, "ghost-row.jld2"))
+        @test ghosted["status"] == :failed
+        @test occursin("code", ghosted["message"])
+        @test ghosted["steps"] == 0
+        @test load(joinpath(selection_dir, "wave-box-h0.1.jld2"))["status"] == :ok
     end
 
     @testset "a run that does not converge is a result" begin
@@ -401,6 +461,9 @@ end
             method = entry.method === :box ? box_method(entry) : spline_matrix_method(entry)
             @test method isa SpaceTimeMethod
             @test ntime(problem) >= 1
+            # The row's cache is built and no step runs: a row whose ansatz and coupling disagree
+            # is a row the driver cannot run, and a count of rows is no evidence that it can.
+            @test GeometricIntegrator(problem, method) isa GeometricIntegrator
             if entry.problem === :linear_transport
                 @test problem.D == 2
             end
