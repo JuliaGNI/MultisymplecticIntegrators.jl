@@ -4,9 +4,11 @@ using GeometricBase
 using GeometricEquations
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: Diagonal, I, UpperTriangular, axpy!, dot, ldiv!, mul!, norm, rdiv!
+using LinearAlgebra: Diagonal, I, UpperTriangular, axpy!, dot, ldiv!,
+                     mul!, norm, rdiv!, svd
 using SimpleSplines
 using SimpleSolvers
+import ForwardDiff: gradient, jacobian
 using SparseArrays
 using Random: AbstractRNG, Xoshiro
 using Symbolics
@@ -16,7 +18,7 @@ import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrat
                       basis_values, degree, nbasis, ncells, quadrature_nodes,
                       quadrature_weights, l2_projection!, nodes as spline_nodes
 import SimpleSolvers: initial_residual, method, solve_with_status!, NonlinearSolverException
-import SimpleSolvers: config, jacobian!, jacobianmatrix, linearsolver
+import SimpleSolvers: config, jacobian!, jacobianmatrix, linearsolver, isconverged
 import AbstractNeuralNetworks: Chain, Dense, NeuralNetwork, layers, params
 import NeuralNetworkParameters: flatten, unflatten, unflatten!
 import SymbolicNeuralNetworks: SymbolicNeuralNetwork, Jacobian, derivative,
@@ -29,7 +31,8 @@ import GeometricEquations: initial_conditions, GeometricProblem, GeometricEquati
 import GeometricIntegratorsBase: GeometricIntegrator, solutionstep, reset!, integrate!,
                                  cache, current, default_extrapolation, NoExtrapolation
 import GeometricIntegratorsBase: Cache, CacheType, IntegratorCache, check_solver_status,
-                                 nlsolution, default_solver, initial_guess!,
+                                 nlsolution, default_solver, default_options,
+                                 initial_guess!,
                                  integrate_step!, residual!, solver, initsolver,
                                  solverstate, copy_internal_variables!, internal
 
@@ -68,6 +71,10 @@ export TensorBSplineAnsatz, degree, ncells, quadrature,
 include("core/slab_integrator.jl")
 export SpaceTimeGalerkin, SpaceTimeGalerkinCache, ansatz, coupling, total_free_coefficients
 
+# the nonlinear solver of the fixed-boundary family, which plugs into the record path
+include("core/levenberg_marquardt.jl")
+export LevenbergMarquardt
+
 include("ansatz/symbolic.jl")
 export SymbolicAnsatz
 
@@ -78,9 +85,19 @@ include("initial_guess/orthogonal_greedy.jl")
 include("initial_guess/trained_hidden_layer.jl")
 export TrainedHiddenLayer, PINNTraining
 
+# The fixed-boundary coupling and the network block refer to each other: the block holds the
+# coupling's fit workspace, and the coupling's methods dispatch on the block. This file is therefore
+# included twice — its first pass declares the two blocks and the fits, which the network's block
+# needs, and its second pass, after the network, declares the methods that dispatch on it.
+include("couplings/fixed_boundary.jl")
+
 # the network ansatz, which the coupling's carrier and the guess hooks extend
 include("ansatz/network.jl")
 export NetworkAnsatz, trace_basis, OrthogonalGreedy
+
+include("couplings/fixed_boundary.jl")
+export FixedBoundaryNetwork, FixedBoundary, BubbleGreedy, Predictor, bubble_atoms,
+       fixed_boundary_f_reltol
 
 # the couplings
 include("couplings/coefficient_restriction.jl")

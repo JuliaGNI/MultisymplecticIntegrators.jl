@@ -544,6 +544,34 @@ makes it worth keeping.
   units, `degree = 3` and `ncells = (2, 5)`, at two time steps — and `register_family!(:elm, ELM;
   run = elm_run)` puts it under `runs/` through the one driver, `scripts/run_family.jl`, without an
   edit to `scripts/experiments.jl`.
+- **The fixed-boundary network, its coupling and Levenberg–Marquardt.** `FixedBoundaryNetwork` makes
+  the configuration of one time level the parameter vector of a *spatial* network, carries the side
+  data in the field itself and puts a tanh bubble on the slab, so a step solves for the next level's
+  parameters and the bubble's and has no multiplier at all. `FixedBoundary` is its coupling: it
+  carries the datum `(φ₀, p₀)`, hands on `∂S/∂φ₁`, and its `BubbleGreedy` fit starts a slab from a
+  greedy dictionary of 2184 atoms. The bubble's hidden layer has two coordinate systems, `:abg` and
+  the ridge chart `:tsr`, whose Jacobian is applied to the equations as well as to the unknowns.
+  `LevenbergMarquardt` is the family's solver — damped by a shift on the singular values, with the
+  bubble's output weights eliminable by an inner Newton solve — and `Newton()` stays available with
+  the minimum-norm step of a pivoted QR cut at `1e-12`. A step converges when
+  `residual ≤ f_abstol + f_reltol · r₀`, at `f_abstol = 0` and the element type's own `f_reltol`: the
+  dead branch's twenty steps on `Wave` all reach it at `Float64`, and a live-branch row records its
+  convergence flags and asserts none of them. `fixed_boundary_f_reltol(T)` is the one place that
+  constant lives, at the two element types the family measured it for: a third type is refused, and
+  a caller at such a type names its own `f_reltol`. A failed step is carried, with its statistics
+  recorded, as every family's is.
+  `ForwardDiff` (compat `0.10.36, 1`) joins `[deps]`, because the family differentiates the side
+  data in `t`, the initial data's momentum on the level's parameters and the Jacobian of the
+  Levenberg–Marquardt routines with it directly rather than through `SimpleSolvers`' re-export; the
+  manifest already held it through `SimpleSolvers`, so the load gains no package.
+- **`scripts/experiments.jl` registers the fixed-boundary family.** Thirty rows — `Wave` and
+  `SineGordon` at three time steps, on the dead branch and on the four combinations of the bubble's
+  form and its solve — and the two rows of the plateau probe, one of them at `Sx = 12`, `St = 16` and
+  one at `BigFloat` with `GenericLinearAlgebra` in `scripts/Project.toml` alone. The plateau's
+  numbers are recorded, never asserted. Every row names its time step `timestep`, the field
+  `smallest_entry` reads, so `run_family.jl fixed_boundary` without a stem runs the cheapest row —
+  the largest time step, at `Float64` — and not the `BigFloat` row, which cannot run (K53 in
+  `KNOWN_ISSUES.md`).
 - **The TrialNN family returns as the network ansatz under `HardConstraintLifting`.** The coupling
   makes the field of a slab `P[N] + ℓ`: the transfinite projection of the ansatz's field that
   vanishes at the two ends of `xspan` and at the bottom of the slab, plus the transfinite

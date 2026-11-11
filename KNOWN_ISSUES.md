@@ -297,3 +297,78 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: docs
 - found: 2026-11-10
 
+### K50 · No live-branch variant of the fixed-boundary network converges, and its `:last_layer` affine control has no solution under `FitTo(Predictor())`.
+
+- location: `src/couplings/fixed_boundary.jl`, `src/core/levenberg_marquardt.jl`,
+  `scripts/experiments.jl`
+- evidence: the family's live branch is `FitTo(Predictor())` with Levenberg–Marquardt, in both
+  bubble forms and with and without the projected solve, and the matrix's thirty rows for it are
+  built by `scripts/experiments.jl` without being run. A two-step run at `max_iterations = 3` on
+  `Wave` at `h = 0.05`, `Sx = 8`, `St = 10`, `ncells = 20` and `nq = (6, 4)` fails the convergence
+  rule at both steps in all four combinations, at final residuals of `9.26e-4` and `1.78e-4` (joint,
+  `:abg`), `0.200` and `4.60e-3` (projected, `:abg`), `1.03e-4` and `1.03e-4` (joint, `:tsr`) and
+  `0.234` and `4.14e-3` (projected, `:tsr`), from initial residuals of `6.82e-3` (`:abg`) and
+  `6.83e-3` (`:tsr`) at the first step, and `0.0766`, `0.335`, `5.74e-3` and `0.335` at the second;
+  while the dead branch — `Continuation()` with `Newton()` on a pivoted QR cut at `1e-12` —
+  converges 20 of 20 steps at a worst ratio of `2.96e-10` and an error of `6.6156e-4` at `t = 1`.
+  The affine control under this guess has no solution at all: `FitTo(Predictor())` moves level 1's
+  hidden layer away from level 0's by `35.7` on a quadratic entry, and the Jacobian keeps four null
+  directions at `D = 1` and two at `D = 2` in the `c₁` columns and `c₀` rows, so that entry leaves
+  `0.302` of `r₀` unreachable by any step — an LU solve leaves `1.8e-2`. The family's own affine
+  control is therefore `Continuation()`, which holds the spatial hidden layer at `φ₀`'s fit. The
+  non-convergence is a measured result of the method and not a defect of its solve: the matrix
+  compares it, a row's `converged` is recorded and never asserted, and a fix would be a different
+  solve rather than a different tolerance.
+- kind: defect
+- found: 2026-11-09
+
+### K51 · `integrate!` applies a method's initial guess twice, so a guess that reads state it writes starts the step from its own output.
+
+- location: `src/core/integrate.jl:90`, `src/core/slab_integrator.jl:655`
+- evidence: `integrate_steps!` drives each step with the ecosystem's `integrate!(solstep, integrator)`,
+  which calls `initial_guess!` (`GeometricIntegratorsBase`'s `src/integrate.jl:10`) and then
+  `integrate_step!`, which calls it again (`src/core/slab_integrator.jl:655`). A guess whose fit and
+  target read the block's parameter vector measures its own first output on the second application.
+  Measured on `Wave` over two steps, step 2's datum `φ₀` differs from step 1's solved `φ₁` by `5.90`
+  at `Sx = St = 4` and by `0.427` at `Sx = 8`, `St = 10`, and by `0` through `integrate_step!`
+  alone. The double call is the base's; the family keeps its datum, its momentum and its top
+  velocity in the copies `coupling_update!` writes (`phi_next`, `p_next`, `v_top`), and its fits read
+  the level the fit builds, so that a second application of its guess cannot move the level, the
+  momentum or the velocity the next slab reads.
+- kind: upstream
+- found: 2026-11-09
+
+### K52 · The bubble's output block is rank deficient at `Continuation()`'s first slab, so a projected solve there eliminates an `a` that is not differentiable.
+
+- location: `src/couplings/fixed_boundary.jl`, `src/ansatz/network.jl` (`bubble_start`)
+- evidence: the bubble's start grid is antisymmetric under `k ↦ St + 1 − k`: the units at `k` and at
+  `St + 1 − k` are exact negatives, measured to `0.0` at `St = 10`, so a first slab solved from
+  `Continuation()` differentiates a bubble whose hidden atoms pair off. At `Wave`, `h = 0.05`,
+  `Sx = 8`, `St = 10`, `ncells = 20` and `nq = (6, 4)`, the `∂S/∂a` block `J_aa` of that slab has
+  rank 4 of 10 at the cut `√eps(T) · σmax` — 5 of 10 lie above `1e-9` — with singular values
+  `0.746, 5.34e-3, 6.94e-5, 7.24e-7, 5.93e-9, 3.7e-17 … 3.6e-25` under `:abg`. A projected step
+  from that guess therefore eliminates, by its inner solve, an `a*(z)` that a perturbation of a
+  hidden entry breaks, and its reduced Jacobian is not the derivative of `z ↦ F_o(z, a*(z))`. The
+  testset "FB5 variable projection" takes its measurements from `FitTo(Predictor())`, whose `J_aa`
+  is full rank, and no test asserts a projected solve from `Continuation()`. A `bubble_start`
+  without the pairing would be a different guess for every run of the family, and the guess is what
+  the matrix compares.
+- kind: defect
+- found: 2026-11-10
+
+### K53 · The plateau probe's extended-precision row cannot run, because `GeometricSolutions` cannot build a solution at `BigFloat`.
+
+- location: `scripts/experiments.jl` (the `BigFloat` plateau row);
+  `GeometricSolutions`, `src/timeseries.jl:8`
+- evidence: `TimeSeries(ti::AbstractVector, Δt)` builds `new{T, n, typeof(t)}` with
+  `n = length(ti) - 1`, and the `length` of a `BigFloat` range is a `BigInt` — it is a
+  `StepRangeLen{BigFloat, BigFloat, BigFloat, BigInt}` — so `GeometricSolution(problem)` on a
+  `BigFloat` `Wave` raises `TypeError: in Type, in parameter, expected Int64, got a value of type
+  BigInt` before a step is taken. The row names its own `f_reltol = big"1e-8"`, because the family
+  measures no tolerance at `BigFloat` and refuses a caller there that names none, and
+  `fixed_boundary_solver_keywords` hands the entry's value to the solver, so the integrator builds
+  and `TimeSeries`'s `TypeError` is the whole block. The row stays in the registry and in the
+  build-only testset "FB18", which builds it and never runs it; the fix is a pull request of its own
+  to `GeometricSolutions`, and the step runs as a row of M's matrix once it lands.
+- kind: upstream
+- found: 2026-11-10
