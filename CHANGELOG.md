@@ -784,10 +784,11 @@ makes it worth keeping.
   before the change and none after it.
 - **The fixed-boundary Jacobian test reads the Jacobian along directions.** The testset "FB2 the
   Jacobian is the derivative of the residual" of `test/couplings/fixed_boundary.jl` took a central
-  difference per unknown, two residuals per column, and with it the `Fixed boundary` file ran four
-  of CI's jobs, `Downgrade` among them, into their 120-minute limit. It now checks `J · d` along
-  three random directions per vector, drawn from the testset's own seeded `rng`, against
-  `directional_differences`, the central difference of the residual along `d` with two residuals
-  per direction, to the former entrywise bound `sqrt(eps(T)) · max|J|` carried through the product,
-  `sqrt(eps(T)) · max|J| · ‖d‖₁`. The legs, forms, modes, vectors, element types, the `Newton()`
-  slab and the `1/100` floor are unchanged. A direction of zeros raises an `ArgumentError`.
+  difference per unknown, two residuals per column, and that was the costly part of the
+  `Fixed boundary` file. It now checks `J · d` along three random directions per vector, drawn
+  from a second seeded generator, `drng = Xoshiro(12)`, so that the testset's
+  `rng = Xoshiro(11)` draws the vectors alone, against `directional_differences`, the central
+  difference of the residual along `d` with two residuals per direction, to the former entrywise
+  bound `sqrt(eps(T)) · max|J|` carried through the product, `sqrt(eps(T)) · max|J| · ‖d‖₁`. The
+  legs, forms, modes, vectors, element types, the `Newton()` slab and the `1/100` floor are
+  unchanged.

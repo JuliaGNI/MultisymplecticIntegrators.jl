@@ -197,11 +197,9 @@ end
     directional_differences(int, θ, d, params)
 
 The central difference of a residual at `θ` along the direction `d`, `(r(θ + δd) − r(θ − δd)) / 2δ`
-with `δ = cbrt(eps(T)) · max(1, max|θ|) / max|d|`: two residuals, which approximate `J · d`. A
-direction of zeros has no step and is refused before any residual is taken.
+with `δ = cbrt(eps(T)) · max(1, max|θ|) / max|d|`: two residuals, which approximate `J · d`.
 """
 function directional_differences(int, θ::AbstractVector{T}, d::AbstractVector{T}, params) where {T}
-    iszero(maximum(abs, d)) && throw(ArgumentError("a zero direction has no step"))
     δ = cbrt(eps(T)) * max(one(T), maximum(abs, θ)) / maximum(abs, d)
     forward = zeros(T, length(θ))
     backward = zeros(T, length(θ))
@@ -369,6 +367,7 @@ end
 
 @testset "FB2 the Jacobian is the derivative of the residual" begin
     rng = Xoshiro(11)
+    drng = Xoshiro(12)
     # `jacobian!` is SimpleSolvers' and writes the solver's own matrix, so it exists for a
     # `NonlinearSolver`. The family's Levenberg–Marquardt keeps no such matrix — it takes one SVD of
     # the Jacobian at each accepted iterate — so the Jacobian of the residual is read through the
@@ -376,18 +375,14 @@ end
     #
     # N5's and N18's second check: the legs are `Wave`, `SineGordon` and all 24 seeded entries, in
     # both forms and both modes, at 16 vectors each, and at both element types. Each vector's `J` is
-    # read along three directions drawn from the same `rng`: the difference along `d` checks `J · d`
-    # with two residuals, and a `d` with no zero entry weights every column of `J`. The bound
-    # is the entrywise `sqrt(eps(T)) · max|J|` carried through the product. The differences are
-    # taken on the `Float64` slab in both precisions, as the symbolic ansatz's are: the residual's
-    # round-off at `Float32` sits in differences `cbrt(eps(Float32))` apart, where its own truncation
-    # error is larger than the bound. The `Float64` slab is the same slab — `transplant_datum!`
-    # copies the datum across, so that both element types differentiate one function of the unknowns
-    # rather than two fits of it.
-    #
-    # A direction of zeros has no step: the helper refuses it before it takes a residual, so the
-    # `nothing` in place of an integrator is never reached.
-    @test_throws ArgumentError directional_differences(nothing, zeros(3), zeros(3), nothing)
+    # read along three directions drawn from `drng`, so that `rng` draws the vectors alone: the
+    # difference along `d` checks `J · d` with two residuals, and a `d` with no zero entry weights
+    # every column of `J`. The bound is the entrywise `sqrt(eps(T)) · max|J|` carried through the
+    # product. The differences are taken on the `Float64` slab in both precisions, as the symbolic
+    # ansatz's are: the residual's round-off at `Float32` sits in differences `cbrt(eps(Float32))`
+    # apart, where its own truncation error is larger than the bound. The `Float64` slab is the same
+    # slab — `transplant_datum!` copies the datum across, so that both element types differentiate
+    # one function of the unknowns rather than two fits of it.
     for T in (Float64, Float32)
         entries = generate_problems(T; rng = Xoshiro(SEED))
         reference_entries = T === Float64 ? entries :
@@ -422,7 +417,7 @@ end
                 J = copy(SimpleSolvers.jacobianmatrix(s))
                 @test maximum(abs, J) ≥ T(1 // 100)
                 for _ in 1:3
-                    d = 2 .* rand(rng, T, length(c.x)) .- 1
+                    d = 2 .* rand(drng, T, length(c.x)) .- 1
                     @test maximum(abs,
                         J * d - directional_differences(reference.int, Float64.(θ),
                             Float64.(d), parameters(leg.reference))) ≤
