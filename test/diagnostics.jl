@@ -504,4 +504,96 @@ end
             @test noether_charge(problem, BoxScheme(), [nothing]) === nothing
         end
     end
+
+    @testset "the network ansatze's space weights" begin
+        # A network stores its trace at the nodes of its trace basis' space rule, and a
+        # fixed-boundary network at those of its own; each rule's weights sum to the span, and the
+        # fixed-boundary rule, Gauss on each cell, integrates `x²` exactly.
+        for T in (Float64, Float32), D in (1, 2)
+
+            xspan = (T(-1) / 2, one(T))
+            length_of_span = xspan[2] - xspan[1]
+            network = NetworkAnsatz(
+                S = 4, xspan = xspan, ncells = (2, 5), degree = 3, D = D)
+            weights = space_quadrature_weights(network)
+            @test eltype(weights) === T
+            @test weights == space_quadrature_weights(trace_basis(network))
+            @test isapprox(sum(weights), length_of_span; rtol = 8 * eps(T))
+            for fixed in (FixedBoundaryNetwork(xspan = xspan, D = D),
+                FixedBoundaryNetwork(
+                Sx = 4, St = 4, xspan = xspan, ncells = 7, nq = (3, 4),
+                D = D))
+                fixed_weights = space_quadrature_weights(fixed)
+                nodes = fixed.tabulation.xnode
+                @test eltype(fixed_weights) === T
+                @test length(fixed_weights) == fixed.ncells * fixed.nq[2] == length(nodes)
+                @test all(>(zero(T)), fixed_weights)
+                @test isapprox(sum(fixed_weights), length_of_span; rtol = 8 * eps(T))
+                @test isapprox(sum(fixed_weights .* nodes .^ 2),
+                    (xspan[2]^3 - xspan[1]^3) / 3; rtol = 64 * eps(T))
+            end
+        end
+    end
+
+    @testset "the network ansatze's energy error" begin
+        # `Wave`'s density at `u = w = 0` is `½ v²` per component, so a trace of constant velocity
+        # `c` on `[0, 1]` has the energy `½ D c²`, and two traces at `c₀` and `c₁` deviate by
+        # `|c₁² − c₀²| / c₀²`; a first trace at rest has no scale, and the second's deviation is its
+        # absolute energy.
+        for T in (Float64, Float32), D in (1, 2)
+
+            problem = (D == 1 ? Wave : VectorWave).problem(T = T,
+                timespan = (zero(T), T(1) / 5), timestep = T(1) / 10,
+                xspan = (zero(T), one(T)), xstep = T(1) / 20)
+            @test problem.D == D
+            c₀, c₁ = one(T), T(3) / 2
+            unit = (zero(T), one(T))
+            for ansatz in (NetworkAnsatz(
+                S = 4, xspan = unit, ncells = (2, 5), degree = 3, D = D),
+                FixedBoundaryNetwork(xspan = unit, D = D),
+                FixedBoundaryNetwork(Sx = 4, St = 4, xspan = unit, ncells = 7, nq = (3, 4),
+                D = D))
+                n = D * length(space_quadrature_weights(ansatz))
+                trace(c, m = n) = (u = zeros(T, m), v = fill(c, m), w = zeros(T, m))
+                drift = energy_error(problem, ansatz, [trace(c₀), trace(c₁)])
+                @test drift isa Vector{T}
+                @test length(drift) == 2
+                @test iszero(drift[1])
+                @test isapprox(drift[2], abs(c₁^2 - c₀^2) / c₀^2; rtol = 64 * eps(T))
+                at_rest = energy_error(problem, ansatz, [trace(zero(T)), trace(c₁)])
+                @test isapprox(at_rest[2], D * c₁^2 / 2; rtol = 64 * eps(T))
+                @test_throws ArgumentError energy_error(problem, ansatz, typeof(trace(c₀))[])
+                @test_throws ArgumentError energy_error(problem, ansatz, [trace(c₀, n + D)])
+                # the method's energy is its ansatz's
+                method = SpaceTimeGalerkin(ansatz,
+                    ansatz isa NetworkAnsatz ? WeakInitialAndBoundaryConditions() :
+                    FixedBoundary())
+                @test energy_error(problem, method, [trace(c₀), trace(c₁)]) == drift
+            end
+        end
+    end
+
+    @testset "the rotation charge of a network's two-component trace" begin
+        # `u₁ = a`, `v₂ = b` and every other entry zero give `∫ (u₁ v₂ − u₂ v₁) dx = a b` on
+        # `[0, 1]`, under each network's own space rule.
+        for T in (Float64, Float32)
+            problem = VectorWave.problem(T = T, timespan = (zero(T), T(1) / 5),
+                timestep = T(1) / 10, xspan = (zero(T), one(T)), xstep = T(1) / 20)
+            unit = (zero(T), one(T))
+            a, b = T(3) / 4, T(-2)
+            for method in (
+                SpaceTimeGalerkin(
+                NetworkAnsatz(S = 4, xspan = unit, ncells = (2, 5), degree = 3, D = 2),
+                WeakInitialAndBoundaryConditions()),
+                SpaceTimeGalerkin(FixedBoundaryNetwork(xspan = unit, D = 2), FixedBoundary()))
+                nq = length(space_quadrature_weights(ansatz(method)))
+                trace = (u = vcat(fill(a, nq), zeros(T, nq)),
+                    v = vcat(zeros(T, nq), fill(b, nq)),
+                    w = zeros(T, 2nq))
+                charge = noether_charge(problem, method, [trace])
+                @test charge isa Vector{T}
+                @test isapprox(only(charge), a * b; rtol = 8 * eps(T))
+            end
+        end
+    end
 end
