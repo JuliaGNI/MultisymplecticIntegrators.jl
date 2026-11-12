@@ -79,6 +79,10 @@ failed run.
 | `run_benchmark.jl` | the matrix's driver: it includes every `*_model.jl` file here, selects the rows by method, problem or tag or names them by stem, runs each in a child process of its own, and archives each — a row that fails included. |
 | `spline_matrix_model.jl` | the spline family's matrix rows: the three couplings on the four example problems at three resolutions each, 36 rows with distinct stems. |
 | `box_model.jl` | the box scheme's matrix rows: the Preissmann box scheme on the three problems whose density is in its class, at two resolutions each, with a `smoke` tag on two of them. |
+| `network_matrix_model.jl` | the multiplier network's matrix rows: both modes, `:all` and `:last_layer`, under the weak initial-and-boundary conditions and continued from the previous slab, on `Wave`, `SineGordon` and `VectorWave` at three time steps each, 18 rows. |
+| `symbolic_matrix_model.jl` | the symbolic family's matrix rows: the standing wave of `Wave` at its period over two periods, at three space resolutions of the trace basis, 3 rows. Its problem and method are `symbolic_model.jl`'s. |
+| `elm_matrix_model.jl` | the ELM family's matrix rows: the family's ansatz, guess and settings on `Wave` and `SineGordon` at three time steps each, 6 rows. Its method is `elm_model.jl`'s. |
+| `trialnn_matrix_model.jl` | the TrialNN family's matrix rows: the family's ansatz, coupling and guess on `Wave` and `SineGordon` at three time steps each, 6 rows. Its method is `trialnn_model.jl`'s. |
 | `figures.jl` | globs `runs/`, draws each archive as the kind it declares, and writes `results/<stem>.pdf` through `atomic_write`. **The only place `save` is called.** |
 | `spline_energy_scan.jl` | the relative energy error over time at a ladder of time steps, archived as one `"energy"` run that `figures.jl` draws as a comparison. |
 | `spline_phase_drift_scan.jl` | the error against the exact solution at the final time, at a ladder of ansatz resolutions. Prints a table and writes nothing. |

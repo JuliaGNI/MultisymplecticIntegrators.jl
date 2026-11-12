@@ -568,10 +568,9 @@ makes it worth keeping.
   `SineGordon` at three time steps, on the dead branch and on the four combinations of the bubble's
   form and its solve — and the two rows of the plateau probe, one of them at `Sx = 12`, `St = 16` and
   one at `BigFloat` with `GenericLinearAlgebra` in `scripts/Project.toml` alone. The plateau's
-  numbers are recorded, never asserted. Every row names its time step `timestep`, the field
-  `smallest_entry` reads, so `run_family.jl fixed_boundary` without a stem runs the cheapest row —
-  the largest time step, at `Float64` — and not the `BigFloat` row, which cannot run (K53 in
-  `KNOWN_ISSUES.md`).
+  numbers are recorded, never asserted. `run_family.jl fixed_boundary` without a stem runs the
+  plateau's `Float64` row and not the `BigFloat` row, which cannot run (K53 in `KNOWN_ISSUES.md`).
+  The thirty rows are the matrix's: `:fixed_boundary_matrix`, below.
 - **The TrialNN family returns as the network ansatz under `HardConstraintLifting`.** The coupling
   makes the field of a slab `P[N] + ℓ`: the transfinite projection of the ansatz's field that
   vanishes at the two ends of `xspan` and at the bottom of the slab, plus the transfinite
@@ -689,6 +688,18 @@ makes it worth keeping.
   `energy_error(problem, ::BoxScheme, traces)` as the midpoint rule over the boxes of the output
   grid, and `benchmark_panels`, the data of the two comparison panels: the error of a run's last
   stored step against its cost and against its wall time, one series per method.
+- **The network, symbolic, ELM, TrialNN and fixed-boundary families are rows of the matrix.** Four
+  model files register a family of rows each: `:network_matrix`, the multiplier network in both
+  modes on `Wave`, `SineGordon` and `VectorWave` at three time steps (18 rows); `:symbolic_matrix`,
+  the standing wave at its period at three space resolutions (3); and `:elm_matrix` and
+  `:trialnn_matrix`, on `Wave` and `SineGordon` at three time steps (6 each). The fixed-boundary
+  family's thirty matrix entries move to `:fixed_boundary_matrix` and keep their stems, so an
+  archive of either driver names the same configuration; `:fixed_boundary` keeps the two plateau
+  entries as runs. A fixed-boundary entry's `problem` is the symbol `:wave` or `:sine_gordon`, no
+  longer the string `"wave"` or `"sinegordon"`; the stems keep the strings. Every new row is tagged `:matrix`, so the smoke gate runs none of them. The diagnostics
+  gain `space_quadrature_weights` and `energy_error` for `NetworkAnsatz`, read on its trace basis'
+  space rule, and for `FixedBoundaryNetwork`, read on its own; `noether_charge` reaches them through
+  the weights, so a `VectorWave` row of a network has a charge.
 
 ### Changed
 
