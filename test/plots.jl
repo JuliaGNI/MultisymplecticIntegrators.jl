@@ -213,6 +213,55 @@ end
             @test_throws ArgumentError Diagnostics.plot_energy_error(times, [err];
                 labels = ["one", "two"])
         end
+
+        @testset "P1 error against cost and against time" begin
+            # The data of the two comparison panels, from three archives of two methods: one series
+            # per method, of the error of a run's last stored step against its cost on one panel and
+            # against its measured wall time on the other. The cost and the time are never
+            # exchanged, which is why the two are read back separately here.
+            #
+            # The figure itself is `scripts/figures.jl`'s and is asserted nowhere: a pixel, a font
+            # or an axis label is a defect of a machine and not of the package.
+            archives = [
+                Dict{String, Any}("stem" => "wave-box-h0.2", "method" => "box",
+                    "error" => [0.2, 0.03], "cost" => [66.0, 66.0], "wall_time" => 0.25),
+                Dict{String, Any}("stem" => "wave-spline-h0.1", "method" => "spline",
+                    "error" => [0.4, 0.02, 0.004], "cost" => [180.0, 180.0, 180.0],
+                    "wall_time" => 1.5),
+                Dict{String, Any}("stem" => "wave-spline-h0.05", "method" => "spline",
+                    "error" => [0.4, 0.01, 0.001], "cost" => [360.0, 360.0, 360.0],
+                    "wall_time" => 6.0)]
+            panels = benchmark_panels(archives)
+            @test length(panels.cost) == 2
+            @test length(panels.time) == 2
+            @test [series.label for series in panels.cost] == ["box", "spline"]
+            @test [series.label for series in panels.time] == ["box", "spline"]
+            @test panels.cost[1].x == [66.0]
+            @test panels.cost[2].x == [360.0, 180.0]
+            @test panels.time[1].x == [0.25]
+            @test panels.time[2].x == [6.0, 1.5]
+            # The error of the last stored step. A series keeps the order the archives are read in,
+            # which is the stems' string order: `wave-spline-h0.05` sorts before `wave-spline-h0.1`,
+            # so the finer row of the spline method comes first.
+            @test panels.cost[1].y == [0.03]
+            @test panels.cost[2].y == [0.001, 0.004]
+            @test panels.time[1].y == [0.03]
+            @test panels.time[2].y == [0.001, 0.004]
+
+            # A run whose error is not finite has no point on a logarithmic axis: it is left out of
+            # both series rather than drawn as a gap, and it does not stop the panels being drawn.
+            # The tables carry it, with the status that says why it has no error.
+            unfinite = vcat(archives,
+                [Dict{String, Any}("stem" => "wave-box-h0.1", "method" => "box",
+                    "error" => [NaN], "cost" => [132.0], "wall_time" => 0.5)])
+            drawn = benchmark_panels(unfinite)
+            @test [series.label for series in drawn.cost] == ["box", "spline"]
+            @test drawn.cost[1].x == [66.0]
+            @test drawn.cost[1].y == [0.03]
+            @test drawn.time[1].x == [0.25]
+            @test all(series -> all(isfinite, series.y), drawn.cost)
+            @test all(series -> all(isfinite, series.y), drawn.time)
+        end
     finally
         rm(directory; recursive = true, force = true)
     end

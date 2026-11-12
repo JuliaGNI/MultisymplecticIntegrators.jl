@@ -43,6 +43,9 @@ function main(args)
     selected = isempty(stems) ? (smallest_entry(entries),) :
                Tuple(entry_by_stem(entries, stem) for stem in stems)
     runner = family_run(name)
+    runner === nothing &&
+        throw(ArgumentError("the family `$(name)` registers no `run`; its rows are the matrix's " *
+                            "and `run_benchmark.jl` runs them"))
 
     banner("$(name): $(length(selected)) run(s) into $(RUNS_DIR[])")
     failures = 0

@@ -7,32 +7,54 @@
 #
 # An entry is a named tuple with at least `stem`, which names its archive and its figure, and
 # `label`, which a report and a heading show; the rest of its fields are the family's own.
+#
+# A row of the benchmark matrix is an entry whose family registers a `benchmark`, and it names four
+# fields more: `method`, `problem`, `tag` and `resolution`. The driver selects on the first three
+# and archives the fourth, so that the coarsest-to-finest comparison of one method reads a
+# resolution as data instead of parsing a stem.
 
 # The registry itself: one record per family name. It is a `Dict` and not a constant per family,
 # because a constant is an edit to this file for every family that arrives.
 const FAMILIES = Dict{Symbol, NamedTuple}()
 
-"""
-    register_family!(name, entries; run) -> Symbol
+# The fields a benchmark row adds to the entry every family's entry already has.
+const ROW_FIELDS = (:method, :problem, :tag, :resolution)
 
-Add the family `name` to the registry: its `entries`, and the `run` that turns one of them into the
-archive [`store_run!`](@ref) writes.
+"""
+    register_family!(name, entries; run = nothing, benchmark = nothing) -> Symbol
+
+Add the family `name` to the registry: its `entries`, the `run` that turns one of them into the
+archive [`store_run!`](@ref) writes, and the `benchmark` that turns one of them into a row of the
+matrix [`benchmark_run`](@ref) runs.
 
 The registry is append-only. A family is registered once, by the model file that builds it, and a
 second registration of the same name is refused with an `ArgumentError` naming it: two model files
 that claim one name are a mistake to report, not a claim to resolve in favour of the later one.
+
+A family registers its `run` for the figure archives, its `benchmark` for the matrix's rows, or
+both; one that registers neither is refused with an `ArgumentError` naming it, because neither
+driver could do anything with it.
+
+An entry of a family that registers a `benchmark` is a row, and a row names `method`, `problem`,
+`tag` and `resolution`. One that lacks any of them is refused with an `ArgumentError` naming the
+stem and the missing field: a row the driver cannot select on is not a row of the matrix.
 
 A stem names one archive under `runs/` for every family, so a stem that `entries` repeats, or that
 a registered family already holds, is refused with an `ArgumentError` naming it: the later run would
 replace the earlier archive.
 
 `run(entry)` returns the entry's archive as a `Dict{String, Any}` whose `"kind"` says what shape of
-figure it draws; `store_run!` adds the `"stem"`.
+figure it draws; `store_run!` adds the `"stem"`. `benchmark(entry)` integrates the row and returns
+its record as a `Dict{String, Any}` of the `"benchmark"` kind, which
+[`scripts/README.md`](README.md) documents.
 """
-function register_family!(name::Symbol, entries; run::Function)
+function register_family!(name::Symbol, entries; run = nothing, benchmark = nothing)
     haskey(FAMILIES, name) &&
         throw(ArgumentError("the family `$(name)` is already registered; a family is " *
                             "registered once, by its model file"))
+    (run === nothing && benchmark === nothing) &&
+        throw(ArgumentError("the family `$(name)` registers neither a `run` nor a `benchmark`; " *
+                            "`run_family.jl` and `run_benchmark.jl` would both skip it"))
     # A tuple, so that no entry arrives after the check.
     entries = Tuple(entries)
     taken = Set(entry.stem for family in values(FAMILIES) for entry in family.entries)
@@ -41,8 +63,15 @@ function register_family!(name::Symbol, entries; run::Function)
             throw(ArgumentError("the stem `$(entry.stem)` names two entries; a stem names one " *
                                 "archive under `runs/`"))
         push!(taken, entry.stem)
+        benchmark === nothing && continue
+        for field in ROW_FIELDS
+            haskey(entry, field) ||
+                throw(ArgumentError("the row `$(entry.stem)` of the family `$(name)` has no " *
+                                    "`$(field)`; a row of the matrix names method, problem, tag " *
+                                    "and resolution"))
+        end
     end
-    FAMILIES[name] = (entries = entries, run = run)
+    FAMILIES[name] = (entries = entries, run = run, benchmark = benchmark)
     return name
 end
 
@@ -60,6 +89,56 @@ The function that turns one entry of the family `name` into its archive, and an 
 naming a name the registry does not hold.
 """
 family_run(name::Symbol) = family(name).run
+
+"""
+    family_benchmark(name) -> Function
+
+The function that runs one row of the family `name`, and an `ArgumentError` naming a name the
+registry does not hold.
+"""
+family_benchmark(name::Symbol) = family(name).benchmark
+
+"""
+    select_rows(; method = nothing, problem = nothing, tag = nothing) -> Vector
+
+The rows of the matrix whose `method`, `problem` and `tag` equal every filter given, in stem order.
+
+The rows are the entries of the families that register a `benchmark`, and a family that registers a
+`run` alone contributes none: the two drivers read one registry, and a family of the figure archives
+is not a row of the matrix. A filter left at `nothing` selects on nothing, and two filters together
+select their intersection rather than their union.
+
+A filter that no row matches raises an `ArgumentError` naming it and the values the rows hold, and
+it does so before any row runs: a mistyped tag that selected nothing would otherwise be reported as
+a run that archived nothing.
+
+```julia
+select_rows(tag = :smoke)
+select_rows(method = :box, problem = :wave)
+```
+"""
+function select_rows(; method = nothing, problem = nothing, tag = nothing)
+    filters = (method = method, problem = problem, tag = tag)
+    rows = [(family = name, entry = entry, benchmark = FAMILIES[name].benchmark)
+            for name in sort!(collect(keys(FAMILIES)))
+            for entry in FAMILIES[name].entries
+            if FAMILIES[name].benchmark !== nothing]
+    # A filter is checked against every row of the matrix, not against the rows the other filters
+    # already left: `select_rows(method = :typo, tag = :smoke)` names the method, which is the one
+    # that is wrong.
+    for (field, value) in pairs(filters)
+        value === nothing && continue
+        held = [getfield(row.entry, field) for row in rows]
+        any(h -> h == value, held) ||
+            throw(ArgumentError("no row of the matrix has the $(field) `$(value)`; the registry " *
+                                "holds $(join(sort!(unique!(held)), ", "))"))
+    end
+    selected = [row
+                for row in rows
+                if all(getfield(row.entry, field) == value
+    for (field, value) in pairs(filters) if value !== nothing)]
+    return sort!(selected; by = row -> row.entry.stem)
+end
 
 function family(name::Symbol)
     haskey(FAMILIES, name) || throw(ArgumentError(

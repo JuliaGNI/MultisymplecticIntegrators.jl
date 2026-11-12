@@ -659,6 +659,36 @@ makes it worth keeping.
   counts the entry as failed and archives nothing, rather than archiving the truncated run as a
   success.
   The family's two §A soundings are unconverged iterates and are recorded as K47 and K48.
+- **The benchmark matrix, with the Preissmann box scheme as its baseline.** The scripts' registry
+  gains a second driver: `register_family!` takes `run` for the figure archives and `benchmark` for
+  the matrix's rows, a row names its `method`, its `problem`, its `tag` and its `resolution` beside
+  its stem and is refused without them, and `select_rows(; method, problem, tag)` returns the rows
+  whose fields equal every filter given, in stem order, naming the filter that no row matches before
+  any row runs. `scripts/run_benchmark.jl` runs a selection with one child Julia process per row, so
+  that no row's compilation flatters the next one's time, and archives each row as
+  `runs/<stem>.jld2` of the new `"benchmark"` kind: the solve's stats, the error, the energy drift,
+  the rotation charge, the cost in scalar unknowns and the wall time of every stored step after the
+  first, whose time is compilation, with the load average, the two thread counts, the Julia version
+  and the `--check-bounds` setting beside them. A row that throws, and a row that ends on a step
+  which did not converge, is archived with its status rather than dropped, so the comparison
+  includes the methods that fail, and a problem without an exact solution is measured against its
+  finest run. `scripts/benchmark.jl` writes one Markdown table per problem, with the eight
+  unconverged records of the old stack appended as historical rows and no family's oracle drawn from
+  them. `scripts/spline_matrix_model.jl` registers 36 rows — the three couplings on the four example
+  problems at three resolutions each — and `scripts/box_model.jl` the baseline's rows.
+  `BoxScheme <: SpaceTimeMethod` is the Preissmann box scheme of the first-order form
+  `K z_t + L z_x = ∇S(z)` of a density `λ(½|v|² − ½c²|w|² − V(u))` with `λ > 0`: `integrate`
+  advances it like any other method, its observed order is 2 in the time step and in the space step,
+  and it satisfies the discrete multisymplectic conservation law `δₜω + δₓκ = 0` per box. A density
+  outside its class raises an `ArgumentError`, and the class is decided on the partial derivatives
+  the density supplies rather than on the problem's type or its component count, so `SineGordon`'s
+  `½(c v² − w²) + 1 + cos u` is in it and `LinearTransport`'s doubled field is not. The package's
+  diagnostics gain `solution_error(problem, result)`, the error of every stored step against the
+  problem's exact solution and `nothing` where the problem has none, `noether_charge`, the rotation
+  charge of a density with that symmetry and `nothing` for one without it,
+  `energy_error(problem, ::BoxScheme, traces)` as the midpoint rule over the boxes of the output
+  grid, and `benchmark_panels`, the data of the two comparison panels: the error of a run's last
+  stored step against its cost and against its wall time, one series per method.
 
 ### Changed
 
@@ -705,6 +735,19 @@ makes it worth keeping.
   `test/problems/linear_transport.jl` asserts the measurement: both couplings at those three meshes,
   at most two Newton iterations per step, the 20-cell Jacobian at full rank with
   `σ_min/σ_max ≥ 1e-3`, and the masked and whole-grid orders at least `1.9` from 10 to 20 cells.
+- **The fixed-boundary affine control is held to its own floor.** The slab's Jacobian is
+  rank-deficient, and the part of the initial residual outside its range is a floor that no Newton
+  step removes: on entry 10 of the generated family it is `1.51e-10` of the initial residual at the
+  first slab, and one to five iterations all end there. The floor moves with the machine's
+  round-off, and on a `znver4` CI runner a step of the control ended near `4e-8`, above the
+  tolerance `1e-8` that the test held every step to. The test now measures each step's floor with a
+  dense column-pivoted QR of the step's Jacobian, under the solver's own rank rule, holds the step's
+  ratio to the larger of the tolerance and ten times that floor, asserts convergence wherever the
+  floor is a tenth of the tolerance or less, and bounds the floor by `√f_reltol`, so that a residual
+  independent of the unknowns (floor `1`) fails. An SVD's rank rule is not the solver's: at
+  `Float32` it keeps up to four directions fewer on these slabs, and its floor is up to `57` times
+  the QR's. `scripts/fb8_floor.jl` prints the floor, the conditioning, the ratio after one to five
+  iterations, and both ranks and floors on every slab of the test.
 - **CI coverage and cache.** CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of
   `Julia min`, and a test job saves the Julia cache only when it succeeds.
 - **Test floors for the merged downgrade check.** CI's Downgrade job resolves `Project.toml` and

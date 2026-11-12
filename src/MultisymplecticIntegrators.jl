@@ -117,9 +117,14 @@ export default_fit
 include("core/integrate.jl")
 export integrate, top_trace, solve_stats
 
+# the baselines, which the diagnostics report on like any other method
+include("baselines/box_scheme.jl")
+export BoxScheme, box_grid, box_quadrature_weights
+
 # the diagnostics
 include("diagnostics.jl")
-export energy_density, energy_error, solution_data
+export energy_density, energy_error, solution_error, solution_data, noether_charge,
+       benchmark_panels
 
 # the plotting API, implemented in the `MultisymplecticIntegratorsPlots` extension
 include("plots.jl")

@@ -372,3 +372,49 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   to `GeometricSolutions`, and the step runs as a row of M's matrix once it lands.
 - kind: upstream
 - found: 2026-11-10
+
+### K54 · A reference run that itself failed part-way makes the driver throw after every row has archived.
+
+- location: `scripts/benchmark.jl:265` (`fine_time_rows`), reached from `main` through
+  `attach_references!`
+- evidence: a problem without an exact solution whose finest run fails at a step raises
+  `ArgumentError: the time 0.2 of the coarse run is not a time of the finer run` from
+  `fine_time_rows`, so the driver ends with an exception after every selected row has written its
+  archive. No registered row is measured against a reference run, so the input lies outside every
+  clause's domain and nothing in the suite reaches it; comparing at the times both runs stored, and
+  recording `NaN` past them, would make it a result.
+- kind: defect
+- found: 2026-11-11
+
+### K55 · The shared-node and shared-time matches are two routines that disagree at one ulp.
+
+- location: `scripts/benchmark.jl:234` and `:265`
+- evidence: the nodes are matched by one routine and the times by another; only the time one
+  tolerates a neighbour in the last place, so a grid compared on its nodes and a grid compared on its
+  times answer differently for the same pair. One `shared_index(sorted, value)` would serve both and
+  remove about twelve lines.
+- kind: dead code
+- found: 2026-11-11
+
+### K56 · The box scheme copies the initial level into its cache twice on the first step.
+
+- location: `src/baselines/box_scheme.jl:443` (`initial_guess!`) and `:494` (`read_initial_level!`)
+- evidence: `initial_guess!` copies `sol.u`, `sol.v` and `sol.w` into the cache when `c.steps == 0`,
+  and `integrate_step!` then calls `read_initial_level!` (`:478`), which copies the same three
+  arrays again. Removing the second copy makes a bare `integrate_step!` start from a zero cache, so
+  the choice of the one copy that stays is a design decision.
+- kind: dead code
+- found: #59
+
+### K57 · The problem-label mapping of the matrix is written three times, and the two problem builders repeat each other.
+
+- location: `scripts/box_model.jl:33` (`box_problem_label`), `scripts/spline_matrix_model.jl:59`
+  (`spline_problem_label`) and `test/integration/benchmark.jl:31` (`PROBLEM_LABELS`)
+- evidence: the three map `:wave`, `:vector_wave` and `:sine_gordon` to the same display names;
+  only the spline file and the test name `:linear_transport`, which the box file prints as
+  `"linear_transport"` because the box scheme refuses that problem. `box_problem`
+  (`scripts/box_model.jl:58`) and `spline_matrix_problem` (`scripts/spline_matrix_model.jl:91`) are
+  the same `if` chain apart from the `xstep` and the transport span. One shared helper would serve
+  both model files and the test.
+- kind: dead code
+- found: #59

@@ -322,6 +322,36 @@ end
         end
     end
 
+    @testset "S2a the box's midpoint rule of a scalar density of another type" begin
+        # The box scheme reads its density at the mean of a box's two nodes, and a density that is
+        # not a `LagrangianDensity` gets that mean state as a scalar at `D = 1`, as the ansatz's node
+        # rule hands it one value per node. For `L = ½kv²` the energy density is `½kv²`, so the
+        # energy of a trace is the box sum of `½k v̄²`, which the test builds itself.
+        for T in (Float64, Float32)
+            problem = LagrangianPDEProblem(QuadraticDensity(T(2)); D = 1,
+                ics_function = (x, p) -> (u = zeros(T, length(x), 1),
+                    v = zeros(T, length(x), 1), w = zeros(T, length(x), 1)),
+                bcs_function = (t, p) -> nothing,
+                timespan = (zero(T), one(T)), timestep = T(0.1),
+                xspan = (zero(T), one(T)), xstep = T(0.1))
+            nodes = collect(xgrid(problem))
+            weights = box_quadrature_weights(problem)
+            @test length(weights) == length(nodes) - 1
+            # A profile that varies from node to node, so that a box's mean is no node's value.
+            profile = [one(T) + T(0.5) * (j - 1) / (length(nodes) - 1)
+                       for j in eachindex(nodes)]
+            traces = [(u = zeros(T, length(nodes)), v = copy(profile),
+                w = zeros(T, length(nodes)))]
+            boxed = MultisymplecticIntegrators.box_energies(problem, traces)
+            closed = sum(weights[j] * T(1) * ((profile[j] + profile[j + 1]) / 2)^2
+            for j in eachindex(weights))
+            @test isapprox(first(boxed), closed; rtol = 8 * eps(T))
+            # One stored trace has no deviation from itself, and what `energy_error` reports is the
+            # deviation of the series and not the energies themselves.
+            @test energy_error(problem, BoxScheme(), traces) == [zero(T)]
+        end
+    end
+
     @testset "S2a a per-component density sums the components of a node" begin
         # `VectorWave.problem` carries a `LagrangianDensity`, which `node_energy_density` applies to
         # each component of a node in turn. The energy of a `D = 2` trace is the sum of the two
@@ -366,5 +396,112 @@ end
         @test length(err) == 2
         @test err[1] == 0.0f0
         @test err[2] > 16 * eps(Float32)
+    end
+
+    @testset "the error of a run against the exact solution" begin
+        # A run built by hand: the exact solution at every stored step, and `n ε sin(πx)` added to
+        # the last one. The error of that step is arithmetic — `n ε` at the node where the sine is
+        # one — and the steps before it are zero, so the value comes from the closed form and not
+        # from a second run of the code.
+        #
+        # The two-component problem's perturbation sits on component 2 alone, so a value read from
+        # component 1 reports no error at all.
+        function exact_run(problem, ε; component = 1)
+            solution = MultisymplecticIntegrators.GeometricSolution(problem)
+            nodes = collect(MultisymplecticIntegrators.xgrid(problem))
+            nx = length(nodes)
+            steps = MultisymplecticIntegrators.ntime(problem)
+            for n in 1:steps
+                t = solution.t[n]
+                solution[n] = (u = problem.solutions.u(t, nodes, problem.params),
+                    v = problem.solutions.v(t, nodes, problem.params),
+                    w = problem.solutions.w(t, nodes, problem.params))
+            end
+            last = solution.t[steps]
+            u = problem.solutions.u(last, nodes, problem.params)
+            for j in 1:nx
+                u[(component - 1) * nx + j] += eltype(u)(steps) * ε * sinpi(nodes[j])
+            end
+            solution[steps] = (u = u,
+                v = problem.solutions.v(last, nodes, problem.params),
+                w = problem.solutions.w(last, nodes, problem.params))
+            return (; solution, traces = fill(nothing, steps))
+        end
+
+        for T in (Float32, Float64)
+            ε = T(1) / 20
+            steps = 5
+            scalar = Wave.problem(
+                T = T, timespan = (zero(T), T(1) / 4), timestep = T(1) / 20,
+                xstep = T(1) / 20)
+
+            err = solution_error(scalar, exact_run(scalar, ε))
+            @test eltype(err) === T
+            @test length(err) == steps
+            @test all(iszero, err[1:(end - 1)])
+            @test isapprox(err[end], T(steps) * ε; rtol = 8 * eps(T))
+
+            vector = VectorWave.problem(T = T, timespan = (zero(T), T(1) / 4),
+                timestep = T(1) / 20, xstep = T(1) / 20)
+            err2 = solution_error(vector, exact_run(vector, ε; component = 2))
+            @test length(err2) == steps
+            @test all(iszero, err2[1:(end - 1)])
+            @test isapprox(err2[end], T(steps) * ε; rtol = 8 * eps(T))
+
+            # A problem without an exact solution has no error to report, and says so rather than
+            # returning a value of its own: the matrix measures such a run against a finer one.
+            base = scalar
+            unsolved = LagrangianPDEProblem(base.density; D = base.D,
+                ics_function = base.ics_function, bcs_function = base.bcs_function,
+                timespan = base.timespan, timestep = base.timestep, xspan = base.xspan,
+                xstep = base.xstep, params = base.params)
+            @test unsolved.solutions === nothing
+            @test solution_error(unsolved, exact_run(scalar, ε)) === nothing
+            # A call outside the method's signature is a `MethodError`, and not `Base.error` printing
+            # its arguments.
+            @test_throws MethodError solution_error(scalar, scalar, exact_run(scalar, ε))
+        end
+    end
+
+    @testset "the rotation charge of a density with and without the symmetry" begin
+        # `VectorWave`'s density is a function of the components' lengths, so a rotation of the two
+        # components leaves it invariant and `∫ (u₁ v₂ − u₂ v₁)` is the run's conserved quantity.
+        # `LinearTransport`'s doubled field has two components and no such symmetry: its density
+        # reads one component against the other's velocity and slope. Whether the charge exists is
+        # decided on the density's values, so the component count is not what tells the two apart,
+        # and the answer is `nothing` for a density without the symmetry and a series for the other.
+        T = Float64
+        span = (zero(T), T(1) / 10)
+        vector = VectorWave.problem(T = T, timespan = span, timestep = T(1) / 20,
+            xstep = T(1) / 20)
+        transport = LinearTransport.problem(T = T, timespan = span, timestep = T(1) / 20,
+            xspan = (T(-1) / 2, zero(T)), xstep = T(1) / 20)
+        ansatz = TensorBSplineAnsatz(
+            degree = 2, ncells = (2, 10), xspan = (zero(T), one(T)),
+            n = 3)
+        method = SpaceTimeGalerkin(ansatz, CoefficientRestriction())
+        splined = integrate(vector, method)
+        charge = noether_charge(vector, method, splined.traces)
+        @test charge isa Vector{T}
+        @test length(charge) == length(splined.traces)
+        @test all(isfinite, charge)
+        @test abs(first(charge)) > eps(T)
+        # The box scheme keeps one convention for its energy and its charge: the charge of its run
+        # is integrated by the midpoint rule over its boxes, so it too is a series.
+        boxed = integrate(vector, BoxScheme())
+        boxed_charge = noether_charge(vector, BoxScheme(), boxed.traces)
+        @test boxed_charge isa Vector{T}
+        @test length(boxed_charge) == length(boxed.traces)
+        @test all(isfinite, boxed_charge)
+        @test abs(first(boxed_charge)) > eps(T)
+        # A density without the symmetry answers `nothing` under either rule, and the trace is never
+        # read for it: the decision comes first.
+        for problem in (
+            Wave.problem(T = T, timespan = span, timestep = T(1) / 20,
+            xstep = T(1) / 20),
+            transport)
+            @test noether_charge(problem, method, [nothing]) === nothing
+            @test noether_charge(problem, BoxScheme(), [nothing]) === nothing
+        end
     end
 end
