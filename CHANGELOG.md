@@ -741,10 +741,13 @@ makes it worth keeping.
   first slab, and one to five iterations all end there. The floor moves with the machine's
   round-off, and on a `znver4` CI runner a step of the control ended near `4e-8`, above the
   tolerance `1e-8` that the test held every step to. The test now measures each step's floor with a
-  dense SVD of the step's Jacobian, holds the step's ratio to the larger of the tolerance and ten
-  times that floor, and asserts convergence wherever the floor is a tenth of the tolerance or less.
-  `scripts/fb8_floor.jl` prints the floor, the conditioning and the ratio after one to five
-  iterations.
+  dense column-pivoted QR of the step's Jacobian, under the solver's own rank rule, holds the step's
+  ratio to the larger of the tolerance and ten times that floor, asserts convergence wherever the
+  floor is a tenth of the tolerance or less, and bounds the floor by `√f_reltol`, so that a residual
+  independent of the unknowns (floor `1`) fails. An SVD's rank rule is not the solver's: at
+  `Float32` it keeps up to four directions fewer on these slabs, and its floor is up to `57` times
+  the QR's. `scripts/fb8_floor.jl` prints the floor, the conditioning, the ratio after one to five
+  iterations, and both ranks and floors on every slab of the test.
 - **CI coverage and cache.** CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of
   `Julia min`, and a test job saves the Julia cache only when it succeeds.
 - **Test floors for the merged downgrade check.** CI's Downgrade job resolves `Project.toml` and

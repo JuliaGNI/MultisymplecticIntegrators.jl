@@ -1,7 +1,7 @@
 using GeometricBase: parameters, timestep, timespan
 using GeometricIntegratorsBase
 using GeometricSolutions
-using LinearAlgebra: BLAS, norm, svd
+using LinearAlgebra: BLAS, ColumnNorm, diag, norm, qr
 using MultisymplecticIntegrators
 using Random
 using SimpleSolvers
@@ -223,11 +223,13 @@ end
 """
     residual_floor(int, θ, params, cut)
 
-The part of an affine slab's residual at `θ` that lies outside the range of its Jacobian, relative to
+The part of an affine slab's residual at `θ` that lies outside the range the solver keeps, relative to
 that residual: the least ratio any step from `θ` can reach. The Jacobian is the central difference of
-the residual at unit steps, which is exact for an affine residual, and its range is spanned by the
-left singular vectors of a dense SVD whose singular values exceed `cut` times the largest, the rank
-rule of the solver's own pivoted QR.
+the residual at unit steps, which is exact for an affine residual. Its range is taken as the
+solver's `LapackPivotedQR` takes it: the leading columns of `Q` of a column-pivoted QR, as long a run
+as the moduli of `R`'s diagonal exceed `cut` times the first. An SVD's rank rule is a different
+one, and at `Float32` it keeps up to four directions fewer on these slabs (`scripts/fb8_floor.jl`).
+A residual that does not depend on `θ` has rank `0` and floor `1`.
 """
 function residual_floor(int, θ::AbstractVector{T}, params, cut) where {T}
     r₀ = slab_residual(int, θ, params)
@@ -238,9 +240,11 @@ function residual_floor(int, θ::AbstractVector{T}, params, cut) where {T}
         J[:, j] = (slab_residual(int, θ .+ e, params) .-
                    slab_residual(int, θ .- e, params)) ./ 2
     end
-    F = svd(J)
-    U = F.U[:, F.S .> cut * F.S[1]]
-    return norm(r₀ - U * (U' * r₀)) / norm(r₀)
+    F = qr(J, ColumnNorm())
+    d = abs.(diag(F.R))
+    rank = something(findfirst(≤(cut * d[1]), d), length(d) + 1) - 1
+    Q = Matrix(F.Q)[:, 1:rank]
+    return norm(r₀ - Q * (Q' * r₀)) / norm(r₀)
 end
 
 const PROBLEMS = Dict(
@@ -728,9 +732,11 @@ end
     # a floor that no step removes: on entry 10 of the generated family it is `1.51e-10` of the
     # initial residual at the first slab, and one, two, three and five iterations all end there. The
     # floor is a property of the slab's data, and it moves with the machine's round-off. So each step
-    # is held to the larger of the tolerance and ten times its own floor, which a dense SVD of the
-    # step's Jacobian measures outside the solver's pivoted QR, and the step converges wherever that
-    # floor is a tenth of the tolerance or less.
+    # is held to the larger of the tolerance and ten times its own floor, which a dense pivoted QR of
+    # the step's Jacobian measures outside the solver, and the step converges wherever that floor is
+    # a tenth of the tolerance or less. The floor itself is bounded by `√f_reltol`: the largest on
+    # these slabs is `1.29e-9` at `Float64` and `1.63e-2` at `Float32`, and a residual that has lost
+    # its dependence on the unknowns has floor `1`, which would otherwise pass every check here.
     for T in (Float64, Float32), form in (:abg, :tsr)
 
         linear = [entry.problem
@@ -763,6 +769,7 @@ end
             @testset "$label, $T, $form" begin
                 @test length(ratios) == ntime(problem)
                 @test all(c.iterations .≤ 2)
+                @test all(floors .≤ sqrt(reltol))
                 @test all(ratios .≤ max.(reltol, 10 .* floors))
                 @test all(c.converged .| (floors .> reltol / 10))
                 @test all(c.initial_residuals .≥ T(1 // 100))
