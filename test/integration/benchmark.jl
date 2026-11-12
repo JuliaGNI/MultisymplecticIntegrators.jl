@@ -6,6 +6,7 @@ using MultisymplecticIntegrators
 using MultisymplecticIntegrators: space_quadrature_nodes, space_quadrature_weights
 using Printf: @sprintf
 using Random: Xoshiro
+using SimpleSolvers: SimpleSolvers
 using SimpleSplines: Dirichlet
 using Test
 
@@ -630,6 +631,91 @@ end
                 @test problem.D == 2
             end
         end
+        # The rows of the network, symbolic, ELM, TrialNN and fixed-boundary families: each family
+        # registers a `benchmark` and no `run`, holds every method on every problem it takes at three
+        # time steps, and each row builds its integrator with its own solver keywords, without a
+        # step. A row is never `:smoke`, so the gate's two smoke testsets run none of them.
+        wave_keys = keys(Wave.problem().params)
+        problem_keys = Dict(:wave => wave_keys,
+            :sine_gordon => keys(SineGordon.problem().params),
+            :vector_wave => keys(VectorWave.problem().params))
+        @test problem_keys[:wave] != problem_keys[:sine_gordon]
+        fixed_boundary_methods = (:fixed_boundary_dead, :fixed_boundary_live_abg_joint,
+            :fixed_boundary_live_tsr_joint, :fixed_boundary_live_abg_projected,
+            :fixed_boundary_live_tsr_projected)
+        families = (
+            network_matrix = (count = 18, methods = (:network_all, :network_last_layer),
+                problems = (:wave, :sine_gordon, :vector_wave),
+                build = (network_matrix_problem, network_matrix_method)),
+            symbolic_matrix = (count = 3, methods = (:symbolic,), problems = (:wave,),
+                build = (symbolic_matrix_problem, symbolic_matrix_method)),
+            elm_matrix = (count = 6, methods = (:elm,), problems = (:wave, :sine_gordon),
+                build = (elm_matrix_problem, elm_matrix_method)),
+            trialnn_matrix = (
+                count = 6, methods = (:trialnn,), problems = (:wave, :sine_gordon),
+                build = (trialnn_matrix_problem, trialnn_matrix_method)),
+            fixed_boundary_matrix = (count = 30, methods = fixed_boundary_methods,
+                problems = (:wave, :sine_gordon),
+                build = (fixed_boundary_problem, fixed_boundary_method)))
+        @test allunique(row.entry.stem for row in rows)
+        for (name, family) in pairs(families)
+            entries = family_entries(name)
+            @test family_benchmark(name) isa Function
+            @test family_run(name) === nothing
+            @test length(entries) == family.count
+            for method in family.methods, problem in family.problems
+
+                group = [entry
+                         for entry in entries
+                         if entry.method === method && entry.problem === problem]
+                @test length(group) == 3
+                @test allunique(entry.resolution for entry in group)
+            end
+            makeproblem, makemethod = family.build
+            for entry in entries
+                @test entry.tag === :matrix
+                @test entry.method in family.methods
+                @test entry.problem in family.problems
+                @test entry.label isa String && entry.problem_label isa String
+                @test entry.resolution isa NamedTuple && haskey(entry.resolution, :timestep)
+                @test entry.parameters isa NamedTuple
+                keywords = get(entry, :solver, (;))
+                @test keywords isa NamedTuple
+                problem = makeproblem(entry)
+                method = makemethod(entry)
+                @test method isa SpaceTimeMethod
+                @test problem.timestep == entry.resolution.timestep
+                @test ntime(problem) >= 1
+                # the problem the row names, told apart by its parameters
+                @test keys(problem.params) == problem_keys[entry.problem]
+                @test problem.D == (entry.problem === :vector_wave ? 2 : 1)
+                @test GeometricIntegrator(problem, method; keywords...) isa
+                      GeometricIntegrator
+            end
+        end
+        # The symbolic rows run at the standing wave's period `2l / c = 4` and at the tolerance the
+        # symbolic family measured on its affine control.
+        for entry in family_entries(:symbolic_matrix)
+            @test entry.resolution.timestep == 4.0
+            @test entry.solver == (f_abstol = 0.0, f_reltol = symbolic_f_reltol(Float64))
+        end
+        @test allunique(entry.resolution.ncells
+        for entry in family_entries(:symbolic_matrix))
+        # The fixed-boundary rows keep the stems of the entries they were, reach `t = 1`, and name
+        # the solver method their branch is solved by.
+        solvers = Dict(:newton => SimpleSolvers.Newton(),
+            :joint => MultisymplecticIntegrators.LevenbergMarquardt(),
+            :projected => MultisymplecticIntegrators.LevenbergMarquardt(
+                variable_projection = true))
+        for entry in family_entries(:fixed_boundary_matrix)
+            @test occursin("-fixed-boundary-", entry.stem)
+            @test entry.parameters.steps * entry.resolution.timestep ≥ 1 - 1e-12
+            @test entry.solver == (solver = solvers[entry.parameters.solve],)
+            @test endswith(string(entry.method), string(entry.parameters.solve)) ||
+                  entry.parameters.solve === :newton
+        end
+        @test count(entry -> entry.solver.solver == solvers[:projected],
+            family_entries(:fixed_boundary_matrix)) == 12
         # A family of the figure archives contributes no row, and the run-only family is registered.
         elm = Set(entry.stem for entry in family_entries(:elm))
         @test !isempty(elm)

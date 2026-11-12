@@ -1271,29 +1271,32 @@ end
 # ---- FB18 ----------------------------------------------------------------------------
 
 @testset "FB18 the family's rows build and the plateau is a record" begin
-    # N23: the registry holds the family's 32 entries — 30 of the matrix and 2 of the plateau probe
-    # — each with a distinct stem and a resolution, one of them at `Sx = 12`, `St = 16` and
+    # N23: the registry holds the family's 32 entries — 30 rows of the matrix and 2 runs of the
+    # plateau probe — each with a distinct stem, one of the plateau's at `Sx = 12`, `St = 16` and
     # `h = 0.025` and one at `BigFloat`, and the plateau's numbers are a record and no assertion.
-    entries = family_entries(:fixed_boundary)
-    @test length(entries) == 32
-    @test length(unique(entry.stem for entry in entries)) == 32
-    @test all(entry -> entry.steps ≥ 1, entries)
-    matrix = filter(
-        entry -> occursin("fixed-boundary", entry.stem) &&
-                 !occursin("plateau", entry.stem),
-        entries)
+    plateau = family_entries(:fixed_boundary)
+    matrix = family_entries(:fixed_boundary_matrix)
+    @test length(plateau) == 2
     @test length(matrix) == 30
-    @test length(Set((entry.problem, entry.form, entry.solver, entry.timestep)
-    for entry in matrix)) == 30
+    @test allunique(entry.stem for entry in Iterators.flatten((plateau, matrix)))
+    @test length(plateau) + length(matrix) == 32
+    @test all(entry -> occursin("plateau", entry.stem), plateau)
+    @test !any(entry -> occursin("plateau", entry.stem), matrix)
+    @test all(entry -> entry.steps ≥ 1, plateau)
+    @test all(entry -> entry.parameters.steps ≥ 1, matrix)
+    @test length(Set((entry.problem, entry.parameters.form, entry.parameters.solve,
+                         entry.resolution.timestep) for entry in matrix)) == 30
     # a matrix row integrates its ladder up to `t = 1`, so that the three resolutions of one
     # problem compare one span
-    @test all(entry -> entry.steps * entry.timestep ≥ 1 - 1e-12, matrix)
-    # a driver given no stem runs the cheapest row: the largest time step, at `Float64`
-    cheapest = smallest_entry(entries)
-    @test cheapest.timestep == maximum(entry.timestep for entry in entries)
-    @test cheapest.T === Float64
-    plateau = filter(entry -> occursin("plateau", entry.stem), entries)
-    @test length(plateau) == 2
+    @test all(entry -> entry.parameters.steps * entry.resolution.timestep ≥ 1 - 1e-12, matrix)
+    # a driver given no stem runs the plateau's `Float64` entry, and not the `BigFloat` one
+    @test smallest_entry(plateau).T === Float64
+    # the cheapest row, the largest time step, runs at `Float64`
+    largest = maximum(entry.resolution.timestep for entry in matrix)
+    @test all(entry -> entry.parameters.T === :Float64,
+        filter(entry -> entry.resolution.timestep == largest, matrix))
+    entries = vcat(collect(plateau), collect(matrix))
+    @test all(entry -> entry.problem in (:wave, :sine_gordon), entries)
     @test any(entry -> entry.Sx == 12 && entry.St == 16 && entry.timestep == 0.025, plateau)
     @test any(entry -> entry.T === BigFloat, plateau)
     @test all(entry -> entry.steps == 1, filter(entry -> entry.T === BigFloat, plateau))
