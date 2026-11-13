@@ -635,8 +635,7 @@ end
         # registers a `benchmark` and no `run`, holds every method on every problem it takes at three
         # resolutions, and each row builds its integrator with its own solver keywords, without a
         # step. A row is never `:smoke`, so the gate's two smoke testsets run none of them.
-        wave_keys = keys(Wave.problem().params)
-        problem_keys = Dict(:wave => wave_keys,
+        problem_keys = Dict(:wave => keys(Wave.problem().params),
             :sine_gordon => keys(SineGordon.problem().params),
             :vector_wave => keys(VectorWave.problem().params))
         @test problem_keys[:wave] != problem_keys[:sine_gordon]

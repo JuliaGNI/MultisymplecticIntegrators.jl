@@ -1279,7 +1279,6 @@ end
     @test length(plateau) == 2
     @test length(matrix) == 30
     @test allunique(entry.stem for entry in Iterators.flatten((plateau, matrix)))
-    @test length(plateau) + length(matrix) == 32
     @test all(entry -> occursin("plateau", entry.stem), plateau)
     @test !any(entry -> occursin("plateau", entry.stem), matrix)
     @test all(entry -> entry.steps ≥ 1, plateau)

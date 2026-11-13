@@ -28,7 +28,7 @@ A stem carries `matrix`, because the run family's `wave-elm-h0.05` and `wave-elm
 name two archives of the same problem, method and time step.
 
 A row's `solver` is `f_abstol = 0` and the relative tolerance that the ELM family measured on its
-run of `Wave`, `trained_f_reltol(Float64)` of `test/helpers/testsetup.jl:44`.
+run of `Wave`, `trained_f_reltol(Float64)` of `test/helpers/testsetup.jl`.
 """
 const ELM_MATRIX = [(stem = "$(held.problem)-elm-matrix-h$(timestep)",
                         label = "$(held.problem), elm, h = $(timestep)",

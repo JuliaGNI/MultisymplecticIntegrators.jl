@@ -32,7 +32,7 @@ are the network's width, its mode, the trace basis' degree and cells, and the nu
 components, `2` on `VectorWave`.
 
 A row's `solver` is `f_abstol = 0` and the relative tolerance that the network family measured on
-its affine control, `network_f_reltol(Float64)` of `test/ansatz/network.jl:51`.
+its affine control, `network_f_reltol(Float64)` of `test/ansatz/network.jl`.
 """
 const NETWORK_MATRIX = [(stem = "$(held.problem)-$(network.method)-h$(timestep)",
                             label = "$(held.problem), $(network.method), h = $(timestep)",

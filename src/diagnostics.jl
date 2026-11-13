@@ -76,18 +76,8 @@ function energy_error(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin, 
 end
 
 function energy_error(problem::LagrangianPDEProblem,
-        ansatz::Union{TensorBSplineAnsatz, FixedBoundaryNetwork}, traces)
+        ansatz::Union{TensorBSplineAnsatz, NetworkAnsatz, FixedBoundaryNetwork}, traces)
     return quadrature_energy_error(problem, space_quadrature_weights(ansatz), traces)
-end
-
-"""
-    energy_error(problem, ansatz::NetworkAnsatz, traces)
-
-The relative energy deviation of a network run, read from the traces on the trace basis' space
-rule, which is the rule the network's slab stores the trace on, and not on the network's own rule.
-"""
-function energy_error(problem::LagrangianPDEProblem, ansatz::NetworkAnsatz, traces)
-    return quadrature_energy_error(problem, space_quadrature_weights(ansatz.trace), traces)
 end
 
 # The energy deviation of a run whose traces are stored at the nodes of a space rule with these
