@@ -421,33 +421,34 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-11-12
 
-### K59 · Two builds of one network architecture can generate kernels whose sums stand in another order.
+### K59 · A network's generated kernels follow the GC history, so a trained run reproduces only within one process.
 
-- location: `src/ansatz/network.jl:113` (`network_functions`); `SymbolicUtils` 4.56.1,
-  `src/code.jl:1949` (`_cse_compute`) and `src/symbolic_ops/addsub.jl:129` (`add_worker`)
-- evidence: every `NetworkAnsatz` generates its `field` and `gradient` kernels again through
-  `SymbolicNeuralNetworks`' `build_flat_function`. The CSE pass of `SymbolicUtils` emits a sum's
-  terms in the order of `arguments(expr)`, not `sorted_arguments`, and that order is the term
+- location: `src/ansatz/network.jl:140` (`network_kernels`) and `:112` (`network_functions`);
+  `SymbolicUtils` 4.56.1, `src/code.jl:1949` (`_cse_compute`) and `src/symbolic_ops/addsub.jl:129`
+  (`add_worker`)
+- evidence: `network_kernels` builds the `field` and `gradient` kernels of an architecture once
+  per process, through `network_functions` and `SymbolicNeuralNetworks`' `build_flat_function`,
+  and every `NetworkAnsatz` of that architecture reads them. The CSE pass of `SymbolicUtils` emits a
+  sum's terms in the order of `arguments(expr)`, not `sorted_arguments`, and that order is the term
   dictionary of whichever hash-consed copy of the term the weak cache holds, so it follows the
-  process's allocation and `GC.gc()` history. `scripts/kernel_build_order.jl` builds
-  `NetworkAnsatz(S = 20, D = 1)` 20 times with a `GC.gc()` after every fifth build: with
-  `SymbolicUtils` 4.56.1 the `Float64` builds fall into two classes, 1–5 and 6–20, whose first
-  differing line is `ps.L1.W[21] * x1[2, k]` against `ps.L1.W[1] * x1[1, k]` and whose kernel values
-  differ by up to `2.5e-15` relative; with 4.55.0 all 20 builds are one class. 4.56 seeds a sum's
-  dictionary with a bulk copy of an existing one (`_dict_copy_into!`), which keeps that dictionary's
-  slot order, where 4.55 inserts the terms one by one; that this change is the cause is likely and
-  not shown. The 20 epochs of a `TrainedHiddenLayer` fit carry the rounding difference to the step:
-  `julia --startup-file=no --project=. scripts/kernel_build_order.jl 20 5 30 3` (Julia 1.13.3, no
-  `--check-bounds` flag) runs E4a's pair 30 times per element type with 3 builds and one `GC.gc()`
-  between its two steps: 2 of 30 `Float64` and 2 of 30 `Float32` pairs differ, by up to `3.1e-12`
-  and `1.3e-3` relative, with 4.56.1, and none with 4.55.0. CI resolves the newer version, which is
-  how E4a's `===` assertions at `test/initial_guess/trained_hidden_layer.jl:756-757` fail on some
-  legs and pass on others. One kernel pair per architecture and process (#62) makes every
-  integrator of one process read the same kernels: the same pair, looped 20 times per element type
-  at each of 0, 3 and 6 builds between its steps with 4.56.1, differs in 8 of 120 trials at `1e0301e`
-  and in none at the head of #62 (`04b065b`). Two processes whose history differs before the first
-  build can still generate different kernels, so a trained run reproduces within one process and
-  not, bit for bit, from one process to the next. Sorted arguments in `SymbolicUtils`' CSE would
-  remove the dependence at its source.
+  process's allocation and `GC.gc()` history. 4.56 seeds a sum's dictionary with a bulk copy of an
+  existing one (`_dict_copy_into!`), which keeps that dictionary's slot order, where 4.55 inserts
+  the terms one by one; that this change is the cause is likely and not shown.
+  `julia --startup-file=no --project=. scripts/kernel_build_order.jl 20 5 30 3` at `6036a47`
+  (Julia 1.13.3, `SymbolicUtils` 4.56.1, no `--check-bounds` flag) builds the kernels of
+  `S = 20`, `D = 1` 20 times around the cache, with a `GC.gc()` after every fifth build: the builds
+  fall into two classes, 1–10 and 11–20 in `Float64` and 1–5 and 6–20 in `Float32`, whose kernel
+  values differ by up to `2.5e-15` and `2.2e-7` relative. One differing line is
+  `ps.L1.W[21] * x1[2, k]` against `ps.L1.W[1] * x1[1, k]` in the first term of a sum. The same
+  builds at `1e0301e`, which has no cache, are one class with 4.55.0. The 20 epochs of a
+  `TrainedHiddenLayer` fit carry the rounding difference to the step: at `1e0301e`, where every
+  `NetworkAnsatz` builds its own kernels, test E4a's pair of first steps, looped 30 times per
+  element type with 3 builds and one `GC.gc()` between its two steps, differs in 2 of 30 `Float64`
+  and 2 of 30 `Float32` trials, by up to `3.1e-12` and `1.3e-3` relative, with 4.56.1, and in none
+  with 4.55.0. At `6036a47` the script's part 2 counts none of 30 per element type, because both
+  steps read the one cached pair. Within one process the kernels are therefore one build; two
+  processes whose history differs before that build can generate different kernels, so a trained
+  run does not reproduce bit for bit from one process to the next. Sorted arguments in
+  `SymbolicUtils`' CSE would remove the dependence at its source.
 - kind: upstream
 - found: 2026-11-13

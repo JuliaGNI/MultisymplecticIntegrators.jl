@@ -1,15 +1,17 @@
-# Whether two builds of one network architecture give the same kernels, and what that does to the
-# trained fit of test E4a (known issue K59).
+# Whether two symbolic builds of one network architecture give the same kernels, and whether test
+# E4a's pair of first steps is bitwise equal (known issue K59).
 #
-# Part 1 builds `NetworkAnsatz(S = 20, D = 1)` `builds` times, with a `GC.gc()` after every
-# `gcevery`-th build, and sorts the builds into classes by the generated code of their two kernels
-# and by the kernels' values at fixed inputs. One class means the build is reproducible in this
-# process.
+# Part 1 builds the `field` and `gradient` kernels of the network `S = 20`, `D = 1`, `tanh`
+# `builds` times through `network_functions`, around the per-process cache of `network_kernels`,
+# with a `GC.gc()` after every `gcevery`-th build. It sorts the builds into classes by the generated
+# code of the two kernels and by their values at fixed inputs. One class means that the symbolic
+# build is reproducible in this process; more than one is the order dependence of K59.
 #
 # Part 2 is E4a's pair, looped: the first step of a `PreviousSlab` run, `churn` builds of the same
-# architecture and one `GC.gc()`, then the first step of a fresh `InitialCondition` integrator. It
-# counts the trials whose residual or initial residual is not bitwise equal, and the largest relative
-# difference. Where every integrator of one architecture shares one kernel pair, it counts none.
+# `NetworkAnsatz` and one `GC.gc()`, then the first step of a fresh `InitialCondition` integrator. It
+# counts the trials whose residual or initial residual is not bitwise equal, and the largest
+# relative difference. Every `NetworkAnsatz` of one architecture reads the kernels of
+# `network_kernels`, so it counts none wherever that cache holds.
 #
 #     julia --startup-file=no --project=. scripts/kernel_build_order.jl [builds gcevery trials churn]
 using MultisymplecticIntegrators, Random
@@ -21,25 +23,33 @@ const RGF = SymbolicNeuralNetworks.RuntimeGeneratedFunctions
 
 builds, gcevery, trials, churn = length(ARGS) == 4 ? parse.(Int, ARGS) : (20, 5, 20, 3)
 
+const S, D = 20, 1
+
 function build(T)
-    NetworkAnsatz(S = 20, D = 1, mode = :last_layer, xspan = (zero(T), one(T)),
+    NetworkAnsatz(S = S, D = D, mode = :last_layer, xspan = (zero(T), one(T)),
         degree = 3, ncells = (2, 5))
 end
 
-function code(a)
-    string(RGF.get_expression(M.flat_kernel!(a.field))) *
-    string(RGF.get_expression(M.flat_kernel!(a.gradient)))
+# A symbolic build of the kernels that does not read the cache.
+function fresh_kernels()
+    chain = M.Chain(M.Dense(2, S, tanh), M.Dense(S, D, identity; use_bias = false))
+    return M.network_functions(M.SymbolicNeuralNetwork(chain), D)
 end
 
-function kernel_values(a, ::Type{T}) where {T}
+function code(field, gradient)
+    string(RGF.get_expression(M.flat_kernel!(field))) *
+    string(RGF.get_expression(M.flat_kernel!(gradient)))
+end
+
+function kernel_values(field, gradient, np, ::Type{T}) where {T}
     rng = Xoshiro(7)
-    ps = M.unflatten(M.flat_layout(a.field), T.(2 .* rand(rng, a.np) .- 1))
-    vals, grad = zeros(T, 3 * a.D), zeros(T, 3 * a.D, a.np)
+    ps = M.unflatten(M.flat_layout(field), T.(2 .* rand(rng, np) .- 1))
+    vals, grad = zeros(T, 3 * D), zeros(T, 3 * D, np)
     out = T[]
     for _ in 1:50
         input = T.([rand(rng), rand(rng)])
-        M.flat_kernel!(a.field)(vals, input, ps, 1)
-        M.flat_kernel!(a.gradient)(grad, input, ps, 1)
+        M.flat_kernel!(field)(vals, input, ps, 1)
+        M.flat_kernel!(gradient)(grad, input, ps, 1)
         append!(out, vals, vec(grad))
     end
     return out
@@ -69,11 +79,12 @@ function wave_without_solutions(::Type{T}) where {T}
 end
 
 for T in (Float64, Float32)
+    np = build(T).np
     codes, values = String[], Vector{T}[]
     for k in 1:builds
-        a = build(T)
-        push!(codes, code(a))
-        push!(values, kernel_values(a, T))
+        field, gradient = fresh_kernels()
+        push!(codes, code(field, gradient))
+        push!(values, kernel_values(field, gradient, np, T))
         gcevery > 0 && k % gcevery == 0 && GC.gc()
     end
     code_class = join(findfirst(==(c), unique(codes)) for c in codes)

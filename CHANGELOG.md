@@ -720,11 +720,12 @@ makes it worth keeping.
   `VectorWave` row of a network has a charge. A `SymbolicAnsatz` takes the same methods as a
   `NetworkAnsatz`, with the same results as before.
 - **`scripts/kernel_build_order.jl` checks whether a network's kernels are generated the same way
-  twice.** It sorts repeated builds of one `NetworkAnsatz` architecture by their generated code and
-  their kernel values, and loops the pair of first steps that test E4a compares bit for bit, with
-  builds and a `GC.gc()` between the two. Its measurements are the evidence of known issue K59:
-  with `SymbolicUtils` 4.56.1 the kernel code follows the process's `GC.gc()` history, and E4a's
-  pair then differs in about one trial in fifteen.
+  twice.** It sorts repeated symbolic builds of one network architecture, made around the
+  per-process cache of `network_kernels`, by their generated code and their kernel values, and
+  loops the pair of first steps that test E4a compares bit for bit, with builds and a `GC.gc()`
+  between the two. Its measurements are the evidence of known issue K59: with `SymbolicUtils`
+  4.56.1 the generated code follows the process's `GC.gc()` history, so the cache keeps a run
+  reproducible within one process and not from one process to the next.
 
 ### Changed
 
