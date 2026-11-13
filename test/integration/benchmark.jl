@@ -547,39 +547,59 @@ end
         @test !isempty(data["residuals"])
         # The table's row for it shows the status.
         tables = benchmark_tables([merge(data, Dict("stem" => "unconverged-row"))])
-        table = tables["SineGordon"]
+        table = tables["SineGordon-t0.15"]
         line = only(filter(row -> occursin("unconverged-row", row), split(table, '\n')))
         @test occursin("unconverged", line)
     end
 
-    @testset "one table per problem, with the historical rows" begin
+    @testset "one table per problem and final time, with the historical rows" begin
         directory = mktempdir()
         @test main(["--tag", "smoke", "--runs-dir", directory]) == 0
         runs = [load(joinpath(directory, file))
                 for file in filter(file -> endswith(file, ".jld2"), readdir(directory))]
         tables = benchmark_tables(runs)
-        @test haskey(tables, "Wave") && haskey(tables, "SineGordon")
         page = join(values(tables), "\n")
+        # Each archive is in one table, the one of its problem and of the time of its last stored
+        # step, and every table holds one final time.
         for archive in runs
             @test length(collect(eachmatch(Regex(archive["stem"]), page))) == 1
+            time = round(last(archive["t"]); sigdigits = 12)
+            @test occursin(archive["stem"], tables["$(archive["problem"])-t$(time)"])
         end
-        wave = split(tables["Wave"], '\n')
-        for name in ("WAVE_NN_FULLY", "WAVE_NN_PARTIALLY", "WAVE_NN_SYMBOLIC_FULLY",
-            "WAVE_ELM_LSGD", "WAVE_TRIALNN_OGA2D")
-            line = only(filter(text -> occursin(name, text), wave))
+        # Two archives of one problem that end at different times are in two tables, and one that
+        # stored no step is in a table of its own.
+        early = first(runs)
+        later = merge(early, Dict("stem" => "later-row", "t" => 2 .* early["t"]))
+        blank = merge(early, Dict("stem" => "blank-row", "steps" => 0, "t" => Float64[]))
+        split_tables = benchmark_tables([early, later, blank]; records = ())
+        @test length(split_tables) == 3
+        early_time = round(last(early["t"]); sigdigits = 12)
+        later_time = round(2 * last(early["t"]); sigdigits = 12)
+        early_table = split_tables["$(early["problem"])-t$(early_time)"]
+        later_table = split_tables["$(early["problem"])-t$(later_time)"]
+        @test occursin(early["stem"], early_table) && !occursin("later-row", early_table)
+        @test occursin("later-row", later_table) &&
+              !occursin(early["stem"] * " ", later_table)
+        @test occursin("blank-row", split_tables["$(early["problem"])-no-step"])
+        # The records of §A are filed under the time their stored steps reach at `h = 0.05`.
+        record_tables = Dict(
+            :WAVE_NN_FULLY => "Wave-t0.25", :WAVE_NN_PARTIALLY => "Wave-t0.25",
+            :WAVE_NN_SYMBOLIC_FULLY => "Wave-t0.25", :WAVE_ELM_LSGD => "Wave-t0.25",
+            :WAVE_TRIALNN_OGA2D => "Wave-t0.2", :SINE_GORDON_NN_FULLY => "SineGordon-t0.15",
+            :SINE_GORDON_ELM_LSGD => "SineGordon-t0.15",
+            :SINE_GORDON_TRIALNN_OGA2D => "SineGordon-t0.15")
+        @test Set(keys(record_tables)) == Set(name for (_, name) in HISTORICAL)
+        for (name, key) in record_tables
+            @test length(collect(eachmatch(Regex(string(name) * " "), page))) == 1
+            line = only(filter(text -> occursin(string(name), text), split(tables[key], '\n')))
             @test occursin("historical", line)
             @test occursin("unconverged", line)
-        end
-        sine = split(tables["SineGordon"], '\n')
-        for name in ("SINE_GORDON_NN_FULLY", "SINE_GORDON_ELM_LSGD", "SINE_GORDON_TRIALNN_OGA2D")
-            line = only(filter(text -> occursin(name, text), sine))
-            @test occursin("historical", line) && occursin("unconverged", line)
         end
         # A record's own series is its energy error, and the table's error column holds the
         # solution error: the record's value stands in the energy-drift column, where a live row's
         # drift stands, and its error cell is a dash.
         for (problem, name) in HISTORICAL
-            lines = split(tables[problem], '\n')
+            lines = split(tables[record_tables[name]], '\n')
             header = strip.(split(strip(lines[3], '|'), '|'))
             cells = strip.(split(
                 strip(only(filter(text -> occursin(string(name), text), lines)), '|'), '|'))
@@ -587,9 +607,7 @@ end
             @test cells[findfirst(==("energy drift"), header)] ==
                   @sprintf("%.3e", last(getfield(@__MODULE__, name).energy_error))
         end
-        @test !any(text -> occursin("WAVE_SINDY", text), wave)
-        @test !any(text -> occursin("WAVE_TRIALNN_OGA2D", text), sine)
-        @test !any(text -> occursin("SINE_GORDON_NN_FULLY", text), wave)
+        @test !occursin("WAVE_SINDY", page)
     end
 
     @testset "the rows of the merged families" begin
@@ -657,6 +675,9 @@ end
                 problems = (:wave, :sine_gordon),
                 build = (fixed_boundary_problem, fixed_boundary_method)))
         @test allunique(row.entry.stem for row in rows)
+        # One problem runs to one final time: every row of these families but the symbolic one,
+        # which runs over two periods of its standing wave, ends at `t = 0.2`.
+        final_times = Dict{Symbol, Set{Float64}}()
         for (name, family) in pairs(families)
             entries = family_entries(name)
             @test family_benchmark(name) isa Function
@@ -685,6 +706,9 @@ end
                 @test method isa SpaceTimeMethod
                 @test problem.timestep == entry.resolution.timestep
                 @test ntime(problem) >= 1
+                name === :symbolic_matrix ||
+                    push!(get!(final_times, entry.problem, Set{Float64}()),
+                        round(last(problem.timespan); sigdigits = 12))
                 # the problem the row names, told apart by its parameters
                 @test keys(problem.params) == problem_keys[entry.problem]
                 @test problem.D == (entry.problem === :vector_wave ? 2 : 1)
@@ -713,6 +737,8 @@ end
                 end
             end
         end
+        @test keys(final_times) == Set((:wave, :sine_gordon, :vector_wave))
+        @test all(==(Set([0.2])), values(final_times))
         # The symbolic rows run at the standing wave's period `2l / c = 4` and at the tolerance the
         # symbolic family measured on its affine control.
         for entry in family_entries(:symbolic_matrix)
@@ -721,15 +747,16 @@ end
         end
         @test allunique(entry.resolution.ncells
         for entry in family_entries(:symbolic_matrix))
-        # The fixed-boundary rows keep the base stems, reach `t = 1`, and name the solver method
-        # their branch is solved by.
+        # The fixed-boundary rows keep the base stems, reach `t = 0.2`, the final time of the other
+        # families' rows of their problems, and name the solver method their branch is solved by.
         solvers = Dict(:newton => SimpleSolvers.Newton(),
             :joint => MultisymplecticIntegrators.LevenbergMarquardt(),
             :projected => MultisymplecticIntegrators.LevenbergMarquardt(
                 variable_projection = true))
         for entry in family_entries(:fixed_boundary_matrix)
             @test occursin("-fixed-boundary-", entry.stem)
-            @test entry.parameters.steps * entry.resolution.timestep ≥ 1 - 1e-12
+            @test entry.parameters.steps * entry.resolution.timestep ≈ 0.2
+            @test ntime(fixed_boundary_problem(entry)) == entry.parameters.steps
             @test entry.solver == (solver = solvers[entry.parameters.solve],)
             @test endswith(string(entry.method), string(entry.parameters.solve)) ||
                   entry.parameters.solve === :newton

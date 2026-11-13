@@ -240,7 +240,7 @@ function fixed_boundary_row(held, timestep, branch)
         problem = held.problem, problem_label = held.label, tag = :matrix,
         resolution = (timestep = timestep,),
         parameters = (form = branch.form, solve = branch.solver, Sx = 8, St = 10,
-            steps = round(Int, 1 / timestep), T = :Float64),
+            steps = round(Int, 0.2 / timestep), T = :Float64),
         solver = (solver = fixed_boundary_solver_method(branch.solver),))
 end
 
@@ -250,7 +250,8 @@ dead branch and on the four combinations of the bubble's form and its solve.
 
 A row's `method` is its branch, its `resolution` its time step, and its `parameters` the bubble's
 form, the solve, the two networks' widths, the `steps` it integrates — the time step's ladder up to
-`t = 1`, so that the three resolutions of one problem compare one span — and the name of its element
+`t = 0.2`, the final time of every other family's rows of `Wave` and `SineGordon` but the symbolic
+family's, so that the rows of one problem compare errors at one time — and the name of its element
 type. Its `solver` is the solver method of its branch, which the matrix's runner hands to the
 integrator.
 """

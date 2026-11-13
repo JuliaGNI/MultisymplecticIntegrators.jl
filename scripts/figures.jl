@@ -10,9 +10,11 @@
 #
 # A `"benchmark"` archive is the one kind the extension does not draw: the matrix's comparison is of
 # several runs, and the extension draws one archive at a time. Its panels are drawn here, from the
-# data the package's `benchmark_panels` gives, and one Markdown table per problem is written beside
-# them. The panels are drawn per problem — the runs of one problem compared by method — and each
-# archive's own PDF marks its own run among them, so that a figure per archive says what it is.
+# data the package's `benchmark_panels` gives, and one Markdown table per problem and final time is
+# written beside them. The panels are drawn per problem and final time — the runs of one problem
+# that end at one time compared by method, so that no panel puts errors at two times side by side —
+# and each archive's own PDF marks its own run among them, so that a figure per archive says what it
+# is.
 
 include(joinpath(@__DIR__, "archives.jl"))
 include(joinpath(@__DIR__, "experiments.jl"))
@@ -25,8 +27,10 @@ import MultisymplecticIntegrators.Diagnostics as Diagnostics
 """
     benchmark_figure(problem, runs; own = nothing)
 
-The two panels of one problem's comparison: the error of each run against its cost on the left, and
-against its wall time on the right, both on a logarithmic scale and with one series per method.
+The two panels of one problem's comparison at one final time: the error of each run against its cost
+on the left, and against its wall time on the right, both on a logarithmic scale and with one series
+per method. `problem` is the panels' title, the problem and the final time, and `runs` are the
+archives of that problem that end at that time.
 
 `own` is the stem of the archive the figure is drawn for, and its point carries a marker of its own,
 so that each archive's PDF says which of the points is its run. Nothing else here decides what the
@@ -93,12 +97,13 @@ function main(args)
     end
 
     banner("figures: $(length(runs)) archive(s) into $(RESULTS_DIR[])")
-    # The matrix's tables are one per problem, over every benchmark archive of that problem, so they
-    # are written once, before the figures and from the whole selection.
+    # The matrix's tables are one per problem and final time, over every benchmark archive of that
+    # problem at that time, so they are written once, before the figures and from the whole
+    # selection.
     benchmarks = [run for run in runs if get(run, "kind", "") == "benchmark"]
     if !isempty(benchmarks)
-        for (problem, text) in benchmark_tables(benchmarks)
-            path = joinpath(RESULTS_DIR[], problem * ".md")
+        for (group, text) in benchmark_tables(benchmarks)
+            path = joinpath(RESULTS_DIR[], group * ".md")
             atomic_write(path) do temporary
                 write(temporary, text)
             end
@@ -111,10 +116,14 @@ function main(args)
         drawn = try
             if get(data, "kind", "") == "benchmark"
                 problem = string(get(data, "problem", ""))
+                time = final_time(data)
                 others = [run
                           for run in benchmarks
-                          if string(get(run, "problem", "")) == problem]
-                benchmark_figure(problem, others; own = stem)
+                          if string(get(run, "problem", "")) == problem &&
+                    isequal(final_time(run), time)]
+                title = time === nothing ? "$(problem), no stored step" :
+                        "$(problem), t = $(time)"
+                benchmark_figure(title, others; own = stem)
             else
                 # The extension picks the figure from the archive's kind; a kind it cannot draw is
                 # refused there rather than drawn from the wrong keys.

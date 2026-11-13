@@ -393,16 +393,52 @@ function failed_archive(entry, reason)
 end
 
 """
+    final_time(run) -> Union{Float64, Nothing}
+
+The time of an archive's last stored step, the last entry of its `"t"`, rounded to 12 significant
+digits, and `nothing` for an archive that stored no step.
+
+It is the time the archive's last error, energy drift and cost belong to, so two archives whose final
+times differ are never compared on one panel or in one table. The rounding makes the times that two
+resolutions reach by different numbers of steps compare equal.
+"""
+function final_time(run)
+    iszero(get(run, "steps", 0)) && return nothing
+    return round(Float64(last(run["t"])); sigdigits = 12)
+end
+
+# The final time of a historical record: its stored steps times the time step its problem names.
+function record_final_time(record)
+    timestep = parse(Float64, match(r"timestep = ([0-9.eE+-]+)", record.problem)[1])
+    return round(record.steps * timestep; sigdigits = 12)
+end
+
+"""
+    benchmark_group(problem, time) -> String
+
+The name of the comparison of one problem's archives at one final time, as `benchmark_tables` keys
+its tables and `figures.jl` names their files: `"Wave-t0.2"`, and `"Wave-no-step"` for the archives
+that stored no step.
+"""
+function benchmark_group(problem, time)
+    time === nothing ? "$(problem)-no-step" : "$(problem)-t$(time)"
+end
+
+"""
     benchmark_tables(runs; records = HISTORICAL) -> Dict{String, String}
 
-The Markdown tables of a selection, one per problem, as `problem => text`.
+The Markdown tables of a selection, one per problem and final time, as
+[`benchmark_group`](@ref)` => text`.
 
-Each archive of a problem is one row: its stem, its method, its tag, the steps it stored, its
-status, and the error, the energy drift, the cost and the wall time of its last stored step. An
-archive with no stored step still has its row, because such a run is a result and its status says
-why it has no numbers.
+The archives of one problem are grouped by their [`final_time`](@ref), and each group is one table,
+so that a table never compares errors at two times. Each archive of a group is one row: its stem,
+its method, its tag, the steps it stored, its status, and the error, the energy drift, the cost and
+the wall time of its last stored step. An archive with no stored step still has its row, in the
+problem's table of the archives that stored none, because such a run is a result and its status
+says why it has no numbers.
 
-The eight historical records of §A that a problem holds are appended to its table, marked
+The eight historical records of §A that a problem holds are appended to the table of their own final
+time — their stored steps times their problem's time step — marked
 `historical` and `unconverged`: they are the old stack's own numbers, from
 `test/helpers/reference_values.jl`, and the matrix reproduces none of them. The set is a choice of
 names and not a query of a record's status, so a record that converged is still marked — which is
@@ -412,26 +448,26 @@ drift measures — so it is printed where a live row prints its energy drift and
 cell is a dash.
 """
 function benchmark_tables(runs; records = HISTORICAL)
-    problems = String[]
+    groups = Set{Tuple{String, Union{Float64, Nothing}}}()
     for run in runs
         get(run, "kind", "") == "benchmark" || continue
-        problem = string(get(run, "problem", ""))
-        problem in problems || push!(problems, problem)
+        push!(groups, (string(get(run, "problem", "")), final_time(run)))
     end
-    for (problem, _) in records
-        problem in problems || push!(problems, problem)
+    for (problem, name) in records
+        push!(groups, (problem, record_final_time(getfield(@__MODULE__, name))))
     end
-    sort!(problems)
     tables = Dict{String, String}()
-    for problem in problems
+    for (problem, time) in groups
         rows = sort(
             [run
              for run in runs
              if get(run, "kind", "") == "benchmark" &&
-                string(get(run, "problem", "")) == problem];
+                    string(get(run, "problem", "")) == problem &&
+                    isequal(final_time(run), time)];
             by = run -> run["stem"])
         text = IOBuffer()
-        print(text, "# ", problem, "\n\n")
+        print(text, "# ", problem,
+            time === nothing ? ", no stored step" : ", t = $(time)", "\n\n")
         print(
             text, "| stem | method | tag | steps | status | error | energy drift | cost | ",
             "wall time (s) |\n")
@@ -443,12 +479,12 @@ function benchmark_tables(runs; records = HISTORICAL)
                 _table_number(run["cost"]), " | ", _table_number(run["wall_time"]), " |\n")
         end
         for (held, name) in records
-            held == problem || continue
             record = getfield(@__MODULE__, name)
+            held == problem && isequal(record_final_time(record), time) || continue
             print(text, "| ", name, " | historical | — | ", record.steps,
                 " | unconverged | — | ", _table_number(record.energy_error), " | — | — |\n")
         end
-        tables[problem] = String(take!(text))
+        tables[benchmark_group(problem, time)] = String(take!(text))
     end
     return tables
 end

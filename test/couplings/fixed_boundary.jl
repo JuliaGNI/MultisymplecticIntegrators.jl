@@ -1285,9 +1285,10 @@ end
     @test all(entry -> entry.parameters.steps ≥ 1, matrix)
     @test length(Set((entry.problem, entry.parameters.form, entry.parameters.solve,
                          entry.resolution.timestep) for entry in matrix)) == 30
-    # a matrix row integrates its ladder up to `t = 1`, so that the three resolutions of one
-    # problem compare one span
-    @test all(entry -> entry.parameters.steps * entry.resolution.timestep ≥ 1 - 1e-12, matrix)
+    # a matrix row integrates its ladder up to `t = 0.2`, the final time of the other families'
+    # rows of its problem, so that the rows of one problem compare errors at one time
+    @test all(entry -> entry.parameters.steps * entry.resolution.timestep ≈ 0.2, matrix)
+    @test sort(unique(entry.parameters.steps for entry in matrix)) == [2, 4, 8]
     # a driver given no stem runs the plateau's `Float64` entry, and not the `BigFloat` one
     @test smallest_entry(plateau).T === Float64
     # the cheapest row, the largest time step, runs at `Float64`

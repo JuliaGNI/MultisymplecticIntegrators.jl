@@ -187,9 +187,15 @@ one without it. `"parameters"` is the row's method-defining fields and not the p
 `"pid"`, `"load"`, `"threads"`, `"blas_threads"`, `"julia"` and `"check_bounds"` are what the timing
 means.
 
-`benchmark_tables` writes one Markdown table per problem of a selection, with a row per archive —
-its status included, so a run that failed is in the table — and the eight unconverged records of the
-old stack appended to the `Wave` and `SineGordon` tables as `historical`. Those records are data and
+`benchmark_tables` writes one Markdown table per problem and final time of a selection, with a row
+per archive — its status included, so a run that failed is in the table — and the eight unconverged
+records of the old stack appended to the `Wave` and `SineGordon` tables of their own final time as
+`historical`. An archive's final time is the time of its last stored step, the last entry of its
+`"t"`, and an archive that stored no step is in a table of its own; `figures.jl` draws the panels by
+the same groups and names a table `<problem>-t<final time>.md`, so that no panel and no table
+compares errors at two times. The rows of one problem end at one time: `t = 0.2` for every family
+of `Wave`, `SineGordon` and `VectorWave` but the symbolic one, whose rows run over two periods of
+the standing wave, to `t = 8`. Those records are data and
 not an oracle: the matrix reproduces none of them. A record's energy error is the old stack's
 relative error of its slabs' quadrature energy, so it stands in the energy-drift column where a live
 row's drift stands, and its error cell is a dash.
