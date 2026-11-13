@@ -71,7 +71,7 @@ failed run.
 | file | does |
 |:--|:--|
 | `archives.jl` | where output goes, `atomic_write`, the archive's writer and its reader, the option parser, the printing helpers. Depends on `JLD2` and `Printf` alone, so a renderer loads it cheaply. No work at top level. |
-| `experiments.jl` | the registry: `register_family!`, `family_entries`, `family_run`, and the selection rules `smallest_entry`, `entry_by_stem` and `default_entry`, plus the ladders of the two scans. Of the families it holds only the fixed-boundary network's, the plateau runs `FIXED_BOUNDARY` and the matrix rows `FIXED_BOUNDARY_MATRIX`, and it integrates nothing on `include`. |
+| `experiments.jl` | the registry: `register_family!`, `family_entries`, `family_run`, and the selection rules `smallest_entry`, `entry_by_stem` and `default_entry`, plus the ladders of the two scans, and the map from a row's problem to its builder and its display name, `matrix_problem` and `matrix_problem_label`, which every matrix family's rows use. Of the families it holds only the fixed-boundary network's, the plateau runs `FIXED_BOUNDARY` and the matrix rows `FIXED_BOUNDARY_MATRIX`, and it integrates nothing on `include`. |
 | `spline_model.jl` | the spline family: its registry entries, the problem and the method of one of them, one run timed, the archive of a run, and the error of a run against the exact solution at its last stored step. It ends by registering `:spline`. |
 | `symbolic_model.jl` | the symbolic family: its registry entry, the closed-form expression in the slab's normalised time, the problem and the method of the entry, the archive of a run, and the energy error over it. It ends by registering `:symbolic`. |
 | `elm_model.jl` | the ELM family: its two registry entries, the problem, the ansatz and the method of one of them, one run timed, and the archive of a run. It ends by registering `:elm`. |
@@ -195,9 +195,9 @@ records of the old stack appended to the `Wave` and `SineGordon` tables of their
 `historical`. An archive's final time is the time of its last stored step, the last entry of its
 `"t"`, and an archive that stored no step is in a table of its own; `figures.jl` draws the panels by
 the same groups and names a table `<problem>-t<final time>.md`, so that no panel and no table
-compares errors at two times. The rows of one problem end at one time: `t = 0.2` for every family
-of `Wave`, `SineGordon` and `VectorWave` but the symbolic one, whose rows run over two periods of
-the standing wave, to `t = 8`. Those records are data and
+compares errors at two times. Every family's rows of one problem end at one time, except the
+symbolic rows: every family's rows of `Wave`, `SineGordon` and `VectorWave` end at `t = 0.2`, and
+the symbolic rows run over two periods of the standing wave, to `t = 8`. Those records are data and
 not an oracle: the matrix reproduces none of them. A record's energy error is the old stack's
 relative error of its slabs' quadrature energy, so it stands in the energy-drift column where a live
 row's drift stands, and its error cell is a dash.

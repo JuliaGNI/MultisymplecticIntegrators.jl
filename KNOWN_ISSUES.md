@@ -406,22 +406,9 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: dead code
 - found: #59
 
-### K57 · The problem-label mapping of the matrix is written three times, and the two problem builders repeat each other.
-
-- location: `scripts/box_model.jl:33` (`box_problem_label`), `scripts/spline_matrix_model.jl:59`
-  (`spline_problem_label`) and `test/integration/benchmark.jl:33` (`PROBLEM_LABELS`)
-- evidence: the three map `:wave`, `:vector_wave` and `:sine_gordon` to the same display names;
-  only the spline file and the test name `:linear_transport`, which the box file prints as
-  `"linear_transport"` because the box scheme refuses that problem. `box_problem`
-  (`scripts/box_model.jl:58`) and `spline_matrix_problem` (`scripts/spline_matrix_model.jl:91`) are
-  the same `if` chain apart from the `xstep` and the transport span. One shared helper would serve
-  both model files and the test.
-- kind: dead code
-- found: #59
-
 ### K58 · The TrialNN family has no measured solver tolerance, and the ELM and TrialNN runs solve at the generic defaults.
 
-- location: `scripts/trialnn_matrix_model.jl:33` (`TRIALNN_MATRIX`), `scripts/elm_model.jl:72` and
+- location: `scripts/trialnn_matrix_model.jl:29` (`TRIALNN_MATRIX`), `scripts/elm_model.jl:72` and
   `scripts/trialnn_model.jl:80`
 - evidence: a network family solves at `f_abstol = 0` and a relative `f_reltol` that it measures
   on its affine control. The network family measured

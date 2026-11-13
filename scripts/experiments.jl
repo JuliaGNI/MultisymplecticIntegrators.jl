@@ -213,13 +213,63 @@ function entry_by_stem(entries, stem)
                         join((entry.stem for entry in entries), ", ")))
 end
 
+# ---- the problems of the matrix ------------------------------------------------------
+
+# This section is here, and not in a model file, because the model files call it at their top level
+# and the driver includes them after this file.
+using MultisymplecticIntegrators: LinearTransport, SineGordon, VectorWave, Wave
+
+"""
+The example problems a row of the matrix names, by the symbol its `problem` holds: each is the
+module whose `problem` builds it.
+"""
+const MATRIX_PROBLEMS = (wave = Wave, vector_wave = VectorWave, sine_gordon = SineGordon,
+    linear_transport = LinearTransport)
+
+# The time span, the field's span and the space step that `matrix_problem` gives a row's problem
+# unless its family names its own.
+const MATRIX_TIMESPAN = (0.0, 0.2)
+const MATRIX_XSPAN = (0.0, 1.0)
+const MATRIX_XSTEP = 0.05
+
+"""
+    matrix_problem_label(problem) -> String
+
+The display name of the problem `problem`, which a row archives and a table is named by: the name of
+its module in [`MATRIX_PROBLEMS`](@ref), and the symbol itself for a problem the matrix does not
+hold.
+"""
+function matrix_problem_label(problem::Symbol)
+    haskey(MATRIX_PROBLEMS, problem) || return string(problem)
+    return string(nameof(MATRIX_PROBLEMS[problem]))
+end
+
+"""
+    matrix_problem(family, problem, takes; timespan = MATRIX_TIMESPAN, xspan = MATRIX_XSPAN,
+                   xstep = MATRIX_XSTEP, keywords...)
+
+The example problem `problem` of a row of `family`, built by its module's `problem` with the spans,
+the space step and the other `keywords` given.
+
+`takes` is the problems the family takes. A problem outside them raises an `ArgumentError` naming
+the family and what it takes: a row of a problem its family cannot run is a mistake to report, not a
+row to build.
+"""
+function matrix_problem(family, problem::Symbol, takes; timespan = MATRIX_TIMESPAN,
+        xspan = MATRIX_XSPAN, xstep = MATRIX_XSTEP, keywords...)
+    problem in takes ||
+        throw(ArgumentError("the $(family) has no problem `$(problem)`; it takes " *
+                            join((":$(name)" for name in takes), ", ")))
+    return MATRIX_PROBLEMS[problem].problem(; timespan, xspan, xstep, keywords...)
+end
+
 # ---- the fixed-boundary network ------------------------------------------------------
 
 # The names the family's rows and runner build, taken from their owners so that this section loads
 # under any driver that includes the registry.
 using MultisymplecticIntegrators: Continuation, FitTo, FixedBoundary, FixedBoundaryNetwork,
-                                  LevenbergMarquardt, Predictor, SineGordon,
-                                  SpaceTimeGalerkin, Wave, integrate
+                                  LevenbergMarquardt, Predictor, SpaceTimeGalerkin,
+                                  integrate
 using SimpleSolvers: Newton
 
 """
@@ -235,8 +285,8 @@ const FIXED_BOUNDARY_BRANCHES = (
     (name = "live-tsr-projected", form = :tsr, solve = :projected))
 
 # The problems of the family, as the symbol a row selects on and the name its stem carries.
-const FIXED_BOUNDARY_PROBLEMS = ((problem = :wave, name = "wave", label = "Wave"),
-    (problem = :sine_gordon, name = "sinegordon", label = "SineGordon"))
+const FIXED_BOUNDARY_PROBLEMS = ((problem = :wave, name = "wave"),
+    (problem = :sine_gordon, name = "sinegordon"))
 const FIXED_BOUNDARY_STEPS = (0.1, 0.05, 0.025)
 
 """
@@ -258,7 +308,7 @@ function fixed_boundary_row(held, timestep, branch)
     return (stem = "$(held.name)-fixed-boundary-$(branch.name)-h$(timestep)",
         label = "$(held.name), $(branch.name), h = $(timestep)",
         method = Symbol("fixed_boundary_", replace(branch.name, "-" => "_")),
-        problem = held.problem, problem_label = held.label, tag = :matrix,
+        problem = held.problem, problem_label = matrix_problem_label(held.problem), tag = :matrix,
         resolution = (timestep = timestep,),
         parameters = (form = branch.form, solve = branch.solve, Sx = 8, St = 10,
             steps = round(Int, 0.2 / timestep), T = :Float64),
@@ -329,12 +379,8 @@ The problem of a fixed-boundary row or entry: `Wave` for the problem `:wave` and
 function fixed_boundary_problem(entry)
     settings = fixed_boundary_settings(entry)
     T = settings.T
-    problem = settings.problem === :wave ? Wave.problem :
-              settings.problem === :sine_gordon ? SineGordon.problem :
-              throw(ArgumentError("the fixed-boundary family has no problem " *
-                                  "`$(settings.problem)`; it takes :wave and :sine_gordon"))
     timestep = T(settings.timestep)
-    return problem(
+    return matrix_problem("fixed-boundary family", settings.problem, (:wave, :sine_gordon);
         T = T, timespan = (zero(T), T(settings.steps) * timestep),
         timestep = timestep, xspan = (zero(T), one(T)), xstep = timestep)
 end

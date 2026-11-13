@@ -28,17 +28,13 @@ module ExitingRow end
 # arm does not exist on Windows.
 module SignalledRow end
 
-# The display names of the problems a test's rows name, which a family's own rows carry and a table
-# is keyed by.
-const PROBLEM_LABELS = Dict(:wave => "Wave", :vector_wave => "VectorWave",
-    :sine_gordon => "SineGordon", :linear_transport => "LinearTransport",
-    :generated => "generated")
-
-# One row's metadata, which a family's rows carry and a test builds for a run of its own.
+# One row's metadata, which a family's rows carry and a test builds for a run of its own. Its
+# `problem_label` is the display name the families' rows carry, from the registry's
+# `matrix_problem_label`.
 function row(stem, method, problem, tag, resolution; parameters = (k = 1,), kwargs...)
     merge(
         (stem = stem, label = stem, method = method, problem = problem,
-            problem_label = get(PROBLEM_LABELS, problem, string(problem)),
+            problem_label = matrix_problem_label(problem),
             tag = tag, resolution = resolution, parameters = parameters),
         (; kwargs...))
 end
@@ -676,8 +672,9 @@ end
                 problems = (:wave, :sine_gordon),
                 build = (fixed_boundary_problem, fixed_boundary_method)))
         @test allunique(row.entry.stem for row in rows)
-        # One problem runs to one final time: every row of these families but the symbolic one,
-        # which runs over two periods of its standing wave, ends at `t = 0.2`.
+        # Every family's rows of one problem end at one time, except the symbolic rows: every row
+        # of these families but the symbolic one, which runs over two periods of its standing wave,
+        # ends at `t = 0.2`.
         final_times = Dict{Symbol, Set{Float64}}()
         for (name, family) in pairs(families)
             entries = family_entries(name)

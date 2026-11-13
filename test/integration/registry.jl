@@ -56,6 +56,28 @@ include(joinpath(@__DIR__, "..", "..", "scripts", "elm_model.jl"))
         @test !haskey(FAMILIES, :undefaulted)
     end
 
+    @testset "a row's problem and its label come from one map" begin
+        @test matrix_problem_label(:wave) == "Wave"
+        @test matrix_problem_label(:vector_wave) == "VectorWave"
+        @test matrix_problem_label(:sine_gordon) == "SineGordon"
+        @test matrix_problem_label(:linear_transport) == "LinearTransport"
+        @test matrix_problem_label(:generated) == "generated"
+        problem = matrix_problem("test family", :vector_wave, (:wave, :vector_wave);
+            timestep = 0.05)
+        @test problem.D == 2
+        @test problem.timestep == 0.05
+        @test problem.timespan == (0.0, 0.2)
+        @test xspan(problem) == (0.0, 1.0)
+        @test xstep(problem) == 0.05
+        transport = matrix_problem("test family", :linear_transport, (:linear_transport,);
+            timestep = 0.1, timespan = (0.0, 0.3), xspan = (-0.5, 0.0), xstep = 0.1)
+        @test transport.timespan == (0.0, 0.3)
+        @test xspan(transport) == (-0.5, 0.0)
+        @test xstep(transport) == 0.1
+        @test_throws r"^ArgumentError: the box scheme has no problem `linear_transport`; it takes :wave, :sine_gordon$" matrix_problem(
+            "box scheme", :linear_transport, (:wave, :sine_gordon); timestep = 0.1)
+    end
+
     # The family is started from one guess: the previous slab's field fitted by a trained hidden
     # layer, whose target falls back to the trained fit of the initial condition at the first slab.
     @testset "the family is built from its one guess" begin

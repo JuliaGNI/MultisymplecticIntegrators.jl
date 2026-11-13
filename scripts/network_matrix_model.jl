@@ -14,17 +14,11 @@ alone free with the hidden layer held at its start.
 const NETWORK_METHODS = ((method = :network_all, mode = :all),
     (method = :network_last_layer, mode = :last_layer))
 
-"""The problems of the family, as the `problem` of a row, and their display names."""
-const NETWORK_PROBLEMS = ((problem = :wave, label = "Wave"),
-    (problem = :sine_gordon, label = "SineGordon"),
-    (problem = :vector_wave, label = "VectorWave"))
+"""The problems of the family, as the `problem` of a row."""
+const NETWORK_PROBLEMS = (:wave, :sine_gordon, :vector_wave)
 
 """The time steps of one method and problem, as the `resolution` of a row."""
 const NETWORK_STEPS = (0.1, 0.05, 0.025)
-
-const NETWORK_TIMESPAN = (0.0, 0.2)
-const NETWORK_XSPAN = (0.0, 1.0)
-const NETWORK_XSTEP = 0.05
 
 """
 The network's rows: both modes on every problem at every time step, 18 in all. A row's `parameters`
@@ -34,31 +28,26 @@ components, `2` on `VectorWave`.
 A row's `solver` is `f_abstol = 0` and the relative tolerance that the network family measured on
 its affine control, `network_f_reltol(Float64)` of `test/helpers/testsetup.jl`.
 """
-const NETWORK_MATRIX = [(stem = "$(held.problem)-$(network.method)-h$(timestep)",
-                            label = "$(held.problem), $(network.method), h = $(timestep)",
-                            method = network.method, problem = held.problem,
-                            problem_label = held.label, tag = :matrix,
+const NETWORK_MATRIX = [(stem = "$(problem)-$(network.method)-h$(timestep)",
+                            label = "$(problem), $(network.method), h = $(timestep)",
+                            method = network.method, problem,
+                            problem_label = matrix_problem_label(problem), tag = :matrix,
                             resolution = (timestep = timestep,),
                             parameters = (S = 10, mode = network.mode, degree = 3,
-                                ncells = (2, 5), D = held.problem === :vector_wave ? 2 : 1),
+                                ncells = (2, 5), D = problem === :vector_wave ? 2 : 1),
                             solver = (f_abstol = 0.0, f_reltol = 1e-4))
-                        for network in NETWORK_METHODS, held in NETWORK_PROBLEMS,
+                        for network in NETWORK_METHODS, problem in NETWORK_PROBLEMS,
 timestep in NETWORK_STEPS]
 
 """
     network_matrix_problem(entry)
 
-The problem of a row: the example problem it names, on the row's time step and the family's space
-step.
+The problem of a row: the example problem it names, on the row's time step and the matrix's spans
+and space step.
 """
 function network_matrix_problem(entry)
-    build = entry.problem === :wave ? Wave.problem :
-            entry.problem === :sine_gordon ? SineGordon.problem :
-            entry.problem === :vector_wave ? VectorWave.problem :
-            throw(ArgumentError("the network family has no problem `$(entry.problem)`; it " *
-                                "takes :wave, :sine_gordon and :vector_wave"))
-    return build(timespan = NETWORK_TIMESPAN, timestep = entry.resolution.timestep,
-        xspan = NETWORK_XSPAN, xstep = NETWORK_XSTEP)
+    matrix_problem("network family", entry.problem, NETWORK_PROBLEMS;
+        timestep = entry.resolution.timestep)
 end
 
 """
@@ -69,7 +58,7 @@ conditions, each slab started from the previous one.
 """
 function network_matrix_method(entry)
     held = entry.parameters
-    ansatz = NetworkAnsatz(S = held.S, mode = held.mode, xspan = NETWORK_XSPAN,
+    ansatz = NetworkAnsatz(S = held.S, mode = held.mode, xspan = MATRIX_XSPAN,
         degree = held.degree, ncells = held.ncells, D = held.D)
     return SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions();
         initial_guess = Continuation())

@@ -700,19 +700,25 @@ makes it worth keeping.
   longer the string `"wave"` or `"sinegordon"`; the stems keep the strings. A plateau entry names
   its branch's solve `solve`, as a row's `parameters` do, so `solver` is a row's solver method
   alone. `register_family!` takes a `default` stem, and `run_family.jl` without a stem runs
-  `default_entry`: the entry the family names, else its cheapest. One problem runs to
-  one final time: the fixed-boundary rows, like the network, ELM, TrialNN, spline and box rows,
-  end at `t = 0.2` (2, 4 and 8 steps), and the symbolic rows run over two periods of the standing
-  wave, to `t = 8`. `figures.jl` and `benchmark_tables` group one problem's archives by the time
-  of their last stored step, so that no panel and no table compares errors at two times; a table is
-  named `<problem>-t<final time>.md`. Every new row is tagged `:matrix`, so the smoke gate runs
+  `default_entry`: the entry the family names, else its cheapest. Every family's rows of one
+  problem end at one time, except the symbolic rows: the fixed-boundary rows, like the network,
+  ELM, TrialNN, spline and box rows, end at `t = 0.2` (2, 4 and 8 steps), and the symbolic rows
+  run over two periods of the standing wave, to `t = 8`. `figures.jl` and `benchmark_tables` group
+  one problem's archives by the time of their last stored step, so that no panel and no table
+  compares errors at two times; a table is named `<problem>-t<final time>.md`. Every row's problem
+  and display name come from one map in `scripts/experiments.jl`: `matrix_problem` builds the
+  problem a row names, over the matrix's time span `(0.0, 0.2)`, field span `(0.0, 1.0)` and space
+  step `0.05` unless the family names its own, and refuses a problem its family does not take;
+  `matrix_problem_label` gives the display name. The box, spline, network, ELM, TrialNN and
+  fixed-boundary families build their rows' problems through it, which closes K57. Every new row is tagged `:matrix`, so the smoke gate runs
   none of them. The network, ELM and TrialNN rows solve at
   `f_abstol = 0` and a relative `f_reltol` of `1e-4`, `1e-2` and `1e-4`, the values that the
   network and the ELM family measured; the TrialNN family measured none and takes the network
   family's (K58 in `KNOWN_ISSUES.md`). The diagnostics gain `space_quadrature_weights` and
   `energy_error` for `NetworkAnsatz`, read on its trace basis' space rule, and for
   `FixedBoundaryNetwork`, read on its own; `noether_charge` reaches them through the weights, so a
-  `VectorWave` row of a network has a charge.
+  `VectorWave` row of a network has a charge. A `SymbolicAnsatz` takes the same methods as a
+  `NetworkAnsatz`, with the same results as before.
 
 ### Changed
 
