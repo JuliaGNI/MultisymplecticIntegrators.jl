@@ -356,20 +356,20 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-11-10
 
-### K53 · The plateau probe's extended-precision row cannot run, because `GeometricSolutions` cannot build a solution at `BigFloat`.
+### K53 · The plateau probe's extended-precision entry cannot run, because `GeometricSolutions` cannot build a solution at `BigFloat`.
 
-- location: `scripts/experiments.jl` (the `BigFloat` plateau row);
+- location: `scripts/experiments.jl` (the `BigFloat` plateau entry);
   `GeometricSolutions`, `src/timeseries.jl:8`
 - evidence: `TimeSeries(ti::AbstractVector, Δt)` builds `new{T, n, typeof(t)}` with
   `n = length(ti) - 1`, and the `length` of a `BigFloat` range is a `BigInt` — it is a
   `StepRangeLen{BigFloat, BigFloat, BigFloat, BigInt}` — so `GeometricSolution(problem)` on a
   `BigFloat` `Wave` raises `TypeError: in Type, in parameter, expected Int64, got a value of type
-  BigInt` before a step is taken. The row names its own `f_reltol = big"1e-8"`, because the family
+  BigInt` before a step is taken. The entry names its own `f_reltol = big"1e-8"`, because the family
   measures no tolerance at `BigFloat` and refuses a caller there that names none, and
   `fixed_boundary_solver_keywords` hands the entry's value to the solver, so the integrator builds
-  and `TimeSeries`'s `TypeError` is the whole block. The row stays in the registry and in the
+  and `TimeSeries`'s `TypeError` is the whole block. The entry stays in the registry and in the
   build-only testset "FB18", which builds it and never runs it; the fix is a pull request of its own
-  to `GeometricSolutions`, and the step runs as a row of M's matrix once it lands.
+  to `GeometricSolutions`, and the step runs through the family's `run` once it lands.
 - kind: upstream
 - found: 2026-11-10
 
@@ -406,15 +406,17 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: dead code
 - found: #59
 
-### K57 · The problem-label mapping of the matrix is written three times, and the two problem builders repeat each other.
+### K58 · The TrialNN family has no measured solver tolerance, and the ELM and TrialNN runs solve at the generic defaults.
 
-- location: `scripts/box_model.jl:33` (`box_problem_label`), `scripts/spline_matrix_model.jl:59`
-  (`spline_problem_label`) and `test/integration/benchmark.jl:31` (`PROBLEM_LABELS`)
-- evidence: the three map `:wave`, `:vector_wave` and `:sine_gordon` to the same display names;
-  only the spline file and the test name `:linear_transport`, which the box file prints as
-  `"linear_transport"` because the box scheme refuses that problem. `box_problem`
-  (`scripts/box_model.jl:58`) and `spline_matrix_problem` (`scripts/spline_matrix_model.jl:91`) are
-  the same `if` chain apart from the `xstep` and the transport span. One shared helper would serve
-  both model files and the test.
-- kind: dead code
-- found: #59
+- location: `scripts/trialnn_matrix_model.jl:29` (`TRIALNN_MATRIX`), `scripts/elm_model.jl:72` and
+  `scripts/trialnn_model.jl:80`
+- evidence: a network family solves at `f_abstol = 0` and a relative `f_reltol` that it measures
+  on its affine control. The network family measured
+  `network_f_reltol(Float64) = 1.0e-4` (`test/helpers/testsetup.jl:59`) and the ELM family
+  `trained_f_reltol(Float64) = 1.0e-2` (`test/helpers/testsetup.jl:44`); no test of
+  `HardConstraintLifting` names an `f_reltol`, so the TrialNN rows take the network family's value.
+  The run families call `integrate(problem, method)` with no solver keywords, so their steps solve
+  at `f_abstol = 8 eps = 1.78e-15` and `f_reltol = √eps = 1.49e-8`, and their archives' convergence
+  is judged on another rule than the matrix rows of the same method.
+- kind: defect
+- found: 2026-11-12

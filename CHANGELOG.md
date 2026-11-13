@@ -566,12 +566,12 @@ makes it worth keeping.
   manifest already held it through `SimpleSolvers`, so the load gains no package.
 - **`scripts/experiments.jl` registers the fixed-boundary family.** Thirty rows — `Wave` and
   `SineGordon` at three time steps, on the dead branch and on the four combinations of the bubble's
-  form and its solve — and the two rows of the plateau probe, one of them at `Sx = 12`, `St = 16` and
-  one at `BigFloat` with `GenericLinearAlgebra` in `scripts/Project.toml` alone. The plateau's
-  numbers are recorded, never asserted. Every row names its time step `timestep`, the field
-  `smallest_entry` reads, so `run_family.jl fixed_boundary` without a stem runs the cheapest row —
-  the largest time step, at `Float64` — and not the `BigFloat` row, which cannot run (K53 in
-  `KNOWN_ISSUES.md`).
+  form and its solve — and the two entries of the plateau probe, one of them at `Sx = 12`, `St = 16`
+  and one at `BigFloat` with `GenericLinearAlgebra` in `scripts/Project.toml` alone. The plateau's
+  numbers are recorded, never asserted. `run_family.jl fixed_boundary` without a stem runs the
+  plateau's `Float64` entry, which the family names as its default, and not the `BigFloat` entry,
+  which cannot run (K53 in `KNOWN_ISSUES.md`).
+  The thirty rows are the matrix's: `:fixed_boundary_matrix`, below.
 - **The TrialNN family returns as the network ansatz under `HardConstraintLifting`.** The coupling
   makes the field of a slab `P[N] + ℓ`: the transfinite projection of the ansatz's field that
   vanishes at the two ends of `xspan` and at the bottom of the slab, plus the transfinite
@@ -672,9 +672,9 @@ makes it worth keeping.
   and the `--check-bounds` setting beside them. A row that throws, and a row that ends on a step
   which did not converge, is archived with its status rather than dropped, so the comparison
   includes the methods that fail, and a problem without an exact solution is measured against its
-  finest run. `scripts/benchmark.jl` writes one Markdown table per problem, with the eight
-  unconverged records of the old stack appended as historical rows and no family's oracle drawn from
-  them. `scripts/spline_matrix_model.jl` registers 36 rows — the three couplings on the four example
+  finest run. `scripts/benchmark.jl` writes one Markdown table per problem and final time, with the
+  eight unconverged records of the old stack appended as historical rows and no family's oracle
+  drawn from them. `scripts/spline_matrix_model.jl` registers 36 rows — the three couplings on the four example
   problems at three resolutions each — and `scripts/box_model.jl` the baseline's rows.
   `BoxScheme <: SpaceTimeMethod` is the Preissmann box scheme of the first-order form
   `K z_t + L z_x = ∇S(z)` of a density `λ(½|v|² − ½c²|w|² − V(u))` with `λ > 0`: `integrate`
@@ -689,6 +689,36 @@ makes it worth keeping.
   `energy_error(problem, ::BoxScheme, traces)` as the midpoint rule over the boxes of the output
   grid, and `benchmark_panels`, the data of the two comparison panels: the error of a run's last
   stored step against its cost and against its wall time, one series per method.
+- **The network, symbolic, ELM, TrialNN and fixed-boundary families are rows of the matrix.** Four
+  model files register a family of rows each: `:network_matrix`, the multiplier network in both
+  modes on `Wave`, `SineGordon` and `VectorWave` at three time steps (18 rows); `:symbolic_matrix`,
+  the standing wave at its period at three space resolutions (3); and `:elm_matrix` and
+  `:trialnn_matrix`, on `Wave` and `SineGordon` at three time steps (6 each). The fixed-boundary
+  family's thirty matrix entries move to `:fixed_boundary_matrix` and keep their stems, so an
+  archive of either driver names the same configuration; `:fixed_boundary` keeps the two plateau
+  entries as runs. A fixed-boundary entry's `problem` is the symbol `:wave` or `:sine_gordon`, no
+  longer the string `"wave"` or `"sinegordon"`; the stems keep the strings. A plateau entry names
+  its branch's solve `solve`, as a row's `parameters` do, so `solver` is a row's solver method
+  alone. `register_family!` takes a `default` stem, and `run_family.jl` without a stem runs
+  `default_entry`: the entry the family names, else its cheapest. Every family's rows of one
+  problem end at one time, except the symbolic rows: the fixed-boundary rows, like the network,
+  ELM, TrialNN, spline and box rows, end at `t = 0.2` (2, 4 and 8 steps), and the symbolic rows
+  run over two periods of the standing wave, to `t = 8`. `figures.jl` and `benchmark_tables` group
+  one problem's archives by the time of their last stored step, so that no panel and no table
+  compares errors at two times; a table is named `<problem>-t<final time>.md`. Every row's problem
+  and display name come from one map in `scripts/experiments.jl`: `matrix_problem` builds the
+  problem a row names, over the matrix's time span `(0.0, 0.2)`, field span `(0.0, 1.0)` and space
+  step `0.05` unless the family names its own, and refuses a problem its family does not take;
+  `matrix_problem_label` gives the display name. The box, spline, network, ELM, TrialNN and
+  fixed-boundary families build their rows' problems through it, which closes K57. Every new row is tagged `:matrix`, so the smoke gate runs
+  none of them. The network, ELM and TrialNN rows solve at
+  `f_abstol = 0` and a relative `f_reltol` of `1e-4`, `1e-2` and `1e-4`, the values that the
+  network and the ELM family measured; the TrialNN family measured none and takes the network
+  family's (K58 in `KNOWN_ISSUES.md`). The diagnostics gain `space_quadrature_weights` and
+  `energy_error` for `NetworkAnsatz`, read on its trace basis' space rule, and for
+  `FixedBoundaryNetwork`, read on its own; `noether_charge` reaches them through the weights, so a
+  `VectorWave` row of a network has a charge. A `SymbolicAnsatz` takes the same methods as a
+  `NetworkAnsatz`, with the same results as before.
 
 ### Changed
 

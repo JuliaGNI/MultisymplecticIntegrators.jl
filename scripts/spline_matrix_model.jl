@@ -36,11 +36,8 @@ const SPLINE_RESOLUTIONS = (
     (timestep = 0.05, degree = 2, ncells = (2, 20), n = 3),
     (timestep = 0.025, degree = 2, ncells = (4, 40), n = 3))
 
-# The space step of every row, and the span of each problem's field. `LinearTransport`'s default
-# span is its own, because its initial profile is a Gaussian centred on it.
-const SPLINE_XSTEP = 0.05
-const SPLINE_XSPAN = (0.0, 1.0)
-const SPLINE_TIMESPAN = (0.0, 0.2)
+# The span of `LinearTransport`'s field, which is its own and not the matrix's, because its initial
+# profile is a Gaussian centred on it.
 const TRANSPORT_XSPAN = (-0.5, 0.0)
 
 """
@@ -52,25 +49,12 @@ function spline_matrix_stem(problem, method, resolution)
 end
 
 """
-    spline_problem_label(problem)
-
-The display name of a problem of the family, which its rows archive and its table is named by.
-"""
-function spline_problem_label(problem)
-    problem === :wave ? "Wave" :
-    problem === :vector_wave ? "VectorWave" :
-    problem === :sine_gordon ? "SineGordon" :
-    problem === :linear_transport ? "LinearTransport" :
-    string(problem)
-end
-
-"""
 The spline matrix's rows: every coupling on every problem at every resolution, 36 in all, each with
 its own stem, its method, its problem, its tag, its resolution and its method-defining parameters.
 """
 const SPLINE_MATRIX = [(stem = spline_matrix_stem(problem, held.method, resolution),
                            label = "$(problem), $(held.method), h = $(resolution.timestep)",
-                           method = held.method, problem, problem_label = spline_problem_label(problem),
+                           method = held.method, problem, problem_label = matrix_problem_label(problem),
                            tag = :matrix, resolution,
                            parameters = (degree = resolution.degree,
                                ncells = resolution.ncells, n = resolution.n,
@@ -81,33 +65,17 @@ resolution in SPLINE_RESOLUTIONS]
 """
     spline_matrix_problem(entry)
 
-The problem of a row: the example problem it names, on the row's time step and the family's space
-step.
+The problem of a row: the example problem it names, on the row's time step and the matrix's time
+span and space step, over the matrix's span or, for `LinearTransport`, over its own.
 
 `LinearTransport` is built as the problem module builds it, which is the doubled field its density
 needs: a row of it on a single field would have no transport equation to solve, and its density is
 not `D = 1`.
 """
 function spline_matrix_problem(entry)
-    timespan = SPLINE_TIMESPAN
-    if entry.problem === :wave
-        return Wave.problem(timespan = timespan, timestep = entry.resolution.timestep,
-            xspan = SPLINE_XSPAN, xstep = SPLINE_XSTEP)
-    elseif entry.problem === :vector_wave
-        return VectorWave.problem(
-            timespan = timespan, timestep = entry.resolution.timestep,
-            xspan = SPLINE_XSPAN, xstep = SPLINE_XSTEP)
-    elseif entry.problem === :sine_gordon
-        return SineGordon.problem(
-            timespan = timespan, timestep = entry.resolution.timestep,
-            xspan = SPLINE_XSPAN, xstep = SPLINE_XSTEP)
-    elseif entry.problem === :linear_transport
-        return LinearTransport.problem(
-            timespan = timespan, timestep = entry.resolution.timestep,
-            xspan = TRANSPORT_XSPAN, xstep = SPLINE_XSTEP)
-    end
-    throw(ArgumentError("the spline matrix has no problem `$(entry.problem)`; it holds " *
-                        join(string.(SPLINE_PROBLEMS), ", ")))
+    xspan = entry.problem === :linear_transport ? TRANSPORT_XSPAN : MATRIX_XSPAN
+    return matrix_problem("spline matrix", entry.problem, SPLINE_PROBLEMS;
+        timestep = entry.resolution.timestep, xspan)
 end
 
 """
@@ -124,7 +92,7 @@ boundary rows carry an unknown, and `Dirichlet()` for every other coupling, whos
 conditions the recombined basis imposes; the package refuses either basis under the other coupling.
 """
 function spline_matrix_method(entry)
-    xspan = entry.problem === :linear_transport ? TRANSPORT_XSPAN : SPLINE_XSPAN
+    xspan = entry.problem === :linear_transport ? TRANSPORT_XSPAN : MATRIX_XSPAN
     x_boundary = entry.parameters.coupling === :initial_boundary ? Free() : Dirichlet()
     ansatz = TensorBSplineAnsatz(degree = entry.parameters.degree,
         ncells = entry.parameters.ncells, xspan = xspan, n = entry.parameters.n,

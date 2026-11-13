@@ -7,7 +7,10 @@
 
 using MultisymplecticIntegrators
 
-"""The problems of the box scheme: exactly those whose density is in its class."""
+"""
+The problems of the box scheme: exactly those whose density is in its class, so `LinearTransport`,
+whose density is not, has no row.
+"""
 const BOX_PROBLEMS = (:wave, :vector_wave, :sine_gordon)
 
 """
@@ -16,9 +19,6 @@ whole discretisation, since it reads them from the problem.
 """
 const BOX_RESOLUTIONS = ((timestep = 0.1, xstep = 0.1), (timestep = 0.05, xstep = 0.05))
 
-const BOX_XSPAN = (0.0, 1.0)
-const BOX_TIMESPAN = (0.0, 0.2)
-
 """
 The stem of one row: `<problem>-box-h<time step>`, the family's name in the naming rule of
 `scripts/README.md`.
@@ -26,24 +26,12 @@ The stem of one row: `<problem>-box-h<time step>`, the family's name in the nami
 box_stem(problem, resolution) = "$(problem)-box-h$(resolution.timestep)"
 
 """
-    box_problem_label(problem)
-
-The display name of a problem of the baseline, which its rows archive and its table is named by.
-"""
-function box_problem_label(problem)
-    problem === :wave ? "Wave" :
-    problem === :vector_wave ? "VectorWave" :
-    problem === :sine_gordon ? "SineGordon" :
-    string(problem)
-end
-
-"""
 The box scheme's rows — the baseline of every comparison the matrix draws — with a `smoke` tag on
 the coarsest row of each of two problems, which is the pair the gate runs.
 """
 const BOX = [(stem = box_stem(problem, resolution),
                  label = "$(problem), box, h = $(resolution.timestep)",
-                 method = :box, problem, problem_label = box_problem_label(problem),
+                 method = :box, problem, problem_label = matrix_problem_label(problem),
                  tag = resolution.timestep == 0.1 && problem in (:wave, :sine_gordon) ?
                        :smoke : :matrix,
                  resolution,
@@ -53,24 +41,13 @@ const BOX = [(stem = box_stem(problem, resolution),
 """
     box_problem(entry)
 
-The problem of a baseline row: the example problem it names, on the row's time step and space step.
+The problem of a baseline row: the example problem it names, on the row's time step and space step
+and the matrix's spans. The space step is the row's own, because the box scheme reads its whole
+discretisation from the problem.
 """
 function box_problem(entry)
-    if entry.problem === :wave
-        return Wave.problem(timespan = BOX_TIMESPAN, timestep = entry.resolution.timestep,
-            xspan = BOX_XSPAN, xstep = entry.resolution.xstep)
-    elseif entry.problem === :vector_wave
-        return VectorWave.problem(
-            timespan = BOX_TIMESPAN, timestep = entry.resolution.timestep,
-            xspan = BOX_XSPAN, xstep = entry.resolution.xstep)
-    elseif entry.problem === :sine_gordon
-        return SineGordon.problem(
-            timespan = BOX_TIMESPAN, timestep = entry.resolution.timestep,
-            xspan = BOX_XSPAN, xstep = entry.resolution.xstep)
-    end
-    throw(ArgumentError("the box scheme has no row on `$(entry.problem)`; its class covers " *
-                        join(string.(BOX_PROBLEMS), ", ") *
-                        ", and a density outside it is refused when the integrator is built"))
+    matrix_problem("box scheme", entry.problem, BOX_PROBLEMS;
+        timestep = entry.resolution.timestep, xstep = entry.resolution.xstep)
 end
 
 """

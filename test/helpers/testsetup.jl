@@ -45,6 +45,21 @@ trained_f_reltol(::Type{Float64}) = 1.0e-2
 trained_f_reltol(::Type{Float32}) = 1.0e-1
 
 """
+    network_f_reltol(::Type{T})
+
+The relative tolerance of the network family's steps, measured on the affine control of `:last_layer`
+at `S = 20`: the largest of its five step ratios `residual / initial residual` is `7.8e-6` in
+`Float64` and `6.4e-3` in `Float32`, against the tolerance this function returns.
+
+The control's steps are affine in its unknowns — the coupling's constraint rows reach the free
+output weights alone and the hidden layer, which the fit fixed, enters the residual as data — so two
+Newton iterations reach the root, and the ratio is the solver's own round-off. `f_abstol = 0`, so no
+step converges on an absolute term.
+"""
+network_f_reltol(::Type{Float64}) = 1.0e-4
+network_f_reltol(::Type{Float32}) = 1.0e-2
+
+"""
     assert_no_upcast(x, ::Type{T})
 
 Assert that `x` — an array, a named tuple of arrays or a scalar — holds only values of element type

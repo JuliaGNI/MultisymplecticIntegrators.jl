@@ -1271,34 +1271,52 @@ end
 # ---- FB18 ----------------------------------------------------------------------------
 
 @testset "FB18 the family's rows build and the plateau is a record" begin
-    # N23: the registry holds the family's 32 entries — 30 of the matrix and 2 of the plateau probe
-    # — each with a distinct stem and a resolution, one of them at `Sx = 12`, `St = 16` and
+    # N23: the registry holds the family's 32 entries — 30 rows of the matrix and 2 runs of the
+    # plateau probe — each with a distinct stem, one of the plateau's at `Sx = 12`, `St = 16` and
     # `h = 0.025` and one at `BigFloat`, and the plateau's numbers are a record and no assertion.
-    entries = family_entries(:fixed_boundary)
-    @test length(entries) == 32
-    @test length(unique(entry.stem for entry in entries)) == 32
-    @test all(entry -> entry.steps ≥ 1, entries)
-    matrix = filter(
-        entry -> occursin("fixed-boundary", entry.stem) &&
-                 !occursin("plateau", entry.stem),
-        entries)
-    @test length(matrix) == 30
-    @test length(Set((entry.problem, entry.form, entry.solver, entry.timestep)
-    for entry in matrix)) == 30
-    # a matrix row integrates its ladder up to `t = 1`, so that the three resolutions of one
-    # problem compare one span
-    @test all(entry -> entry.steps * entry.timestep ≥ 1 - 1e-12, matrix)
-    # a driver given no stem runs the cheapest row: the largest time step, at `Float64`
-    cheapest = smallest_entry(entries)
-    @test cheapest.timestep == maximum(entry.timestep for entry in entries)
-    @test cheapest.T === Float64
-    plateau = filter(entry -> occursin("plateau", entry.stem), entries)
+    plateau = family_entries(:fixed_boundary)
+    matrix = family_entries(:fixed_boundary_matrix)
     @test length(plateau) == 2
+    @test length(matrix) == 30
+    @test allunique(entry.stem for entry in Iterators.flatten((plateau, matrix)))
+    @test all(entry -> occursin("plateau", entry.stem), plateau)
+    @test !any(entry -> occursin("plateau", entry.stem), matrix)
+    @test all(entry -> entry.steps ≥ 1, plateau)
+    @test all(entry -> entry.parameters.steps ≥ 1, matrix)
+    @test length(Set((entry.problem, entry.parameters.form, entry.parameters.solve,
+                         entry.resolution.timestep) for entry in matrix)) == 30
+    # a matrix row integrates its ladder up to `t = 0.2`, the final time of the other families'
+    # rows of its problem, so that the rows of one problem compare errors at one time
+    @test all(entry -> entry.parameters.steps * entry.resolution.timestep ≈ 0.2, matrix)
+    @test sort(unique(entry.parameters.steps for entry in matrix)) == [2, 4, 8]
+    # a driver given no stem runs the plateau's `Float64` entry, and not the `BigFloat` one, by its
+    # stem and whatever the order of the family's tuple: reversed, the cheapest entry of the tie is
+    # the `BigFloat` one, and the default stays
+    default = default_entry(:fixed_boundary)
+    @test default.stem == "wave-fixed-boundary-plateau-h0.025"
+    @test default.T === Float64
+    held = FAMILIES[:fixed_boundary]
+    try
+        FAMILIES[:fixed_boundary] = merge(held, (entries = reverse(held.entries),))
+        @test smallest_entry(family_entries(:fixed_boundary)).T === BigFloat
+        @test default_entry(:fixed_boundary) === default
+    finally
+        FAMILIES[:fixed_boundary] = held
+    end
+    # a plateau entry names its solve as a row's `parameters` do; `solver` is a row's solver method
+    @test all(entry -> entry.solve in (:newton, :joint, :projected), plateau)
+    @test !any(entry -> haskey(entry, :solver), plateau)
+    # the cheapest row, the largest time step, runs at `Float64`
+    largest = maximum(entry.resolution.timestep for entry in matrix)
+    @test all(entry -> entry.parameters.T === :Float64,
+        filter(entry -> entry.resolution.timestep == largest, matrix))
+    entries = vcat(collect(plateau), collect(matrix))
+    @test all(entry -> entry.problem in (:wave, :sine_gordon), entries)
     @test any(entry -> entry.Sx == 12 && entry.St == 16 && entry.timestep == 0.025, plateau)
     @test any(entry -> entry.T === BigFloat, plateau)
     @test all(entry -> entry.steps == 1, filter(entry -> entry.T === BigFloat, plateau))
-    # N23: the extended-precision row names its own tolerance, because the family measures none at
-    # `BigFloat`; the row's driver and this testset build the solver's keywords through one
+    # N23: the extended-precision entry names its own tolerance, because the family measures none at
+    # `BigFloat`; the entry's driver and this testset build the solver's keywords through one
     # function, so the entry's value is the one the solver is built with
     extended = only(filter(entry -> entry.T === BigFloat, plateau))
     @test extended.f_reltol == big"1e-8"

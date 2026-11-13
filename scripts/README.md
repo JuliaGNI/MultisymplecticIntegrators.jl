@@ -58,7 +58,9 @@ julia --project=scripts scripts/profile_residual.jl --steps 0.05,0.025
 ```
 
 With no stem named, the driver runs the cheapest entry of the family: the largest time step, which
-is what answers "does this family run at all" in the least time. A run that throws is reported on
+is what answers "does this family run at all" in the least time. A family whose cheapest entry is
+not the one to run names its `default` stem in `register_family!`, as the fixed-boundary family's
+plateau runs do, and `default_entry` reads it. A run that throws is reported on
 stderr with its stem and its backtrace, archives nothing, and makes the driver exit 1, so a failed
 family is distinguishable from a family that ran.
 
@@ -69,7 +71,7 @@ failed run.
 | file | does |
 |:--|:--|
 | `archives.jl` | where output goes, `atomic_write`, the archive's writer and its reader, the option parser, the printing helpers. Depends on `JLD2` and `Printf` alone, so a renderer loads it cheaply. No work at top level. |
-| `experiments.jl` | the registry: `register_family!`, `family_entries`, `family_run`, and the two selection rules `smallest_entry` and `entry_by_stem`, plus the ladders of the two scans. It holds no family's entries and builds nothing on `include`. |
+| `experiments.jl` | the registry: `register_family!`, `family_entries`, `family_run`, and the selection rules `smallest_entry`, `entry_by_stem` and `default_entry`, plus the ladders of the two scans, and the map from a row's problem to its builder and its display name, `matrix_problem` and `matrix_problem_label`, which every matrix family's rows use. Of the families it holds only the fixed-boundary network's, the plateau runs `FIXED_BOUNDARY` and the matrix rows `FIXED_BOUNDARY_MATRIX`, and it integrates nothing on `include`. |
 | `spline_model.jl` | the spline family: its registry entries, the problem and the method of one of them, one run timed, the archive of a run, and the error of a run against the exact solution at its last stored step. It ends by registering `:spline`. |
 | `symbolic_model.jl` | the symbolic family: its registry entry, the closed-form expression in the slab's normalised time, the problem and the method of the entry, the archive of a run, and the energy error over it. It ends by registering `:symbolic`. |
 | `elm_model.jl` | the ELM family: its two registry entries, the problem, the ansatz and the method of one of them, one run timed, and the archive of a run. It ends by registering `:elm`. |
@@ -79,6 +81,10 @@ failed run.
 | `run_benchmark.jl` | the matrix's driver: it includes every `*_model.jl` file here, selects the rows by method, problem or tag or names them by stem, runs each in a child process of its own, and archives each — a row that fails included. |
 | `spline_matrix_model.jl` | the spline family's matrix rows: the three couplings on the four example problems at three resolutions each, 36 rows with distinct stems. |
 | `box_model.jl` | the box scheme's matrix rows: the Preissmann box scheme on the three problems whose density is in its class, at two resolutions each, with a `smoke` tag on two of them. |
+| `network_matrix_model.jl` | the multiplier network's matrix rows: both modes, `:all` and `:last_layer`, under the weak initial-and-boundary conditions and continued from the previous slab, on `Wave`, `SineGordon` and `VectorWave` at three time steps each, 18 rows. |
+| `symbolic_matrix_model.jl` | the symbolic family's matrix rows: the standing wave of `Wave` at its period over two periods, at three space resolutions of the trace basis, 3 rows. Its problem and method are `symbolic_model.jl`'s. |
+| `elm_matrix_model.jl` | the ELM family's matrix rows: the family's ansatz, guess and settings on `Wave` and `SineGordon` at three time steps each, 6 rows. Its method is `elm_model.jl`'s. |
+| `trialnn_matrix_model.jl` | the TrialNN family's matrix rows: the family's ansatz, coupling and guess on `Wave` and `SineGordon` at three time steps each, 6 rows. Its method is `trialnn_model.jl`'s. |
 | `figures.jl` | globs `runs/`, draws each archive as the kind it declares, and writes `results/<stem>.pdf` through `atomic_write`. **The only place `save` is called.** |
 | `spline_energy_scan.jl` | the relative energy error over time at a ladder of time steps, archived as one `"energy"` run that `figures.jl` draws as a comparison. |
 | `spline_phase_drift_scan.jl` | the error against the exact solution at the final time, at a ladder of ansatz resolutions. Prints a table and writes nothing. |
@@ -183,9 +189,15 @@ one without it. `"parameters"` is the row's method-defining fields and not the p
 `"pid"`, `"load"`, `"threads"`, `"blas_threads"`, `"julia"` and `"check_bounds"` are what the timing
 means.
 
-`benchmark_tables` writes one Markdown table per problem of a selection, with a row per archive —
-its status included, so a run that failed is in the table — and the eight unconverged records of the
-old stack appended to the `Wave` and `SineGordon` tables as `historical`. Those records are data and
+`benchmark_tables` writes one Markdown table per problem and final time of a selection, with a row
+per archive — its status included, so a run that failed is in the table — and the eight unconverged
+records of the old stack appended to the `Wave` and `SineGordon` tables of their own final time as
+`historical`. An archive's final time is the time of its last stored step, the last entry of its
+`"t"`, and an archive that stored no step is in a table of its own; `figures.jl` draws the panels by
+the same groups and names a table `<problem>-t<final time>.md`, so that no panel and no table
+compares errors at two times. Every family's rows of one problem end at one time, except the
+symbolic rows: every family's rows of `Wave`, `SineGordon` and `VectorWave` end at `t = 0.2`, and
+the symbolic rows run over two periods of the standing wave, to `t = 8`. Those records are data and
 not an oracle: the matrix reproduces none of them. A record's energy error is the old stack's
 relative error of its slabs' quadrature energy, so it stands in the energy-drift column where a live
 row's drift stands, and its error cell is a dash.

@@ -10,7 +10,8 @@
 # here in sorted order, so a new family is a new file and no edit to the driver.
 #
 # With no entry named it runs the cheapest entry of the family, which is what answers "does this
-# family run" in the least time. An archive is one JLD2 file per run, and `figures.jl` draws it.
+# family run" in the least time, or the entry the family names as its default where the cheapest is
+# not the one to run. An archive is one JLD2 file per run, and `figures.jl` draws it.
 #
 # A run that throws is reported on **stderr** with its stem and its backtrace and archives nothing —
 # the stem says which of the selected entries failed, the frame that threw says where the family
@@ -29,8 +30,8 @@ end
 """
     main(args) -> Int
 
-Run the family named by the first positional argument, over the entries its stems name or else the
-smallest entry, and return 0 iff every selected entry was archived.
+Run the family named by the first positional argument, over the entries its stems name or else its
+[`default_entry`](@ref), and return 0 iff every selected entry was archived.
 """
 function main(args)
     positional, _ = parse_arguments(args)
@@ -40,7 +41,7 @@ function main(args)
     name = Symbol(first(positional))
     stems = positional[2:end]
     entries = family_entries(name)
-    selected = isempty(stems) ? (smallest_entry(entries),) :
+    selected = isempty(stems) ? (default_entry(name),) :
                Tuple(entry_by_stem(entries, stem) for stem in stems)
     runner = family_run(name)
     runner === nothing &&

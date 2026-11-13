@@ -1,11 +1,12 @@
 using GeometricBase: ntime, timesteps
-using GeometricIntegratorsBase: GeometricIntegrator
+using GeometricIntegratorsBase: GeometricIntegrator, solver
 using JLD2
 using LinearAlgebra: BLAS
 using MultisymplecticIntegrators
 using MultisymplecticIntegrators: space_quadrature_nodes, space_quadrature_weights
 using Printf: @sprintf
 using Random: Xoshiro
+using SimpleSolvers: SimpleSolvers, config
 using SimpleSplines: Dirichlet
 using Test
 
@@ -16,6 +17,7 @@ using Test
 include(joinpath(@__DIR__, "..", "helpers", "reference_values.jl"))
 include(joinpath(@__DIR__, "..", "..", "scripts", "run_benchmark.jl"))
 include(joinpath(@__DIR__, "..", "helpers", "problem_generator.jl"))
+include(joinpath(@__DIR__, "..", "helpers", "testsetup.jl"))
 
 # The module a copy of the driver is included into, for the one row whose child process ends on an
 # exit code the tree's own registry cannot produce: the parent reads the child's code, so the row
@@ -26,17 +28,13 @@ module ExitingRow end
 # arm does not exist on Windows.
 module SignalledRow end
 
-# The display names of the problems a test's rows name, which a family's own rows carry and a table
-# is keyed by.
-const PROBLEM_LABELS = Dict(:wave => "Wave", :vector_wave => "VectorWave",
-    :sine_gordon => "SineGordon", :linear_transport => "LinearTransport",
-    :generated => "generated")
-
-# One row's metadata, which a family's rows carry and a test builds for a run of its own.
+# One row's metadata, which a family's rows carry and a test builds for a run of its own. Its
+# `problem_label` is the display name the families' rows carry, from the registry's
+# `matrix_problem_label`.
 function row(stem, method, problem, tag, resolution; parameters = (k = 1,), kwargs...)
     merge(
         (stem = stem, label = stem, method = method, problem = problem,
-            problem_label = get(PROBLEM_LABELS, problem, string(problem)),
+            problem_label = matrix_problem_label(problem),
             tag = tag, resolution = resolution, parameters = parameters),
         (; kwargs...))
 end
@@ -546,39 +544,59 @@ end
         @test !isempty(data["residuals"])
         # The table's row for it shows the status.
         tables = benchmark_tables([merge(data, Dict("stem" => "unconverged-row"))])
-        table = tables["SineGordon"]
+        table = tables["SineGordon-t0.15"]
         line = only(filter(row -> occursin("unconverged-row", row), split(table, '\n')))
         @test occursin("unconverged", line)
     end
 
-    @testset "one table per problem, with the historical rows" begin
+    @testset "one table per problem and final time, with the historical rows" begin
         directory = mktempdir()
         @test main(["--tag", "smoke", "--runs-dir", directory]) == 0
         runs = [load(joinpath(directory, file))
                 for file in filter(file -> endswith(file, ".jld2"), readdir(directory))]
         tables = benchmark_tables(runs)
-        @test haskey(tables, "Wave") && haskey(tables, "SineGordon")
         page = join(values(tables), "\n")
+        # Each archive is in one table, the one of its problem and of the time of its last stored
+        # step, and every table holds one final time.
         for archive in runs
             @test length(collect(eachmatch(Regex(archive["stem"]), page))) == 1
+            time = round(last(archive["t"]); sigdigits = 12)
+            @test occursin(archive["stem"], tables["$(archive["problem"])-t$(time)"])
         end
-        wave = split(tables["Wave"], '\n')
-        for name in ("WAVE_NN_FULLY", "WAVE_NN_PARTIALLY", "WAVE_NN_SYMBOLIC_FULLY",
-            "WAVE_ELM_LSGD", "WAVE_TRIALNN_OGA2D")
-            line = only(filter(text -> occursin(name, text), wave))
+        # Two archives of one problem that end at different times are in two tables, and one that
+        # stored no step is in a table of its own.
+        early = first(runs)
+        later = merge(early, Dict("stem" => "later-row", "t" => 2 .* early["t"]))
+        blank = merge(early, Dict("stem" => "blank-row", "steps" => 0, "t" => Float64[]))
+        split_tables = benchmark_tables([early, later, blank]; records = ())
+        @test length(split_tables) == 3
+        early_time = round(last(early["t"]); sigdigits = 12)
+        later_time = round(2 * last(early["t"]); sigdigits = 12)
+        early_table = split_tables["$(early["problem"])-t$(early_time)"]
+        later_table = split_tables["$(early["problem"])-t$(later_time)"]
+        @test occursin(early["stem"], early_table) && !occursin("later-row", early_table)
+        @test occursin("later-row", later_table) &&
+              !occursin(early["stem"] * " ", later_table)
+        @test occursin("blank-row", split_tables["$(early["problem"])-no-step"])
+        # The records of §A are filed under the time their stored steps reach at `h = 0.05`.
+        record_tables = Dict(
+            :WAVE_NN_FULLY => "Wave-t0.25", :WAVE_NN_PARTIALLY => "Wave-t0.25",
+            :WAVE_NN_SYMBOLIC_FULLY => "Wave-t0.25", :WAVE_ELM_LSGD => "Wave-t0.25",
+            :WAVE_TRIALNN_OGA2D => "Wave-t0.2", :SINE_GORDON_NN_FULLY => "SineGordon-t0.15",
+            :SINE_GORDON_ELM_LSGD => "SineGordon-t0.15",
+            :SINE_GORDON_TRIALNN_OGA2D => "SineGordon-t0.15")
+        @test Set(keys(record_tables)) == Set(name for (_, name) in HISTORICAL)
+        for (name, key) in record_tables
+            @test length(collect(eachmatch(Regex(string(name) * " "), page))) == 1
+            line = only(filter(text -> occursin(string(name), text), split(tables[key], '\n')))
             @test occursin("historical", line)
             @test occursin("unconverged", line)
-        end
-        sine = split(tables["SineGordon"], '\n')
-        for name in ("SINE_GORDON_NN_FULLY", "SINE_GORDON_ELM_LSGD", "SINE_GORDON_TRIALNN_OGA2D")
-            line = only(filter(text -> occursin(name, text), sine))
-            @test occursin("historical", line) && occursin("unconverged", line)
         end
         # A record's own series is its energy error, and the table's error column holds the
         # solution error: the record's value stands in the energy-drift column, where a live row's
         # drift stands, and its error cell is a dash.
         for (problem, name) in HISTORICAL
-            lines = split(tables[problem], '\n')
+            lines = split(tables[record_tables[name]], '\n')
             header = strip.(split(strip(lines[3], '|'), '|'))
             cells = strip.(split(
                 strip(only(filter(text -> occursin(string(name), text), lines)), '|'), '|'))
@@ -586,9 +604,7 @@ end
             @test cells[findfirst(==("energy drift"), header)] ==
                   @sprintf("%.3e", last(getfield(@__MODULE__, name).energy_error))
         end
-        @test !any(text -> occursin("WAVE_SINDY", text), wave)
-        @test !any(text -> occursin("WAVE_TRIALNN_OGA2D", text), sine)
-        @test !any(text -> occursin("SINE_GORDON_NN_FULLY", text), wave)
+        @test !occursin("WAVE_SINDY", page)
     end
 
     @testset "the rows of the merged families" begin
@@ -630,6 +646,123 @@ end
                 @test problem.D == 2
             end
         end
+        # The rows of the network, symbolic, ELM, TrialNN and fixed-boundary families: each family
+        # registers a `benchmark` and no `run`, holds every method on every problem it takes at three
+        # resolutions, and each row builds its integrator with its own solver keywords, without a
+        # step. A row is never `:smoke`, so the gate's two smoke testsets run none of them.
+        problem_keys = Dict(:wave => keys(Wave.problem().params),
+            :sine_gordon => keys(SineGordon.problem().params),
+            :vector_wave => keys(VectorWave.problem().params))
+        @test problem_keys[:wave] != problem_keys[:sine_gordon]
+        fixed_boundary_methods = (:fixed_boundary_dead, :fixed_boundary_live_abg_joint,
+            :fixed_boundary_live_tsr_joint, :fixed_boundary_live_abg_projected,
+            :fixed_boundary_live_tsr_projected)
+        families = (
+            network_matrix = (count = 18, methods = (:network_all, :network_last_layer),
+                problems = (:wave, :sine_gordon, :vector_wave),
+                build = (network_matrix_problem, network_matrix_method)),
+            symbolic_matrix = (count = 3, methods = (:symbolic,), problems = (:wave,),
+                build = (symbolic_matrix_problem, symbolic_matrix_method)),
+            elm_matrix = (count = 6, methods = (:elm,), problems = (:wave, :sine_gordon),
+                build = (elm_matrix_problem, elm_matrix_method)),
+            trialnn_matrix = (
+                count = 6, methods = (:trialnn,), problems = (:wave, :sine_gordon),
+                build = (trialnn_matrix_problem, trialnn_matrix_method)),
+            fixed_boundary_matrix = (count = 30, methods = fixed_boundary_methods,
+                problems = (:wave, :sine_gordon),
+                build = (fixed_boundary_problem, fixed_boundary_method)))
+        @test allunique(row.entry.stem for row in rows)
+        # Every family's rows of one problem end at one time, except the symbolic rows: every row
+        # of these families but the symbolic one, which runs over two periods of its standing wave,
+        # ends at `t = 0.2`.
+        final_times = Dict{Symbol, Set{Float64}}()
+        for (name, family) in pairs(families)
+            entries = family_entries(name)
+            @test family_benchmark(name) isa Function
+            @test family_run(name) === nothing
+            @test length(entries) == family.count
+            for method in family.methods, problem in family.problems
+
+                group = [entry
+                         for entry in entries
+                         if entry.method === method && entry.problem === problem]
+                @test length(group) == 3
+                @test allunique(entry.resolution for entry in group)
+            end
+            makeproblem, makemethod = family.build
+            for entry in entries
+                @test entry.tag === :matrix
+                @test entry.method in family.methods
+                @test entry.problem in family.problems
+                @test entry.label isa String && entry.problem_label isa String
+                @test entry.resolution isa NamedTuple && haskey(entry.resolution, :timestep)
+                @test entry.parameters isa NamedTuple
+                keywords = get(entry, :solver, (;))
+                @test keywords isa NamedTuple
+                problem = makeproblem(entry)
+                method = makemethod(entry)
+                @test method isa SpaceTimeMethod
+                @test problem.timestep == entry.resolution.timestep
+                @test ntime(problem) >= 1
+                name === :symbolic_matrix ||
+                    push!(get!(final_times, entry.problem, Set{Float64}()),
+                        round(last(problem.timespan); sigdigits = 12))
+                # the problem the row names, told apart by its parameters
+                @test keys(problem.params) == problem_keys[entry.problem]
+                @test problem.D == (entry.problem === :vector_wave ? 2 : 1)
+                integrator = GeometricIntegrator(problem, method; keywords...)
+                @test integrator isa GeometricIntegrator
+                # A network family's rows solve at `f_abstol = 0` and a measured relative tolerance:
+                # the network family's `network_f_reltol(Float64)` for the network and the TrialNN
+                # rows, the ELM family's `trained_f_reltol(Float64)` for the ELM rows.
+                if name in (:network_matrix, :elm_matrix, :trialnn_matrix)
+                    options = config(solver(integrator))
+                    @test options.f_abstol == 0
+                    @test options.f_reltol ==
+                          (name === :elm_matrix ? trained_f_reltol(Float64) :
+                           network_f_reltol(Float64))
+                end
+                # The built method is the one the row names.
+                if name === :network_matrix
+                    @test ansatz(method).mode === entry.parameters.mode
+                    @test entry.parameters.mode ===
+                          (entry.method === :network_last_layer ? :last_layer : :all)
+                end
+                if name === :fixed_boundary_matrix
+                    @test MultisymplecticIntegrators.initial_guess(method) isa
+                          (entry.parameters.solve === :newton ? Continuation : FitTo)
+                    @test ansatz(method).Sx == entry.parameters.Sx
+                    @test ansatz(method).St == entry.parameters.St
+                    @test ansatz(method).bubble_form === entry.parameters.form
+                end
+            end
+        end
+        @test keys(final_times) == Set((:wave, :sine_gordon, :vector_wave))
+        @test all(==(Set([0.2])), values(final_times))
+        # The symbolic rows run at the standing wave's period `2l / c = 4` and at the tolerance the
+        # symbolic family measured on its affine control.
+        for entry in family_entries(:symbolic_matrix)
+            @test entry.resolution.timestep == 4.0
+            @test entry.solver == (f_abstol = 0.0, f_reltol = symbolic_f_reltol(Float64))
+        end
+        @test allunique(entry.resolution.ncells
+        for entry in family_entries(:symbolic_matrix))
+        # The fixed-boundary rows keep the base stems, reach `t = 0.2`, the final time of the other
+        # families' rows of their problems, and name the solver method their branch is solved by.
+        solvers = Dict(:newton => SimpleSolvers.Newton(),
+            :joint => MultisymplecticIntegrators.LevenbergMarquardt(),
+            :projected => MultisymplecticIntegrators.LevenbergMarquardt(
+                variable_projection = true))
+        for entry in family_entries(:fixed_boundary_matrix)
+            @test occursin("-fixed-boundary-", entry.stem)
+            @test entry.parameters.steps * entry.resolution.timestep ≈ 0.2
+            @test ntime(fixed_boundary_problem(entry)) == entry.parameters.steps
+            @test entry.solver == (solver = solvers[entry.parameters.solve],)
+            @test endswith(string(entry.method), string(entry.parameters.solve)) ||
+                  entry.parameters.solve === :newton
+        end
+        @test count(entry -> entry.solver.solver == solvers[:projected],
+            family_entries(:fixed_boundary_matrix)) == 12
         # A family of the figure archives contributes no row, and the run-only family is registered.
         elm = Set(entry.stem for entry in family_entries(:elm))
         @test !isempty(elm)
