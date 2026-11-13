@@ -462,6 +462,12 @@ end
         @test a.gradient === b.gradient
         @test a.field === c.field
         @test a.gradient === c.gradient
+        # two separate builds of equal bodies are `===` too, so the cache itself is the check
+        @test lock(kernels -> kernels[(6, 2, tanh)], M.NETWORK_KERNELS) ===
+              (a.field, a.gradient)
+        entries = lock(length, M.NETWORK_KERNELS)
+        network_ansatz(T; S = 6, D = 2)
+        @test lock(length, M.NETWORK_KERNELS) == entries
         # another width, another output count or another activation is another architecture
         @test network_ansatz(T; S = 7, D = 2).field !== a.field
         @test network_ansatz(T; S = 6, D = 1).field !== a.field
