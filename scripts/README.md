@@ -187,7 +187,8 @@ stored step; `"wall_per_step"` holds one entry per step after the first and `"wa
 none: the finest row of a method on that problem records `NaN` and names itself in
 `"reference_stem"`, and each coarser row records its difference from that row at the times and nodes
 the two share. `"charge"` is the rotation charge of a density with that symmetry and `nothing` for
-one without it. `"parameters"` is the row's method-defining fields and not the problem's.
+one without it. `"parameters"` is the row's method-defining fields and not the problem's; a row of
+the network's regularisation scan adds the solver's `regularization_factor` to them.
 `"pid"`, `"load"`, `"threads"`, `"blas_threads"`, `"julia"` and `"check_bounds"` are what the timing
 means.
 
