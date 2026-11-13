@@ -373,9 +373,9 @@ makes it worth keeping.
   `test/helpers/action_oracle.jl` builds the discrete slab action from the density, the data
   functions and SimpleSplines' evaluation of the ansatz, with each coupling's terms and datums, and
   differentiates it with ForwardDiff. Six files under `test/verification/properties/`, in the
-  groups `derivatives` and `invariants`, assert in `Float64` and `Float32` the generator's controls and the oracle's independence,
-  and under all three couplings: that `residual!` is the gradient of the action on the first and the
-  second slab; that the solver's Jacobian equals central differences; that a linear density
+  groups `derivatives` and `invariants`, assert in `Float64` and `Float32` the generator's
+  controls and the oracle's independence, and under all three couplings: that `residual!` is the
+  gradient of the action on the first and the second slab; that the solver's Jacobian equals central differences; that a linear density
   converges in at most two Newton iterations; that the rotation charge of a Noether problem is
   conserved; and that symmetric data give a symmetric top row and symmetric multipliers. The test
   environment adds `ForwardDiff`, `Random` and `SimpleSolvers`, and the `SimpleSplines` bound is
