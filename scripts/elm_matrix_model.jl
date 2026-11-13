@@ -26,6 +26,9 @@ trace basis' degree and cells.
 
 A stem carries `matrix`, because the run family's `wave-elm-h0.05` and `wave-elm-h0.025` already
 name two archives of the same problem, method and time step.
+
+A row's `solver` is `f_abstol = 0` and the relative tolerance that the ELM family measured on its
+run of `Wave`, `trained_f_reltol(Float64)` of `test/helpers/testsetup.jl:44`.
 """
 const ELM_MATRIX = [(stem = "$(held.problem)-elm-matrix-h$(timestep)",
                         label = "$(held.problem), elm, h = $(timestep)",
@@ -33,7 +36,8 @@ const ELM_MATRIX = [(stem = "$(held.problem)-elm-matrix-h$(timestep)",
                         tag = :matrix, resolution = (timestep = timestep,),
                         parameters = (
                             S = 20, epochs = 20, learning_rate = 1e-5, degree = 3,
-                            ncells = (2, 5)))
+                            ncells = (2, 5)),
+                        solver = (f_abstol = 0.0, f_reltol = 1e-2))
                     for held in ELM_PROBLEMS, timestep in ELM_STEPS]
 
 """

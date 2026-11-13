@@ -1,12 +1,12 @@
 using GeometricBase: ntime, timesteps
-using GeometricIntegratorsBase: GeometricIntegrator
+using GeometricIntegratorsBase: GeometricIntegrator, solver
 using JLD2
 using LinearAlgebra: BLAS
 using MultisymplecticIntegrators
 using MultisymplecticIntegrators: space_quadrature_nodes, space_quadrature_weights
 using Printf: @sprintf
 using Random: Xoshiro
-using SimpleSolvers: SimpleSolvers
+using SimpleSolvers: SimpleSolvers, config
 using SimpleSplines: Dirichlet
 using Test
 
@@ -689,8 +689,29 @@ end
                 # the problem the row names, told apart by its parameters
                 @test keys(problem.params) == problem_keys[entry.problem]
                 @test problem.D == (entry.problem === :vector_wave ? 2 : 1)
-                @test GeometricIntegrator(problem, method; keywords...) isa
-                      GeometricIntegrator
+                integrator = GeometricIntegrator(problem, method; keywords...)
+                @test integrator isa GeometricIntegrator
+                # A network family's rows solve at `f_abstol = 0` and a measured relative tolerance:
+                # the network family's `network_f_reltol(Float64)` for the network and the TrialNN
+                # rows, the ELM family's `trained_f_reltol(Float64)` for the ELM rows.
+                if name in (:network_matrix, :elm_matrix, :trialnn_matrix)
+                    options = config(solver(integrator))
+                    @test options.f_abstol == 0
+                    @test options.f_reltol == (name === :elm_matrix ? 1e-2 : 1e-4)
+                end
+                # The built method is the one the row names.
+                if name === :network_matrix
+                    @test ansatz(method).mode === entry.parameters.mode
+                    @test entry.parameters.mode ===
+                          (entry.method === :network_last_layer ? :last_layer : :all)
+                end
+                if name === :fixed_boundary_matrix
+                    @test MultisymplecticIntegrators.initial_guess(method) isa
+                          (entry.parameters.solve === :newton ? Continuation : FitTo)
+                    @test ansatz(method).Sx == entry.parameters.Sx
+                    @test ansatz(method).St == entry.parameters.St
+                    @test ansatz(method).bubble_form === entry.parameters.form
+                end
             end
         end
         # The symbolic rows run at the standing wave's period `2l / c = 4` and at the tolerance the
@@ -701,8 +722,8 @@ end
         end
         @test allunique(entry.resolution.ncells
         for entry in family_entries(:symbolic_matrix))
-        # The fixed-boundary rows keep the stems of the entries they were, reach `t = 1`, and name
-        # the solver method their branch is solved by.
+        # The fixed-boundary rows keep the base stems, reach `t = 1`, and name the solver method
+        # their branch is solved by.
         solvers = Dict(:newton => SimpleSolvers.Newton(),
             :joint => MultisymplecticIntegrators.LevenbergMarquardt(),
             :projected => MultisymplecticIntegrators.LevenbergMarquardt(

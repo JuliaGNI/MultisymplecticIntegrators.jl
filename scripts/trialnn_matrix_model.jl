@@ -25,12 +25,17 @@ TrialNN family's entries: the network's width and the trace basis' degree and ce
 
 A stem carries `matrix`, because the run family's `wave-trialnn-h0.05` already names an archive of
 the same problem, method and time step.
+
+A row's `solver` is `f_abstol = 0` and the network family's relative tolerance,
+`network_f_reltol(Float64)` of `test/ansatz/network.jl:51`: the TrialNN ansatz is that family's
+`NetworkAnsatz`, and the TrialNN family measured no tolerance of its own (`KNOWN_ISSUES.md`).
 """
 const TRIALNN_MATRIX = [(stem = "$(held.problem)-trialnn-matrix-h$(timestep)",
                             label = "$(held.problem), trialnn, h = $(timestep)",
                             method = :trialnn, problem = held.problem, problem_label = held.label,
                             tag = :matrix, resolution = (timestep = timestep,),
-                            parameters = (S = 10, degree = 3, ncells = (2, 5)))
+                            parameters = (S = 10, degree = 3, ncells = (2, 5)),
+                            solver = (f_abstol = 0.0, f_reltol = 1e-4))
                         for held in TRIALNN_PROBLEMS, timestep in TRIALNN_STEPS]
 
 """

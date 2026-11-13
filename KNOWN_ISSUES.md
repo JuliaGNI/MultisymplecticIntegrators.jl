@@ -418,3 +418,18 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   both model files and the test.
 - kind: dead code
 - found: #59
+
+### K58 · The TrialNN family has no measured solver tolerance, and the ELM and TrialNN runs solve at the generic defaults.
+
+- location: `scripts/trialnn_matrix_model.jl:33` (`TRIALNN_MATRIX`), `scripts/elm_model.jl:72` and
+  `scripts/trialnn_model.jl:80`
+- evidence: a network family solves at `f_abstol = 0` and a relative `f_reltol` that it measures
+  on its affine control. The network family measured
+  `network_f_reltol(Float64) = 1.0e-4` (`test/ansatz/network.jl:51`) and the ELM family
+  `trained_f_reltol(Float64) = 1.0e-2` (`test/helpers/testsetup.jl:44`); no test of
+  `HardConstraintLifting` names an `f_reltol`, so the TrialNN rows take the network family's value.
+  The run families call `integrate(problem, method)` with no solver keywords, so their steps solve
+  at `f_abstol = 8 eps = 1.78e-15` and `f_reltol = √eps = 1.49e-8`, and their archives' convergence
+  is judged on another rule than the matrix rows of the same method.
+- kind: defect
+- found: 2026-11-12

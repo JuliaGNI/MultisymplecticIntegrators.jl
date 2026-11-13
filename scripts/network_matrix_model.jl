@@ -30,6 +30,9 @@ const NETWORK_XSTEP = 0.05
 The network's rows: both modes on every problem at every time step, 18 in all. A row's `parameters`
 are the network's width, its mode, the trace basis' degree and cells, and the number of the field's
 components, `2` on `VectorWave`.
+
+A row's `solver` is `f_abstol = 0` and the relative tolerance that the network family measured on
+its affine control, `network_f_reltol(Float64)` of `test/ansatz/network.jl:51`.
 """
 const NETWORK_MATRIX = [(stem = "$(held.problem)-$(network.method)-h$(timestep)",
                             label = "$(held.problem), $(network.method), h = $(timestep)",
@@ -37,7 +40,8 @@ const NETWORK_MATRIX = [(stem = "$(held.problem)-$(network.method)-h$(timestep)"
                             problem_label = held.label, tag = :matrix,
                             resolution = (timestep = timestep,),
                             parameters = (S = 10, mode = network.mode, degree = 3,
-                                ncells = (2, 5), D = held.problem === :vector_wave ? 2 : 1))
+                                ncells = (2, 5), D = held.problem === :vector_wave ? 2 : 1),
+                            solver = (f_abstol = 0.0, f_reltol = 1e-4))
                         for network in NETWORK_METHODS, held in NETWORK_PROBLEMS,
 timestep in NETWORK_STEPS]
 

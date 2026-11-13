@@ -696,7 +696,11 @@ makes it worth keeping.
   family's thirty matrix entries move to `:fixed_boundary_matrix` and keep their stems, so an
   archive of either driver names the same configuration; `:fixed_boundary` keeps the two plateau
   entries as runs. A fixed-boundary entry's `problem` is the symbol `:wave` or `:sine_gordon`, no
-  longer the string `"wave"` or `"sinegordon"`; the stems keep the strings. Every new row is tagged `:matrix`, so the smoke gate runs none of them. The diagnostics
+  longer the string `"wave"` or `"sinegordon"`; the stems keep the strings. Every new row is
+  tagged `:matrix`, so the smoke gate runs none of them. The network, ELM and TrialNN rows solve at
+  `f_abstol = 0` and a relative `f_reltol` of `1e-4`, `1e-2` and `1e-4`, the values that the
+  network and the ELM family measured; the TrialNN family measured none and takes the network
+  family's (K58 in `KNOWN_ISSUES.md`). The diagnostics
   gain `space_quadrature_weights` and `energy_error` for `NetworkAnsatz`, read on its trace basis'
   space rule, and for `FixedBoundaryNetwork`, read on its own; `noether_charge` reaches them through
   the weights, so a `VectorWave` row of a network has a charge.
