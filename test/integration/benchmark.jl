@@ -633,7 +633,7 @@ end
         end
         # The rows of the network, symbolic, ELM, TrialNN and fixed-boundary families: each family
         # registers a `benchmark` and no `run`, holds every method on every problem it takes at three
-        # time steps, and each row builds its integrator with its own solver keywords, without a
+        # resolutions, and each row builds its integrator with its own solver keywords, without a
         # step. A row is never `:smoke`, so the gate's two smoke testsets run none of them.
         wave_keys = keys(Wave.problem().params)
         problem_keys = Dict(:wave => wave_keys,

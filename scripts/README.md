@@ -69,7 +69,7 @@ failed run.
 | file | does |
 |:--|:--|
 | `archives.jl` | where output goes, `atomic_write`, the archive's writer and its reader, the option parser, the printing helpers. Depends on `JLD2` and `Printf` alone, so a renderer loads it cheaply. No work at top level. |
-| `experiments.jl` | the registry: `register_family!`, `family_entries`, `family_run`, and the two selection rules `smallest_entry` and `entry_by_stem`, plus the ladders of the two scans. It holds no family's entries and builds nothing on `include`. |
+| `experiments.jl` | the registry: `register_family!`, `family_entries`, `family_run`, and the two selection rules `smallest_entry` and `entry_by_stem`, plus the ladders of the two scans. Of the families it holds only the fixed-boundary network's, the plateau runs `FIXED_BOUNDARY` and the matrix rows `FIXED_BOUNDARY_MATRIX`, and it integrates nothing on `include`. |
 | `spline_model.jl` | the spline family: its registry entries, the problem and the method of one of them, one run timed, the archive of a run, and the error of a run against the exact solution at its last stored step. It ends by registering `:spline`. |
 | `symbolic_model.jl` | the symbolic family: its registry entry, the closed-form expression in the slab's normalised time, the problem and the method of the entry, the archive of a run, and the energy error over it. It ends by registering `:symbolic`. |
 | `elm_model.jl` | the ELM family: its two registry entries, the problem, the ansatz and the method of one of them, one run timed, and the archive of a run. It ends by registering `:elm`. |

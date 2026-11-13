@@ -338,10 +338,10 @@ end
 
 The solver keywords of a fixed-boundary entry: the tolerance the entry names, and nothing else.
 
-A row that names none is solved at the tolerance the family measures at its element type, which the
-family resolves when the integrator is built; the extended-precision row names `big"1e-8"`, because
-the family measures no tolerance at `BigFloat`. The row's driver and the build-only testset both
-build their keywords here, so an entry's `f_reltol` reaches its solver by one path.
+An entry that names none is solved at the tolerance the family measures at its element type, which
+the family resolves when the integrator is built; the extended-precision entry names `big"1e-8"`,
+because the family measures no tolerance at `BigFloat`. The entry's driver and the build-only
+testset both build their keywords here, so an entry's `f_reltol` reaches its solver by one path.
 """
 function fixed_boundary_solver_keywords(entry)
     entry.f_reltol === nothing && return (;)

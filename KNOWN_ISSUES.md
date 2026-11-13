@@ -369,7 +369,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `fixed_boundary_solver_keywords` hands the entry's value to the solver, so the integrator builds
   and `TimeSeries`'s `TypeError` is the whole block. The row stays in the registry and in the
   build-only testset "FB18", which builds it and never runs it; the fix is a pull request of its own
-  to `GeometricSolutions`, and the step runs as a row of M's matrix once it lands.
+  to `GeometricSolutions`, and the step runs through the family's `run` once it lands.
 - kind: upstream
 - found: 2026-11-10
 
