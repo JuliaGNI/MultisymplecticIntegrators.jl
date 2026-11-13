@@ -409,7 +409,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 ### K57 · The problem-label mapping of the matrix is written three times, and the two problem builders repeat each other.
 
 - location: `scripts/box_model.jl:33` (`box_problem_label`), `scripts/spline_matrix_model.jl:59`
-  (`spline_problem_label`) and `test/integration/benchmark.jl:31` (`PROBLEM_LABELS`)
+  (`spline_problem_label`) and `test/integration/benchmark.jl:33` (`PROBLEM_LABELS`)
 - evidence: the three map `:wave`, `:vector_wave` and `:sine_gordon` to the same display names;
   only the spline file and the test name `:linear_transport`, which the box file prints as
   `"linear_transport"` because the box scheme refuses that problem. `box_problem`
@@ -425,7 +425,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `scripts/trialnn_model.jl:80`
 - evidence: a network family solves at `f_abstol = 0` and a relative `f_reltol` that it measures
   on its affine control. The network family measured
-  `network_f_reltol(Float64) = 1.0e-4` (`test/ansatz/network.jl:51`) and the ELM family
+  `network_f_reltol(Float64) = 1.0e-4` (`test/helpers/testsetup.jl:59`) and the ELM family
   `trained_f_reltol(Float64) = 1.0e-2` (`test/helpers/testsetup.jl:44`); no test of
   `HardConstraintLifting` names an `f_reltol`, so the TrialNN rows take the network family's value.
   The run families call `integrate(problem, method)` with no solver keywords, so their steps solve

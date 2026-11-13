@@ -17,6 +17,7 @@ using Test
 include(joinpath(@__DIR__, "..", "helpers", "reference_values.jl"))
 include(joinpath(@__DIR__, "..", "..", "scripts", "run_benchmark.jl"))
 include(joinpath(@__DIR__, "..", "helpers", "problem_generator.jl"))
+include(joinpath(@__DIR__, "..", "helpers", "testsetup.jl"))
 
 # The module a copy of the driver is included into, for the one row whose child process ends on an
 # exit code the tree's own registry cannot produce: the parent reads the child's code, so the row
@@ -720,7 +721,9 @@ end
                 if name in (:network_matrix, :elm_matrix, :trialnn_matrix)
                     options = config(solver(integrator))
                     @test options.f_abstol == 0
-                    @test options.f_reltol == (name === :elm_matrix ? 1e-2 : 1e-4)
+                    @test options.f_reltol ==
+                          (name === :elm_matrix ? trained_f_reltol(Float64) :
+                           network_f_reltol(Float64))
                 end
                 # The built method is the one the row names.
                 if name === :network_matrix
