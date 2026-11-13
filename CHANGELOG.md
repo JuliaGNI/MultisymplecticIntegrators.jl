@@ -719,6 +719,14 @@ makes it worth keeping.
   `FixedBoundaryNetwork`, read on its own; `noether_charge` reaches them through the weights, so a
   `VectorWave` row of a network has a charge. A `SymbolicAnsatz` takes the same methods as a
   `NetworkAnsatz`, with the same results as before.
+- **The multiplier network has a regularisation scan of 8 matrix rows.**
+  `scripts/network_regularisation_model.jl` registers `:network_regularisation`: both modes on
+  `Wave` at `h = 0.05`, each at the solver's `regularization_factor` `λ ∈ (0.0, 1e-8, 1e-5, 1e-2)`,
+  with the network family's problem, method and tolerances, and stems that end in `-lambda<λ>`. The
+  `λ = 0.0` rows repeat the network family's `h = 0.05` rows on `Wave` as the scan's baseline. The
+  docstring of `integrate` says what the option does: `Newton` adds `λ`, unscaled, to the diagonal
+  of the slab Jacobian before each factorisation, a shift of the Newton matrix and not a Tikhonov
+  term.
 - **`scripts/kernel_build_order.jl` checks whether a network's kernels are generated the same way
   twice.** It sorts repeated symbolic builds of one network architecture, made around the
   per-process cache of `network_kernels`, by their generated code and their kernel values, and

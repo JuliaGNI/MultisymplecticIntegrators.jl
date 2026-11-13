@@ -763,6 +763,43 @@ end
         end
         @test count(entry -> entry.solver.solver == solvers[:projected],
             family_entries(:fixed_boundary_matrix)) == 12
+        # The network's regularisation scan: both modes on `Wave` at one time step, each at the four
+        # values of the solver's `regularization_factor`, so it has its own block rather than an
+        # entry of `families`, whose check takes three resolutions per method and problem. Each
+        # row builds its integrator with its own solver keywords, without a step.
+        scan = family_entries(:network_regularisation)
+        @test family_benchmark(:network_regularisation) isa Function
+        @test family_run(:network_regularisation) === nothing
+        @test length(scan) == 8
+        @test allunique(entry.stem for entry in scan)
+        for method in (:network_all, :network_last_layer)
+            group = [entry for entry in scan if entry.method === method]
+            @test sort([entry.parameters.regularization_factor for entry in group]) ==
+                  [0.0, 1e-8, 1e-5, 1e-2]
+        end
+        for entry in scan
+            @test entry.tag === :matrix
+            @test entry.problem === :wave
+            @test entry.resolution == (timestep = 0.05,)
+            @test entry.solver.regularization_factor ===
+                  entry.parameters.regularization_factor
+            # A stem and a label that name `λ` keep the rows apart in the tables, which key by stem.
+            @test endswith(entry.stem, "-lambda$(entry.parameters.regularization_factor)")
+            @test occursin("λ = $(entry.parameters.regularization_factor)", entry.label)
+            problem = network_matrix_problem(entry)
+            method = network_matrix_method(entry)
+            @test method isa SpaceTimeMethod
+            @test problem.timestep == entry.resolution.timestep
+            @test keys(problem.params) == problem_keys[:wave]
+            integrator = GeometricIntegrator(problem, method; entry.solver...)
+            options = config(solver(integrator))
+            @test options.f_abstol == 0
+            @test options.f_reltol == network_f_reltol(Float64)
+            @test options.regularization_factor == entry.parameters.regularization_factor
+            # The built method is the one the row names.
+            @test ansatz(method).mode ===
+                  (entry.method === :network_last_layer ? :last_layer : :all)
+        end
         # A family of the figure archives contributes no row, and the run-only family is registered.
         elm = Set(entry.stem for entry in family_entries(:elm))
         @test !isempty(elm)
