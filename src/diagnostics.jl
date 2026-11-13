@@ -27,10 +27,20 @@ end
 """
     space_quadrature_weights(ansatz)
 
-The weights of the ansatz's space quadrature, which a [`SymbolicAnsatz`](@ref) takes from the
-trace basis that owns its rule.
+The weights of the space rule a [`SymbolicAnsatz`](@ref)'s or a [`NetworkAnsatz`](@ref)'s slab
+stores its trace on, which is its trace basis' rule and not the ansatz's own.
 """
-space_quadrature_weights(ansatz::SymbolicAnsatz) = space_quadrature_weights(ansatz.trace)
+function space_quadrature_weights(ansatz::Union{SymbolicAnsatz, NetworkAnsatz})
+    return space_quadrature_weights(ansatz.trace)
+end
+
+"""
+    space_quadrature_weights(ansatz)
+
+The weights of a [`FixedBoundaryNetwork`](@ref)'s own space rule, the Gauss rule on each of its
+cells, which is the rule its slab stores the trace on.
+"""
+space_quadrature_weights(ansatz::FixedBoundaryNetwork) = ansatz.tabulation.xweight
 
 """
     energy_error(problem, method, traces)
@@ -59,12 +69,20 @@ function energy_error(problem::LagrangianPDEProblem, method::SpaceTimeGalerkin, 
     return energy_error(problem, ansatz(method), traces)
 end
 
-function energy_error(problem::LagrangianPDEProblem{T}, ansatz::TensorBSplineAnsatz,
+function energy_error(problem::LagrangianPDEProblem,
+        ansatz::Union{
+            TensorBSplineAnsatz, SymbolicAnsatz, NetworkAnsatz, FixedBoundaryNetwork},
+        traces)
+    return quadrature_energy_error(problem, space_quadrature_weights(ansatz), traces)
+end
+
+# The energy deviation of a run whose traces are stored at the nodes of a space rule with these
+# weights, one weight per node.
+function quadrature_energy_error(problem::LagrangianPDEProblem{T}, weights::AbstractVector,
         traces) where {T}
     isempty(traces) &&
         throw(ArgumentError("the run stored no trace, so it has no energy; `integrate` returns " *
                             "an empty `traces` for a run that took no step"))
-    weights = space_quadrature_weights(ansatz)
     energies = Vector{T}(undef, length(traces))
     # `Val(problem.D)` is built once for the run and carried into the quadrature behind one function
     # barrier, so the `D` values of a node are a tuple whose length is a compile-time constant. The
@@ -73,16 +91,6 @@ function energy_error(problem::LagrangianPDEProblem{T}, ansatz::TensorBSplineAns
     step_energies!(
         energies, problem.density, problem.params, weights, traces, Val(problem.D))
     return relative_deviation(energies)
-end
-
-"""
-    energy_error(problem, ansatz::SymbolicAnsatz, traces)
-
-The relative energy deviation of a symbolic run, read from the traces through the trace basis'
-space rule, which is the rule the trace is stored on.
-"""
-function energy_error(problem::LagrangianPDEProblem, ansatz::SymbolicAnsatz, traces)
-    energy_error(problem, ansatz.trace, traces)
 end
 
 # The deviation of an energy series from its first entry: relative where that entry is a scale, and

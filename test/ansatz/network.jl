@@ -38,19 +38,6 @@ const LAST_LAYER_ITERATIONS = 2
 """The hidden units of the affine control, which frees its output weights alone."""
 const NETWORK_CONTROL_S = 20
 
-"""
-The relative tolerance of the network family's steps, measured on the affine control of `:last_layer`
-at `S = 20`: the largest of its five step ratios `residual / initial residual` is `7.8e-6` in
-`Float64` and `6.4e-3` in `Float32`, against the tolerance this function returns.
-
-The control's steps are affine in its unknowns — the coupling's constraint rows reach the free
-output weights alone and the hidden layer, which the fit fixed, enters the residual as data — so two
-Newton iterations reach the root, and the ratio is the solver's own round-off. `f_abstol = 0`, so no
-step converges on an absolute term.
-"""
-network_f_reltol(::Type{Float64}) = 1.0e-4
-network_f_reltol(::Type{Float32}) = 1.0e-2
-
 function network_ansatz(::Type{T}; S = 10, D = 1, mode = :all, degree = 3, ncells = (2, 5),
         xspan = (zero(T), one(T)), quadrature_order = nothing) where {T}
     return NetworkAnsatz(S = S, D = D, mode = mode, xspan = xspan, degree = degree,
@@ -475,6 +462,12 @@ end
         @test a.gradient === b.gradient
         @test a.field === c.field
         @test a.gradient === c.gradient
+        # two separate builds of equal bodies are `===` too, so the cache itself is the check
+        @test lock(kernels -> kernels[(6, 2, tanh)], M.NETWORK_KERNELS) ===
+              (a.field, a.gradient)
+        entries = lock(length, M.NETWORK_KERNELS)
+        network_ansatz(T; S = 6, D = 2)
+        @test lock(length, M.NETWORK_KERNELS) == entries
         # another width, another output count or another activation is another architecture
         @test network_ansatz(T; S = 7, D = 2).field !== a.field
         @test network_ansatz(T; S = 6, D = 1).field !== a.field

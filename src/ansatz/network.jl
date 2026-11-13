@@ -69,7 +69,7 @@ function NetworkAnsatz(; S::Integer, activation = tanh, mode::Symbol = :all, xsp
     T = _coordinate_type(xspan)
     xsp = (convert(T, xspan[1]), convert(T, xspan[2]))
     xsp[1] < xsp[2] || throw(ArgumentError("xspan must increase, got $xsp"))
-    chain = Chain(Dense(2, S, activation), Dense(S, D, identity; use_bias = false))
+    chain = network_chain(S, D, activation)
     trace = TensorBSplineAnsatz(; degree, ncells, xspan = xsp, x_boundary = Free())
     order = quadrature_order === nothing ? _default_quadrature_order(degree_of(trace)) + 1 :
             Int(quadrature_order)
@@ -120,28 +120,32 @@ function network_functions(symbolic::SymbolicNeuralNetwork, D::Integer)
         build_flat_function(flat_parameter_gradient(values, symbolic), symbolic))
 end
 
-# The kernels of every network built in this process, one pair per architecture. The chain is
-# `Chain(Dense(2, S, activation), Dense(S, D, identity; use_bias = false))`, so `(S, D, activation)`
-# fixes the symbolic build; the mode and the element type do not enter it. Two builds of one
-# architecture generate bodies whose sums can differ in the order of their terms, and so in their
-# rounding, so every network of one architecture shares the first build's kernels. The value type
-# is abstract: the constructor is the function barrier that reads the concrete types.
-const NETWORK_KERNELS = Dict{Tuple{Int, Int, Any}, Tuple{Any, Any}}()
-const NETWORK_KERNELS_LOCK = ReentrantLock()
+# The chain of a network of `S` hidden units and `D` outputs.
+function network_chain(S::Integer, D::Integer, activation)
+    return Chain(Dense(2, S, activation), Dense(S, D, identity; use_bias = false))
+end
+
+# The kernels of every network built in this process, one pair per architecture. `(S, D,
+# activation)` fixes the chain of `network_chain` and so the symbolic build; the mode and the
+# element type do not enter it. Two builds of one architecture can generate bodies whose sums differ
+# in the order of their terms, and so in their rounding (K59 in `KNOWN_ISSUES.md`), so every network
+# of one architecture shares the first build's kernels. The value type is abstract: the constructor
+# is the function barrier that reads the concrete types.
+const NETWORK_KERNELS = Base.Lockable(Dict{Tuple{Int, Int, Any}, Tuple{Any, Any}}())
 
 """
     network_kernels(S, D, activation)
 
 The `field` and `gradient` of [`network_functions`](@ref) for the network of `S` hidden units and
 `D` outputs, built once per process for each architecture `(S, D, activation)` and shared by every
-[`NetworkAnsatz`](@ref) of that architecture, so that two networks of one shape evaluate the same
-code.
+[`NetworkAnsatz`](@ref) of that architecture, so that in one process two networks of one shape
+evaluate the same code. Another process builds the pair afresh, and its bodies need not be the
+same.
 """
 function network_kernels(S::Int, D::Int, activation)
-    return lock(NETWORK_KERNELS_LOCK) do
-        get!(NETWORK_KERNELS, (S, D, activation)) do
-            chain = Chain(Dense(2, S, activation), Dense(S, D, identity; use_bias = false))
-            network_functions(SymbolicNeuralNetwork(chain), D)
+    return lock(NETWORK_KERNELS) do kernels
+        get!(kernels, (S, D, activation)) do
+            network_functions(SymbolicNeuralNetwork(network_chain(S, D, activation)), D)
         end
     end
 end

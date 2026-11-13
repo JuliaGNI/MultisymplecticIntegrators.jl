@@ -193,24 +193,19 @@ function top_velocity(oracle, problem, ansatz, φ0, φ1, Θ, t₀, x, d)
     return ut / h
 end
 
-"""Central differences of a residual at `θ`, one column per unknown."""
-function residual_differences(int, θ::AbstractVector{T}, params) where {T}
-    n = length(θ)
-    J = zeros(T, n, n)
-    forward = zeros(T, n)
-    backward = zeros(T, n)
-    x = copy(θ)
-    for k in 1:n
-        δ = cbrt(eps(T)) * max(one(T), abs(θ[k]))
-        x[k] = θ[k] + δ
-        M.residual!(forward, x, nothing, params, int)
-        up = x[k]
-        x[k] = θ[k] - δ
-        M.residual!(backward, x, nothing, params, int)
-        J[:, k] .= (forward .- backward) ./ (up - x[k])
-        x[k] = θ[k]
-    end
-    return J
+"""
+    directional_differences(int, θ, d, params)
+
+The central difference of a residual at `θ` along the direction `d`, `(r(θ + δd) − r(θ − δd)) / 2δ`
+with `δ = cbrt(eps(T)) · max(1, max|θ|) / max|d|`: two residuals, which approximate `J · d`.
+"""
+function directional_differences(int, θ::AbstractVector{T}, d::AbstractVector{T}, params) where {T}
+    δ = cbrt(eps(T)) * max(one(T), maximum(abs, θ)) / maximum(abs, d)
+    forward = zeros(T, length(θ))
+    backward = zeros(T, length(θ))
+    M.residual!(forward, θ .+ δ .* d, nothing, params, int)
+    M.residual!(backward, θ .- δ .* d, nothing, params, int)
+    return (forward .- backward) ./ (2δ)
 end
 
 """The residual of a slab at `θ`, in a vector of `θ`'s element type."""
@@ -372,18 +367,24 @@ end
 
 @testset "FB2 the Jacobian is the derivative of the residual" begin
     rng = Xoshiro(11)
+    drng = Xoshiro(12)
     # `jacobian!` is SimpleSolvers' and writes the solver's own matrix, so it exists for a
     # `NonlinearSolver`. The family's Levenberg–Marquardt keeps no such matrix — it takes one SVD of
     # the Jacobian at each accepted iterate — so the Jacobian of the residual is read through the
     # `Newton()` solver the family also offers, on the same residual and the same block.
     #
     # N5's and N18's second check: the legs are `Wave`, `SineGordon` and all 24 seeded entries, in
-    # both forms and both modes, at 16 vectors each, and at both element types. The differences are
-    # taken on the `Float64` slab in both precisions, as the symbolic ansatz's are: the residual's
-    # round-off at `Float32` sits in differences `cbrt(eps(Float32))` apart, where its own truncation
-    # error is larger than the bound. The `Float64` slab is the same slab — `transplant_datum!`
-    # copies the datum across, so that both element types differentiate one function of the unknowns
-    # rather than two fits of it.
+    # both forms and both modes, at 16 vectors each, and at both element types. Each vector's `J` is
+    # read along three directions drawn from `drng`, so that `rng` draws the vectors alone; each `d`
+    # is drawn in `Float64` and rounded to `T`. The difference along `d` checks `J · d` with two
+    # residuals, and a `d` with no zero entry weights every column of `J`. The bound is
+    # `sqrt(eps(T)) · max|J| · ‖d‖₂`. Its margin is measured, not derived: on this grid the worst
+    # ratio of error to bound is 0.124 in `Float64` and 0.026 in `Float32` (issue #63). The
+    # differences are taken on the `Float64` slab in both precisions, as the symbolic ansatz's are:
+    # the residual's round-off at `Float32` sits in differences `cbrt(eps(Float32))` apart, where
+    # its own truncation error is larger than the bound. The `Float64` slab is the same slab —
+    # `transplant_datum!` copies the datum across, so that both element types differentiate one
+    # function of the unknowns rather than two fits of it.
     for T in (Float64, Float32)
         entries = generate_problems(T; rng = Xoshiro(SEED))
         reference_entries = T === Float64 ? entries :
@@ -417,9 +418,13 @@ end
                 SimpleSolvers.jacobian!(s, θ, (current(slab.solstep), p, slab.int))
                 J = copy(SimpleSolvers.jacobianmatrix(s))
                 @test maximum(abs, J) ≥ T(1 // 100)
-                @test maximum(abs,
-                    J - residual_differences(reference.int, Float64.(θ),
-                        parameters(leg.reference))) ≤ sqrt(eps(T)) * maximum(abs, J)
+                for _ in 1:3
+                    d = T.(2 .* rand(drng, length(c.x)) .- 1)
+                    @test maximum(abs,
+                        J * d - directional_differences(reference.int, Float64.(θ),
+                            Float64.(d), parameters(leg.reference))) ≤
+                          sqrt(eps(T)) * maximum(abs, J) * norm(d)
+                end
             end
         end
     end
@@ -1266,34 +1271,52 @@ end
 # ---- FB18 ----------------------------------------------------------------------------
 
 @testset "FB18 the family's rows build and the plateau is a record" begin
-    # N23: the registry holds the family's 32 entries — 30 of the matrix and 2 of the plateau probe
-    # — each with a distinct stem and a resolution, one of them at `Sx = 12`, `St = 16` and
+    # N23: the registry holds the family's 32 entries — 30 rows of the matrix and 2 runs of the
+    # plateau probe — each with a distinct stem, one of the plateau's at `Sx = 12`, `St = 16` and
     # `h = 0.025` and one at `BigFloat`, and the plateau's numbers are a record and no assertion.
-    entries = family_entries(:fixed_boundary)
-    @test length(entries) == 32
-    @test length(unique(entry.stem for entry in entries)) == 32
-    @test all(entry -> entry.steps ≥ 1, entries)
-    matrix = filter(
-        entry -> occursin("fixed-boundary", entry.stem) &&
-                 !occursin("plateau", entry.stem),
-        entries)
-    @test length(matrix) == 30
-    @test length(Set((entry.problem, entry.form, entry.solver, entry.timestep)
-    for entry in matrix)) == 30
-    # a matrix row integrates its ladder up to `t = 1`, so that the three resolutions of one
-    # problem compare one span
-    @test all(entry -> entry.steps * entry.timestep ≥ 1 - 1e-12, matrix)
-    # a driver given no stem runs the cheapest row: the largest time step, at `Float64`
-    cheapest = smallest_entry(entries)
-    @test cheapest.timestep == maximum(entry.timestep for entry in entries)
-    @test cheapest.T === Float64
-    plateau = filter(entry -> occursin("plateau", entry.stem), entries)
+    plateau = family_entries(:fixed_boundary)
+    matrix = family_entries(:fixed_boundary_matrix)
     @test length(plateau) == 2
+    @test length(matrix) == 30
+    @test allunique(entry.stem for entry in Iterators.flatten((plateau, matrix)))
+    @test all(entry -> occursin("plateau", entry.stem), plateau)
+    @test !any(entry -> occursin("plateau", entry.stem), matrix)
+    @test all(entry -> entry.steps ≥ 1, plateau)
+    @test all(entry -> entry.parameters.steps ≥ 1, matrix)
+    @test length(Set((entry.problem, entry.parameters.form, entry.parameters.solve,
+                         entry.resolution.timestep) for entry in matrix)) == 30
+    # a matrix row integrates its ladder up to `t = 0.2`, the final time of the other families'
+    # rows of its problem, so that the rows of one problem compare errors at one time
+    @test all(entry -> entry.parameters.steps * entry.resolution.timestep ≈ 0.2, matrix)
+    @test sort(unique(entry.parameters.steps for entry in matrix)) == [2, 4, 8]
+    # a driver given no stem runs the plateau's `Float64` entry, and not the `BigFloat` one, by its
+    # stem and whatever the order of the family's tuple: reversed, the cheapest entry of the tie is
+    # the `BigFloat` one, and the default stays
+    default = default_entry(:fixed_boundary)
+    @test default.stem == "wave-fixed-boundary-plateau-h0.025"
+    @test default.T === Float64
+    held = FAMILIES[:fixed_boundary]
+    try
+        FAMILIES[:fixed_boundary] = merge(held, (entries = reverse(held.entries),))
+        @test smallest_entry(family_entries(:fixed_boundary)).T === BigFloat
+        @test default_entry(:fixed_boundary) === default
+    finally
+        FAMILIES[:fixed_boundary] = held
+    end
+    # a plateau entry names its solve as a row's `parameters` do; `solver` is a row's solver method
+    @test all(entry -> entry.solve in (:newton, :joint, :projected), plateau)
+    @test !any(entry -> haskey(entry, :solver), plateau)
+    # the cheapest row, the largest time step, runs at `Float64`
+    largest = maximum(entry.resolution.timestep for entry in matrix)
+    @test all(entry -> entry.parameters.T === :Float64,
+        filter(entry -> entry.resolution.timestep == largest, matrix))
+    entries = vcat(collect(plateau), collect(matrix))
+    @test all(entry -> entry.problem in (:wave, :sine_gordon), entries)
     @test any(entry -> entry.Sx == 12 && entry.St == 16 && entry.timestep == 0.025, plateau)
     @test any(entry -> entry.T === BigFloat, plateau)
     @test all(entry -> entry.steps == 1, filter(entry -> entry.T === BigFloat, plateau))
-    # N23: the extended-precision row names its own tolerance, because the family measures none at
-    # `BigFloat`; the row's driver and this testset build the solver's keywords through one
+    # N23: the extended-precision entry names its own tolerance, because the family measures none at
+    # `BigFloat`; the entry's driver and this testset build the solver's keywords through one
     # function, so the entry's value is the one the solver is built with
     extended = only(filter(entry -> entry.T === BigFloat, plateau))
     @test extended.f_reltol == big"1e-8"

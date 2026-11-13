@@ -356,20 +356,20 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-11-10
 
-### K53 · The plateau probe's extended-precision row cannot run, because `GeometricSolutions` cannot build a solution at `BigFloat`.
+### K53 · The plateau probe's extended-precision entry cannot run, because `GeometricSolutions` cannot build a solution at `BigFloat`.
 
-- location: `scripts/experiments.jl` (the `BigFloat` plateau row);
+- location: `scripts/experiments.jl` (the `BigFloat` plateau entry);
   `GeometricSolutions`, `src/timeseries.jl:8`
 - evidence: `TimeSeries(ti::AbstractVector, Δt)` builds `new{T, n, typeof(t)}` with
   `n = length(ti) - 1`, and the `length` of a `BigFloat` range is a `BigInt` — it is a
   `StepRangeLen{BigFloat, BigFloat, BigFloat, BigInt}` — so `GeometricSolution(problem)` on a
   `BigFloat` `Wave` raises `TypeError: in Type, in parameter, expected Int64, got a value of type
-  BigInt` before a step is taken. The row names its own `f_reltol = big"1e-8"`, because the family
+  BigInt` before a step is taken. The entry names its own `f_reltol = big"1e-8"`, because the family
   measures no tolerance at `BigFloat` and refuses a caller there that names none, and
   `fixed_boundary_solver_keywords` hands the entry's value to the solver, so the integrator builds
-  and `TimeSeries`'s `TypeError` is the whole block. The row stays in the registry and in the
+  and `TimeSeries`'s `TypeError` is the whole block. The entry stays in the registry and in the
   build-only testset "FB18", which builds it and never runs it; the fix is a pull request of its own
-  to `GeometricSolutions`, and the step runs as a row of M's matrix once it lands.
+  to `GeometricSolutions`, and the step runs through the family's `run` once it lands.
 - kind: upstream
 - found: 2026-11-10
 
@@ -406,15 +406,49 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: dead code
 - found: #59
 
-### K57 · The problem-label mapping of the matrix is written three times, and the two problem builders repeat each other.
+### K58 · The TrialNN family has no measured solver tolerance, and the ELM and TrialNN runs solve at the generic defaults.
 
-- location: `scripts/box_model.jl:33` (`box_problem_label`), `scripts/spline_matrix_model.jl:59`
-  (`spline_problem_label`) and `test/integration/benchmark.jl:31` (`PROBLEM_LABELS`)
-- evidence: the three map `:wave`, `:vector_wave` and `:sine_gordon` to the same display names;
-  only the spline file and the test name `:linear_transport`, which the box file prints as
-  `"linear_transport"` because the box scheme refuses that problem. `box_problem`
-  (`scripts/box_model.jl:58`) and `spline_matrix_problem` (`scripts/spline_matrix_model.jl:91`) are
-  the same `if` chain apart from the `xstep` and the transport span. One shared helper would serve
-  both model files and the test.
-- kind: dead code
-- found: #59
+- location: `scripts/trialnn_matrix_model.jl:29` (`TRIALNN_MATRIX`), `scripts/elm_model.jl:72` and
+  `scripts/trialnn_model.jl:80`
+- evidence: a network family solves at `f_abstol = 0` and a relative `f_reltol` that it measures
+  on its affine control. The network family measured
+  `network_f_reltol(Float64) = 1.0e-4` (`test/helpers/testsetup.jl:59`) and the ELM family
+  `trained_f_reltol(Float64) = 1.0e-2` (`test/helpers/testsetup.jl:44`); no test of
+  `HardConstraintLifting` names an `f_reltol`, so the TrialNN rows take the network family's value.
+  The run families call `integrate(problem, method)` with no solver keywords, so their steps solve
+  at `f_abstol = 8 eps = 1.78e-15` and `f_reltol = √eps = 1.49e-8`, and their archives' convergence
+  is judged on another rule than the matrix rows of the same method.
+- kind: defect
+- found: 2026-11-12
+
+### K59 · A network's generated kernels follow the GC history, so a trained run reproduces only within one process.
+
+- location: `src/ansatz/network.jl:145` (`network_kernels`) and `:112` (`network_functions`);
+  `SymbolicUtils` 4.56.1, `src/code.jl:1949` (`_cse_compute`) and `src/symbolic_ops/addsub.jl:129`
+  (`_dict_copy_into!` in the call method of `AddWorkerBuffer`, `:96`, which `add_worker` reaches)
+- evidence: `network_kernels` builds the `field` and `gradient` kernels of an architecture once
+  per process, through `network_functions` and `SymbolicNeuralNetworks`' `build_flat_function`,
+  and every `NetworkAnsatz` of that architecture reads them. The CSE pass of `SymbolicUtils` emits a
+  sum's terms in the order of `arguments(expr)`, not `sorted_arguments`, and that order is the term
+  dictionary of whichever hash-consed copy of the term the weak cache holds, so it follows the
+  process's allocation and `GC.gc()` history. 4.56 seeds a sum's dictionary with a bulk copy of an
+  existing one (`_dict_copy_into!`), which keeps that dictionary's slot order, where 4.55 inserts
+  the terms one by one; that this change is the cause is likely and not shown.
+  `julia --startup-file=no --project=. scripts/kernel_build_order.jl 20 5 30 3` at `6036a47`
+  (Julia 1.13.3, `SymbolicUtils` 4.56.1, no `--check-bounds` flag) builds the kernels of
+  `S = 20`, `D = 1` 20 times around the cache, with a `GC.gc()` after every fifth build: the builds
+  fall into two classes, 1–10 and 11–20 in `Float64` and 1–5 and 6–20 in `Float32`, whose kernel
+  values differ by up to `2.5e-15` and `2.2e-7` relative. One differing line is
+  `ps.L1.W[21] * x1[2, k]` against `ps.L1.W[1] * x1[1, k]` in the first term of a sum. The same
+  builds at `1e0301e`, which has no cache, are one class with 4.55.0. The 20 epochs of a
+  `TrainedHiddenLayer` fit carry the rounding difference to the step: at `1e0301e`, where every
+  `NetworkAnsatz` builds its own kernels, test E4a's pair of first steps, looped 30 times per
+  element type with 3 builds and one `GC.gc()` between its two steps, differs in 2 of 30 `Float64`
+  and 2 of 30 `Float32` trials, by up to `3.1e-12` and `1.3e-3` relative, with 4.56.1, and in none
+  with 4.55.0. At `6036a47` the script's part 2 counts none of 30 per element type, because both
+  steps read the one cached pair. Within one process the kernels are therefore one build; two
+  processes whose history differs before that build can generate different kernels, so a trained
+  run does not reproduce bit for bit from one process to the next. Sorted arguments in
+  `SymbolicUtils`' CSE would remove the dependence at its source.
+- kind: upstream
+- found: 2026-11-13
