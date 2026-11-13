@@ -1,6 +1,9 @@
 using SafeTestsets
 
-const GROUPS = isempty(ARGS) ? ["core", "slow"] : ARGS
+const GROUPS = isempty(ARGS) ?
+               ["core", "slow", "ansatz", "couplings", "initialguess",
+    "derivatives", "invariants", "fixedboundary"] :
+               ARGS
 
 if "core" in GROUPS
     @safetestset "Aqua" include("quality/aqua.jl")
@@ -24,18 +27,36 @@ end
 
 if "slow" in GROUPS
     @safetestset "Benchmark matrix" include("integration/benchmark.jl")
+end
+
+if "ansatz" in GROUPS
     @safetestset "Symbolic ansatz" include("ansatz/symbolic.jl")
-    @safetestset "Weak multipliers" include("couplings/weak_multipliers.jl")
     @safetestset "Network ansatz" include("ansatz/network.jl")
+end
+
+if "couplings" in GROUPS
+    @safetestset "Weak multipliers" include("couplings/weak_multipliers.jl")
+    @safetestset "Hard constraint lifting" include("couplings/hard_constraint_lifting.jl")
+end
+
+if "initialguess" in GROUPS
     @safetestset "Orthogonal greedy" include("initial_guess/orthogonal_greedy.jl")
     @safetestset "Trained hidden layer" include("initial_guess/trained_hidden_layer.jl")
     @safetestset "PINN training" include("initial_guess/pinn_training.jl")
-    @safetestset "Hard constraint lifting" include("couplings/hard_constraint_lifting.jl")
+end
+
+if "derivatives" in GROUPS
     @safetestset "Property: generated problems" include("verification/properties/generator.jl")
     @safetestset "Property: gradient" include("verification/properties/gradient.jl")
     @safetestset "Property: Jacobian" include("verification/properties/jacobian.jl")
+end
+
+if "invariants" in GROUPS
     @safetestset "Property: linear control" include("verification/properties/linear_control.jl")
     @safetestset "Property: Noether charge" include("verification/properties/noether.jl")
     @safetestset "Property: symmetry" include("verification/properties/symmetry.jl")
+end
+
+if "fixedboundary" in GROUPS
     @safetestset "Fixed boundary" include("couplings/fixed_boundary.jl")
 end

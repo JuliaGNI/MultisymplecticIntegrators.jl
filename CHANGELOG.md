@@ -232,13 +232,13 @@ makes it worth keeping.
   `docs/src/seam.md`, *The slab seam*, states the seam of the slab integrator and the action form
   that it admits. The library is split over two pages, the package module and its submodules, so
   that each page stays below Documenter's size threshold.
-- **`test/runtests.jl` runs each test file in its own `@safetestset`.** Empty `ARGS` runs the `core`
-  and `slow` groups. The `core` group holds fifteen files: the Aqua, explicit-imports and sources
-  quality checks, the Lagrangian density and Lagrangian problem tests, the linear transport and
-  vector wave tests, the tensor B-spline ansatz, coefficient restriction, coupling seam and
-  initial-guess tests, the integrator shell and archive tests, and the diagnostics and
-  plotting tests. The
-  `slow` group holds the weak-multiplier test and the six property files of the entry below.
+- **`test/runtests.jl` runs each test file in its own `@safetestset`.** Empty `ARGS` runs every
+  group that `test/ci-groups.toml` lists. The `core` group holds seventeen files: the Aqua,
+  explicit-imports and sources quality checks, the Lagrangian density and Lagrangian problem tests,
+  the linear transport and vector wave tests, the tensor B-spline ansatz, coefficient restriction,
+  coupling seam and initial-guess tests, the integrator shell, archive and registry tests, the box
+  scheme, and the diagnostics and plotting tests. The other groups are in the entry on the CI test
+  groups.
 - **Reference values of the integrators at `294f023`.** `scripts/reference_values.jl` runs every
   integrator family on short `Wave` and `SineGordon` cases and writes
   `test/helpers/reference_values.jl`. Two cases fail at `294f023`. The script does not run on this
@@ -372,8 +372,8 @@ makes it worth keeping.
   cell counts and Gauss counts, Noether problems and problems symmetric under `x ↦ a + b − x`.
   `test/helpers/action_oracle.jl` builds the discrete slab action from the density, the data
   functions and SimpleSplines' evaluation of the ansatz, with each coupling's terms and datums, and
-  differentiates it with ForwardDiff. Six files under `test/verification/properties/`, in the group
-  `slow`, assert in `Float64` and `Float32` the generator's controls and the oracle's independence,
+  differentiates it with ForwardDiff. Six files under `test/verification/properties/`, in the
+  groups `derivatives` and `invariants`, assert in `Float64` and `Float32` the generator's controls and the oracle's independence,
   and under all three couplings: that `residual!` is the gradient of the action on the first and the
   second slab; that the solver's Jacobian equals central differences; that a linear density
   converges in at most two Newton iterations; that the rotation charge of a Noether problem is
@@ -750,6 +750,13 @@ makes it worth keeping.
   iterations, and both ranks and floors on every slab of the test.
 - **CI coverage and cache.** CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of
   `Julia min`, and a test job saves the Julia cache only when it succeeds.
+- **The tests run in CI as eight groups, one job each:** `core`, `slow`, `ansatz`, `couplings`,
+  `initialguess`, `derivatives`, `invariants` and `fixedboundary`. `test/ci-groups.toml` lists
+  them, and empty `ARGS` still runs every group. `slow` keeps the benchmark matrix; the other
+  files of the former `slow` group move to the six new groups by topic, so that one job no longer
+  runs past the 120-minute timeout. `.github/workflows/CI.yml`, `codecov.yml` and the git hooks in
+  `.githooks/` follow the Harness template, which runs one CI job per group and checks the group
+  files.
 - **Test floors for the merged downgrade check.** CI's Downgrade job resolves `Project.toml` and
   `test/Project.toml` together at their lower bounds and requires each bound to be the version it
   resolves to. `test/Project.toml` raises `ForwardDiff` from `0.10` to `0.10.36, 1`, the lowest
