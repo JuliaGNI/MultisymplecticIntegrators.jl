@@ -32,8 +32,7 @@ end
 
 # A symbolic build of the kernels that does not read the cache.
 function fresh_kernels()
-    chain = M.Chain(M.Dense(2, S, tanh), M.Dense(S, D, identity; use_bias = false))
-    return M.network_functions(M.SymbolicNeuralNetwork(chain), D)
+    return M.network_functions(M.SymbolicNeuralNetwork(M.network_chain(S, D, tanh)), D)
 end
 
 function code(field, gradient)

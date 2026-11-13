@@ -127,10 +127,10 @@ end
 
 # The kernels of every network built in this process, one pair per architecture. `(S, D,
 # activation)` fixes the chain of `network_chain` and so the symbolic build; the mode and the
-# element type do not enter it. Two builds of one architecture generate bodies whose sums can differ
-# in the order of their terms, and so in their rounding, so every network of one architecture
-# shares the first build's kernels. The value type is abstract: the constructor is the function
-# barrier that reads the concrete types.
+# element type do not enter it. Two builds of one architecture can generate bodies whose sums differ
+# in the order of their terms, and so in their rounding (K59 in `KNOWN_ISSUES.md`), so every network
+# of one architecture shares the first build's kernels. The value type is abstract: the constructor
+# is the function barrier that reads the concrete types.
 const NETWORK_KERNELS = Base.Lockable(Dict{Tuple{Int, Int, Any}, Tuple{Any, Any}}())
 
 """

@@ -816,9 +816,15 @@ makes it worth keeping.
   about `1e-3` relative in `Float32`, and E4a of `trained_hidden_layer.jl`, which compares two runs
   bit for bit, failed intermittently, most often under `--check-bounds=yes`. `network_kernels` now
   builds the pair once per process for each `(S, D, activation)` and returns it to every later
-  build, behind a lock; the mode and the element type do not enter the symbolic build and share
-  it. In 40 repetitions of E4a in one process under `--check-bounds=yes`, 4 of 1200 checks failed
-  before the change and none after it.
+  build, from a cache that is one `Base.Lockable`; the mode and the element type do not enter the
+  symbolic build and share it. The constructor and `network_kernels` build the chain through one
+  function, `network_chain`, so the stored chain and the cached kernels describe one network. The
+  sharing holds within one process: another process builds the pair afresh, and its bodies need
+  not be the same (K59). In 40 repetitions of E4a in one process under `--check-bounds=yes`, 4 of
+  1200 checks failed before the change and none after it. N7 of `test/ansatz/network.jl` asserts
+  on the cache itself, that the cached entry is the pair the constructor returned and that a
+  second build of one architecture adds no entry; with `network_kernels` bypassed, N7 reports 2
+  errors in 20 assertions.
 - **The fixed-boundary Jacobian test reads the Jacobian along directions.** The testset "FB2 the
   Jacobian is the derivative of the residual" of `test/couplings/fixed_boundary.jl` took a central
   difference per unknown, two residuals per column, and that was the costly part of the
@@ -830,12 +836,3 @@ makes it worth keeping.
   carried through the product sees a defect in one entry of `J` at a smaller multiple of its size.
   The legs, forms, modes, vectors, element types, the `Newton()` slab and the `1/100` floor are
   unchanged.
-- **The network kernel cache has one definition of the chain and a test of its own.** The
-  constructor and `network_kernels` build the chain through one function, `network_chain`, so the
-  stored chain and the cached kernels cannot describe different networks. The cache is one
-  `Base.Lockable` in place of a `Dict` and a separate lock. Its docstring states that the sharing
-  holds within one process: another process builds the pair afresh, and its bodies need not be the
-  same. N7 of `test/ansatz/network.jl` now asserts on the cache itself, that the cached entry is
-  the pair the constructor returned and that a second build of one architecture adds no entry. Its
-  earlier assertions also passed without the cache, because two separate builds of equal bodies are
-  already `===`; with `network_kernels` bypassed, N7 now reports 2 errors in 20 assertions.
