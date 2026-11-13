@@ -2,8 +2,8 @@
 #
 # An entry is plain data and no work happens at this file's top level, so a driver can `include`
 # this and pay only the load. The problem and the method are built from the entry by the family's
-# own model file, which registers the family here; this file holds no family's entries and no
-# constructor, only the registry and the ladders of the spline scans.
+# own model file, which registers the family here; this file holds the registry, the ladders of the
+# spline scans and one family, the fixed-boundary network's, with its entries and constructors.
 #
 # An entry is a named tuple with at least `stem`, which names its archive and its figure, and
 # `label`, which a report and a heading show; the rest of its fields are the family's own.
