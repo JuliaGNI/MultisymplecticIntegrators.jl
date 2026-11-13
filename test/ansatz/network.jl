@@ -466,6 +466,24 @@ end
             ncells = (2, 5), degree = 3, mode = :full)
     end
 
+    @testset "N7 networks of one architecture share their kernels" for T in (Float64, Float32)
+        a = network_ansatz(T; S = 6, D = 2)
+        b = network_ansatz(T; S = 6, D = 2, mode = :last_layer)
+        # the mode and the element type do not enter the symbolic build
+        c = network_ansatz(T === Float64 ? Float32 : Float64; S = 6, D = 2)
+        @test a.field === b.field
+        @test a.gradient === b.gradient
+        @test a.field === c.field
+        @test a.gradient === c.gradient
+        # another width, another output count or another activation is another architecture
+        @test network_ansatz(T; S = 7, D = 2).field !== a.field
+        @test network_ansatz(T; S = 6, D = 1).field !== a.field
+        other = NetworkAnsatz(S = 6, D = 2, activation = sin, xspan = (zero(T), one(T)),
+            ncells = (2, 5), degree = 3)
+        @test other.field !== a.field
+        @test other.gradient !== a.gradient
+    end
+
     @testset "A1 the §A case in both modes" for T in (Float64, Float32)
         for (mode, name, entry) in ((:all, :WAVE_NN_FULLY, WAVE_NN_FULLY),
             (:last_layer, :WAVE_NN_PARTIALLY, WAVE_NN_PARTIALLY))

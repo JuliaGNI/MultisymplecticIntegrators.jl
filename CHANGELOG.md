@@ -772,3 +772,13 @@ makes it worth keeping.
   block of those pages that documents the top-level module names the source files of its layer,
   which `@autodocs` matches by the end of a file's path. A file that no block names leaves its
   docstrings out of the manual, and the build reports it through `checkdocs = :all`.
+- **Every `NetworkAnsatz` of one architecture shares one pair of kernels.** The constructor built
+  the `field` and `gradient` functions afresh through `Symbolics.build_function` each time, and two
+  builds of one network could generate pre-activation sums whose terms stand in a different order,
+  so two ansätze of one shape rounded differently. The trained fit amplifies that difference to
+  about `1e-3` relative in `Float32`, and E4a of `trained_hidden_layer.jl`, which compares two runs
+  bit for bit, failed intermittently, most often under `--check-bounds=yes`. `network_kernels` now
+  builds the pair once per process for each `(S, D, activation)` and returns it to every later
+  build, behind a lock; the mode and the element type do not enter the symbolic build and share
+  it. In 40 repetitions of E4a in one process under `--check-bounds=yes`, 4 of 1200 checks failed
+  before the change and none after it.
