@@ -193,24 +193,21 @@ function top_velocity(oracle, problem, ansatz, φ0, φ1, Θ, t₀, x, d)
     return ut / h
 end
 
-"""Central differences of a residual at `θ`, one column per unknown."""
-function residual_differences(int, θ::AbstractVector{T}, params) where {T}
-    n = length(θ)
-    J = zeros(T, n, n)
-    forward = zeros(T, n)
-    backward = zeros(T, n)
-    x = copy(θ)
-    for k in 1:n
-        δ = cbrt(eps(T)) * max(one(T), abs(θ[k]))
-        x[k] = θ[k] + δ
-        M.residual!(forward, x, nothing, params, int)
-        up = x[k]
-        x[k] = θ[k] - δ
-        M.residual!(backward, x, nothing, params, int)
-        J[:, k] .= (forward .- backward) ./ (up - x[k])
-        x[k] = θ[k]
-    end
-    return J
+"""
+    directional_differences(int, θ, d, params)
+
+The central difference of a residual at `θ` along the direction `d`, `(r(θ + δd) − r(θ − δd)) / 2δ`
+with `δ = cbrt(eps(T)) · max(1, max|θ|) / max|d|`: two residuals, which approximate `J · d`. A
+direction of zeros has no step and is refused before any residual is taken.
+"""
+function directional_differences(int, θ::AbstractVector{T}, d::AbstractVector{T}, params) where {T}
+    iszero(maximum(abs, d)) && throw(ArgumentError("a zero direction has no step"))
+    δ = cbrt(eps(T)) * max(one(T), maximum(abs, θ)) / maximum(abs, d)
+    forward = zeros(T, length(θ))
+    backward = zeros(T, length(θ))
+    M.residual!(forward, θ .+ δ .* d, nothing, params, int)
+    M.residual!(backward, θ .- δ .* d, nothing, params, int)
+    return (forward .- backward) ./ (2δ)
 end
 
 """The residual of a slab at `θ`, in a vector of `θ`'s element type."""
@@ -378,12 +375,19 @@ end
     # `Newton()` solver the family also offers, on the same residual and the same block.
     #
     # N5's and N18's second check: the legs are `Wave`, `SineGordon` and all 24 seeded entries, in
-    # both forms and both modes, at 16 vectors each, and at both element types. The differences are
+    # both forms and both modes, at 16 vectors each, and at both element types. Each vector's `J` is
+    # read along three directions drawn from the same `rng`: the difference along `d` checks `J · d`
+    # with two residuals, and a `d` with no zero entry weights every column of `J`. The bound
+    # is the entrywise `sqrt(eps(T)) · max|J|` carried through the product. The differences are
     # taken on the `Float64` slab in both precisions, as the symbolic ansatz's are: the residual's
     # round-off at `Float32` sits in differences `cbrt(eps(Float32))` apart, where its own truncation
     # error is larger than the bound. The `Float64` slab is the same slab — `transplant_datum!`
     # copies the datum across, so that both element types differentiate one function of the unknowns
     # rather than two fits of it.
+    #
+    # A direction of zeros has no step: the helper refuses it before it takes a residual, so the
+    # `nothing` in place of an integrator is never reached.
+    @test_throws ArgumentError directional_differences(nothing, zeros(3), zeros(3), nothing)
     for T in (Float64, Float32)
         entries = generate_problems(T; rng = Xoshiro(SEED))
         reference_entries = T === Float64 ? entries :
@@ -417,9 +421,13 @@ end
                 SimpleSolvers.jacobian!(s, θ, (current(slab.solstep), p, slab.int))
                 J = copy(SimpleSolvers.jacobianmatrix(s))
                 @test maximum(abs, J) ≥ T(1 // 100)
-                @test maximum(abs,
-                    J - residual_differences(reference.int, Float64.(θ),
-                        parameters(leg.reference))) ≤ sqrt(eps(T)) * maximum(abs, J)
+                for _ in 1:3
+                    d = 2 .* rand(rng, T, length(c.x)) .- 1
+                    @test maximum(abs,
+                        J * d - directional_differences(reference.int, Float64.(θ),
+                            Float64.(d), parameters(leg.reference))) ≤
+                          sqrt(eps(T)) * maximum(abs, J) * sum(abs, d)
+                end
             end
         end
     end
