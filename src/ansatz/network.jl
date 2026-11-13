@@ -80,7 +80,7 @@ function NetworkAnsatz(; S::Integer, activation = tanh, mode::Symbol = :all, xsp
     last_layer = (n - S * D + 1):n
     free = mode === :all ? n : length(last_layer)
     start = mode === :all ? 1 : Base.first(last_layer)
-    field, gradient = network_kernels(chain, Int(S), Int(D), activation)
+    field, gradient = network_kernels(Int(S), Int(D), activation)
     return NetworkAnsatz{T, typeof(chain), typeof(field), typeof(gradient), typeof(trace),
         typeof(q)}(chain, xsp, mode, trace, q, field, gradient, Int(S), Int(D), n,
         free, start)
@@ -130,15 +130,17 @@ const NETWORK_KERNELS = Dict{Tuple{Int, Int, Any}, Tuple{Any, Any}}()
 const NETWORK_KERNELS_LOCK = ReentrantLock()
 
 """
-    network_kernels(chain, S, D, activation)
+    network_kernels(S, D, activation)
 
-The `field` and `gradient` of [`network_functions`](@ref) for `chain`, built once per process for each
-architecture `(S, D, activation)` and shared by every [`NetworkAnsatz`](@ref) of that architecture,
-so that two networks of one shape evaluate the same code.
+The `field` and `gradient` of [`network_functions`](@ref) for the network of `S` hidden units and
+`D` outputs, built once per process for each architecture `(S, D, activation)` and shared by every
+[`NetworkAnsatz`](@ref) of that architecture, so that two networks of one shape evaluate the same
+code.
 """
-function network_kernels(chain, S::Int, D::Int, activation)
+function network_kernels(S::Int, D::Int, activation)
     return lock(NETWORK_KERNELS_LOCK) do
         get!(NETWORK_KERNELS, (S, D, activation)) do
+            chain = Chain(Dense(2, S, activation), Dense(S, D, identity; use_bias = false))
             network_functions(SymbolicNeuralNetwork(chain), D)
         end
     end
