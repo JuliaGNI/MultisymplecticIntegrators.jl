@@ -70,7 +70,6 @@ function NetworkAnsatz(; S::Integer, activation = tanh, mode::Symbol = :all, xsp
     xsp = (convert(T, xspan[1]), convert(T, xspan[2]))
     xsp[1] < xsp[2] || throw(ArgumentError("xspan must increase, got $xsp"))
     chain = Chain(Dense(2, S, activation), Dense(S, D, identity; use_bias = false))
-    symbolic = SymbolicNeuralNetwork(chain)
     trace = TensorBSplineAnsatz(; degree, ncells, xspan = xsp, x_boundary = Free())
     order = quadrature_order === nothing ? _default_quadrature_order(degree_of(trace)) + 1 :
             Int(quadrature_order)
@@ -81,7 +80,7 @@ function NetworkAnsatz(; S::Integer, activation = tanh, mode::Symbol = :all, xsp
     last_layer = (n - S * D + 1):n
     free = mode === :all ? n : length(last_layer)
     start = mode === :all ? 1 : Base.first(last_layer)
-    field, gradient = network_functions(symbolic, D)
+    field, gradient = network_kernels(Int(S), Int(D), activation)
     return NetworkAnsatz{T, typeof(chain), typeof(field), typeof(gradient), typeof(trace),
         typeof(q)}(chain, xsp, mode, trace, q, field, gradient, Int(S), Int(D), n,
         free, start)
@@ -119,6 +118,32 @@ function network_functions(symbolic::SymbolicNeuralNetwork, D::Integer)
     values = vcat(equations, times, spaces)
     return (build_flat_function(values, symbolic),
         build_flat_function(flat_parameter_gradient(values, symbolic), symbolic))
+end
+
+# The kernels of every network built in this process, one pair per architecture. The chain is
+# `Chain(Dense(2, S, activation), Dense(S, D, identity; use_bias = false))`, so `(S, D, activation)`
+# fixes the symbolic build; the mode and the element type do not enter it. Two builds of one
+# architecture generate bodies whose sums can differ in the order of their terms, and so in their
+# rounding, so every network of one architecture shares the first build's kernels. The value type
+# is abstract: the constructor is the function barrier that reads the concrete types.
+const NETWORK_KERNELS = Dict{Tuple{Int, Int, Any}, Tuple{Any, Any}}()
+const NETWORK_KERNELS_LOCK = ReentrantLock()
+
+"""
+    network_kernels(S, D, activation)
+
+The `field` and `gradient` of [`network_functions`](@ref) for the network of `S` hidden units and
+`D` outputs, built once per process for each architecture `(S, D, activation)` and shared by every
+[`NetworkAnsatz`](@ref) of that architecture, so that two networks of one shape evaluate the same
+code.
+"""
+function network_kernels(S::Int, D::Int, activation)
+    return lock(NETWORK_KERNELS_LOCK) do
+        get!(NETWORK_KERNELS, (S, D, activation)) do
+            chain = Chain(Dense(2, S, activation), Dense(S, D, identity; use_bias = false))
+            network_functions(SymbolicNeuralNetwork(chain), D)
+        end
+    end
 end
 
 # A function of `build_flat_function` lays its flat parameter vector out into a new parameter set and
