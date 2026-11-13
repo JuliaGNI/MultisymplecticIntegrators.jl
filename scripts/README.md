@@ -58,7 +58,9 @@ julia --project=scripts scripts/profile_residual.jl --steps 0.05,0.025
 ```
 
 With no stem named, the driver runs the cheapest entry of the family: the largest time step, which
-is what answers "does this family run at all" in the least time. A run that throws is reported on
+is what answers "does this family run at all" in the least time. A family whose cheapest entry is
+not the one to run names its `default` stem in `register_family!`, as the fixed-boundary family's
+plateau runs do, and `default_entry` reads it. A run that throws is reported on
 stderr with its stem and its backtrace, archives nothing, and makes the driver exit 1, so a failed
 family is distinguishable from a family that ran.
 
@@ -69,7 +71,7 @@ failed run.
 | file | does |
 |:--|:--|
 | `archives.jl` | where output goes, `atomic_write`, the archive's writer and its reader, the option parser, the printing helpers. Depends on `JLD2` and `Printf` alone, so a renderer loads it cheaply. No work at top level. |
-| `experiments.jl` | the registry: `register_family!`, `family_entries`, `family_run`, and the two selection rules `smallest_entry` and `entry_by_stem`, plus the ladders of the two scans. Of the families it holds only the fixed-boundary network's, the plateau runs `FIXED_BOUNDARY` and the matrix rows `FIXED_BOUNDARY_MATRIX`, and it integrates nothing on `include`. |
+| `experiments.jl` | the registry: `register_family!`, `family_entries`, `family_run`, and the selection rules `smallest_entry`, `entry_by_stem` and `default_entry`, plus the ladders of the two scans. Of the families it holds only the fixed-boundary network's, the plateau runs `FIXED_BOUNDARY` and the matrix rows `FIXED_BOUNDARY_MATRIX`, and it integrates nothing on `include`. |
 | `spline_model.jl` | the spline family: its registry entries, the problem and the method of one of them, one run timed, the archive of a run, and the error of a run against the exact solution at its last stored step. It ends by registering `:spline`. |
 | `symbolic_model.jl` | the symbolic family: its registry entry, the closed-form expression in the slab's normalised time, the problem and the method of the entry, the archive of a run, and the energy error over it. It ends by registering `:symbolic`. |
 | `elm_model.jl` | the ELM family: its two registry entries, the problem, the ansatz and the method of one of them, one run timed, and the archive of a run. It ends by registering `:elm`. |

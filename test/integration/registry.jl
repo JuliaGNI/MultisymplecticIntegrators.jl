@@ -42,6 +42,20 @@ include(joinpath(@__DIR__, "..", "..", "scripts", "elm_model.jl"))
         @test family_entries(:third) == ((stem = "d", label = "d"),)
     end
 
+    @testset "a family's default entry is the one it names, and else its cheapest" begin
+        tied = ((stem = "e-big", label = "e", timestep = 0.1),
+            (stem = "e-run", label = "e", timestep = 0.1),
+            (stem = "e-fine", label = "e", timestep = 0.05))
+        @test register_family!(:defaulted, tied; run = archive, default = "e-big") ===
+              :defaulted
+        @test default_entry(:defaulted) === tied[1]
+        @test smallest_entry(tied) === tied[2]
+        @test default_entry(:first) === smallest_entry(entries)
+        @test_throws r"^ArgumentError: the default `e-none` of the family `undefaulted` names none" register_family!(
+            :undefaulted, ((stem = "f", label = "f"),); run = archive, default = "e-none")
+        @test !haskey(FAMILIES, :undefaulted)
+    end
+
     # The family is started from one guess: the previous slab's field fitted by a trained hidden
     # layer, whose target falls back to the trained fit of the initial condition at the first slab.
     @testset "the family is built from its one guess" begin

@@ -43,12 +43,17 @@ A stem names one archive under `runs/` for every family, so a stem that `entries
 a registered family already holds, is refused with an `ArgumentError` naming it: the later run would
 replace the earlier archive.
 
+`default` is the stem of the entry a driver given no stem runs, for a family whose cheapest entry
+is not that entry; [`default_entry`](@ref) reads it. A `default` that names none of `entries` is
+refused with an `ArgumentError` naming it.
+
 `run(entry)` returns the entry's archive as a `Dict{String, Any}` whose `"kind"` says what shape of
 figure it draws; `store_run!` adds the `"stem"`. `benchmark(entry)` integrates the row and returns
 its record as a `Dict{String, Any}` of the `"benchmark"` kind, which
 [`scripts/README.md`](README.md) documents.
 """
-function register_family!(name::Symbol, entries; run = nothing, benchmark = nothing)
+function register_family!(name::Symbol, entries; run = nothing, benchmark = nothing,
+        default = nothing)
     haskey(FAMILIES, name) &&
         throw(ArgumentError("the family `$(name)` is already registered; a family is " *
                             "registered once, by its model file"))
@@ -71,7 +76,11 @@ function register_family!(name::Symbol, entries; run = nothing, benchmark = noth
                                     "and resolution"))
         end
     end
-    FAMILIES[name] = (entries = entries, run = run, benchmark = benchmark)
+    default === nothing || any(entry -> entry.stem == default, entries) ||
+        throw(ArgumentError("the default `$(default)` of the family `$(name)` names none of " *
+                            "its entries"))
+    FAMILIES[name] = (
+        entries = entries, run = run, benchmark = benchmark, default = default)
     return name
 end
 
@@ -97,6 +106,18 @@ The function that runs one row of the family `name`, and an `ArgumentError` nami
 registry does not hold.
 """
 family_benchmark(name::Symbol) = family(name).benchmark
+
+"""
+    default_entry(name)
+
+The entry of the family `name` that a driver given no stem runs: the entry the family names as its
+`default`, and else its [`smallest_entry`](@ref).
+"""
+function default_entry(name::Symbol)
+    held = family(name)
+    held.default === nothing && return smallest_entry(held.entries)
+    return entry_by_stem(held.entries, held.default)
+end
 
 """
     select_rows(; method = nothing, problem = nothing, tag = nothing) -> Vector
@@ -207,11 +228,11 @@ by Newton in `(α, β, γ)` — and the live branch's four combinations of the b
 solve, each started by the predictor.
 """
 const FIXED_BOUNDARY_BRANCHES = (
-    (name = "dead", form = :abg, solver = :newton),
-    (name = "live-abg-joint", form = :abg, solver = :joint),
-    (name = "live-tsr-joint", form = :tsr, solver = :joint),
-    (name = "live-abg-projected", form = :abg, solver = :projected),
-    (name = "live-tsr-projected", form = :tsr, solver = :projected))
+    (name = "dead", form = :abg, solve = :newton),
+    (name = "live-abg-joint", form = :abg, solve = :joint),
+    (name = "live-tsr-joint", form = :tsr, solve = :joint),
+    (name = "live-abg-projected", form = :abg, solve = :projected),
+    (name = "live-tsr-projected", form = :tsr, solve = :projected))
 
 # The problems of the family, as the symbol a row selects on and the name its stem carries.
 const FIXED_BOUNDARY_PROBLEMS = ((problem = :wave, name = "wave", label = "Wave"),
@@ -239,9 +260,9 @@ function fixed_boundary_row(held, timestep, branch)
         method = Symbol("fixed_boundary_", replace(branch.name, "-" => "_")),
         problem = held.problem, problem_label = held.label, tag = :matrix,
         resolution = (timestep = timestep,),
-        parameters = (form = branch.form, solve = branch.solver, Sx = 8, St = 10,
+        parameters = (form = branch.form, solve = branch.solve, Sx = 8, St = 10,
             steps = round(Int, 0.2 / timestep), T = :Float64),
-        solver = (solver = fixed_boundary_solver_method(branch.solver),))
+        solver = (solver = fixed_boundary_solver_method(branch.solve),))
 end
 
 """
@@ -267,17 +288,26 @@ the tolerance an entry names for its solver: the extended-precision entry names 
 the family measures none at `BigFloat`, and the other names none, so its solver is built at the
 tolerance the family measures at its own element type.
 
-The two entries share their time step, and `smallest_entry` keeps the order of a tie and returns the
-last: the `Float64` entry is last, so a driver given no stem runs it and not the `BigFloat` entry.
+An entry's `solve` is its branch's solve, the symbol a row holds in its `parameters`; a row's
+`solver` is the solver method that solve names.
+
+The two entries share their time step, so the cheapest entry is no answer to which one a driver
+given no stem runs: the family names its `default`, [`FIXED_BOUNDARY_DEFAULT`](@ref), the `Float64`
+entry, and not the `BigFloat` entry, which cannot run (K53 in `KNOWN_ISSUES.md`).
 """
 const FIXED_BOUNDARY = (
     (stem = "wave-fixed-boundary-plateau-extended",
         label = "wave, plateau, extended precision",
-        problem = :wave, timestep = 0.025, steps = 1, form = :tsr, solver = :joint,
+        problem = :wave, timestep = 0.025, steps = 1, form = :tsr, solve = :joint,
         Sx = 8, St = 10, T = BigFloat, f_reltol = big"1e-8"),
     (stem = "wave-fixed-boundary-plateau-h0.025", label = "wave, plateau, h = 0.025",
-        problem = :wave, timestep = 0.025, steps = 40, form = :tsr, solver = :joint,
+        problem = :wave, timestep = 0.025, steps = 40, form = :tsr, solve = :joint,
         Sx = 12, St = 16, T = Float64, f_reltol = nothing))
+
+"""
+The stem of the plateau entry that `run_family.jl fixed_boundary` runs when it is given no stem.
+"""
+const FIXED_BOUNDARY_DEFAULT = "wave-fixed-boundary-plateau-h0.025"
 
 # The settings of either kind of entry, as one named tuple: a row of the matrix holds them in its
 # `resolution` and its `parameters`, and an entry of the plateau runs at its top level.
@@ -286,7 +316,7 @@ function fixed_boundary_settings(entry)
     held = entry.parameters
     return (
         problem = entry.problem, timestep = entry.resolution.timestep, steps = held.steps,
-        form = held.form, solver = held.solve, Sx = held.Sx, St = held.St,
+        form = held.form, solve = held.solve, Sx = held.Sx, St = held.St,
         T = getfield(Base, held.T))
 end
 
@@ -320,7 +350,7 @@ function fixed_boundary_method(entry)
     T = settings.T
     ansatz = FixedBoundaryNetwork(Sx = settings.Sx, St = settings.St,
         bubble_form = settings.form, xspan = (zero(T), one(T)), ncells = 20, nq = (6, 4))
-    guess = settings.solver === :newton ? Continuation() : FitTo(Predictor())
+    guess = settings.solve === :newton ? Continuation() : FitTo(Predictor())
     return SpaceTimeGalerkin(ansatz, FixedBoundary(); initial_guess = guess)
 end
 
@@ -363,7 +393,7 @@ a result of the probe.
 function fixed_boundary_run(entry)
     problem = fixed_boundary_problem(entry)
     method = fixed_boundary_method(entry)
-    solvermethod = fixed_boundary_solver_method(entry.solver)
+    solvermethod = fixed_boundary_solver_method(entry.solve)
     seconds = @elapsed result = integrate(problem, method; solver = solvermethod,
         fixed_boundary_solver_keywords(entry)..., verbosity = 0)
     stats = result.stats
@@ -387,5 +417,6 @@ function fixed_boundary_run(entry)
         "seconds" => seconds)
 end
 
-register_family!(:fixed_boundary, FIXED_BOUNDARY; run = fixed_boundary_run)
+register_family!(:fixed_boundary, FIXED_BOUNDARY; run = fixed_boundary_run,
+    default = FIXED_BOUNDARY_DEFAULT)
 register_family!(:fixed_boundary_matrix, FIXED_BOUNDARY_MATRIX; benchmark = fixed_boundary_benchmark)

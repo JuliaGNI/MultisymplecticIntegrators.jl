@@ -1289,8 +1289,23 @@ end
     # rows of its problem, so that the rows of one problem compare errors at one time
     @test all(entry -> entry.parameters.steps * entry.resolution.timestep ≈ 0.2, matrix)
     @test sort(unique(entry.parameters.steps for entry in matrix)) == [2, 4, 8]
-    # a driver given no stem runs the plateau's `Float64` entry, and not the `BigFloat` one
-    @test smallest_entry(plateau).T === Float64
+    # a driver given no stem runs the plateau's `Float64` entry, and not the `BigFloat` one, by its
+    # stem and whatever the order of the family's tuple: reversed, the cheapest entry of the tie is
+    # the `BigFloat` one, and the default stays
+    default = default_entry(:fixed_boundary)
+    @test default.stem == "wave-fixed-boundary-plateau-h0.025"
+    @test default.T === Float64
+    held = FAMILIES[:fixed_boundary]
+    try
+        FAMILIES[:fixed_boundary] = merge(held, (entries = reverse(held.entries),))
+        @test smallest_entry(family_entries(:fixed_boundary)).T === BigFloat
+        @test default_entry(:fixed_boundary) === default
+    finally
+        FAMILIES[:fixed_boundary] = held
+    end
+    # a plateau entry names its solve as a row's `parameters` do; `solver` is a row's solver method
+    @test all(entry -> entry.solve in (:newton, :joint, :projected), plateau)
+    @test !any(entry -> haskey(entry, :solver), plateau)
     # the cheapest row, the largest time step, runs at `Float64`
     largest = maximum(entry.resolution.timestep for entry in matrix)
     @test all(entry -> entry.parameters.T === :Float64,

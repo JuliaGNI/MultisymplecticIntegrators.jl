@@ -569,8 +569,8 @@ makes it worth keeping.
   form and its solve — and the two entries of the plateau probe, one of them at `Sx = 12`, `St = 16`
   and one at `BigFloat` with `GenericLinearAlgebra` in `scripts/Project.toml` alone. The plateau's
   numbers are recorded, never asserted. `run_family.jl fixed_boundary` without a stem runs the
-  plateau's `Float64` entry and not the `BigFloat` entry, which cannot run (K53 in
-  `KNOWN_ISSUES.md`).
+  plateau's `Float64` entry, which the family names as its default, and not the `BigFloat` entry,
+  which cannot run (K53 in `KNOWN_ISSUES.md`).
   The thirty rows are the matrix's: `:fixed_boundary_matrix`, below.
 - **The TrialNN family returns as the network ansatz under `HardConstraintLifting`.** The coupling
   makes the field of a slab `P[N] + ℓ`: the transfinite projection of the ansatz's field that
@@ -697,7 +697,10 @@ makes it worth keeping.
   family's thirty matrix entries move to `:fixed_boundary_matrix` and keep their stems, so an
   archive of either driver names the same configuration; `:fixed_boundary` keeps the two plateau
   entries as runs. A fixed-boundary entry's `problem` is the symbol `:wave` or `:sine_gordon`, no
-  longer the string `"wave"` or `"sinegordon"`; the stems keep the strings. One problem runs to
+  longer the string `"wave"` or `"sinegordon"`; the stems keep the strings. A plateau entry names
+  its branch's solve `solve`, as a row's `parameters` do, so `solver` is a row's solver method
+  alone. `register_family!` takes a `default` stem, and `run_family.jl` without a stem runs
+  `default_entry`: the entry the family names, else its cheapest. One problem runs to
   one final time: the fixed-boundary rows, like the network, ELM, TrialNN, spline and box rows,
   end at `t = 0.2` (2, 4 and 8 steps), and the symbolic rows run over two periods of the standing
   wave, to `t = 8`. `figures.jl` and `benchmark_tables` group one problem's archives by the time
