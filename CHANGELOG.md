@@ -830,3 +830,12 @@ makes it worth keeping.
   carried through the product sees a defect in one entry of `J` at a smaller multiple of its size.
   The legs, forms, modes, vectors, element types, the `Newton()` slab and the `1/100` floor are
   unchanged.
+- **The network kernel cache has one definition of the chain and a test of its own.** The
+  constructor and `network_kernels` build the chain through one function, `network_chain`, so the
+  stored chain and the cached kernels cannot describe different networks. The cache is one
+  `Base.Lockable` in place of a `Dict` and a separate lock. Its docstring states that the sharing
+  holds within one process: another process builds the pair afresh, and its bodies need not be the
+  same. N7 of `test/ansatz/network.jl` now asserts on the cache itself, that the cached entry is
+  the pair the constructor returned and that a second build of one architecture adds no entry. Its
+  earlier assertions also passed without the cache, because two separate builds of equal bodies are
+  already `===`; with `network_kernels` bypassed, N7 now reports 2 errors in 20 assertions.
