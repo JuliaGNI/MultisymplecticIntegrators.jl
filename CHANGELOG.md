@@ -786,9 +786,10 @@ makes it worth keeping.
   Jacobian is the derivative of the residual" of `test/couplings/fixed_boundary.jl` took a central
   difference per unknown, two residuals per column, and that was the costly part of the
   `Fixed boundary` file. It now checks `J · d` along three random directions per vector, drawn
-  from a second seeded generator, `drng = Xoshiro(12)`, so that the testset's
-  `rng = Xoshiro(11)` draws the vectors alone, against `directional_differences`, the central
-  difference of the residual along `d` with two residuals per direction, to the former entrywise
-  bound `sqrt(eps(T)) · max|J|` carried through the product, `sqrt(eps(T)) · max|J| · ‖d‖₁`. The
-  legs, forms, modes, vectors, element types, the `Newton()` slab and the `1/100` floor are
+  in `Float64` and rounded to `T` from a second seeded generator, `drng = Xoshiro(12)`, so that
+  the testset's `rng = Xoshiro(11)` draws the vectors alone, against `directional_differences`,
+  the central difference of the residual along `d` with two residuals per direction, to the bound
+  `sqrt(eps(T)) · max|J| · ‖d‖₂`. The `‖d‖₂` in place of the `‖d‖₁` of the former entrywise bound
+  carried through the product sees a defect in one entry of `J` at a smaller multiple of its size.
+  The legs, forms, modes, vectors, element types, the `Newton()` slab and the `1/100` floor are
   unchanged.

@@ -375,14 +375,16 @@ end
     #
     # N5's and N18's second check: the legs are `Wave`, `SineGordon` and all 24 seeded entries, in
     # both forms and both modes, at 16 vectors each, and at both element types. Each vector's `J` is
-    # read along three directions drawn from `drng`, so that `rng` draws the vectors alone: the
-    # difference along `d` checks `J · d` with two residuals, and a `d` with no zero entry weights
-    # every column of `J`. The bound is the entrywise `sqrt(eps(T)) · max|J|` carried through the
-    # product. The differences are taken on the `Float64` slab in both precisions, as the symbolic
-    # ansatz's are: the residual's round-off at `Float32` sits in differences `cbrt(eps(Float32))`
-    # apart, where its own truncation error is larger than the bound. The `Float64` slab is the same
-    # slab — `transplant_datum!` copies the datum across, so that both element types differentiate
-    # one function of the unknowns rather than two fits of it.
+    # read along three directions drawn from `drng`, so that `rng` draws the vectors alone; each `d`
+    # is drawn in `Float64` and rounded to `T`. The difference along `d` checks `J · d` with two
+    # residuals, and a `d` with no zero entry weights every column of `J`. The bound is
+    # `sqrt(eps(T)) · max|J| · ‖d‖₂`, which sees a defect in one entry of `J` at a smaller multiple
+    # of its size than the `‖d‖₁` of the entrywise bound carried through the product. The
+    # differences are taken on the `Float64` slab in both precisions, as the symbolic ansatz's are:
+    # the residual's round-off at `Float32` sits in differences `cbrt(eps(Float32))` apart, where
+    # its own truncation error is larger than the bound. The `Float64` slab is the same slab —
+    # `transplant_datum!` copies the datum across, so that both element types differentiate one
+    # function of the unknowns rather than two fits of it.
     for T in (Float64, Float32)
         entries = generate_problems(T; rng = Xoshiro(SEED))
         reference_entries = T === Float64 ? entries :
@@ -417,11 +419,11 @@ end
                 J = copy(SimpleSolvers.jacobianmatrix(s))
                 @test maximum(abs, J) ≥ T(1 // 100)
                 for _ in 1:3
-                    d = 2 .* rand(drng, T, length(c.x)) .- 1
+                    d = T.(2 .* rand(drng, length(c.x)) .- 1)
                     @test maximum(abs,
                         J * d - directional_differences(reference.int, Float64.(θ),
                             Float64.(d), parameters(leg.reference))) ≤
-                          sqrt(eps(T)) * maximum(abs, J) * sum(abs, d)
+                          sqrt(eps(T)) * maximum(abs, J) * norm(d)
                 end
             end
         end
