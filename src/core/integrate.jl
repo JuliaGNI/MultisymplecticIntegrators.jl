@@ -61,7 +61,8 @@ Among them, the solver option `regularization_factor = λ` makes SimpleSolvers' 
 default solver of every method but a fixed-boundary network's, add `λ`, unscaled, to the diagonal
 of the slab Jacobian before each factorisation; that network's [`LevenbergMarquardt`](@ref) solver
 does not read it. It is a shift of the Newton matrix, not a Tikhonov term of a
-least-squares step: the residual that a step drives to zero is unchanged.
+least-squares step: the residual that a step drives to zero is unchanged. The direct linear solve
+of `linear_solver = true` factorises the Jacobian without the shift, so `λ` has no effect there.
 """
 function integrate(problem::LagrangianPDEProblem, method::SpaceTimeMethod;
         on_failure = :warn, kwargs...)
