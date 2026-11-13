@@ -425,7 +425,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 - location: `src/ansatz/network.jl:140` (`network_kernels`) and `:112` (`network_functions`);
   `SymbolicUtils` 4.56.1, `src/code.jl:1949` (`_cse_compute`) and `src/symbolic_ops/addsub.jl:129`
-  (`add_worker`)
+  (`_dict_copy_into!` in the call method of `AddWorkerBuffer`, `:96`, which `add_worker` reaches)
 - evidence: `network_kernels` builds the `field` and `gradient` kernels of an architecture once
   per process, through `network_functions` and `SymbolicNeuralNetworks`' `build_flat_function`,
   and every `NetworkAnsatz` of that architecture reads them. The CSE pass of `SymbolicUtils` emits a
