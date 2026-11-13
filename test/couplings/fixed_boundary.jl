@@ -378,8 +378,8 @@ end
     # read along three directions drawn from `drng`, so that `rng` draws the vectors alone; each `d`
     # is drawn in `Float64` and rounded to `T`. The difference along `d` checks `J · d` with two
     # residuals, and a `d` with no zero entry weights every column of `J`. The bound is
-    # `sqrt(eps(T)) · max|J| · ‖d‖₂`, which sees a defect in one entry of `J` at a smaller multiple
-    # of its size than the `‖d‖₁` of the entrywise bound carried through the product. The
+    # `sqrt(eps(T)) · max|J| · ‖d‖₂`. Its margin is measured, not derived: on this grid the worst
+    # ratio of error to bound is 0.124 in `Float64` and 0.026 in `Float32` (issue #63). The
     # differences are taken on the `Float64` slab in both precisions, as the symbolic ansatz's are:
     # the residual's round-off at `Float32` sits in differences `cbrt(eps(Float32))` apart, where
     # its own truncation error is larger than the bound. The `Float64` slab is the same slab —
