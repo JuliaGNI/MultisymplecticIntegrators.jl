@@ -1300,8 +1300,8 @@ end
     @test any(entry -> entry.Sx == 12 && entry.St == 16 && entry.timestep == 0.025, plateau)
     @test any(entry -> entry.T === BigFloat, plateau)
     @test all(entry -> entry.steps == 1, filter(entry -> entry.T === BigFloat, plateau))
-    # N23: the extended-precision row names its own tolerance, because the family measures none at
-    # `BigFloat`; the row's driver and this testset build the solver's keywords through one
+    # N23: the extended-precision entry names its own tolerance, because the family measures none at
+    # `BigFloat`; the entry's driver and this testset build the solver's keywords through one
     # function, so the entry's value is the one the solver is built with
     extended = only(filter(entry -> entry.T === BigFloat, plateau))
     @test extended.f_reltol == big"1e-8"

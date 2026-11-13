@@ -356,8 +356,8 @@ names and return the archive of its per-step record.
 
 The solver is `Newton()` on the dead branch, and Levenberg–Marquardt on the live one — joint, or
 with the bubble's output weights eliminated. The convergence flags are the run's own record and not
-an assertion: no live-branch variant of this method converges, and a row that did not converge is a
-result of the comparison.
+an assertion: no live-branch variant of this method converges, and an entry that did not converge is
+a result of the probe.
 """
 function fixed_boundary_run(entry)
     problem = fixed_boundary_problem(entry)

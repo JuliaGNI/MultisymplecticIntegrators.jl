@@ -28,7 +28,7 @@ the same problem, method and time step.
 
 A row's `solver` is `f_abstol = 0` and the network family's relative tolerance,
 `network_f_reltol(Float64)` of `test/ansatz/network.jl:51`: the TrialNN ansatz is that family's
-`NetworkAnsatz`, and the TrialNN family measured no tolerance of its own (`KNOWN_ISSUES.md`).
+`NetworkAnsatz`, and the TrialNN family measured no tolerance of its own (K58 in `KNOWN_ISSUES.md`).
 """
 const TRIALNN_MATRIX = [(stem = "$(held.problem)-trialnn-matrix-h$(timestep)",
                             label = "$(held.problem), trialnn, h = $(timestep)",

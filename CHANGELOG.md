@@ -566,10 +566,11 @@ makes it worth keeping.
   manifest already held it through `SimpleSolvers`, so the load gains no package.
 - **`scripts/experiments.jl` registers the fixed-boundary family.** Thirty rows — `Wave` and
   `SineGordon` at three time steps, on the dead branch and on the four combinations of the bubble's
-  form and its solve — and the two rows of the plateau probe, one of them at `Sx = 12`, `St = 16` and
-  one at `BigFloat` with `GenericLinearAlgebra` in `scripts/Project.toml` alone. The plateau's
+  form and its solve — and the two entries of the plateau probe, one of them at `Sx = 12`, `St = 16`
+  and one at `BigFloat` with `GenericLinearAlgebra` in `scripts/Project.toml` alone. The plateau's
   numbers are recorded, never asserted. `run_family.jl fixed_boundary` without a stem runs the
-  plateau's `Float64` row and not the `BigFloat` row, which cannot run (K53 in `KNOWN_ISSUES.md`).
+  plateau's `Float64` entry and not the `BigFloat` entry, which cannot run (K53 in
+  `KNOWN_ISSUES.md`).
   The thirty rows are the matrix's: `:fixed_boundary_matrix`, below.
 - **The TrialNN family returns as the network ansatz under `HardConstraintLifting`.** The coupling
   makes the field of a slab `P[N] + ℓ`: the transfinite projection of the ansatz's field that
@@ -700,10 +701,10 @@ makes it worth keeping.
   tagged `:matrix`, so the smoke gate runs none of them. The network, ELM and TrialNN rows solve at
   `f_abstol = 0` and a relative `f_reltol` of `1e-4`, `1e-2` and `1e-4`, the values that the
   network and the ELM family measured; the TrialNN family measured none and takes the network
-  family's (K58 in `KNOWN_ISSUES.md`). The diagnostics
-  gain `space_quadrature_weights` and `energy_error` for `NetworkAnsatz`, read on its trace basis'
-  space rule, and for `FixedBoundaryNetwork`, read on its own; `noether_charge` reaches them through
-  the weights, so a `VectorWave` row of a network has a charge.
+  family's (K58 in `KNOWN_ISSUES.md`). The diagnostics gain `space_quadrature_weights` and
+  `energy_error` for `NetworkAnsatz`, read on its trace basis' space rule, and for
+  `FixedBoundaryNetwork`, read on its own; `noether_charge` reaches them through the weights, so a
+  `VectorWave` row of a network has a charge.
 
 ### Changed
 

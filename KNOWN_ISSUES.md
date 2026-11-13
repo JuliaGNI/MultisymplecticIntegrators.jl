@@ -356,18 +356,18 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-11-10
 
-### K53 · The plateau probe's extended-precision row cannot run, because `GeometricSolutions` cannot build a solution at `BigFloat`.
+### K53 · The plateau probe's extended-precision entry cannot run, because `GeometricSolutions` cannot build a solution at `BigFloat`.
 
-- location: `scripts/experiments.jl` (the `BigFloat` plateau row);
+- location: `scripts/experiments.jl` (the `BigFloat` plateau entry);
   `GeometricSolutions`, `src/timeseries.jl:8`
 - evidence: `TimeSeries(ti::AbstractVector, Δt)` builds `new{T, n, typeof(t)}` with
   `n = length(ti) - 1`, and the `length` of a `BigFloat` range is a `BigInt` — it is a
   `StepRangeLen{BigFloat, BigFloat, BigFloat, BigInt}` — so `GeometricSolution(problem)` on a
   `BigFloat` `Wave` raises `TypeError: in Type, in parameter, expected Int64, got a value of type
-  BigInt` before a step is taken. The row names its own `f_reltol = big"1e-8"`, because the family
+  BigInt` before a step is taken. The entry names its own `f_reltol = big"1e-8"`, because the family
   measures no tolerance at `BigFloat` and refuses a caller there that names none, and
   `fixed_boundary_solver_keywords` hands the entry's value to the solver, so the integrator builds
-  and `TimeSeries`'s `TypeError` is the whole block. The row stays in the registry and in the
+  and `TimeSeries`'s `TypeError` is the whole block. The entry stays in the registry and in the
   build-only testset "FB18", which builds it and never runs it; the fix is a pull request of its own
   to `GeometricSolutions`, and the step runs through the family's `run` once it lands.
 - kind: upstream
