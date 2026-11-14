@@ -452,3 +452,15 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `SymbolicUtils`' CSE would remove the dependence at its source.
 - kind: upstream
 - found: 2026-11-13
+
+### K60 · The hidden-row check of the per-component lifting fails on Windows at `10 * eps(T)`.
+
+- location: `test/couplings/hard_constraint_lifting.jl:438`
+- evidence: the testset "L4 the lifting acts per component on VectorWave, Float64" asserts
+  `maximum(abs, b₂[1:3S] .- 2 * b₁[1:3S]) ≤ 10 * eps(T) * maximum(abs, b₁)`. On Julia 1.13.4,
+  `windows-latest`, it evaluates `3.9968028886505635e-15 ≤ 3.5117220975116142e-15`, about
+  11.4 eps of `maximum(abs, b₁)`: "444 passed, 1 failed". Every other OS passes. `main` fails the
+  same way (run 43575557665, job 132388889007, 2026-11-14), and so does the `couplings` group of
+  #67. The bound is not derived from the error of the sum over the two components.
+- kind: defect
+- found: #67
