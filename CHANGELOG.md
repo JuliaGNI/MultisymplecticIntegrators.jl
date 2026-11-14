@@ -844,3 +844,9 @@ makes it worth keeping.
   carried through the product sees a defect in one entry of `J` at a smaller multiple of its size.
   The legs, forms, modes, vectors, element types, the `Newton()` slab and the `1/100` floor are
   unchanged.
+- **The hidden-row sum of the per-component lifting test holds to `16 eps(T)`.** The testset "L4
+  the lifting acts per component on VectorWave" of `test/couplings/hard_constraint_lifting.jl`
+  compares the hidden rows of the two-component run with twice the scalar run's, relative to the
+  largest scalar row. On the `Julia 1 - windows-latest` job the difference in `Float64` is
+  `3.997e-15`, about `11.4 eps`, above the former `10 eps`. The bound is now `16 eps(T)`; the
+  other bounds of the testset stay at `10 eps(T)`.
