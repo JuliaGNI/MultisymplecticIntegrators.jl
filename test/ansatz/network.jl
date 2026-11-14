@@ -361,6 +361,30 @@ end
         end
     end
 
+    # The solver's `regularization_factor` reaches the step: one Newton iteration of N1's first slab
+    # at `λ = 0` and at `λ = 1e-2` solves two different linear systems, so the two steps' states
+    # differ by far more than round-off, and each integrator's options hold the `λ` it was built
+    # with. No convergence is asserted: one iteration of the `:all` mode is an unconverged iterate.
+    @testset "N8 the regularization factor reaches the step" for T in (Float64, Float32)
+        problem = wave_problem(T; timespan = (zero(T), T(0.05)))
+        method = SpaceTimeGalerkin(network_ansatz(T), WeakInitialAndBoundaryConditions();
+            initial_guess = FitTo(InitialCondition(); method = OrthogonalGreedy()))
+        states = map((zero(T), T(1e-2))) do λ
+            int = GeometricIntegrator(problem, method; max_iterations = 1,
+                regularization_factor = λ)
+            @test SimpleSolvers.config(solver(int)).regularization_factor == λ
+            result = integrate(int)
+            @test length(result.traces) == 1
+            @test result.stats.iterations == [1]
+            u = result.solution.u[1]
+            @test eltype(u) === T
+            @test all(isfinite, u)
+            u
+        end
+        plain, shifted = states
+        @test norm(shifted - plain) > 100 * eps(T) * norm(plain)
+    end
+
     # The edges against the discrete action: a bottom or a top point read in the normalised
     # coordinate moves the residual away from the oracle by a quarter of its scale, where the
     # unmutated residual agrees with it to round-off.

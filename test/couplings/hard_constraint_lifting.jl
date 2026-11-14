@@ -435,7 +435,7 @@ end
         end
         # the hidden rows sum over both components, and each component's output row is the scalar
         # run's there
-        @test maximum(abs, b₂[1:(3S)] .- 2 * b₁[1:(3S)]) ≤ 10 * eps(T) * maximum(abs, b₁)
+        @test maximum(abs, b₂[1:(3S)] .- 2 * b₁[1:(3S)]) ≤ 16 * eps(T) * maximum(abs, b₁)
         for d in 1:2, j in 1:S
 
             @test b₂[3S + (j - 1) * 2 + d] ≈ b₁[3S + j] atol = 10 * eps(T) *

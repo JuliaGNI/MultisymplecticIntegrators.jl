@@ -82,6 +82,7 @@ failed run.
 | `spline_matrix_model.jl` | the spline family's matrix rows: the three couplings on the four example problems at three resolutions each, 36 rows with distinct stems. |
 | `box_model.jl` | the box scheme's matrix rows: the Preissmann box scheme on the three problems whose density is in its class, at two resolutions each, with a `smoke` tag on two of them. |
 | `network_matrix_model.jl` | the multiplier network's matrix rows: both modes, `:all` and `:last_layer`, under the weak initial-and-boundary conditions and continued from the previous slab, on `Wave`, `SineGordon` and `VectorWave` at three time steps each, 18 rows. |
+| `network_regularisation_model.jl` | the multiplier network's regularisation scan: both modes on `Wave` at `h = 0.05`, each at the solver's `regularization_factor` `λ ∈ (0.0, 1e-8, 1e-5, 1e-2)`, 8 rows whose stems end in `-lambda<λ>`. Its problem and method are `network_matrix_model.jl`'s. |
 | `symbolic_matrix_model.jl` | the symbolic family's matrix rows: the standing wave of `Wave` at its period over two periods, at three space resolutions of the trace basis, 3 rows. Its problem and method are `symbolic_model.jl`'s. |
 | `elm_matrix_model.jl` | the ELM family's matrix rows: the family's ansatz, guess and settings on `Wave` and `SineGordon` at three time steps each, 6 rows. Its method is `elm_model.jl`'s. |
 | `trialnn_matrix_model.jl` | the TrialNN family's matrix rows: the family's ansatz, coupling and guess on `Wave` and `SineGordon` at three time steps each, 6 rows. Its method is `trialnn_model.jl`'s. |
@@ -186,7 +187,8 @@ stored step; `"wall_per_step"` holds one entry per step after the first and `"wa
 none: the finest row of a method on that problem records `NaN` and names itself in
 `"reference_stem"`, and each coarser row records its difference from that row at the times and nodes
 the two share. `"charge"` is the rotation charge of a density with that symmetry and `nothing` for
-one without it. `"parameters"` is the row's method-defining fields and not the problem's.
+one without it. `"parameters"` is the row's method-defining fields and not the problem's; a row of
+the network's regularisation scan adds the solver's `regularization_factor` to them.
 `"pid"`, `"load"`, `"threads"`, `"blas_threads"`, `"julia"` and `"check_bounds"` are what the timing
 means.
 

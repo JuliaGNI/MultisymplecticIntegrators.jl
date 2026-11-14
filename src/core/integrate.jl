@@ -56,6 +56,13 @@ As in the ecosystem's `integrate!`, a step whose state holds a NaN ends the run 
 raises a `NonlinearSolverException` ends the run with a warning too; `traces` then ends at the step
 before it, and the solution is valid up to that step only. The keyword arguments other than
 `on_failure` go to the integrator's constructor, and to nothing else.
+
+Among them, the solver option `regularization_factor = λ` makes SimpleSolvers' `Newton`, the
+default solver of every method but a fixed-boundary network's, add `λ`, unscaled, to the diagonal
+of the slab Jacobian before each factorisation; that network's [`LevenbergMarquardt`](@ref) solver
+does not read it. It is a shift of the Newton matrix, not a Tikhonov term of a
+least-squares step: the residual that a step drives to zero is unchanged. The direct linear solve
+of `linear_solver = true` factorises the Jacobian without the shift, so `λ` has no effect there.
 """
 function integrate(problem::LagrangianPDEProblem, method::SpaceTimeMethod;
         on_failure = :warn, kwargs...)

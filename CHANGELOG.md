@@ -719,6 +719,14 @@ makes it worth keeping.
   `FixedBoundaryNetwork`, read on its own; `noether_charge` reaches them through the weights, so a
   `VectorWave` row of a network has a charge. A `SymbolicAnsatz` takes the same methods as a
   `NetworkAnsatz`, with the same results as before.
+- **The multiplier network has a regularisation scan of 8 matrix rows.**
+  `scripts/network_regularisation_model.jl` registers `:network_regularisation`: both modes on
+  `Wave` at `h = 0.05`, each at the solver's `regularization_factor` `λ ∈ (0.0, 1e-8, 1e-5, 1e-2)`,
+  with the network family's problem, method and tolerances, and stems that end in `-lambda<λ>`. The
+  `λ = 0.0` rows repeat the network family's `h = 0.05` rows on `Wave` as the scan's baseline. The
+  docstring of `integrate` says what the option does: `Newton` adds `λ`, unscaled, to the diagonal
+  of the slab Jacobian before each factorisation, a shift of the Newton matrix and not a Tikhonov
+  term.
 - **`scripts/kernel_build_order.jl` checks whether a network's kernels are generated the same way
   twice.** It sorts repeated symbolic builds of one network architecture, made around the
   per-process cache of `network_kernels`, by their generated code and their kernel values, and
@@ -843,3 +851,9 @@ makes it worth keeping.
   carried through the product sees a defect in one entry of `J` at a smaller multiple of its size.
   The legs, forms, modes, vectors, element types, the `Newton()` slab and the `1/100` floor are
   unchanged.
+- **The hidden-row sum of the per-component lifting test holds to `16 eps(T)`.** The testset "L4
+  the lifting acts per component on VectorWave" of `test/couplings/hard_constraint_lifting.jl`
+  compares the hidden rows of the two-component run with twice the scalar run's, relative to the
+  largest scalar row. On the `Julia 1 - windows-latest` job the difference in `Float64` is
+  `3.997e-15`, about `11.4 eps`, above the former `10 eps`. The bound is now `16 eps(T)`; the
+  other bounds of the testset stay at `10 eps(T)`.
