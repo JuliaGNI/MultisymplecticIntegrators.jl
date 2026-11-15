@@ -398,9 +398,9 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K56 · The box scheme copies the initial level into its cache twice on the first step.
 
-- location: `src/baselines/box_scheme.jl:460` (`initial_guess!`) and `:511` (`read_initial_level!`)
+- location: `src/baselines/box_scheme.jl:457` (`initial_guess!`) and `:508` (`read_initial_level!`)
 - evidence: `initial_guess!` copies `sol.u`, `sol.v` and `sol.w` into the cache when `c.steps == 0`,
-  and `integrate_step!` then calls `read_initial_level!` (`:495`), which copies the same three
+  and `integrate_step!` then calls `read_initial_level!` (`:492`), which copies the same three
   arrays again. Removing the second copy makes a bare `integrate_step!` start from a zero cache, so
   the choice of the one copy that stays is a design decision.
 - kind: dead code
@@ -455,20 +455,25 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K61 · JET reports runtime dispatches in the box scheme's `residual!` and in the construction of its cache.
 
-- location: `src/baselines/box_scheme.jl:356`
+- location: `src/baselines/box_scheme.jl:353`
 - evidence: `JET.report_opt` with `target_modules = (MultisymplecticIntegrators,)` reports on
-  `residual!` and on `cache(int, T)` of a `BoxScheme()` integrator at all four entries of
-  `test/helpers/quality_cases.jl` (`Float64` and `Float32`, `Wave.problem` and
-  `VectorWave.problem`): six reports on `residual!` and five on `cache` at each entry, on Julia
-  1.13.4 with JET 0.13.1. Five are in `check_box_density` (`:137`), which runs once per cache,
-  when `cache(int, T)` builds it, and which `residual!` reaches through the cache: the call of its
-  closure `partials` (`:143`), whose `point_derivatives(…, Val(D))` takes the runtime
-  `D = components(problem)`, and the `all` of its checks at `:155`, `:172`, `:176` and `:183`,
-  which read the partials that call returns. The sixth, on `residual!` alone, is the call through
-  the barrier `box_residual!(b, x, c, problem, Val(components(problem)), tc)` (`:356`), dispatched at
-  run time one call below `residual!`, because `components(problem)` is a runtime integer. The
-  eight checks of the testset "JET: box scheme" in `test/quality/jet.jl` are `@test_broken` for
-  these findings, so a fix fails them as unexpected passes. Issue #70 tracks it.
+  `residual!` and on `cache(int, T)` of a `BoxScheme()` integrator at all eight entries of
+  `test/helpers/quality_cases.jl` (`Float64` and `Float32`, `D = 1` and `D = 2`, unforced on
+  `Wave.problem` and `VectorWave.problem` and forced on the manufactured problem): six reports on
+  `residual!` and five on `cache` at each entry, on Julia 1.13.4 with JET 0.13.1. Five are in
+  `check_box_density` (`:134`), which runs once per cache, when `cache(int, T)` builds it, and
+  which `residual!` reaches through the cache: the call of its closure `partials` (`:140`), whose
+  `point_derivatives(…, Val(D))` takes the runtime `D = components(problem)`, and the `all` of its
+  checks at `:152`, `:169`, `:173` and `:180`, which read the partials that call returns. The
+  sixth, on `residual!` alone, is the call through the barrier
+  `box_residual!(b, x, c, problem, Val(components(problem)), tc)` (`:353`), dispatched at run time
+  one call below `residual!`, because `components(problem)` is a runtime integer. JET stops at this
+  dispatch, so while it stays the forced entries of the box scheme repeat the reports of the
+  unforced ones and do not see the forced row of `box_residual!`: with a forcing that returns its
+  value through `Base.inferencebarrier`, the count on `residual!` stays at six at the four forced
+  box-scheme entries, where it goes from none to two at the forced slab entries. The sixteen
+  checks of the testset "JET: box scheme" in `test/quality/jet.jl` are `@test_broken` for these
+  findings, so a fix fails them as unexpected passes. Issue #70 tracks it.
 - kind: defect
 - found: 2026-11-15
 
@@ -518,21 +523,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: missing test
 - found: #73
 
-### K65 · The inference and JET checks reach no forced residual.
-
-- location: `test/helpers/quality_cases.jl:95`
-- evidence: `quality_entry` builds every entry on `Wave.problem` or `VectorWave.problem`, whose
-  forcing is `nothing`, and passes `sol = nothing` to `residual!`, so `test/quality/inference.jl`
-  and `test/quality/jet.jl` never reach `add_forcing!`, the forced row of `box_residual!`,
-  `forcing_value`, `forcing_component` or the read of `sol.t`. The forced path is clean today: on
-  the manufactured problem of `test/helpers/manufactured.jl` with a solution step of the
-  integrator as `sol`, the ten methods of `QUALITY_METHODS` at `Float64` and `Float32` and
-  `D = 1, 2` pass `@inferred residual!` and `@inferred cache(int, T)` in 80 of 80 checks, and
-  `JET.report_opt` reports nothing on the nine slab methods and the six and five reports of K61 on
-  the box scheme (Julia 1.13.4, JET 0.13.1).
-- kind: missing test
-- found: #72
-
 ### K66 · No forced run has a space span other than `[0, 1]` or a time span that starts away from `t = 0`.
 
 - location: `test/helpers/manufactured.jl:63`
@@ -556,36 +546,29 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: docs
 - found: #72
 
-### K68 · The comment of the explicit-imports check leaves out the non-public names of `ForwardDiff`.
-
-- location: `test/quality/explicit_imports.jl:5`
-- evidence: the comment says the public-ness check is off because of the non-public names of
-  `GeometricIntegratorsBase` and `SimpleSolvers`, and lists them. The package also imports
-  `gradient` and `jacobian` (`src/MultisymplecticIntegrators.jl:11`) and `value`
-  (`src/baselines/box_scheme.jl:2`) from `ForwardDiff`; `Base.ispublic(ForwardDiff, :value)` is
-  `false` with ForwardDiff 1.4.8.
-- kind: docs
-- found: #72
-
 ### K69 · `test/quality/inference.jl` runs longer than the 60 s that a `core` file may take.
 
 - location: `test/runtests.jl:12`
 - evidence: the file runs first of the two quality files in `core`, so it pays the first
-  construction and compilation of the 40 integrators of `test/helpers/quality_cases.jl`. In CI,
-  `Julia 1 - ubuntu-latest - default - core` of run 43704633947 takes 1 min 48 s for "Inference".
-  Cold, alone, in a fresh process with `using Test` loaded and the file timed by `@testset` (package
-  load included), on `arm64-apple-darwin` at load average about 5: 1 min 01.7 s on Julia 1.13.4,
-  1 min 08.2 s on 1.12.7 and 48.7 s on 1.14.0-beta1. The #71 review measured 57.9 s on 1.13.4 with
-  the package loaded first. Merging the file with `jet.jl` or reordering them moves the cost to the
-  other file; moving `inference.jl`, or both files, to a group outside `core`, or fewer entries,
-  removes it.
+  construction and compilation of the 80 integrators of `test/helpers/quality_cases.jl`, 40
+  unforced and 40 forced. Cold, alone, in a fresh process with `using Test` loaded and the file
+  timed by `@testset` (package load included), on `arm64-apple-darwin` at load average 4 to 7:
+  1 min 35.2 s and 1 min 40.8 s in two runs on Julia 1.13.4, and 1 min 12.7 s on
+  1.14.0-beta1. In `run-tests.jl <repository> core` on 1.13.4 the file takes 90.6 s. With the 40
+  unforced entries alone the same measurement gave 1 min 02.6 s on 1.13.4, so the forced entries
+  add about 35 s; in CI, `Julia 1 - ubuntu-latest - default - core` of run 43704633947 took
+  1 min 48 s for "Inference" with the 40 entries. `jet.jl`, which runs after it and finds the
+  integrators compiled, takes 39.1 s in the same `core` run; alone and cold it takes 1 min 19.1 s
+  on 1.13.4 with the 80 entries (53.4 s with the 40) and 59.8 s on 1.14.0-beta1. Merging the file
+  with `jet.jl` or reordering them therefore moves the cost to the other file; moving
+  `inference.jl`, or both files, to a group outside `core`, or fewer entries, removes it.
 - kind: defect
 - found: #71
 
 ### K71 · The `ArgumentError` of `quality_problem` for a `D` other than 1 and 2 cannot be thrown.
 
-- location: `test/helpers/quality_cases.jl:22`
-- evidence: `quality_problem(T, D)` has one caller, `quality_entry` (`:92`), and the two callers of
+- location: `test/helpers/quality_cases.jl:29`
+- evidence: `quality_problem(T, D)` has one caller, `quality_entry` (`:111`), and the two callers of
   `quality_entry`, `test/quality/inference.jl` and `test/quality/jet.jl`, take `D` from
   `QUALITY_COMPONENTS = (1, 2)`. Removing the `throw` and returning `VectorWave.problem` for
   `D == 2` as the last line does the same.
@@ -600,7 +583,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   parameter set (`zeros(ST, a.np)` laid out by `unflatten`). The type folds to a constant, but the
   compiler keeps the call, so `cache(int, T)` builds the set at every lookup, and `residual!` and
   the solve's other calls of `cache(int, ST)` pay for it. `@allocated` of a warm
-  `cache(int, T)` with `T` known at the call site, over the entries of
+  `cache(int, T)` with `T` known at the call site, over the unforced entries of
   `test/helpers/quality_cases.jl`: 544 and 608 bytes at `Float64` (`D = 1`, `2`) and 416 and
   448 bytes at `Float32` for the three network methods, and 0 bytes for the other six slab
   methods, the same on Julia 1.13.4 and 1.14.0-beta1. A type-level form of the parameter set's type
