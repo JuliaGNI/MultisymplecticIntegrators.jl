@@ -283,25 +283,31 @@ include("../helpers/testsetup.jl")
             (2, [1.0]),
             (2, [1.0, 2.0, 3.0]),
             (3, (1.0, 2.0)),
-            (2, Float64[])
+            (2, Float64[]),
+            (2, (a = 1.0, b = 2.0, c = 3.0)),
+            (2, reshape([1.0, 2.0, 3.0], 3, 1))
         ]
         for (D, value) in refused
             @test_throws Regex("^ArgumentError: the forcing returns $(length(value)) values " *
-                               "at \\(t, x\\) = .*; D = $D needs a number or $D values") build(
+                               "at \\(t, x\\) = .*; D = $D needs a real number or $D values") build(
                 D, (t, x, p) -> value)
         end
         @test_throws r"^ArgumentError: the forcing returns a value of type Nothing at" build(
             1, (t, x, p) -> nothing)
-        # A value of length `D` is refused where its entries are no numbers, or where its
+        # A complex number is no real number.
+        @test_throws r"^ArgumentError: the forcing returns a value of type ComplexF64 at \(t, x\) = \(0\.0, 0\.0\); D = 1 needs a real number or 1 values$" build(
+            1, (t, x, p) -> 1.0im)
+        # A value of length `D` is refused where its entries are no real numbers, or where its
         # components cannot be read by index.
         nonnumeric = ["ab", ['a', 'b'], Any[1.0, nothing], Set([1.0, 2.0]),
-            Dict(:a => 1.0, :b => 2.0), (i for i in 1.0:2.0)]
+            Dict(:a => 1.0, :b => 2.0), (i for i in 1.0:2.0), [1 + 0im, 2 + 0im],
+            (2.0, 1.0im)]
         literal(s) = replace(s, r"[\\^$.|?*+()\[\]{}]" => s"\\\0")
         for value in nonnumeric
             @test length(value) == 2
             @test_throws Regex("^ArgumentError: the forcing returns a value of type " *
                                literal(string(typeof(value))) *
-                               " at \\(t, x\\) = \\(0\\.0, 0\\.0\\); D = 2 needs a number or " *
+                               " at \\(t, x\\) = \\(0\\.0, 0\\.0\\); D = 2 needs a real number or " *
                                "2 values\$") build(2, (t, x, p) -> value)
         end
 
@@ -312,7 +318,7 @@ include("../helpers/testsetup.jl")
         build(1, recording; spans...)
         @test calls == [(0.5, 0.25)]
         corner = (t, x, p) -> (t == 0.5 && x == 0.25) ? [1.0, 2.0, 3.0] : 1.0
-        @test_throws r"^ArgumentError: the forcing returns 3 values at \(t, x\) = \(0\.5, 0\.25\); D = 2 needs a number or 2 values$" build(
+        @test_throws r"^ArgumentError: the forcing returns 3 values at \(t, x\) = \(0\.5, 0\.25\); D = 2 needs a real number or 2 values$" build(
             2, corner; spans...)
         elsewhere = (t, x, p) -> (t == 0.5 && x == 0.25) ? 1.0 : [1.0, 2.0, 3.0]
         @test build(2, elsewhere; spans...).forcing === elsewhere

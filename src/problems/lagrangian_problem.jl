@@ -39,14 +39,14 @@ each `(u = …, v = …, w = …)` of `D` vectors, entry `d` component `d`'s val
 point and the component-major vector of length `D * length(x)` at a grid.
 
 `forcing` is `nothing` where the problem has no forcing, and otherwise a `(t, x, params)` function
-that returns the `D` components' values of a load at the point `(t, x)`: a number serves every
-component, and a collection of `D` numbers read by index, such as a vector or a tuple, gives one
-value per component, entry `d` component `d`'s, as the closed forms of [`field_exact`](@ref) do.
+that returns the `D` components' values of a load at the point `(t, x)`: a real number serves
+every component, and a vector, a tuple or another collection of `D` real numbers read by index
+gives entry `d` to component `d`, as the closed forms of [`field_exact`](@ref) do.
 The load is added to `∂L/∂u` of each component, so it enters the Euler–Lagrange equation
 `∂ₜ(∂L/∂v) + ∂ₓ(∂L/∂w) − ∂L/∂u = f`: on a density `λ(½|v|² − ½c²|w|² − V(u))` the forced equation
 is `λ(u_tt − c² u_xx + V′(u)) = f`. The density is unchanged. The constructor reads the forcing
 once, at `(timespan[1], xspan[1])`, and throws an `ArgumentError` for a value that is neither a
-number nor such a collection. The integrators convert its values to the element type `T` where
+real number nor such a collection. The integrators convert its values to the element type `T` where
 they enter the residual.
 
 `timespan`, `timestep`, `xspan` and `xstep` are converted to the element type `T` of `timespan`.
@@ -113,21 +113,21 @@ function LagrangianPDEProblem(density;
         forcing)
 end
 
-# A forcing's value at one point is a number, which serves every component, or a collection of one
-# number per component, read by index.
+# A forcing's value at one point is a real number, which serves every component, or a collection of
+# one real number per component, read by index.
 function _check_forcing(forcing, t, x, params, D::Integer)
     value = forcing(t, x, params)
-    value isa Number && return nothing
+    value isa Real && return nothing
     if applicable(length, value) && length(value) != D
         found = "$(length(value)) values"
-    elseif applicable(length, value) && all(entry -> entry isa Number, value) &&
-           all(d -> applicable(getindex, value, d), 1:D)
+    elseif applicable(length, value) && all(entry -> entry isa Real, value) &&
+           applicable(getindex, value, 1)
         return nothing
     else
         found = "a value of type $(typeof(value))"
     end
     throw(ArgumentError("the forcing returns $found at (t, x) = ($t, $x); " *
-                        "D = $D needs a number or $D values"))
+                        "D = $D needs a real number or $D values"))
 end
 
 """

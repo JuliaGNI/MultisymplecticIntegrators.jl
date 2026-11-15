@@ -736,9 +736,9 @@ makes it worth keeping.
   reproducible within one process and not from one process to the next.
 - **`LagrangianPDEProblem` takes a forcing.** The keyword `forcing = nothing` stores a
   `(t, x, params)` function, in a new last field with its own trailing type parameter, that returns
-  the `D` components' values of a load at a point: a number serves every component, a collection of
-  `D` numbers read by index, such as a vector or a tuple, gives one value per component. The load
-  is added to `∂L/∂u`, so on a density
+  the `D` components' values of a load at a point: a real number serves every component, a
+  collection of `D` real numbers read by index, such as a vector or a tuple, gives one value per
+  component. The load is added to `∂L/∂u`, so on a density
   `λ(½|v|² − ½c²|w|² − V(u))` the forced equation is `λ(u_tt − c² u_xx + V′(u)) = f`; the density
   is unchanged. The slab integrator adds it at every quadrature node of the slab, at the node's
   absolute time, in the residual and in the update, so the top row that `CoefficientRestriction`
