@@ -2,7 +2,7 @@
 # the nine pairs of an ansatz and a coupling that the slab integrator accepts, and the box scheme —
 # each built as a `GeometricIntegrator` at `T ∈ (Float64, Float32)` and `D ∈ (1, 2)`, on
 # `Wave.problem` for `D = 1` and on `VectorWave.problem` for `D = 2`. Every method is built at
-# the smallest size that builds it, because the checks read types, not values.
+# a small size, because the checks read types, not values.
 
 using MultisymplecticIntegrators
 using SimpleSplines: Dirichlet, Free
