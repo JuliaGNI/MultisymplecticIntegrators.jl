@@ -734,6 +734,19 @@ makes it worth keeping.
   between the two. Its measurements are the evidence of known issue K59: with `SymbolicUtils`
   4.56.1 the generated code follows the process's `GC.gc()` history, so the cache keeps a run
   reproducible within one process and not from one process to the next.
+- **Inference and JET checks of the Newton solve's two entry points.** `test/quality/inference.jl`
+  asserts `@inferred residual!(b, x, nothing, params, int)` and `@inferred cache(int, T)`, and
+  `test/quality/jet.jl` asserts that `JET.report_opt` with
+  `target_modules = (MultisymplecticIntegrators,)` reports nothing on either. Both run in the `core`
+  group over 40 entries, built in `test/helpers/quality_cases.jl`: nine of the ten pairs of an
+  ansatz and a coupling that `SpaceTimeGalerkin` accepts, with a network's two modes counted apart
+  (all but a `:last_layer` network under `HardConstraintLifting`), and `BoxScheme()`, in `Float64`
+  and `Float32`, on `Wave.problem` (`D = 1`) and `VectorWave.problem` (`D = 2`). The analysis of
+  `cache` follows the cache's construction, so a runtime dispatch in a check that runs when the
+  cache is built counts.
+  The box scheme's eight JET checks are `@test_broken`, for the findings of known issue K61, and
+  `jet.jl` records one `@test_skip` on a Julia where JET does not run. JET `0.13` is a test
+  dependency.
 
 ### Changed
 
@@ -857,3 +870,10 @@ makes it worth keeping.
   largest scalar row. On the `Julia 1 - windows-latest` job the difference in `Float64` is
   `3.997e-15`, about `11.4 eps`, above the former `10 eps`. The bound is now `16 eps(T)`; the
   other bounds of the testset stay at `10 eps(T)`.
+- **`VectorWave.problem`'s initial and side data have an inferred return type.** Its
+  `ics_function` and `bcs_function` build their tuple of components with `ntuple` over the
+  captured `Val(D)` in place of a splatted generator over `1:D`, whose length inference cannot
+  see. The data are the same; the non-concrete named tuples they returned had reached
+  `transform_field!` in every residual of `HardConstraintLifting` at `D = 2`, and
+  `lifting_corner_check` when its cache is built, as runtime dispatches that
+  `test/quality/jet.jl` reports.
