@@ -330,6 +330,9 @@ function assemble_new!(c::BoxSchemeCache, x::AbstractVector, problem::Lagrangian
     return nothing
 end
 
+# The value of a `Dual`, and a plain number itself: the forcing's row divides by the value of `λ`.
+import ForwardDiff: value
+
 """
     box_residual!(b, x, cache, problem, sol)
 
@@ -365,9 +368,12 @@ function box_residual!(b::AbstractVector, x::AbstractVector, c::BoxSchemeCache,
     params = problem.params
     rows = 3 * (nx - 1)
     assemble_new!(c, x, problem)
-    for d in 1:D
-        offset = (d - 1) * rows
-        for j in 1:(nx - 1)
+    for j in 1:(nx - 1)
+        # the forcing at the box's centre, one call for every component
+        f = problem.forcing === nothing ? nothing :
+            forcing_value(problem, tc, (grid[j] + grid[j + 1]) / 2)
+        for d in 1:D
+            offset = (d - 1) * rows
             i0 = (d - 1) * nx + j
             i1 = i0 + 1
             # the four corners of the box, the level being solved second
@@ -384,12 +390,14 @@ function box_residual!(b::AbstractVector, x::AbstractVector, c::BoxSchemeCache,
             wc = c.w[i1]
             wd = c.new_w[i1]
             potential = box_centre_potential(density, c, j, d, nx, params, Val(D))
-            if problem.forcing !== nothing
-                potential += forcing_value(problem, tc, (grid[j] + grid[j + 1]) / 2, d)
+            row = ((vb + vd) - (va + vc)) / (2h) - c² * ((wc + wd) - (wa + wb)) / (2dx) -
+                  potential / λ
+            if f !== nothing
+                # `λ` is the cache's, a `Dual` with zero partials inside the Jacobian; its value
+                # alone keeps a non-finite forcing out of the row's partials.
+                row -= forcing_component(problem, f, d) / value(λ)
             end
-            b[offset + 3(j - 1) + 1] = ((vb + vd) - (va + vc)) / (2h) -
-                                       c² * ((wc + wd) - (wa + wb)) / (2dx) -
-                                       potential / λ
+            b[offset + 3(j - 1) + 1] = row
             b[offset + 3(j - 1) + 2] = ((ub + ud) - (ua + uc)) / (2h) -
                                        (va + vb + vc + vd) / 4
             b[offset + 3(j - 1) + 3] = ((uc + ud) - (ua + ub)) / (2dx) -

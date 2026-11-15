@@ -148,6 +148,25 @@ end
         end
     end
 
+    @testset "a non-finite forcing ends the run unconverged: $value, D = $D" for value in (NaN, Inf),
+        D in (1, 2)
+        # The forcing is not guarded: the residual is not finite, so no step converges, and the
+        # run returns its record. The two weak couplings raise from the linear solve instead
+        # (KNOWN_ISSUES.md).
+        forcing = (t, x, params) -> value
+        problem = manufactured_problem(;
+            D = D, timestep = 0.1, nx = 10, tend = 0.3, forcing = forcing)
+        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (1, 10), xspan = (0.0, 1.0),
+            x_boundary = Dirichlet())
+        for method in (SpaceTimeGalerkin(ansatz, CoefficientRestriction()), BoxScheme())
+            int = GeometricIntegrator(problem, method)
+            result = @test_logs (:warn,) match_mode=:any integrate(int)
+            @test length(result.traces) < 3
+            @test length(result.stats.converged) == length(result.traces)
+            @test !any(result.stats.converged)
+        end
+    end
+
     @testset "an unforced residual takes sol = nothing" begin
         problem = manufactured_problem(; timestep = 0.1, nx = 10, forcing = nothing)
         @test problem.forcing === nothing

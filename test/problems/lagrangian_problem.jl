@@ -244,6 +244,8 @@ include("../helpers/testsetup.jl")
             (2, 2.0),
             (2, [2.0, -1.0]),
             (2, (2.0, -1.0)),
+            (2, (a = 2.0, b = -1.0)),
+            (2, reshape([2.0, -1.0], 2, 1)),
             (3, 1),
             (3, [1.0, 2.0, 3.0])
         ]
@@ -252,6 +254,26 @@ include("../helpers/testsetup.jl")
             problem = build(D, f)
             @test problem.forcing === f
             @test typeof(problem).parameters[end] === typeof(f)
+            at = MultisymplecticIntegrators.forcing_value(problem, 0.5, 0.25)
+            components = [MultisymplecticIntegrators.forcing_component(problem, at, d)
+                          for d in 1:D]
+            @test components == (value isa Number ? fill(value, D) : vec(collect(value)))
+        end
+
+        # The forcing is read with the problem's own parameters, and its values are converted to
+        # the problem's element type.
+        scaled = (t, x, p) -> [p.c * t, -p.c * x]
+        for T in (Float64, Float32)
+            problem = LagrangianPDEProblem(density; D = 2, ics_function = icsD(2),
+                bcs_function = bcs, timespan = (zero(T), one(T)), timestep = T(0.1),
+                xspan = (zero(T), one(T)), xstep = T(0.25), params = (c = 3.0,),
+                forcing = scaled)
+            value = MultisymplecticIntegrators.forcing_value(problem, 0.5, 0.25)
+            @test value == [1.5, -0.75]
+            components = [MultisymplecticIntegrators.forcing_component(problem, value, d)
+                          for d in 1:2]
+            @test components == T[1.5, -0.75]
+            @test eltype(components) === T
         end
 
         # Any other length names the length and `D`; a value that is no number and no collection

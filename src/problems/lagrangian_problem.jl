@@ -40,13 +40,14 @@ point and the component-major vector of length `D * length(x)` at a grid.
 
 `forcing` is `nothing` where the problem has no forcing, and otherwise a `(t, x, params)` function
 that returns the `D` components' values of a load at the point `(t, x)`: a number serves every
-component, and a vector or tuple of length `D` gives one value per component, as the closed forms
-of [`field_exact`](@ref) do. The load is added to `∂L/∂u` of each component, so it enters the
-Euler–Lagrange equation `∂ₜ(∂L/∂v) + ∂ₓ(∂L/∂w) − ∂L/∂u = f`: on a density
-`λ(½|v|² − ½c²|w|² − V(u))` the forced equation is `λ(u_tt − c² u_xx + V′(u)) = f`. The density is
-unchanged. The constructor reads the forcing once, at `(timespan[1], xspan[1])`, and throws an
-`ArgumentError` for a value that is neither a number nor a vector or tuple of length `D`. The
-integrators convert its values to the element type `T` where they enter the residual.
+component, and a collection of length `D`, such as a vector or a tuple, gives one value per
+component, entry `d` component `d`'s, as the closed forms of [`field_exact`](@ref) do. The load is
+added to `∂L/∂u` of each component, so it enters the Euler–Lagrange equation
+`∂ₜ(∂L/∂v) + ∂ₓ(∂L/∂w) − ∂L/∂u = f`: on a density `λ(½|v|² − ½c²|w|² − V(u))` the forced equation
+is `λ(u_tt − c² u_xx + V′(u)) = f`. The density is unchanged. The constructor reads the forcing
+once, at `(timespan[1], xspan[1])`, and throws an `ArgumentError` for a value that is neither a
+number nor a collection of length `D`. The integrators convert its values to the element type `T`
+where they enter the residual.
 
 `timespan`, `timestep`, `xspan` and `xstep` are converted to the element type `T` of `timespan`.
 The functions of the problem take its parameters, never a module-level default.
@@ -117,7 +118,7 @@ end
 function _check_forcing(forcing, t, x, params, D::Integer)
     value = forcing(t, x, params)
     value isa Number && return nothing
-    if value isa Union{AbstractVector, Tuple}
+    if applicable(length, value)
         length(value) == D && return nothing
         found = "$(length(value)) values"
     else
@@ -128,13 +129,21 @@ function _check_forcing(forcing, t, x, params, D::Integer)
 end
 
 """
-    forcing_value(problem, t, x, d)
+    forcing_value(problem, t, x)
 
-Component `d` of the problem's forcing at the point `(t, x)`, converted to the problem's element
-type.
+The problem's forcing at the point `(t, x)`, read with the problem's parameters, as the forcing
+returns it: a number, or one value per component. [`forcing_component`](@ref) takes one
+component of it.
 """
-function forcing_value(problem::LagrangianPDEProblem{T}, t, x, d::Integer) where {T}
-    return convert(T, _field_component(problem.forcing(t, x, problem.params), d))
+forcing_value(problem::LagrangianPDEProblem, t, x) = problem.forcing(t, x, problem.params)
+
+"""
+    forcing_component(problem, value, d)
+
+Component `d` of a value of the problem's forcing, converted to the problem's element type.
+"""
+function forcing_component(::LagrangianPDEProblem{T}, value, d::Integer) where {T}
+    return convert(T, _field_component(value, d))
 end
 
 """

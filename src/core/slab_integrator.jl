@@ -540,12 +540,17 @@ function slab_residual!(
 end
 
 # The forcing added to `∂L/∂u`, indexed `[q, r, d]`, at the slab's quadrature node `(t̂_q, x_r)`,
-# whose absolute time is `t₀ + h·t̂_q`.
+# whose absolute time is `t₀ + h·t̂_q`. The forcing is called once per node, for every component.
 function add_forcing!(du::AbstractArray{<:Any, 3}, problem::LagrangianPDEProblem, t₀,
         tnodes::AbstractVector, xnodes::AbstractVector)
     h = timestep(problem)
-    for d in axes(du, 3), r in axes(du, 2), q in axes(du, 1)
-        du[q, r, d] += forcing_value(problem, t₀ + h * tnodes[q], xnodes[r], d)
+    for r in axes(du, 2)
+        for q in axes(du, 1)
+            f = forcing_value(problem, t₀ + h * tnodes[q], xnodes[r])
+            for d in axes(du, 3)
+                du[q, r, d] += forcing_component(problem, f, d)
+            end
+        end
     end
     return nothing
 end

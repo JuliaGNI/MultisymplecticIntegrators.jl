@@ -470,12 +470,30 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - location: `src/core/weak_form.jl`
 - evidence: above the bound the high space modes grow by a factor `ρ` per step from round-off. The
   spectral radius of the one-step map of `Wave` (`c = 0.5`) under `CoefficientRestriction` on
-  `2f916a2`, Julia 1.13.4, is `1` to round-off up to `c·h/Δx = 1`, and `ρ ≈ 3` at `c·h/Δx = 2` and
-  `3.7` at 16 for degree 1, `1.13` at 2 and `5.7` at 16 for degree 2. At degree 1 the step is the
-  Newmark scheme with `β = 1/6`, `γ = 1/2`, whose spectral radius equals the measured one to about
-  `1e-14`. Every step converges, so a short run looks right: `test/verification/long_time_energy.jl`
-  runs the three couplings at `c·h/Δx = 0.9` for 80 steps under a largest `L²` error of `1e-2`, and
-  records the largest error of 40 steps at `c·h/Δx = 4` without a bound. A stable time rule is not
-  part of the package.
+  `2f916a2`, Julia 1.13.4, is `1` to round-off at every ratio measured up to `c·h/Δx = 1`, and
+  `ρ ≈ 3` at `c·h/Δx = 2` and `3.7` at 16 for degree 1, `1.13` at 2 and `5.7` at 16 for degree 2;
+  bisected at `nx = 40`, the bound is `1.0022` at degree 1 and `0.99988` at degree 2. At degree 1
+  the step is the Newmark scheme with `β = 1/6`, `γ = 1/2`, whose spectral radius equals the
+  measured one to about `1e-14`. Every step converges, so a short run looks right:
+  `test/verification/long_time_energy.jl` runs the three couplings at `c·h/Δx = 0.9` for 80 steps
+  under a largest `L²` error of `1e-2`, and records the largest error of 40 steps at `c·h/Δx = 4`
+  without a bound. A stable time rule is not part of the package; it is the follow-up task
+  `Make the B-spline slab step unconditionally stable`.
 - kind: defect
 - found: 2026-11-14
+
+### K63 · Under the two weak couplings a non-finite residual ends `integrate` with a `SingularException`.
+
+- location: `src/core/integrate.jl`
+- evidence: `integrate` records a failed solve only for a `NonlinearSolverException` and rethrows
+  every other exception. On the manufactured problem of `test/helpers/manufactured.jl`
+  (`h = 0.1`, `nx = 10`, three steps, degree 2), a forcing that returns `NaN` or `Inf` makes
+  `WeakInitialCondition` and `WeakInitialAndBoundaryConditions` throw
+  `SingularException: matrix is singular; factorization failed. Zero pivot found at index 1` and
+  `… index 3`, from SimpleSolvers' LU, where `CoefficientRestriction` and the box scheme return
+  with 0 traces and `converged = Bool[]`. The unforced `Wave.problem(timespan = (0.0, 0.2),
+  timestep = 0.1, xstep = 0.1)` with a `NaN` initial velocity gives the same four outcomes, so the
+  forcing does not cause it. `test/verification/manufactured.jl` asserts the recorded run under
+  `CoefficientRestriction` and the box scheme only.
+- kind: defect
+- found: 2026-11-15
