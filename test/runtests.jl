@@ -9,6 +9,8 @@ if "core" in GROUPS
     @safetestset "Aqua" include("quality/aqua.jl")
     @safetestset "Explicit imports" include("quality/explicit_imports.jl")
     @safetestset "Sources and docstrings" include("quality/sources.jl")
+    @safetestset "Inference" include("quality/inference.jl")
+    @safetestset "JET" include("quality/jet.jl")
     @safetestset "Lagrangian density" include("problems/lagrangian_density.jl")
     @safetestset "Lagrangian problem" include("problems/lagrangian_problem.jl")
     @safetestset "Linear transport" include("problems/linear_transport.jl")
