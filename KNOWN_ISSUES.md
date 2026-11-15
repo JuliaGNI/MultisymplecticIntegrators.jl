@@ -465,7 +465,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: #67
 
-### K62 · The B-spline slab integrator on the wave equation is stable only for `c·h/Δx ≤ 1`.
+### K62 · The B-spline slab integrator on the wave equation is stable only up to about `c·h/Δx = 1`.
 
 - location: `src/core/weak_form.jl`
 - evidence: above the bound the high space modes grow by a factor `ρ` per step from round-off. The

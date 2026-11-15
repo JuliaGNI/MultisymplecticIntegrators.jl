@@ -26,7 +26,7 @@ manufactured_w(t, x) = π * cos(π * x) * cos(t) + π * cos(2 * (π * x)) * sin(
     manufactured_load(t, x, a)
 
 The forcing of the component `a · u*`: `a (u*_tt − c² u*_xx) + β (a u*)³`, with
-`u*_tt − c² u*_xx = (c²π² − 1) sin(πx) cos t + ½(4c²π² − 1) sin(2πx) sin t`. It computes in
+`u*_tt − c² u*_xx = (c²π² − 1) sin(πx) cos t + ½(4c²π² − 1) sin(2πx) sin t`. Its value is a
 `Float64` whatever the element type of `t` and `x`.
 """
 function manufactured_load(t, x, a)
