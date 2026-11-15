@@ -467,7 +467,11 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   checks at `:152`, `:169`, `:173` and `:180`, which read the partials that call returns. The
   sixth, on `residual!` alone, is the call through the barrier
   `box_residual!(b, x, c, problem, Val(components(problem)), tc)` (`:353`), dispatched at run time
-  one call below `residual!`, because `components(problem)` is a runtime integer. The sixteen
+  one call below `residual!`, because `components(problem)` is a runtime integer. JET stops at this
+  dispatch, so while it stays the forced entries of the box scheme repeat the reports of the
+  unforced ones and do not see the forced row of `box_residual!`: with a forcing that returns its
+  value through `Base.inferencebarrier`, the count on `residual!` stays at six at the four forced
+  box-scheme entries, where it goes from none to two at the forced slab entries. The sixteen
   checks of the testset "JET: box scheme" in `test/quality/jet.jl` are `@test_broken` for these
   findings, so a fix fails them as unexpected passes. Issue #70 tracks it.
 - kind: defect

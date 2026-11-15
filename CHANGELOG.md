@@ -908,9 +908,10 @@ makes it worth keeping.
 - **The inference and JET checks reach the forced residual, and `ForwardDiff.value` is imported in
   the module file.** `test/quality/inference.jl` and `test/quality/jet.jl` run each of their 40
   former entries a second time on a forced problem, with a solution step as `sol`, so that they
-  reach `add_forcing!`, the forced row of `box_residual!`, `forcing_value`, `forcing_component`
-  and the read of the step's time; the box scheme's forced JET checks are `@test_broken` for K61,
-  as its unforced ones are. `import ForwardDiff: value` moves from `src/baselines/box_scheme.jl`
+  reach `add_forcing!`, `forcing_value`, `forcing_component` and the read of the step's time; the
+  box scheme's forced JET checks are `@test_broken` for K61, as its unforced ones are, and repeat
+  their reports, so that neither check sees the forced row of `box_residual!` until K61 is fixed.
+  `import ForwardDiff: value` moves from `src/baselines/box_scheme.jl`
   to the module's own `import ForwardDiff` line, and the comment of
   `test/quality/explicit_imports.jl` lists every non-public name the package imports, by owner: the
   23 that `check_all_explicit_imports_are_public` reports, where it named nine before. This closes
