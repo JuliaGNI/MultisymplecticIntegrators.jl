@@ -220,6 +220,120 @@ include("../helpers/testsetup.jl")
             xstep = 0.25f0))) == 4001
     end
 
+    @testset "the forcing keyword" begin
+        density = Wave.density()
+        icsD(D) = (x, p) -> (u = zeros(length(x), D), v = zeros(length(x), D),
+            w = zeros(length(x), D))
+        bcs = (t, p) -> nothing
+        build(D, forcing; timespan = (0.0, 1.0), xspan = (0.0, 1.0)) = LagrangianPDEProblem(
+            density; D = D, ics_function = icsD(D), bcs_function = bcs, timespan = timespan,
+            timestep = 0.1, xspan = xspan, xstep = 0.25, forcing = forcing)
+
+        # The default is no forcing, on the constructor and on the example problems.
+        unforced = LagrangianPDEProblem(
+            density; ics_function = icsD(1), bcs_function = bcs,
+            timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0), xstep = 0.25)
+        @test unforced.forcing === nothing
+        @test Wave.problem().forcing === nothing
+        @test VectorWave.problem().forcing === nothing
+
+        # A real number serves every component, and a collection of real numbers gives one value
+        # per component.
+        accepted = [
+            (1, 2.0),
+            (1, [2.0]),
+            (2, 2.0),
+            (2, [2.0, -1.0]),
+            (2, (2.0, -1.0)),
+            (2, (a = 2.0, b = -1.0)),
+            (2, reshape([2.0, -1.0], 2, 1)),
+            (3, 1),
+            (3, [1.0, 2.0, 3.0])
+        ]
+        for (D, value) in accepted
+            f = (t, x, p) -> value
+            problem = build(D, f)
+            @test problem.forcing === f
+            @test typeof(problem).parameters[end] === typeof(f)
+            at = MultisymplecticIntegrators.forcing_value(problem, 0.5, 0.25)
+            components = [MultisymplecticIntegrators.forcing_component(problem, at, d)
+                          for d in 1:D]
+            @test components == (value isa Number ? fill(value, D) : vec(collect(value)))
+        end
+
+        # The forcing is read with the problem's own parameters, and its values are converted to
+        # the problem's element type.
+        scaled = (t, x, p) -> [p.c * t, -p.c * x]
+        for T in (Float64, Float32)
+            problem = LagrangianPDEProblem(density; D = 2, ics_function = icsD(2),
+                bcs_function = bcs, timespan = (zero(T), one(T)), timestep = T(0.1),
+                xspan = (zero(T), one(T)), xstep = T(0.25), params = (c = 3.0,),
+                forcing = scaled)
+            value = MultisymplecticIntegrators.forcing_value(problem, 0.5, 0.25)
+            @test value == [1.5, -0.75]
+            components = [MultisymplecticIntegrators.forcing_component(problem, value, d)
+                          for d in 1:2]
+            @test components == T[1.5, -0.75]
+            @test eltype(components) === T
+        end
+
+        # A collection of real numbers of any other length names the length and `D`; any other
+        # value names its type, whatever its length.
+        refused = [
+            (1, [1.0, 2.0]),
+            (2, [1.0]),
+            (2, [1.0, 2.0, 3.0]),
+            (3, (1.0, 2.0)),
+            (2, Float64[]),
+            (2, (a = 1.0, b = 2.0, c = 3.0)),
+            (2, reshape([1.0, 2.0, 3.0], 3, 1))
+        ]
+        for (D, value) in refused
+            @test_throws Regex("^ArgumentError: the forcing returns $(length(value)) values " *
+                               "at \\(t, x\\) = .*; D = $D needs a real number or $D values") build(
+                D, (t, x, p) -> value)
+        end
+        @test_throws r"^ArgumentError: the forcing returns a value of type Nothing at" build(
+            1, (t, x, p) -> nothing)
+        # A complex number is no real number.
+        @test_throws r"^ArgumentError: the forcing returns a value of type ComplexF64 at \(t, x\) = \(0\.0, 0\.0\); D = 1 needs a real number or 1 values$" build(
+            1, (t, x, p) -> 1.0im)
+        # A value of length `D` is refused where its entries are no real numbers, or where its
+        # components cannot be read by index.
+        nonnumeric = ["ab", ['a', 'b'], Any[1.0, nothing], Set([1.0, 2.0]),
+            Dict(:a => 1.0, :b => 2.0), (i for i in 1.0:2.0), [1 + 0im, 2 + 0im],
+            (2.0, 1.0im)]
+        literal(s) = replace(s, r"[\\^$.|?*+()\[\]{}]" => s"\\\0")
+        for value in nonnumeric
+            @test length(value) == 2
+            @test_throws Regex("^ArgumentError: the forcing returns a value of type " *
+                               literal(string(typeof(value))) *
+                               " at \\(t, x\\) = \\(0\\.0, 0\\.0\\); D = 2 needs a real number or " *
+                               "2 values\$") build(2, (t, x, p) -> value)
+        end
+        # The entries are read before the length, so a value of the wrong length whose entries are
+        # no real numbers names its type, not its length.
+        for value in (1.0im, "abc", [1.0im, 2.0im, 3.0im])
+            @test length(value) != 2
+            @test_throws Regex("^ArgumentError: the forcing returns a value of type " *
+                               literal(string(typeof(value))) *
+                               " at \\(t, x\\) = \\(0\\.0, 0\\.0\\); D = 2 needs a real number or " *
+                               "2 values\$") build(2, (t, x, p) -> value)
+        end
+
+        # The check reads the forcing once, at the start of the time span and of the space span.
+        spans = (timespan = (0.5, 1.0), xspan = (0.25, 2.0))
+        calls = Tuple{Float64, Float64}[]
+        recording = (t, x, p) -> (push!(calls, (t, x)); 1.0)
+        build(1, recording; spans...)
+        @test calls == [(0.5, 0.25)]
+        corner = (t, x, p) -> (t == 0.5 && x == 0.25) ? [1.0, 2.0, 3.0] : 1.0
+        @test_throws r"^ArgumentError: the forcing returns 3 values at \(t, x\) = \(0\.5, 0\.25\); D = 2 needs a real number or 2 values$" build(
+            2, corner; spans...)
+        elsewhere = (t, x, p) -> (t == 0.5 && x == 0.25) ? 1.0 : [1.0, 2.0, 3.0]
+        @test build(2, elsewhere; spans...).forcing === elsewhere
+    end
+
     @testset "the grid of a mesh" for T in (Float64, Float32)
         # `n = round(Int, Δx / xstep) + 1`: the last mesh divides the span 27 times but for a
         # rounding error, so it holds 28 points, where a floor holds 27.

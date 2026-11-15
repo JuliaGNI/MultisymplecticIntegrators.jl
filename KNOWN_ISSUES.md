@@ -95,7 +95,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K36 · No test passes a zero or a negative `xstep` to a problem constructor.
 
-- location: `src/problems/lagrangian_problem.jl:84`
+- location: `src/problems/lagrangian_problem.jl:98`
 - evidence: `grep -rn 'xstep = 0[,)]\|xstep = zero\|xstep = -' test/` finds nothing, so every test
   problem passes a positive step and the guard `xh > zero(T) || throw(ArgumentError("xstep must be
   positive, got $xh"))` is unasserted: the mutant that deletes the line survived the round-2 run of
@@ -106,7 +106,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K37 · A `xstep` at the smallest positive `Float64` throws `InexactError`, not `ArgumentError`.
 
-- location: `src/problems/lagrangian_problem.jl:210`
+- location: `src/problems/lagrangian_problem.jl:261`
 - evidence: `Wave.problem(xstep = nextfloat(0.0))` passes the positive-step guard and throws
   `InexactError: Int64(Inf)` from `round(Int, (xsp[2] - xsp[1]) / xh)`, where the constructor's
   refusals are `ArgumentError`s. A stepped range of that step fails alike:
@@ -324,10 +324,10 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K51 · `integrate!` applies a method's initial guess twice, so a guess that reads state it writes starts the step from its own output.
 
-- location: `src/core/integrate.jl:90`, `src/core/slab_integrator.jl:655`
+- location: `src/core/integrate.jl:92`, `src/core/slab_integrator.jl:679`
 - evidence: `integrate_steps!` drives each step with the ecosystem's `integrate!(solstep, integrator)`,
   which calls `initial_guess!` (`GeometricIntegratorsBase`'s `src/integrate.jl:10`) and then
-  `integrate_step!`, which calls it again (`src/core/slab_integrator.jl:655`). A guess whose fit and
+  `integrate_step!`, which calls it again (`src/core/slab_integrator.jl:679`). A guess whose fit and
   target read the block's parameter vector measures its own first output on the second application.
   Measured on `Wave` over two steps, step 2's datum `φ₀` differs from step 1's solved `φ₁` by `5.90`
   at `Sx = St = 4` and by `0.427` at `Sx = 8`, `St = 10`, and by `0` through `integrate_step!`
@@ -398,9 +398,9 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K56 · The box scheme copies the initial level into its cache twice on the first step.
 
-- location: `src/baselines/box_scheme.jl:443` (`initial_guess!`) and `:494` (`read_initial_level!`)
+- location: `src/baselines/box_scheme.jl:460` (`initial_guess!`) and `:511` (`read_initial_level!`)
 - evidence: `initial_guess!` copies `sol.u`, `sol.v` and `sol.w` into the cache when `c.steps == 0`,
-  and `integrate_step!` then calls `read_initial_level!` (`:478`), which copies the same three
+  and `integrate_step!` then calls `read_initial_level!` (`:495`), which copies the same three
   arrays again. Removing the second copy makes a bare `integrate_step!` start from a zero cache, so
   the choice of the one copy that stays is a design decision.
 - kind: dead code
@@ -467,19 +467,102 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K61 · JET reports runtime dispatches in the box scheme's `residual!` and in the construction of its cache.
 
-- location: `src/baselines/box_scheme.jl:348`
+- location: `src/baselines/box_scheme.jl:356`
 - evidence: `JET.report_opt` with `target_modules = (MultisymplecticIntegrators,)` reports on
   `residual!` and on `cache(int, T)` of a `BoxScheme()` integrator at all four entries of
   `test/helpers/quality_cases.jl` (`Float64` and `Float32`, `Wave.problem` and
   `VectorWave.problem`): six reports on `residual!` and five on `cache` at each entry, on Julia
-  1.13.4 with JET 0.13.1. Five are in `check_box_density` (`:133`), which runs once per cache,
+  1.13.4 with JET 0.13.1. Five are in `check_box_density` (`:137`), which runs once per cache,
   when `cache(int, T)` builds it, and which `residual!` reaches through the cache: the call of its
-  closure `partials` (`:139`), whose `point_derivatives(…, Val(D))` takes the runtime
-  `D = components(problem)`, and the `all` of its checks at `:151`, `:168`, `:172` and `:179`,
+  closure `partials` (`:143`), whose `point_derivatives(…, Val(D))` takes the runtime
+  `D = components(problem)`, and the `all` of its checks at `:155`, `:172`, `:176` and `:183`,
   which read the partials that call returns. The sixth, on `residual!` alone, is the call through
-  the barrier `box_residual!(b, x, c, problem, Val(components(problem)))` (`:348`), dispatched at
+  the barrier `box_residual!(b, x, c, problem, Val(components(problem)), tc)` (`:356`), dispatched at
   run time one call below `residual!`, because `components(problem)` is a runtime integer. The
   eight checks of the testset "JET: box scheme" in `test/quality/jet.jl` are `@test_broken` for
   these findings, so a fix fails them as unexpected passes. Issue #70 tracks it.
 - kind: defect
 - found: 2026-11-15
+
+### K62 · The B-spline slab integrator on the wave equation is stable only up to about `c·h/Δx = 1`.
+
+- location: `src/core/weak_form.jl`
+- evidence: above the bound the high space modes grow by a factor `ρ` per step from round-off. The
+  spectral radius of the one-step map of `Wave` (`c = 0.5`) under `CoefficientRestriction` on
+  `2f916a2`, Julia 1.13.4, is `1` to round-off at every ratio measured up to `c·h/Δx = 1`, and
+  `ρ ≈ 3` at `c·h/Δx = 2` and `3.7` at 16 for degree 1, `1.13` at 2 and `5.7` at 16 for degree 2;
+  bisected at `nx = 40`, the bound is `1.0022` at degree 1 and `0.99988` at degree 2. At degree 1
+  the step is the Newmark scheme with `β = 1/6`, `γ = 1/2`, whose spectral radius equals the
+  measured one to about `1e-14`. Every step converges, so a short run looks right:
+  `test/verification/long_time_energy.jl` runs the three couplings at `c·h/Δx = 0.9` for 80 steps
+  under a largest `L²` error of `1e-2`, and records the largest error of 40 steps at `c·h/Δx = 4`
+  without a bound. The first rung of the self-difference ladder of
+  `test/verification/manufactured.jl`, `h = 0.1` at `nx = 20`, runs at `c·h/Δx = 1`, at the bound.
+  A stable time rule is not part of the package; it is planned as separate work.
+- kind: defect
+- found: 2026-11-14
+
+### K63 · Under the two weak couplings a non-finite residual ends `integrate` with a `SingularException`.
+
+- location: `src/core/integrate.jl`
+- evidence: `integrate` records a failed solve only for a `NonlinearSolverException` and rethrows
+  every other exception. On the manufactured problem of `test/helpers/manufactured.jl`
+  (`h = 0.1`, `nx = 10`, three steps, degree 2), a forcing that returns `NaN` or `Inf` makes
+  `WeakInitialCondition` and `WeakInitialAndBoundaryConditions` throw
+  `SingularException: matrix is singular; factorization failed. Zero pivot found at index 1` and
+  `… index 3`, from SimpleSolvers' LU, where `CoefficientRestriction` and the box scheme return
+  with 0 traces and `converged = Bool[]`. The unforced `Wave.problem(timespan = (0.0, 0.2),
+  timestep = 0.1, xstep = 0.1)` with a `NaN` initial velocity gives the same four outcomes, so the
+  forcing does not cause it. `test/verification/manufactured.jl` asserts the recorded run under
+  `CoefficientRestriction` and the box scheme only.
+- kind: defect
+- found: 2026-11-15
+
+### K65 · The inference and JET checks reach no forced residual.
+
+- location: `test/helpers/quality_cases.jl:95`
+- evidence: `quality_entry` builds every entry on `Wave.problem` or `VectorWave.problem`, whose
+  forcing is `nothing`, and passes `sol = nothing` to `residual!`, so `test/quality/inference.jl`
+  and `test/quality/jet.jl` never reach `add_forcing!`, the forced row of `box_residual!`,
+  `forcing_value`, `forcing_component` or the read of `sol.t`. The forced path is clean today: on
+  the manufactured problem of `test/helpers/manufactured.jl` with a solution step of the
+  integrator as `sol`, the ten methods of `QUALITY_METHODS` at `Float64` and `Float32` and
+  `D = 1, 2` pass `@inferred residual!` and `@inferred cache(int, T)` in 80 of 80 checks, and
+  `JET.report_opt` reports nothing on the nine slab methods and the six and five reports of K61 on
+  the box scheme (Julia 1.13.4, JET 0.13.1).
+- kind: missing test
+- found: #72
+
+### K66 · No forced run has a space span other than `[0, 1]` or a time span that starts away from `t = 0`.
+
+- location: `test/helpers/manufactured.jl:63`
+- evidence: every forced problem of the tests is `manufactured_problem`, on the spans
+  `(0, tend)` and `(0, 1)`. On `x ∈ [0, 1]` a physical position and a position on the unit
+  interval agree, so no test tells the space nodes at which the slab and the box scheme read the
+  forcing from their unit-interval counterparts. The slab reads it at the nodes `xnodes` of
+  `quadrature_points(c.ansatz)` and at the time `slab_start(problem, sol) + h·t̂`
+  (`add_forcing!` in `src/core/slab_integrator.jl`); the runs of several steps reach the time
+  offset, but none starts at a time other than `0`.
+- kind: missing test
+- found: #72
+
+### K67 · The fixed-boundary network's predictor integrates the unforced equation, and no text says so.
+
+- location: `src/couplings/fixed_boundary.jl:694`
+- evidence: `predictor_force!` computes the acceleration from `∂L/∂u` and `∂L/∂w` of the density
+  alone, and `src/couplings/fixed_boundary.jl` reads no forcing. The forcing enters `∂L/∂u` only in
+  `slab_residual!`, so the solved slab is forced and the initial guess of `Predictor()` is not.
+  Neither the docstring of the predictor nor the CHANGELOG entry of the forcing says so.
+- kind: docs
+- found: #72
+
+### K68 · The comment of the explicit-imports check leaves out the non-public names of `ForwardDiff`.
+
+- location: `test/quality/explicit_imports.jl:5`
+- evidence: the comment says the public-ness check is off because of the non-public names of
+  `GeometricIntegratorsBase` and `SimpleSolvers`, and lists them. The package also imports
+  `gradient` and `jacobian` (`src/MultisymplecticIntegrators.jl:11`) and `value`
+  (`src/baselines/box_scheme.jl:2`) from `ForwardDiff`; `Base.ispublic(ForwardDiff, :value)` is
+  `false` with ForwardDiff 1.4.8.
+- kind: docs
+- found: #72
