@@ -277,8 +277,8 @@ include("../helpers/testsetup.jl")
             @test eltype(components) === T
         end
 
-        # Any other length names the length and `D`; a value that is no real number and no
-        # collection names its type.
+        # A collection of real numbers of any other length names the length and `D`; any other
+        # value names its type, whatever its length.
         refused = [
             (1, [1.0, 2.0]),
             (2, [1.0]),
@@ -306,6 +306,15 @@ include("../helpers/testsetup.jl")
         literal(s) = replace(s, r"[\\^$.|?*+()\[\]{}]" => s"\\\0")
         for value in nonnumeric
             @test length(value) == 2
+            @test_throws Regex("^ArgumentError: the forcing returns a value of type " *
+                               literal(string(typeof(value))) *
+                               " at \\(t, x\\) = \\(0\\.0, 0\\.0\\); D = 2 needs a real number or " *
+                               "2 values\$") build(2, (t, x, p) -> value)
+        end
+        # The entries are read before the length, so a value of the wrong length whose entries are
+        # no real numbers names its type, not its length.
+        for value in (1.0im, "abc", [1.0im, 2.0im, 3.0im])
+            @test length(value) != 2
             @test_throws Regex("^ArgumentError: the forcing returns a value of type " *
                                literal(string(typeof(value))) *
                                " at \\(t, x\\) = \\(0\\.0, 0\\.0\\); D = 2 needs a real number or " *

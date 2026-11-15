@@ -496,7 +496,9 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   measured one to about `1e-14`. Every step converges, so a short run looks right:
   `test/verification/long_time_energy.jl` runs the three couplings at `c·h/Δx = 0.9` for 80 steps
   under a largest `L²` error of `1e-2`, and records the largest error of 40 steps at `c·h/Δx = 4`
-  without a bound. A stable time rule is not part of the package; it is planned as separate work.
+  without a bound. The first rung of the self-difference ladder of
+  `test/verification/manufactured.jl`, `h = 0.1` at `nx = 20`, runs at `c·h/Δx = 1`, at the bound.
+  A stable time rule is not part of the package; it is planned as separate work.
 - kind: defect
 - found: 2026-11-14
 
@@ -515,3 +517,52 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `CoefficientRestriction` and the box scheme only.
 - kind: defect
 - found: 2026-11-15
+
+### K65 · The inference and JET checks reach no forced residual.
+
+- location: `test/helpers/quality_cases.jl:95`
+- evidence: `quality_entry` builds every entry on `Wave.problem` or `VectorWave.problem`, whose
+  forcing is `nothing`, and passes `sol = nothing` to `residual!`, so `test/quality/inference.jl`
+  and `test/quality/jet.jl` never reach `add_forcing!`, the forced row of `box_residual!`,
+  `forcing_value`, `forcing_component` or the read of `sol.t`. The forced path is clean today: on
+  the manufactured problem of `test/helpers/manufactured.jl` with a solution step of the
+  integrator as `sol`, the ten methods of `QUALITY_METHODS` at `Float64` and `Float32` and
+  `D = 1, 2` pass `@inferred residual!` and `@inferred cache(int, T)` in 80 of 80 checks, and
+  `JET.report_opt` reports nothing on the nine slab methods and the six and five reports of K61 on
+  the box scheme (Julia 1.13.4, JET 0.13.1).
+- kind: missing test
+- found: #72
+
+### K66 · No forced run has a space span other than `[0, 1]` or a time span that starts away from `t = 0`.
+
+- location: `test/helpers/manufactured.jl:63`
+- evidence: every forced problem of the tests is `manufactured_problem`, on the spans
+  `(0, tend)` and `(0, 1)`. On `x ∈ [0, 1]` a physical position and a position on the unit
+  interval agree, so no test tells the space nodes at which the slab and the box scheme read the
+  forcing from their unit-interval counterparts. The slab reads it at the nodes `xnodes` of
+  `quadrature_points(c.ansatz)` and at the time `slab_start(problem, sol) + h·t̂`
+  (`add_forcing!` in `src/core/slab_integrator.jl`); the runs of several steps reach the time
+  offset, but none starts at a time other than `0`.
+- kind: missing test
+- found: #72
+
+### K67 · The fixed-boundary network's predictor integrates the unforced equation, and no text says so.
+
+- location: `src/couplings/fixed_boundary.jl:694`
+- evidence: `predictor_force!` computes the acceleration from `∂L/∂u` and `∂L/∂w` of the density
+  alone, and `src/couplings/fixed_boundary.jl` reads no forcing. The forcing enters `∂L/∂u` only in
+  `slab_residual!`, so the solved slab is forced and the initial guess of `Predictor()` is not.
+  Neither the docstring of the predictor nor the CHANGELOG entry of the forcing says so.
+- kind: docs
+- found: #72
+
+### K68 · The comment of the explicit-imports check leaves out the non-public names of `ForwardDiff`.
+
+- location: `test/quality/explicit_imports.jl:5`
+- evidence: the comment says the public-ness check is off because of the non-public names of
+  `GeometricIntegratorsBase` and `SimpleSolvers`, and lists them. The package also imports
+  `gradient` and `jacobian` (`src/MultisymplecticIntegrators.jl:11`) and `value`
+  (`src/baselines/box_scheme.jl:2`) from `ForwardDiff`; `Base.ispublic(ForwardDiff, :value)` is
+  `false` with ForwardDiff 1.4.8.
+- kind: docs
+- found: #72

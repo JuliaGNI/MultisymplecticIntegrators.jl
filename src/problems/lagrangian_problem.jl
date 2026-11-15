@@ -118,13 +118,13 @@ end
 function _check_forcing(forcing, t, x, params, D::Integer)
     value = forcing(t, x, params)
     value isa Real && return nothing
-    if applicable(length, value) && length(value) != D
-        found = "$(length(value)) values"
-    elseif applicable(length, value) && all(entry -> entry isa Real, value) &&
-           applicable(getindex, value, 1)
-        return nothing
-    else
+    if !(applicable(length, value) && applicable(getindex, value, 1) &&
+         all(entry -> entry isa Real, value))
         found = "a value of type $(typeof(value))"
+    elseif length(value) != D
+        found = "$(length(value)) values"
+    else
+        return nothing
     end
     throw(ArgumentError("the forcing returns $found at (t, x) = ($t, $x); " *
                         "D = $D needs a real number or $D values"))
