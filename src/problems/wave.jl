@@ -299,11 +299,15 @@ function problem(; T::Type = Float64, params = default_parameters(),
     tspan = (T(timespan[1]), T(timespan[2]))
     xsp = (T(xspan[1]), T(xspan[2]))
     # `map(hcat, …)` over the components' named tuples lays each entry's column side by side, and
-    # `map(vcat, …)` the side data's `D`-vectors.
+    # `map(vcat, …)` the side data's `D`-vectors. The closures capture the component count as
+    # `Val(D)`, so that `ntuple` builds a tuple of known length and their return type is inferred.
+    components = Val(D)
     ics = (x, p) -> map(hcat,
-        (Wave.initial_data(x, component_parameters(p, i), 1, tspan[1]) for i in 1:D)...)
+        ntuple(i -> Wave.initial_data(x, component_parameters(p, i), 1, tspan[1]),
+            components)...)
     bcs = (t, p) -> map((sides...) -> map(vcat, sides...),
-        (Wave.side_data(t, xsp, component_parameters(p, i), 1) for i in 1:D)...)
+        ntuple(i -> Wave.side_data(t, xsp, component_parameters(p, i), 1),
+            components)...)
     exact(f) = (t, x, p) -> mapreduce(i -> f(t, x, component_parameters(p, i)), vcat, 1:D)
     s = (u = exact(field_exact(Wave.solution_u, 1)),
         v = exact(field_exact(Wave.solution_v, 1)),
