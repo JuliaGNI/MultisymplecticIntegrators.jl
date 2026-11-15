@@ -440,8 +440,10 @@ The slab cache at element type `ST`, and at the problem's own element type.
 
 The ecosystem's accessor takes the element type as a value, which the compiler cannot specialise on,
 so the type assertion of the cache dictionary rebuilds the cache's type at every lookup. These two
-methods take it as a type parameter, which lets that assertion fold away, so that the lookup adds no
-allocation to one slab's residual evaluation. The transform of [`HardConstraintLifting`](@ref)
+methods take it as a type parameter, which lets that assertion fold away. The lookup then adds no
+allocation to one slab's residual evaluation, except for a [`NetworkAnsatz`](@ref): the type of its
+block names the type of a parameter set, which `ansatz_data_type` builds to read that type, and the
+compiler keeps the build in every lookup. The transform of [`HardConstraintLifting`](@ref)
 allocates on its own: it calls the problem's boundary function at every time node of the slab, and
 it builds its scratch arrays for a coefficient ansatz at every call.
 """

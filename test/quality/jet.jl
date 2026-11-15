@@ -11,16 +11,22 @@ using Test
 
 include("../helpers/quality_cases.jl")
 
-const JET_WORKS = isdefined(JET, :JET_AVAILABLE) ? JET.JET_AVAILABLE : JET.JET_LOADABLE
+const JET_WORKS = JET.JET_AVAILABLE
 
 function residual_reports(args)
     JET.get_reports(JET.report_opt(residual!, typeof.(args);
         target_modules = (MultisymplecticIntegrators,)))
 end
 
+# The call `cache(int, T)` with `T` known at the call site, as the integrator makes it. A reflection
+# on `cache` at `Type{T}` analyses, from Julia 1.14, a specialisation that no real call compiles
+# (JuliaLang/julia#63965), and reports runtime dispatches that the real call does not make (issue
+# #74). The static parameter of `Val{T}` gives the call the signature that a real call compiles.
+cache_at(int, ::Val{T}) where {T} = cache(int, T)
+
 function cache_reports(int, T)
-    JET.get_reports(JET.report_opt(cache, Tuple{typeof(int), Type{T}};
-        target_modules = (MultisymplecticIntegrators,)))
+    JET.get_reports(JET.report_opt(cache_at, Tuple{typeof(int), Val{T}};
+        target_modules = (MultisymplecticIntegrators, @__MODULE__)))
 end
 
 if !JET_WORKS

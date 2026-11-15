@@ -770,7 +770,11 @@ makes it worth keeping.
   (all but a `:last_layer` network under `HardConstraintLifting`), and `BoxScheme()`, in `Float64`
   and `Float32`, on `Wave.problem` (`D = 1`) and `VectorWave.problem` (`D = 2`). The analysis of
   `cache` follows the cache's construction, so a runtime dispatch in a check that runs when the
-  cache is built counts.
+  cache is built counts. JET analyses `cache(int, T)` as the integrator calls it, with `T` known at
+  the call site, through `cache_at(int, Val(T))`. A reflection at `Type{T}` analyses, from Julia
+  1.14, a specialisation that no real call compiles (JuliaLang/julia#63965): on 1.14.0-beta1 it
+  failed all 36 `cache` checks of the nine slab methods with runtime dispatches that the real call
+  does not make (issue #74).
   The box scheme's eight JET checks are `@test_broken`, for the findings of known issue K61, and
   `jet.jl` records one `@test_skip` on a Julia where JET does not run. JET `0.13` is a test
   dependency.
