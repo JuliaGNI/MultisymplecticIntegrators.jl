@@ -55,6 +55,8 @@ if "invariants" in GROUPS
     @safetestset "Property: linear control" include("verification/properties/linear_control.jl")
     @safetestset "Property: Noether charge" include("verification/properties/noether.jl")
     @safetestset "Property: symmetry" include("verification/properties/symmetry.jl")
+    @safetestset "Manufactured solutions" include("verification/manufactured.jl")
+    @safetestset "Long-time energy" include("verification/long_time_energy.jl")
 end
 
 if "fixedboundary" in GROUPS

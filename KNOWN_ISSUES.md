@@ -464,3 +464,18 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   #67. The bound is not derived from the error of the sum over the two components.
 - kind: defect
 - found: #67
+
+### K62 · The B-spline slab integrator on the wave equation is stable only for `c·h/Δx ≤ 1`.
+
+- location: `src/core/weak_form.jl`
+- evidence: above the bound the high space modes grow by a factor `ρ` per step from round-off. The
+  spectral radius of the one-step map of `Wave` (`c = 0.5`) under `CoefficientRestriction` on
+  `2f916a2`, Julia 1.13.4, is `1` to round-off up to `c·h/Δx = 1`, and `ρ ≈ 3` at `c·h/Δx = 2` and
+  `3.7` at 16 for degree 1, `1.13` at 2 and `5.7` at 16 for degree 2. At degree 1 the step is the
+  Newmark scheme with `β = 1/6`, `γ = 1/2`, whose spectral radius equals the measured one to about
+  `1e-14`. Every step converges, so a short run looks right: `test/verification/long_time_energy.jl`
+  runs the three couplings at `c·h/Δx = 0.9` for 80 steps under a largest `L²` error of `1e-2`, and
+  records the largest error of 40 steps at `c·h/Δx = 4` without a bound. A stable time rule is not
+  part of the package.
+- kind: defect
+- found: 2026-11-14

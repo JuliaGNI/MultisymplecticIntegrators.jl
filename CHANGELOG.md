@@ -734,6 +734,30 @@ makes it worth keeping.
   between the two. Its measurements are the evidence of known issue K59: with `SymbolicUtils`
   4.56.1 the generated code follows the process's `GC.gc()` history, so the cache keeps a run
   reproducible within one process and not from one process to the next.
+- **`LagrangianPDEProblem` takes a forcing.** The keyword `forcing = nothing` stores a
+  `(t, x, params)` function, in a new last field with its own trailing type parameter, that returns
+  the `D` components' values of a load at a point: a number serves every component, a vector or a
+  tuple gives one value per component. The load is added to `∂L/∂u`, so on a density
+  `λ(½|v|² − ½c²|w|² − V(u))` the forced equation is `λ(u_tt − c² u_xx + V′(u)) = f`; the density
+  is unchanged. The slab integrator adds it at every quadrature node of the slab, at the node's
+  absolute time, in the residual and in the update, so the top row that `CoefficientRestriction`
+  hands on carries it; the box scheme adds it at each box centre. Its values are converted to the
+  problem's element type. The constructor reads the forcing once and throws an `ArgumentError` for
+  a value of the wrong length. Without a forcing the residual reads no time and every run gives the
+  result it gave before.
+- **`test/verification/manufactured.jl` measures the orders of the B-spline couplings and the box
+  scheme on a manufactured solution.** The quartic wave equation is forced so that
+  `u*(t, x) = sin(πx) cos t + ½ sin(2πx) sin t` solves it, at `D = 1` and `D = 2`. The file asserts
+  that every step converges and the observed orders within `0.1`: `p + 1` in `Δx` against `u*` and
+  `2p` in `h` on the self-difference of the top traces for degrees `p = 1, 2` under
+  `CoefficientRestriction`, `WeakInitialCondition` and `WeakInitialAndBoundaryConditions`, and 2 in
+  `Δx` and 2 in `h` for the box scheme, with every slab run at `c·h/Δx ≤ 1`.
+- **`test/verification/long_time_energy.jl` runs `Wave` over ten periods and below the slab's
+  stability bound.** The largest energy error over the last period is at most twice the largest
+  over the first under the three couplings and the box scheme; at `c·h/Δx = 0.9` the largest `L²`
+  error of 80 steps is at most `1e-2` at degrees 1 and 2; the run at `c·h/Δx = 4` is recorded
+  without a bound. The bound itself is the known issue K62. Both files run in the `invariants`
+  group, and write every error, order and ratio with `@info`.
 
 ### Changed
 
