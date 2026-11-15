@@ -40,14 +40,14 @@ point and the component-major vector of length `D * length(x)` at a grid.
 
 `forcing` is `nothing` where the problem has no forcing, and otherwise a `(t, x, params)` function
 that returns the `D` components' values of a load at the point `(t, x)`: a number serves every
-component, and a collection of length `D`, such as a vector or a tuple, gives one value per
-component, entry `d` component `d`'s, as the closed forms of [`field_exact`](@ref) do. The load is
-added to `∂L/∂u` of each component, so it enters the Euler–Lagrange equation
+component, and a collection of `D` numbers read by index, such as a vector or a tuple, gives one
+value per component, entry `d` component `d`'s, as the closed forms of [`field_exact`](@ref) do.
+The load is added to `∂L/∂u` of each component, so it enters the Euler–Lagrange equation
 `∂ₜ(∂L/∂v) + ∂ₓ(∂L/∂w) − ∂L/∂u = f`: on a density `λ(½|v|² − ½c²|w|² − V(u))` the forced equation
 is `λ(u_tt − c² u_xx + V′(u)) = f`. The density is unchanged. The constructor reads the forcing
 once, at `(timespan[1], xspan[1])`, and throws an `ArgumentError` for a value that is neither a
-number nor a collection of length `D`. The integrators convert its values to the element type `T`
-where they enter the residual.
+number nor such a collection. The integrators convert its values to the element type `T` where
+they enter the residual.
 
 `timespan`, `timestep`, `xspan` and `xstep` are converted to the element type `T` of `timespan`.
 The functions of the problem take its parameters, never a module-level default.
@@ -114,13 +114,15 @@ function LagrangianPDEProblem(density;
 end
 
 # A forcing's value at one point is a number, which serves every component, or a collection of one
-# value per component.
+# number per component, read by index.
 function _check_forcing(forcing, t, x, params, D::Integer)
     value = forcing(t, x, params)
     value isa Number && return nothing
-    if applicable(length, value)
-        length(value) == D && return nothing
+    if applicable(length, value) && length(value) != D
         found = "$(length(value)) values"
+    elseif applicable(length, value) && all(entry -> entry isa Number, value) &&
+           all(d -> applicable(getindex, value, d), 1:D)
+        return nothing
     else
         found = "a value of type $(typeof(value))"
     end

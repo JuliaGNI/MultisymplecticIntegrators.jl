@@ -1,3 +1,6 @@
+# The value of a `Dual`, and a plain number itself: the forcing's row divides by the value of `λ`.
+import ForwardDiff: value
+
 """
     BoxScheme() <: SpaceTimeMethod
 
@@ -329,9 +332,6 @@ function assemble_new!(c::BoxSchemeCache, x::AbstractVector, problem::Lagrangian
     end
     return nothing
 end
-
-# The value of a `Dual`, and a plain number itself: the forcing's row divides by the value of `λ`.
-import ForwardDiff: value
 
 """
     box_residual!(b, x, cache, problem, sol)

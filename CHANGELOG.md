@@ -737,15 +737,15 @@ makes it worth keeping.
 - **`LagrangianPDEProblem` takes a forcing.** The keyword `forcing = nothing` stores a
   `(t, x, params)` function, in a new last field with its own trailing type parameter, that returns
   the `D` components' values of a load at a point: a number serves every component, a collection of
-  length `D`, such as a vector or a tuple, gives one value per component. The load is added to
-  `∂L/∂u`, so on a density
+  `D` numbers read by index, such as a vector or a tuple, gives one value per component. The load
+  is added to `∂L/∂u`, so on a density
   `λ(½|v|² − ½c²|w|² − V(u))` the forced equation is `λ(u_tt − c² u_xx + V′(u)) = f`; the density
   is unchanged. The slab integrator adds it at every quadrature node of the slab, at the node's
   absolute time, in the residual and in the update, so the top row that `CoefficientRestriction`
   hands on carries it; the box scheme adds it at each box centre. Its values are converted to the
   problem's element type. The constructor reads the forcing once and throws an `ArgumentError` for
-  a value of the wrong length. Without a forcing the residual reads no time and every run gives the
-  result it gave before. A non-finite forcing value is not guarded: no step converges, and
+  any other value. Without a forcing the residual reads no time and every run gives the result it
+  gave before. A non-finite forcing value is not guarded: no step converges, and
   `CoefficientRestriction` and the box scheme return the run's record, while the two weak couplings
   raise from the linear solve (known issue K63).
 - **`test/verification/manufactured.jl` measures the orders of the B-spline couplings and the box

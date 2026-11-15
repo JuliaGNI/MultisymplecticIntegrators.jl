@@ -292,6 +292,18 @@ include("../helpers/testsetup.jl")
         end
         @test_throws r"^ArgumentError: the forcing returns a value of type Nothing at" build(
             1, (t, x, p) -> nothing)
+        # A value of length `D` is refused where its entries are no numbers, or where its
+        # components cannot be read by index.
+        nonnumeric = ["ab", ['a', 'b'], Any[1.0, nothing], Set([1.0, 2.0]),
+            Dict(:a => 1.0, :b => 2.0), (i for i in 1.0:2.0)]
+        literal(s) = replace(s, r"[\\^$.|?*+()\[\]{}]" => s"\\\0")
+        for value in nonnumeric
+            @test length(value) == 2
+            @test_throws Regex("^ArgumentError: the forcing returns a value of type " *
+                               literal(string(typeof(value))) *
+                               " at \\(t, x\\) = \\(0\\.0, 0\\.0\\); D = 2 needs a number or " *
+                               "2 values\$") build(2, (t, x, p) -> value)
+        end
 
         # The check reads the forcing once, at the start of the time span and of the space span.
         spans = (timespan = (0.5, 1.0), xspan = (0.25, 2.0))

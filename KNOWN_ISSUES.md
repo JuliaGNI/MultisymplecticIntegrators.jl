@@ -477,8 +477,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   measured one to about `1e-14`. Every step converges, so a short run looks right:
   `test/verification/long_time_energy.jl` runs the three couplings at `c·h/Δx = 0.9` for 80 steps
   under a largest `L²` error of `1e-2`, and records the largest error of 40 steps at `c·h/Δx = 4`
-  without a bound. A stable time rule is not part of the package; it is the follow-up task
-  `Make the B-spline slab step unconditionally stable`.
+  without a bound. A stable time rule is not part of the package; it is planned as separate work.
 - kind: defect
 - found: 2026-11-14
 
