@@ -496,3 +496,16 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `CoefficientRestriction` and the box scheme only.
 - kind: defect
 - found: 2026-11-15
+
+### K64 · The construction check accepts a complex forcing value, and every run then throws an `InexactError`.
+
+- location: `src/problems/lagrangian_problem.jl:120`
+- evidence: `_check_forcing` accepts any `Number`, and `forcing_component` converts the value to
+  the problem's real element type where it enters the residual
+  (`src/problems/lagrangian_problem.jl:148`). On the manufactured problem of
+  `test/helpers/manufactured.jl` (`D = 1`, `h = 0.1`, `nx = 10`, two steps), a forcing that
+  returns `1.0im` builds the problem, and `CoefficientRestriction` at degree 1 and the box scheme
+  both throw `InexactError`; a forcing that returns `[1 + 0im, 2 + 0im]` at `D = 2` runs. A check
+  of `Real` in place of `Number` would refuse such a value at construction.
+- kind: found late
+- found: 2026-11-15
