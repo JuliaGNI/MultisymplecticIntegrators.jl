@@ -1,5 +1,5 @@
 # Inference of the two entry points of the Newton solve, `residual!` and `cache(int, T)`, for
-# every method at both element types and both component counts.
+# every method of `QUALITY_METHODS` at both element types and both component counts.
 
 using MultisymplecticIntegrators
 using GeometricIntegratorsBase: cache, residual!

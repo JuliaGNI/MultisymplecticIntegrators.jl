@@ -1,6 +1,7 @@
-# The entry points of the inference and JET checks: the ten methods that the package constructs —
-# the nine pairs of an ansatz and a coupling that the slab integrator accepts, and the box scheme —
-# each built as a `GeometricIntegrator` at `T ∈ (Float64, Float32)` and `D ∈ (1, 2)`, on
+# The entry points of the inference and JET checks: ten methods — nine of the ten pairs of an
+# ansatz and a coupling that the slab integrator accepts, with a network's two modes counted apart,
+# all but the `:last_layer` network under the hard-constraint lifting, and the box scheme — each
+# built as a `GeometricIntegrator` at `T ∈ (Float64, Float32)` and `D ∈ (1, 2)`, on
 # `Wave.problem` for `D = 1` and on `VectorWave.problem` for `D = 2`. Every method is built at
 # a small size, because the checks read types, not values.
 

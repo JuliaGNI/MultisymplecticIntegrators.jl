@@ -1,7 +1,8 @@
 # JET's optimisation analysis of the two entry points of the Newton solve, `residual!` and
-# `cache(int, T)`, for every method at both element types and both component counts. The analysis
-# of `cache` follows the cache dictionary's `getindex` into the construction of the cache, so a
-# runtime dispatch in a check that runs when the cache is built counts as a report.
+# `cache(int, T)`, for every method of `QUALITY_METHODS` at both element types and both component
+# counts. The analysis of `cache` follows the cache dictionary's `getindex` into the construction
+# of the cache, so a runtime dispatch in a check that runs when the cache is built counts as a
+# report.
 
 using JET
 using MultisymplecticIntegrators
