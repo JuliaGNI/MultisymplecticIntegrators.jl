@@ -772,13 +772,13 @@ makes it worth keeping.
   `Wave.problem` (`D = 1`) and `VectorWave.problem` (`D = 2`) with `sol = nothing`; the forced ones
   on the manufactured problem of `test/helpers/manufactured.jl`, whose forcing returns a real number
   at `D = 1` and one value per component at `D = 2`, with the current state of a solution step as
-  `sol`, so that the forcing reads its time. The analysis of
-  `cache` follows the cache's construction, so a runtime dispatch in a check that runs when the
-  cache is built counts. JET analyses `cache(int, T)` as the integrator calls it, with `T` known at
-  the call site, through `cache_at(int, Val(T))`. A reflection at `Type{T}` analyses, from Julia
-  1.14, a specialisation that no real call compiles (JuliaLang/julia#63965): on 1.14.0-beta1 it
-  failed all 36 `cache` checks of the nine slab methods with runtime dispatches that the real call
-  does not make (issue #74).
+  `sol`, so that the forcing reads its time. The analysis of `cache` follows the cache's
+  construction, so a runtime dispatch in a check that runs when the cache is built counts. JET
+  analyses `cache(int, T)` as the integrator calls it, with `T` known at the call site, through
+  `cache_at(int, Val(T))`. A reflection at `Type{T}` analyses, from Julia 1.14, a specialisation
+  that no real call compiles (JuliaLang/julia#63965): on 1.14.0-beta1 it failed all 36 `cache`
+  checks of the nine slab methods on the 40 unforced entries with runtime dispatches that the real
+  call does not make (issue #74).
   The box scheme's sixteen JET checks are `@test_broken`, for the findings of known issue K61, and
   `jet.jl` records one `@test_skip` on a Julia where JET does not run. JET `0.13` is a test
   dependency.
