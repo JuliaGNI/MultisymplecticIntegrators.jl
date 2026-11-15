@@ -567,7 +567,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: docs
 - found: #72
 
-### K65 · `test/quality/inference.jl` runs longer than the 60 s that a `core` file may take.
+### K69 · `test/quality/inference.jl` runs longer than the 60 s that a `core` file may take.
 
 - location: `test/runtests.jl:12`
 - evidence: the file runs first of the two quality files in `core`, so it pays the first
@@ -582,7 +582,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: #71
 
-### K66 · The `JET.JET_LOADABLE` branch of `JET_WORKS` cannot run.
+### K70 · The `JET.JET_LOADABLE` branch of `JET_WORKS` cannot run.
 
 - location: `test/quality/jet.jl:14`
 - evidence: `const JET_WORKS = isdefined(JET, :JET_AVAILABLE) ? JET.JET_AVAILABLE :
@@ -594,7 +594,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: dead code
 - found: #71
 
-### K67 · The `ArgumentError` of `quality_problem` for a `D` other than 1 and 2 cannot be thrown.
+### K71 · The `ArgumentError` of `quality_problem` for a `D` other than 1 and 2 cannot be thrown.
 
 - location: `test/helpers/quality_cases.jl:22`
 - evidence: `quality_problem(T, D)` has one caller, `quality_entry` (`:92`), and the two callers of
@@ -604,7 +604,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: dead code
 - found: #71
 
-### K68 · A cache lookup of a `NetworkAnsatz` integrator allocates.
+### K72 · A cache lookup of a `NetworkAnsatz` integrator allocates.
 
 - location: `src/ansatz/network.jl:596`
 - evidence: `ansatz_data_type` of a `NetworkAnsatz` returns
