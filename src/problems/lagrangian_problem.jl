@@ -134,7 +134,7 @@ end
     forcing_value(problem, t, x)
 
 The problem's forcing at the point `(t, x)`, read with the problem's parameters, as the forcing
-returns it: a number, or one value per component. [`forcing_component`](@ref) takes one
+returns it: a real number, or one value per component. [`forcing_component`](@ref) takes one
 component of it.
 """
 forcing_value(problem::LagrangianPDEProblem, t, x) = problem.forcing(t, x, problem.params)

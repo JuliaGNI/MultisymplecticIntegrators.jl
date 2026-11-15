@@ -237,7 +237,8 @@ include("../helpers/testsetup.jl")
         @test Wave.problem().forcing === nothing
         @test VectorWave.problem().forcing === nothing
 
-        # A number serves every component, and a collection gives one value per component.
+        # A real number serves every component, and a collection of real numbers gives one value
+        # per component.
         accepted = [
             (1, 2.0),
             (1, [2.0]),
@@ -276,8 +277,8 @@ include("../helpers/testsetup.jl")
             @test eltype(components) === T
         end
 
-        # Any other length names the length and `D`; a value that is no number and no collection
-        # names its type.
+        # Any other length names the length and `D`; a value that is no real number and no
+        # collection names its type.
         refused = [
             (1, [1.0, 2.0]),
             (2, [1.0]),

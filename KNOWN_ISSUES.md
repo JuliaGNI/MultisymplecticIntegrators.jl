@@ -324,7 +324,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K51 · `integrate!` applies a method's initial guess twice, so a guess that reads state it writes starts the step from its own output.
 
-- location: `src/core/integrate.jl:90`, `src/core/slab_integrator.jl:679`
+- location: `src/core/integrate.jl:92`, `src/core/slab_integrator.jl:679`
 - evidence: `integrate_steps!` drives each step with the ecosystem's `integrate!(solstep, integrator)`,
   which calls `initial_guess!` (`GeometricIntegratorsBase`'s `src/integrate.jl:10`) and then
   `integrate_step!`, which calls it again (`src/core/slab_integrator.jl:679`). A guess whose fit and
