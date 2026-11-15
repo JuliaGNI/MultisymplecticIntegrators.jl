@@ -762,20 +762,24 @@ makes it worth keeping.
   without a bound. The bound itself is the known issue K62. Both files run in the `invariants`
   group, and write every error, order and ratio with `@info`.
 - **Inference and JET checks of the Newton solve's two entry points.** `test/quality/inference.jl`
-  asserts `@inferred residual!(b, x, nothing, params, int)` and `@inferred cache(int, T)`, and
+  asserts `@inferred residual!(b, x, sol, params, int)` and `@inferred cache(int, T)`, and
   `test/quality/jet.jl` asserts that `JET.report_opt` with
   `target_modules = (MultisymplecticIntegrators,)` reports nothing on either. Both run in the `core`
-  group over 40 entries, built in `test/helpers/quality_cases.jl`: nine of the ten pairs of an
+  group over 80 entries, built in `test/helpers/quality_cases.jl`: nine of the ten pairs of an
   ansatz and a coupling that `SpaceTimeGalerkin` accepts, with a network's two modes counted apart
   (all but a `:last_layer` network under `HardConstraintLifting`), and `BoxScheme()`, in `Float64`
-  and `Float32`, on `Wave.problem` (`D = 1`) and `VectorWave.problem` (`D = 2`). The analysis of
+  and `Float32`, with `D = 1` and `D = 2`, unforced and forced. The unforced entries run on
+  `Wave.problem` (`D = 1`) and `VectorWave.problem` (`D = 2`) with `sol = nothing`; the forced ones
+  on the manufactured problem of `test/helpers/manufactured.jl`, whose forcing returns a real number
+  at `D = 1` and one value per component at `D = 2`, with the current state of a solution step as
+  `sol`, so that the forcing reads its time. The analysis of
   `cache` follows the cache's construction, so a runtime dispatch in a check that runs when the
   cache is built counts. JET analyses `cache(int, T)` as the integrator calls it, with `T` known at
   the call site, through `cache_at(int, Val(T))`. A reflection at `Type{T}` analyses, from Julia
   1.14, a specialisation that no real call compiles (JuliaLang/julia#63965): on 1.14.0-beta1 it
   failed all 36 `cache` checks of the nine slab methods with runtime dispatches that the real call
   does not make (issue #74).
-  The box scheme's eight JET checks are `@test_broken`, for the findings of known issue K61, and
+  The box scheme's sixteen JET checks are `@test_broken`, for the findings of known issue K61, and
   `jet.jl` records one `@test_skip` on a Julia where JET does not run. JET `0.13` is a test
   dependency.
 
@@ -901,6 +905,16 @@ makes it worth keeping.
   largest scalar row. On the `Julia 1 - windows-latest` job the difference in `Float64` is
   `3.997e-15`, about `11.4 eps`, above the former `10 eps`. The bound is now `16 eps(T)`; the
   other bounds of the testset stay at `10 eps(T)`. This closes the known issue K60.
+- **The inference and JET checks reach the forced residual, and `ForwardDiff.value` is imported in
+  the module file.** `test/quality/inference.jl` and `test/quality/jet.jl` run each of their 40
+  former entries a second time on a forced problem, with a solution step as `sol`, so that they
+  reach `add_forcing!`, the forced row of `box_residual!`, `forcing_value`, `forcing_component`
+  and the read of the step's time; the box scheme's forced JET checks are `@test_broken` for K61,
+  as its unforced ones are. `import ForwardDiff: value` moves from `src/baselines/box_scheme.jl`
+  to the module's own `import ForwardDiff` line, and the comment of
+  `test/quality/explicit_imports.jl` lists every non-public name the package imports, by owner: the
+  23 that `check_all_explicit_imports_are_public` reports, where it named nine before. This closes
+  the known issues K65 and K68.
 - **`VectorWave.problem`'s initial and side data have an inferred return type.** Its
   `ics_function` and `bcs_function` build their tuple of components with `ntuple` over the
   captured `Val(D)` in place of a splatted generator over `1:D`, whose length inference cannot

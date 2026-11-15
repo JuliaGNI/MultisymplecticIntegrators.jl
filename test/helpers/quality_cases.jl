@@ -1,19 +1,26 @@
 # The entry points of the inference and JET checks: ten methods — nine of the ten pairs of an
 # ansatz and a coupling that the slab integrator accepts, with a network's two modes counted apart,
 # all but the `:last_layer` network under the hard-constraint lifting, and the box scheme — each
-# built as a `GeometricIntegrator` at `T ∈ (Float64, Float32)` and `D ∈ (1, 2)`, on
-# `Wave.problem` for `D = 1` and on `VectorWave.problem` for `D = 2`. Every method is built at
-# a small size, because the checks read types, not values.
+# built as a `GeometricIntegrator` at `T ∈ (Float64, Float32)` and `D ∈ (1, 2)`, unforced and
+# forced. The unforced problem is `Wave.problem` for `D = 1` and `VectorWave.problem` for `D = 2`;
+# the forced one is the manufactured problem of `manufactured.jl`, whose forcing returns a real
+# number at `D = 1` and one value per component at `D = 2`, the two forms a forcing may take. Every
+# method is built at a small size, because the checks read types, not values.
 
 using MultisymplecticIntegrators
 using SimpleSplines: Dirichlet, Free
 using Symbolics: Num, @variables
-using GeometricIntegratorsBase: GeometricIntegrator, cache, nlsolution
+using GeometricIntegratorsBase: GeometricIntegrator, cache, current, nlsolution,
+                                solutionstep
 using GeometricBase: parameters
 using GeometricEquations: problem as gproblem
+using GeometricSolutions: GeometricSolution
+
+include("manufactured.jl")
 
 const QUALITY_TYPES = (Float64, Float32)
 const QUALITY_COMPONENTS = (1, 2)
+const QUALITY_FORCED = (false, true)
 
 function quality_problem(T, D)
     kwargs = (T = T, timespan = (zero(T), T(0.2)), timestep = T(0.1), xstep = T(0.05))
@@ -82,15 +89,29 @@ const QUALITY_METHODS = [
 ]
 
 """
-    quality_entry(make, T, D)
+    quality_forced_problem(T, D)
 
-The integrator of the method that `make(T, D)` builds on the problem of `T` and `D`, and the
-arguments `(b, x, nothing, params, int)` of its `residual!`: `x` is a copy of the cache's
-nonlinear solution and `b` a buffer of its shape.
+The manufactured problem with `D` components in the element type `T`, on the spans and steps of
+`quality_problem`.
 """
-function quality_entry(make, T, D)
-    int = GeometricIntegrator(quality_problem(T, D), make(T, D))
+function quality_forced_problem(T, D)
+    manufactured_problem(; D = D, timestep = T(0.1), nx = 20, T = T, tend = 0.2)
+end
+
+"""
+    quality_entry(make, T, D, forced)
+
+The integrator of the method that `make(T, D)` builds on the problem of `T` and `D`, forced or
+not, and the arguments `(b, x, sol, params, int)` of its `residual!`: `x` is a copy of the cache's
+nonlinear solution and `b` a buffer of its shape. `sol` is `nothing` on the unforced problem, which
+does not read it, and the current state of a solution step on the forced one, whose forcing reads
+its time.
+"""
+function quality_entry(make, T, D, forced::Bool)
+    problem = forced ? quality_forced_problem(T, D) : quality_problem(T, D)
+    int = GeometricIntegrator(problem, make(T, D))
+    sol = forced ? current(solutionstep(int, GeometricSolution(problem)[0])) : nothing
     x = copy(nlsolution(cache(int)))
     b = similar(x)
-    return int, (b, x, nothing, parameters(gproblem(int)), int)
+    return int, (b, x, sol, parameters(gproblem(int)), int)
 end
