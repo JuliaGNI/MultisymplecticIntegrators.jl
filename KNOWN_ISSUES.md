@@ -465,6 +465,25 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: #67
 
+### K61 · JET reports runtime dispatches in the box scheme's `residual!` and in the construction of its cache.
+
+- location: `src/baselines/box_scheme.jl:356`
+- evidence: `JET.report_opt` with `target_modules = (MultisymplecticIntegrators,)` reports on
+  `residual!` and on `cache(int, T)` of a `BoxScheme()` integrator at all four entries of
+  `test/helpers/quality_cases.jl` (`Float64` and `Float32`, `Wave.problem` and
+  `VectorWave.problem`): six reports on `residual!` and five on `cache` at each entry, on Julia
+  1.13.4 with JET 0.13.1. Five are in `check_box_density` (`:137`), which runs once per cache,
+  when `cache(int, T)` builds it, and which `residual!` reaches through the cache: the call of its
+  closure `partials` (`:143`), whose `point_derivatives(…, Val(D))` takes the runtime
+  `D = components(problem)`, and the `all` of its checks at `:155`, `:172`, `:176` and `:183`,
+  which read the partials that call returns. The sixth, on `residual!` alone, is the call through
+  the barrier `box_residual!(b, x, c, problem, Val(components(problem)), tc)` (`:356`), dispatched at
+  run time one call below `residual!`, because `components(problem)` is a runtime integer. The
+  eight checks of the testset "JET: box scheme" in `test/quality/jet.jl` are `@test_broken` for
+  these findings, so a fix fails them as unexpected passes. Issue #70 tracks it.
+- kind: defect
+- found: 2026-11-15
+
 ### K62 · The B-spline slab integrator on the wave equation is stable only up to about `c·h/Δx = 1`.
 
 - location: `src/core/weak_form.jl`
