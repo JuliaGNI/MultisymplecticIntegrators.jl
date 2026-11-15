@@ -896,7 +896,7 @@ makes it worth keeping.
   compares the hidden rows of the two-component run with twice the scalar run's, relative to the
   largest scalar row. On the `Julia 1 - windows-latest` job the difference in `Float64` is
   `3.997e-15`, about `11.4 eps`, above the former `10 eps`. The bound is now `16 eps(T)`; the
-  other bounds of the testset stay at `10 eps(T)`. This closes known issue K60.
+  other bounds of the testset stay at `10 eps(T)`. This closes the known issue K60.
 - **`VectorWave.problem`'s initial and side data have an inferred return type.** Its
   `ics_function` and `bcs_function` build their tuple of components with `ntuple` over the
   captured `Val(D)` in place of a splatted generator over `1:D`, whose length inference cannot
