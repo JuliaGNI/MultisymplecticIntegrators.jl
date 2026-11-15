@@ -509,9 +509,10 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 ### K64 · The hidden-row check of the per-component lifting holds to `16 * eps(T)`, a bound set from one measurement.
 
 - location: `test/couplings/hard_constraint_lifting.jl:438`
-- evidence: the testset "L4 the lifting acts per component on VectorWave, Float64" asserts
-  `maximum(abs, b₂[1:3S] .- 2 * b₁[1:3S]) ≤ 16 * eps(T) * maximum(abs, b₁)`. The largest
-  measured difference is about 11.4 eps of `maximum(abs, b₁)`, on Julia 1.13.4, `windows-latest`
+- evidence: the testset "L4 the lifting acts per component on VectorWave, $T" asserts
+  `maximum(abs, b₂[1:(3S)] .- 2 * b₁[1:(3S)]) ≤ 16 * eps(T) * maximum(abs, b₁)` for `Float64`
+  and `Float32`. The largest measured difference is about 11.4 eps of `maximum(abs, b₁)`, in
+  `Float64` on Julia 1.13.4, `windows-latest`
   (run 43575557665, job 132388889007), so the margin is about 1.4. The bound is the measured
   worst case rounded up; it is not derived from the error of the sum over the two components.
 - kind: missing test
