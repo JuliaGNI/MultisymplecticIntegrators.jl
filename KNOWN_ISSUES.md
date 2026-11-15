@@ -95,7 +95,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K36 · No test passes a zero or a negative `xstep` to a problem constructor.
 
-- location: `src/problems/lagrangian_problem.jl:84`
+- location: `src/problems/lagrangian_problem.jl:98`
 - evidence: `grep -rn 'xstep = 0[,)]\|xstep = zero\|xstep = -' test/` finds nothing, so every test
   problem passes a positive step and the guard `xh > zero(T) || throw(ArgumentError("xstep must be
   positive, got $xh"))` is unasserted: the mutant that deletes the line survived the round-2 run of
@@ -106,7 +106,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K37 · A `xstep` at the smallest positive `Float64` throws `InexactError`, not `ArgumentError`.
 
-- location: `src/problems/lagrangian_problem.jl:210`
+- location: `src/problems/lagrangian_problem.jl:261`
 - evidence: `Wave.problem(xstep = nextfloat(0.0))` passes the positive-step guard and throws
   `InexactError: Int64(Inf)` from `round(Int, (xsp[2] - xsp[1]) / xh)`, where the constructor's
   refusals are `ArgumentError`s. A stepped range of that step fails alike:
@@ -324,10 +324,10 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K51 · `integrate!` applies a method's initial guess twice, so a guess that reads state it writes starts the step from its own output.
 
-- location: `src/core/integrate.jl:90`, `src/core/slab_integrator.jl:655`
+- location: `src/core/integrate.jl:90`, `src/core/slab_integrator.jl:679`
 - evidence: `integrate_steps!` drives each step with the ecosystem's `integrate!(solstep, integrator)`,
   which calls `initial_guess!` (`GeometricIntegratorsBase`'s `src/integrate.jl:10`) and then
-  `integrate_step!`, which calls it again (`src/core/slab_integrator.jl:655`). A guess whose fit and
+  `integrate_step!`, which calls it again (`src/core/slab_integrator.jl:679`). A guess whose fit and
   target read the block's parameter vector measures its own first output on the second application.
   Measured on `Wave` over two steps, step 2's datum `φ₀` differs from step 1's solved `φ₁` by `5.90`
   at `Sx = St = 4` and by `0.427` at `Sx = 8`, `St = 10`, and by `0` through `integrate_step!`
@@ -398,9 +398,9 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K56 · The box scheme copies the initial level into its cache twice on the first step.
 
-- location: `src/baselines/box_scheme.jl:443` (`initial_guess!`) and `:494` (`read_initial_level!`)
+- location: `src/baselines/box_scheme.jl:460` (`initial_guess!`) and `:511` (`read_initial_level!`)
 - evidence: `initial_guess!` copies `sol.u`, `sol.v` and `sol.w` into the cache when `c.steps == 0`,
-  and `integrate_step!` then calls `read_initial_level!` (`:478`), which copies the same three
+  and `integrate_step!` then calls `read_initial_level!` (`:495`), which copies the same three
   arrays again. Removing the second copy makes a bare `integrate_step!` start from a zero cache, so
   the choice of the one copy that stays is a design decision.
 - kind: dead code
