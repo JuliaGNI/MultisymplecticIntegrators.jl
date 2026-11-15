@@ -11,7 +11,7 @@ using Test
 
 include("../helpers/quality_cases.jl")
 
-const JET_WORKS = isdefined(JET, :JET_AVAILABLE) ? JET.JET_AVAILABLE : JET.JET_LOADABLE
+const JET_WORKS = JET.JET_AVAILABLE
 
 function residual_reports(args)
     JET.get_reports(JET.report_opt(residual!, typeof.(args);

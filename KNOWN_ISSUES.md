@@ -582,18 +582,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: #71
 
-### K70 · The `JET.JET_LOADABLE` branch of `JET_WORKS` cannot run.
-
-- location: `test/quality/jet.jl:14`
-- evidence: `const JET_WORKS = isdefined(JET, :JET_AVAILABLE) ? JET.JET_AVAILABLE :
-  JET.JET_LOADABLE`. `test/Project.toml` admits `JET = "0.13"`, and JET 0.13 defines
-  `JET_AVAILABLE` (`src/JET.jl:90`), so the condition is always true. JET 0.13.1 on Julia 1.13.4:
-  `isdefined(JET, :JET_AVAILABLE)` is `true` and `isdefined(JET, :JET_LOADABLE)` is `false`, so the
-  other branch would throw `UndefVarError` if it ran. `const JET_WORKS = JET.JET_AVAILABLE` says the
-  same.
-- kind: dead code
-- found: #71
-
 ### K71 · The `ArgumentError` of `quality_problem` for a `D` other than 1 and 2 cannot be thrown.
 
 - location: `test/helpers/quality_cases.jl:22`
