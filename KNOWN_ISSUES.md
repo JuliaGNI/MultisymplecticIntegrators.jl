@@ -566,3 +566,56 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `false` with ForwardDiff 1.4.8.
 - kind: docs
 - found: #72
+
+### K65 · `test/quality/inference.jl` runs longer than the 60 s that a `core` file may take.
+
+- location: `test/runtests.jl:12`
+- evidence: the file runs first of the two quality files in `core`, so it pays the first
+  construction and compilation of the 40 integrators of `test/helpers/quality_cases.jl`. In CI,
+  `Julia 1 - ubuntu-latest - default - core` of run 43704633947 takes 1 min 48 s for "Inference".
+  Cold, alone, in a fresh process with `using Test` loaded and the file timed by `@testset` (package
+  load included), on `arm64-apple-darwin` at load average about 5: 1 min 01.7 s on Julia 1.13.4,
+  1 min 08.2 s on 1.12.7 and 48.7 s on 1.14.0-beta1. The #71 review measured 57.9 s on 1.13.4 with
+  the package loaded first. Merging the file with `jet.jl` or reordering them moves the cost to the
+  other file; moving `inference.jl`, or both files, to a group outside `core`, or fewer entries,
+  removes it.
+- kind: defect
+- found: #71
+
+### K66 · The `JET.JET_LOADABLE` branch of `JET_WORKS` cannot run.
+
+- location: `test/quality/jet.jl:14`
+- evidence: `const JET_WORKS = isdefined(JET, :JET_AVAILABLE) ? JET.JET_AVAILABLE :
+  JET.JET_LOADABLE`. `test/Project.toml` admits `JET = "0.13"`, and JET 0.13 defines
+  `JET_AVAILABLE` (`src/JET.jl:90`), so the condition is always true. JET 0.13.1 on Julia 1.13.4:
+  `isdefined(JET, :JET_AVAILABLE)` is `true` and `isdefined(JET, :JET_LOADABLE)` is `false`, so the
+  other branch would throw `UndefVarError` if it ran. `const JET_WORKS = JET.JET_AVAILABLE` says the
+  same.
+- kind: dead code
+- found: #71
+
+### K67 · The `ArgumentError` of `quality_problem` for a `D` other than 1 and 2 cannot be thrown.
+
+- location: `test/helpers/quality_cases.jl:22`
+- evidence: `quality_problem(T, D)` has one caller, `quality_entry` (`:92`), and the two callers of
+  `quality_entry`, `test/quality/inference.jl` and `test/quality/jet.jl`, take `D` from
+  `QUALITY_COMPONENTS = (1, 2)`. Removing the `throw` and returning `VectorWave.problem` for
+  `D == 2` as the last line does the same.
+- kind: dead code
+- found: #71
+
+### K68 · A cache lookup of a `NetworkAnsatz` integrator allocates.
+
+- location: `src/ansatz/network.jl:596`
+- evidence: `ansatz_data_type` of a `NetworkAnsatz` returns
+  `NetworkSlab{ST, T, typeof(a), typeof(parameter_set(a, ST))}`, and `parameter_set` builds a
+  parameter set (`zeros(ST, a.np)` laid out by `unflatten`). The type folds to a constant, but the
+  compiler keeps the call, so `cache(int, T)` builds the set at every lookup, and `residual!` and
+  the solve's other calls of `cache(int, ST)` pay for it. `@allocated` of a warm
+  `cache(int, T)` with `T` known at the call site, over the entries of
+  `test/helpers/quality_cases.jl`: 544 and 608 bytes at `Float64` (`D = 1`, `2`) and 416 and
+  448 bytes at `Float32` for the three network methods, and 0 bytes for the other six slab
+  methods, the same on Julia 1.13.4 and 1.14.0-beta1. A type-level form of the parameter set's type
+  would remove it.
+- kind: defect
+- found: 2026-11-15
