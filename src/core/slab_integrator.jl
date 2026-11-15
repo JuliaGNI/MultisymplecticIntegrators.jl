@@ -512,22 +512,41 @@ end
 end
 
 """
-    slab_residual!(cache, x, problem, nf)
+    slab_residual!(cache, x, problem, nf, sol)
 
 The interior weak form of the slab that the solver's vector `x` describes, in the ansatz's block:
 the ansatz's field at the nodes of the slab's quadrature, with the coupling's fixed bottom row and
-its transform of the field, the density's derivatives there, and their weak form.
+its transform of the field, the density's derivatives there, the problem's forcing added to
+`∂L/∂u`, and their weak form.
+
+The forcing is read at each node's absolute time, `slab_start(problem, sol) + h·t̂`, so `sol` is
+read only where the problem has a forcing: an unforced residual reads no time and takes
+`sol = nothing`.
 """
 function slab_residual!(
         c::SpaceTimeGalerkinCache, x::AbstractVector, problem::LagrangianPDEProblem,
-        nf::Integer)
+        nf::Integer, sol)
     h = timestep(problem)
     slab_field!(c.u, c.v, c.w, c.ansatz, x, bottom_datum(c.coupling), nf, h)
     tnodes, xnodes = quadrature_points(c.ansatz)
     transform_field!(c.u, c.v, c.w, c.coupling, c.ansatz, tnodes, xnodes, h, problem)
     density_derivatives!(c.du, c.dv, c.dw, problem.density, c.u, c.v, c.w,
         parameters(problem))
+    if problem.forcing !== nothing
+        add_forcing!(c.du, problem, slab_start(problem, sol), tnodes, xnodes)
+    end
     slab_weak_form!(c.ansatz, c.du, c.dv, c.dw, h)
+    return nothing
+end
+
+# The forcing added to `∂L/∂u`, indexed `[q, r, d]`, at the slab's quadrature node `(t̂_q, x_r)`,
+# whose absolute time is `t₀ + h·t̂_q`.
+function add_forcing!(du::AbstractArray{<:Any, 3}, problem::LagrangianPDEProblem, t₀,
+        tnodes::AbstractVector, xnodes::AbstractVector)
+    h = timestep(problem)
+    for d in axes(du, 3), r in axes(du, 2), q in axes(du, 1)
+        du[q, r, d] += forcing_value(problem, t₀ + h * tnodes[q], xnodes[r], d)
+    end
     return nothing
 end
 
@@ -549,7 +568,7 @@ function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol, params,
     a = ansatz(method(int))
     p = problem(int)
     nf = free_rows(coupling(c.coupling), a)
-    slab_residual!(c, x, p, nf)
+    slab_residual!(c, x, p, nf, sol)
     free_residual!(b, c.ansatz, nf)
     coupling_term!(b, x, c.coupling, c, a, p)
     return nothing
@@ -566,7 +585,7 @@ function update!(sol, params, x::AbstractVector{ST},
     c = cache(int, ST)
     a = ansatz(method(int))
     p = problem(int)
-    slab_residual!(c, x, p, free_rows(coupling(c.coupling), a))
+    slab_residual!(c, x, p, free_rows(coupling(c.coupling), a), sol)
     keep_top!(c.ansatz)
     assign!(sol.u, sol.v, sol.w, c, p)
     coupling_update!(c.coupling, x, c, a, p)

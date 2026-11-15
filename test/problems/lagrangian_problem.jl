@@ -220,6 +220,70 @@ include("../helpers/testsetup.jl")
             xstep = 0.25f0))) == 4001
     end
 
+    @testset "the forcing keyword" begin
+        density = Wave.density()
+        icsD(D) = (x, p) -> (u = zeros(length(x), D), v = zeros(length(x), D),
+            w = zeros(length(x), D))
+        bcs = (t, p) -> nothing
+        build(D, forcing; timespan = (0.0, 1.0), xspan = (0.0, 1.0)) = LagrangianPDEProblem(
+            density; D = D, ics_function = icsD(D), bcs_function = bcs, timespan = timespan,
+            timestep = 0.1, xspan = xspan, xstep = 0.25, forcing = forcing)
+
+        # The default is no forcing, on the constructor and on the example problems.
+        unforced = LagrangianPDEProblem(
+            density; ics_function = icsD(1), bcs_function = bcs,
+            timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0), xstep = 0.25)
+        @test unforced.forcing === nothing
+        @test Wave.problem().forcing === nothing
+        @test VectorWave.problem().forcing === nothing
+
+        # A number serves every component, and a collection gives one value per component.
+        accepted = [
+            (1, 2.0),
+            (1, [2.0]),
+            (2, 2.0),
+            (2, [2.0, -1.0]),
+            (2, (2.0, -1.0)),
+            (3, 1),
+            (3, [1.0, 2.0, 3.0])
+        ]
+        for (D, value) in accepted
+            f = (t, x, p) -> value
+            problem = build(D, f)
+            @test problem.forcing === f
+            @test typeof(problem).parameters[end] === typeof(f)
+        end
+
+        # Any other length names the length and `D`; a value that is no number and no collection
+        # names its type.
+        refused = [
+            (1, [1.0, 2.0]),
+            (2, [1.0]),
+            (2, [1.0, 2.0, 3.0]),
+            (3, (1.0, 2.0)),
+            (2, Float64[])
+        ]
+        for (D, value) in refused
+            @test_throws Regex("^ArgumentError: the forcing returns $(length(value)) values " *
+                               "at \\(t, x\\) = .*; D = $D needs a number or $D values") build(
+                D, (t, x, p) -> value)
+        end
+        @test_throws r"^ArgumentError: the forcing returns a value of type Nothing at" build(
+            1, (t, x, p) -> nothing)
+
+        # The check reads the forcing once, at the start of the time span and of the space span.
+        spans = (timespan = (0.5, 1.0), xspan = (0.25, 2.0))
+        calls = Tuple{Float64, Float64}[]
+        recording = (t, x, p) -> (push!(calls, (t, x)); 1.0)
+        build(1, recording; spans...)
+        @test calls == [(0.5, 0.25)]
+        corner = (t, x, p) -> (t == 0.5 && x == 0.25) ? [1.0, 2.0, 3.0] : 1.0
+        @test_throws r"^ArgumentError: the forcing returns 3 values at \(t, x\) = \(0\.5, 0\.25\); D = 2 needs a number or 2 values$" build(
+            2, corner; spans...)
+        elsewhere = (t, x, p) -> (t == 0.5 && x == 0.25) ? 1.0 : [1.0, 2.0, 3.0]
+        @test build(2, elsewhere; spans...).forcing === elsewhere
+    end
+
     @testset "the grid of a mesh" for T in (Float64, Float32)
         # `n = round(Int, Δx / xstep) + 1`: the last mesh divides the span 27 times but for a
         # rounding error, so it holds 28 points, where a floor holds 27.

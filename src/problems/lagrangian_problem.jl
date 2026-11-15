@@ -13,7 +13,8 @@ periodicity(::LagrangianEquation) = NullPeriodicity()
 
 """
     LagrangianPDEProblem(density; D = 1, ics_function, bcs_function, solutions = nothing,
-                         timespan, timestep, xspan, xstep, params = density.params)
+                         timespan, timestep, xspan, xstep, params = density.params,
+                         forcing = nothing)
 
 A Lagrangian field theory in one space dimension on a space-time slab, with a generic element type.
 
@@ -37,6 +38,16 @@ each `(u = …, v = …, w = …)` of `D` vectors, entry `d` component `d`'s val
 `(u = …, v = …, w = …)` of `(t, x, params)` functions that return the `D` components' values at a
 point and the component-major vector of length `D * length(x)` at a grid.
 
+`forcing` is `nothing` where the problem has no forcing, and otherwise a `(t, x, params)` function
+that returns the `D` components' values of a load at the point `(t, x)`: a number serves every
+component, and a vector or tuple of length `D` gives one value per component, as the closed forms
+of [`field_exact`](@ref) do. The load is added to `∂L/∂u` of each component, so it enters the
+Euler–Lagrange equation `∂ₜ(∂L/∂v) + ∂ₓ(∂L/∂w) − ∂L/∂u = f`: on a density
+`λ(½|v|² − ½c²|w|² − V(u))` the forced equation is `λ(u_tt − c² u_xx + V′(u)) = f`. The density is
+unchanged. The constructor reads the forcing once, at `(timespan[1], xspan[1])`, and throws an
+`ArgumentError` for a value that is neither a number nor a vector or tuple of length `D`. The
+integrators convert its values to the element type `T` where they enter the residual.
+
 `timespan`, `timestep`, `xspan` and `xstep` are converted to the element type `T` of `timespan`.
 The functions of the problem take its parameters, never a module-level default.
 
@@ -47,7 +58,7 @@ problem = LagrangianPDEProblem(density;
     timespan = (0.0, 1.0), timestep = 0.1, xspan = (0.0, 1.0), xstep = 0.01)
 ```
 """
-struct LagrangianPDEProblem{T, PT, LDT, ICT, BCT, SOT, ICST} <:
+struct LagrangianPDEProblem{T, PT, LDT, ICT, BCT, SOT, ICST, FT} <:
        GeometricProblem{LagrangianEquation{PT}, T, T}
     density::LDT
     params::PT
@@ -60,6 +71,7 @@ struct LagrangianPDEProblem{T, PT, LDT, ICT, BCT, SOT, ICST} <:
     timestep::T
     xspan::NTuple{2, T}
     xstep::T
+    forcing::FT
 end
 
 function LagrangianPDEProblem(density;
@@ -71,7 +83,8 @@ function LagrangianPDEProblem(density;
         timestep,
         xspan,
         xstep,
-        params = density_params(density))
+        params = density_params(density),
+        forcing = nothing)
     T = eltype(timespan)
     T <: AbstractFloat || throw(ArgumentError("the element type must be a float, got $T"))
     T === Float16 && throw(ArgumentError("Float16 problems are not supported"))
@@ -92,9 +105,36 @@ function LagrangianPDEProblem(density;
                                 "D = $D and $(length(grid)) grid points need " *
                                 "($(length(grid)), $D)"))
     end
+    forcing === nothing || _check_forcing(forcing, tspan[1], xsp[1], params, D)
     return LagrangianPDEProblem{T, typeof(params), typeof(density), typeof(ics_function),
-        typeof(bcs_function), typeof(solutions), typeof(ics)}(
-        density, params, Int(D), ics_function, bcs_function, solutions, ics, tspan, h, xsp, xh)
+        typeof(bcs_function), typeof(solutions), typeof(ics), typeof(forcing)}(
+        density, params, Int(D), ics_function, bcs_function, solutions, ics, tspan, h, xsp, xh,
+        forcing)
+end
+
+# A forcing's value at one point is a number, which serves every component, or a collection of one
+# value per component.
+function _check_forcing(forcing, t, x, params, D::Integer)
+    value = forcing(t, x, params)
+    value isa Number && return nothing
+    if value isa Union{AbstractVector, Tuple}
+        length(value) == D && return nothing
+        found = "$(length(value)) values"
+    else
+        found = "a value of type $(typeof(value))"
+    end
+    throw(ArgumentError("the forcing returns $found at (t, x) = ($t, $x); " *
+                        "D = $D needs a number or $D values"))
+end
+
+"""
+    forcing_value(problem, t, x, d)
+
+Component `d` of the problem's forcing at the point `(t, x)`, converted to the problem's element
+type.
+"""
+function forcing_value(problem::LagrangianPDEProblem{T}, t, x, d::Integer) where {T}
+    return convert(T, _field_component(problem.forcing(t, x, problem.params), d))
 end
 
 """

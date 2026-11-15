@@ -23,6 +23,7 @@ at the centre of a box of the grid — the mean of its four corners for the valu
 differences for the derivatives — which is second order in the time step and in the space step, and
 which satisfies the discrete multisymplectic conservation law `δₜω + δₓκ = 0` of the form, with
 `ω = UᵀKV` and `κ = UᵀLV` of two solutions of the scheme's linearisation, to round-off per box.
+A forcing of the problem is added to `∂L/∂u` at the centre of each box.
 
 # The class of densities
 
@@ -330,26 +331,31 @@ function assemble_new!(c::BoxSchemeCache, x::AbstractVector, problem::Lagrangian
 end
 
 """
-    box_residual!(b, x, cache, problem)
+    box_residual!(b, x, cache, problem, sol)
 
 The residual of one step, in the solver's layout: for every component and every box, the three rows
 of the first-order form at the centre of the box,
 
 ```math
-\\delta_t v - c^2 \\delta_x w = -V'(u), \\qquad \\delta_t u = v, \\qquad \\delta_x u = w,
+\\delta_t v - c^2 \\delta_x w = -V'(u) + f / λ, \\qquad \\delta_t u = v, \\qquad \\delta_x u = w,
 ```
 
-where `w` is the slope `∂ₓu` that the trace carries, `δₜ` and `δₓ` are the box's own differences and
-`V'(u)` is read at the mean of the box's four corners. The rows are ordered component-major, the
-three rows of one box together.
+where `w` is the slope `∂ₓu` that the trace carries, `δₜ` and `δₓ` are the box's own differences,
+`V'(u)` is read at the mean of the box's four corners and the problem's forcing `f` at the box's
+centre, `(first(sol.t) − h/2, (x_j + x_{j+1})/2)`. `sol` is read only where the problem has a
+forcing, so an unforced residual reads no time and takes `sol = nothing`. The rows are ordered
+component-major, the three rows of one box together.
 """
 function box_residual!(b::AbstractVector, x::AbstractVector, c::BoxSchemeCache,
-        problem::LagrangianPDEProblem)
-    return box_residual!(b, x, c, problem, Val(components(problem)))
+        problem::LagrangianPDEProblem, sol)
+    tc = problem.forcing === nothing ? zero(timestep(problem)) :
+         first(sol.t) - timestep(problem) / 2
+    return box_residual!(b, x, c, problem, Val(components(problem)), tc)
 end
 
 function box_residual!(b::AbstractVector, x::AbstractVector, c::BoxSchemeCache,
-        problem::LagrangianPDEProblem, ::Val{D}) where {D}
+        problem::LagrangianPDEProblem, ::Val{D}, tc) where {D}
+    grid = xgrid(problem)
     nx = box_grid(problem).nx
     h = timestep(problem)
     dx = xstep(problem)
@@ -378,6 +384,9 @@ function box_residual!(b::AbstractVector, x::AbstractVector, c::BoxSchemeCache,
             wc = c.w[i1]
             wd = c.new_w[i1]
             potential = box_centre_potential(density, c, j, d, nx, params, Val(D))
+            if problem.forcing !== nothing
+                potential += forcing_value(problem, tc, (grid[j] + grid[j + 1]) / 2, d)
+            end
             b[offset + 3(j - 1) + 1] = ((vb + vd) - (va + vc)) / (2h) -
                                        c² * ((wc + wd) - (wa + wb)) / (2dx) -
                                        potential / λ
@@ -427,7 +436,7 @@ function residual!(b::AbstractVector{ST}, x::AbstractVector{ST}, sol, params,
     copyto!(c.left_u, data.left_u)
     copyto!(c.right_u, data.right_u)
     copyto!(c.left_v, data.left_v)
-    box_residual!(b, x, c, problem(int))
+    box_residual!(b, x, c, problem(int), sol)
     return nothing
 end
 
