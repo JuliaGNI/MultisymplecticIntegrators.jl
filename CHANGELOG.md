@@ -782,6 +782,18 @@ makes it worth keeping.
   The box scheme's sixteen JET checks are `@test_broken`, for the findings of known issue K61, and
   `jet.jl` records one `@test_skip` on a Julia where JET does not run. JET `0.13` is a test
   dependency.
+- **Every method type of the package keeps the contract of `GeometricBase.AbstractMethod`, and a
+  test checks it.** `test/quality/interface.jl`, in the `core` group, asserts that
+  `GeometricBase.interface_violations` finds no entry on one instance of each concrete method type
+  the package owns: the ten methods of the inference and JET checks at `Float64` and `D = 1`, the
+  B-spline ansatz under the coefficient restriction with `linear_solver = true`,
+  `LevenbergMarquardt(variable_projection = true)`, and `T()` of each owned type with a
+  constructor of no argument, which are `BoxScheme` and `LevenbergMarquardt`. The methods are
+  built and never run. A second testset walks the subtypes of `AbstractMethod` and fails for a
+  concrete type of the package that no instance covers. The `[compat]` floors rise to
+  `GeometricBase = "0.15.5"`, the first release with `interface_violations`, and
+  `GeometricIntegratorsBase = "0.7.2"`, the first with its method for `GeometricMethod`.
+  `InteractiveUtils` joins `test/Project.toml` for `subtypes`.
 
 ### Changed
 
