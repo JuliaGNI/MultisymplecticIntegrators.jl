@@ -34,7 +34,7 @@ makes it worth keeping.
   carries no `Plots` dependency: the plotting layer of the entry below arrives as the weak
   dependency `[weakdeps] Makie` with `[extensions] MultisymplecticIntegratorsPlots = "Makie"`. Every
   `[compat]` entry is a patch-level floor
-  (`GeometricBase = "0.15.0"`, `GeometricEquations = "0.21.5"`, `GeometricIntegratorsBase = "0.6.9"`,
+  (`GeometricBase = "0.15.5"`, `GeometricEquations = "0.21.5"`, `GeometricIntegratorsBase = "0.7.2"`,
   `GeometricSolutions = "0.6.6"`, `SimpleSplines = "0.3.4"`,
   `SimpleSolvers = "0.14.1"`, `Symbolics = "7.18.1"`), except `LinearAlgebra = "1"` and `SparseArrays = "1"`,
   which name the major. `SimpleSplines` requires `DomainSets = "0.8"`, which `Symbolics` accepts only from `7.18.1`,
@@ -790,9 +790,10 @@ makes it worth keeping.
   `LevenbergMarquardt(variable_projection = true)`, and `T()` of each owned type with a
   constructor of no argument, which are `BoxScheme` and `LevenbergMarquardt`. The methods are
   built and never run. A second testset walks the subtypes of `AbstractMethod` and fails for a
-  concrete type of the package that no instance covers. The `[compat]` floors rise to
-  `GeometricBase = "0.15.5"`, the first release with `interface_violations`, and
-  `GeometricIntegratorsBase = "0.7.2"`, the first with its method for `GeometricMethod`.
+  concrete type of the package that no instance covers. The `[compat]` floors of `Project.toml`
+  and `scripts/Project.toml` rise to `GeometricBase = "0.15.5"`, whose `interface_violations`
+  admits an `order` formula as a string on a method type, and `GeometricIntegratorsBase = "0.7.2"`,
+  the first release with a method of `interface_violations` for `GeometricMethod`.
   `InteractiveUtils` joins `test/Project.toml` for `subtypes`.
 
 ### Changed
