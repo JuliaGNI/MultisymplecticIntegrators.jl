@@ -795,8 +795,24 @@ makes it worth keeping.
   admits an `order` formula as a string on a method type, and `GeometricIntegratorsBase = "0.7.2"`,
   the first release with a method of `interface_violations` for `GeometricMethod`.
   `InteractiveUtils` joins `test/Project.toml` for `subtypes`.
+- **`scripts/manual_verification.jl` writes the manual's convergence tables and its long-time energy
+  figure into `docs/src/assets/`**, or into the directory of `--out`, so the docs build runs no
+  sweep. `convergence_tables.md` holds one table per B-spline coupling and one for the box scheme,
+  each row a ladder of `test/verification/manufactured.jl` with its errors or differences, its two
+  observed orders and the expected order; `long_time_energy.svg` plots the relative energy error of
+  the four ten-period runs of `test/verification/long_time_energy.jl`, and `long_time_energy.md` is
+  its caption. Each table and the caption name the commit the script ran on and the Julia version,
+  and the script refuses a tree whose `src/`, `test/helpers/` or script differ from that commit.
+  The three files are committed.
 
 ### Changed
+
+- **The ladders, the runs and the long-time settings of the two verification files move into
+  `test/helpers/manufactured.jl`**, with their values: `COUPLINGS`, `slab_run`, `box_run`,
+  `self_differences`, `wave_run`, `quadrature_energy`, `energy_periods` and the ladder constants,
+  so the tests and `scripts/manual_verification.jl` run one copy of them. Every test of the two
+  files stays. **`xstep` has a docstring**, and `test/quality/sources.jl` asserts that every
+  exported name has a docstring of the package or of one of its submodules.
 
 - **The direct linear solve is a `:last_layer` network's option, and its factorisation is the
   solver's own.** `check_method` admits `linear_solver = true` for a `NetworkAnsatz` in
