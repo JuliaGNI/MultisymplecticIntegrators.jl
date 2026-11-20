@@ -936,3 +936,8 @@ makes it worth keeping.
   `transform_field!` in every residual of `HardConstraintLifting` at `D = 2`, and
   `lifting_corner_check` when its cache is built, as runtime dispatches that
   `test/quality/jet.jl` reports.
+- **`scripts/Project.toml` accepts GeometricSolutions 0.7.** Its `[compat]` bound is
+  `GeometricSolutions = "0.6.6, 0.7"`, as `Project.toml`'s is after the Dependabot update #78.
+  `scripts/` loads the package by path, so its bound must overlap the package's. GeometricSolutions
+  0.7 changes only the type parameters of `EnsembleSolution`, which neither the package nor the
+  scripts use.
