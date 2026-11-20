@@ -546,25 +546,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: docs
 - found: #72
 
-### K69 · `test/quality/inference.jl` runs longer than the 60 s that a `core` file may take.
-
-- location: `test/runtests.jl:12`
-- evidence: the file runs first of the two quality files in `core`, so it pays the first
-  construction and compilation of the 80 integrators of `test/helpers/quality_cases.jl`, 40
-  unforced and 40 forced. Cold, alone, in a fresh process with `using Test` loaded and the file
-  timed by `@testset` (package load included), on `arm64-apple-darwin` at load average 4 to 7:
-  1 min 35.2 s and 1 min 40.8 s in two runs on Julia 1.13.4, and 1 min 12.7 s on
-  1.14.0-beta1. In `run-tests.jl <repository> core` on 1.13.4 the file takes 90.6 s. With the 40
-  unforced entries alone the same measurement gave 1 min 02.6 s on 1.13.4, so the forced entries
-  add about 35 s; in CI, `Julia 1 - ubuntu-latest - default - core` of run 43704633947 took
-  1 min 48 s for "Inference" with the 40 entries. `jet.jl`, which runs after it and finds the
-  integrators compiled, takes 39.1 s in the same `core` run; alone and cold it takes 1 min 19.1 s
-  on 1.13.4 with the 80 entries (53.4 s with the 40) and 59.8 s on 1.14.0-beta1. Merging the file
-  with `jet.jl` or reordering them therefore moves the cost to the other file; moving
-  `inference.jl`, or both files, to a group outside `core`, or fewer entries, removes it.
-- kind: defect
-- found: #71
-
 ### K71 · The `ArgumentError` of `quality_problem` for a `D` other than 1 and 2 cannot be thrown.
 
 - location: `test/helpers/quality_cases.jl:29`

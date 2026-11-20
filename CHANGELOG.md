@@ -936,3 +936,21 @@ makes it worth keeping.
   `transform_field!` in every residual of `HardConstraintLifting` at `D = 2`, and
   `lifting_corner_check` when its cache is built, as runtime dispatches that
   `test/quality/jet.jl` reports.
+- **The tests run in worker processes, and CI runs one test job per matrix entry.**
+  `test/runtests.jl` has the parallel form of the Harness test layout: one table `TESTS`, group →
+  label → path, which ParallelTestRunner runs with each file in a worker process of its own, with
+  no retry. `ParallelTestRunner = "2.10"` replaces `SafeTestsets` in `test/Project.toml`. Group
+  names in `ARGS` select groups, an argument that starts with `--`, such as `--jobs=4`, goes to the
+  runner, and an unknown group stops the run with an error. Two groups are new: `quality` holds
+  the six files under `test/quality/` and the plotting test, which leave `core`, and
+  `verification` holds the eight files under `test/verification/`, which were the groups
+  `derivatives` and `invariants`; those two groups are gone. The other files keep their groups
+  and labels, and no test file changes. `test/ci-groups.toml` lists `core`, `quality`, `slow`,
+  `ansatz`, `couplings`, `initialguess`, `verification` and `fixedboundary`, with `split = false`,
+  so that each CI matrix entry runs all its groups in one job, and
+  `once = ["quality", "verification"]`, so that a pull request and a push run those two groups on
+  Ubuntu with Julia 1 only; the weekly run, a tag and a run by hand run every group on every entry.
+  The required checks are those of a repository without test groups: the four `Julia … - default`
+  jobs and the doctests, in place of one check per group and entry. `test/quality/inference.jl`
+  is no longer a `core` file, so the 60 s limit of a `core` file no longer applies to it, and this
+  closes the known issue K69.
