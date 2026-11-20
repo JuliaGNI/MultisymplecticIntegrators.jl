@@ -8,9 +8,8 @@ root and git-ignored. The driver and the renderer, and the scans that archive, t
 and `--results-dir`, so the same run can write into a paper's or a talk's figure directory without
 being copied there.
 
-One script writes into the tree: `manual_verification.jl` writes the manual's convergence tables
-and its long-time energy figure into `docs/src/assets/`, where they are committed, so the docs
-build reads them and runs no sweep.
+`manual_verification.jl` writes the manual's convergence tables and its long-time energy figure
+into `docs/src/assets/`, where they are committed, so the docs build reads them and runs no sweep.
 
 ```sh
 julia --project=scripts -e 'using Pkg; Pkg.instantiate()'
