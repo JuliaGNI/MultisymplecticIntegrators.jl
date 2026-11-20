@@ -1,7 +1,9 @@
+using GeometricBase: parameters
 using GeometricIntegratorsBase: GeometricIntegrator, solver
 using LinearAlgebra: BLAS
 using MultisymplecticIntegrators
 using SimpleSolvers: config
+using SimpleSplines: Dirichlet, Free
 
 # The manufactured problem of the verification files: the quartic wave density
 # `L = ½v² − ½c²w² − ¼βu⁴` on `x ∈ [0, 1]` with a forcing `f = u*_tt − c² u*_xx + β u*³` that makes
@@ -105,4 +107,149 @@ function run_metadata()
     return (julia = VERSION, machine = Sys.MACHINE, cpu = Sys.CPU_NAME,
         blas_threads = BLAS.get_num_threads(),
         check_bounds = Base.JLOptions().check_bounds)
+end
+
+# The runs, the ladders and the long-time settings of `test/verification/manufactured.jl` and
+# `test/verification/long_time_energy.jl`, which `scripts/manual_verification.jl` reads too, so the
+# tests and the manual's tables run one copy of them.
+
+# The B-spline couplings, each with the space boundary condition it runs on: `u*` and the standing
+# wave of `Wave` vanish at both ends, so the two couplings that take Dirichlet data in space run on
+# them.
+const COUPLINGS = (("CoefficientRestriction", CoefficientRestriction(), Dirichlet()),
+    ("WeakInitialCondition", WeakInitialCondition(), Dirichlet()),
+    ("WeakInitialAndBoundaryConditions", WeakInitialAndBoundaryConditions(), Free()))
+
+# The end time of a manufactured run.
+const TEND = 1.0
+
+# The joint ladder: the space cells `nx` of a slab run at `h = 1/nx`, so `c·h/Δx = 0.5` on every
+# rung and the order is `p + 1`.
+const JOINT_LADDER = (20, 40, 80)
+
+# The self-difference ladder: the time steps of the slab runs at `SLAB_SELF_DIFFERENCE_NX` cells and
+# of the box runs at `BOX_SELF_DIFFERENCE_NX` cells. A ladder of four steps gives three differences
+# and two orders.
+const SELF_DIFFERENCE_STEPS = (0.1, 0.05, 0.025, 0.0125)
+const SLAB_SELF_DIFFERENCE_NX = 20
+const BOX_SELF_DIFFERENCE_NX = 40
+
+# The box scheme's space ladder: the space cells `nx` at the time step `BOX_SPACE_STEP`.
+const BOX_SPACE_LADDER = (10, 20, 40)
+const BOX_SPACE_STEP = 1 / 640
+
+# The long-time runs of `Wave` at its defaults: ten periods of `PERIOD = 2l/c = 4` at the time step
+# `h`, the slab runs at degree `p` on `nx` space cells, and the box run at the grid step `box_xstep`.
+const PERIOD = 4.0
+const LONG_TIME = (h = 0.05, tend = 40.0, nx = 20, p = 2, box_xstep = 0.05)
+
+# One slab run of the manufactured problem to `tend`, one time cell per slab: the top trace at the
+# last step, the space rule's weights, the `L²` error of the trace against `u*`, and whether every
+# step converged.
+function slab_run(coupling, boundary, p, h, nx, D; T = Float64, tend = TEND,
+        forcing = manufactured_forcing(D))
+    problem = manufactured_problem(;
+        D = D, timestep = h, nx = nx, T = T, tend = tend, forcing = forcing)
+    ansatz = TensorBSplineAnsatz(degree = p, ncells = (1, nx), xspan = (zero(T), one(T)),
+        x_boundary = boundary)
+    int = GeometricIntegrator(problem, SpaceTimeGalerkin(ansatz, coupling))
+    result = integrate(int)
+    nodes = space_quadrature_nodes(ansatz)
+    weights = MultisymplecticIntegrators.space_quadrature_weights(ansatz)
+    u = result.traces[end].u
+    exact = problem.solutions.u(T(tend), nodes, parameters(problem))
+    return (; result, u, weights, error = l2_norm(weights, u .- exact, D),
+        steps = length(result.traces), converged = all_steps_converge(result, int))
+end
+
+# One box run of the manufactured problem to `tend`: the level at the last step, the trapezoid
+# weights of the grid, the `L²` error of the level against `u*` at the grid nodes, and whether every
+# step converged.
+function box_run(h, nx, D; T = Float64, tend = TEND, forcing = manufactured_forcing(D))
+    problem = manufactured_problem(;
+        D = D, timestep = h, nx = nx, T = T, tend = tend, forcing = forcing)
+    int = GeometricIntegrator(problem, BoxScheme())
+    result = integrate(int)
+    grid = collect(xgrid(problem))
+    weights = fill(one(T) / nx, length(grid))
+    weights[1] /= 2
+    weights[end] /= 2
+    u = result.traces[end].u
+    exact = problem.solutions.u(T(tend), grid, parameters(problem))
+    return (; result, u, weights, error = l2_norm(weights, u .- exact, D),
+        steps = length(result.traces), converged = all_steps_converge(result, int))
+end
+
+# The `L²` norms of the differences of the last levels of consecutive runs of a ladder.
+function self_differences(runs, D)
+    return [l2_norm(runs[i].weights, runs[i].u .- runs[i + 1].u, D)
+            for i in 1:(length(runs) - 1)]
+end
+
+# One slab run of `Wave` at its defaults, `steps` steps of `h` on `nx` space cells.
+function wave_run(coupling, boundary, p, h, nx, steps)
+    problem = Wave.problem(timespan = (0.0, steps * h), timestep = h, xstep = 1 / nx)
+    ansatz = TensorBSplineAnsatz(degree = p, ncells = (1, nx), xspan = (0.0, 1.0),
+        x_boundary = boundary)
+    int = GeometricIntegrator(problem, SpaceTimeGalerkin(ansatz, coupling))
+    return (; problem, ansatz, int, result = integrate(int))
+end
+
+# One box run of `Wave` at its defaults to `tend`, at the time step `h` and the grid step `xstep`.
+function box_wave_run(h, tend, xstep)
+    problem = Wave.problem(timespan = (0.0, tend), timestep = h, xstep = xstep)
+    int = GeometricIntegrator(problem, BoxScheme())
+    return (; problem, int, result = integrate(int))
+end
+
+# The energy of a trace on a rule: `Σ ωᵢ H(uᵢ, vᵢ, wᵢ)` over the rule's nodes.
+function quadrature_energy(problem, weights, u, v, w)
+    return sum(weights[i] *
+               energy_density(problem.density, u[i], v[i], w[i], problem.params)
+    for i in eachindex(weights))
+end
+
+# The energies of a `wave_run` at its top traces, and the exact energies at `t = 0, h, 2h, …` on
+# the same space rule; the first exact entry is the energy at `t = 0`.
+function slab_run_energies(run, h)
+    (; problem, ansatz, result) = run
+    nodes = space_quadrature_nodes(ansatz)
+    weights = MultisymplecticIntegrators.space_quadrature_weights(ansatz)
+    params = parameters(problem)
+    Eh = [quadrature_energy(problem, weights, trace.u, trace.v, trace.w)
+          for trace in result.traces]
+    Ex = [quadrature_energy(
+              problem, weights, problem.solutions.u(n * h, nodes, params),
+              problem.solutions.v(n * h, nodes, params),
+              problem.solutions.w(n * h, nodes, params))
+          for n in 0:length(result.traces)]
+    return Eh, Ex
+end
+
+# The energies of a `box_wave_run` at its levels, and the exact energies at `t = 0, h, 2h, …` on
+# the same grid; the first exact entry is the energy at `t = 0`.
+function box_run_energies(run, h)
+    (; problem, result) = run
+    grid = collect(xgrid(problem))
+    params = parameters(problem)
+    exact = [(u = problem.solutions.u(n * h, grid, params),
+                 v = problem.solutions.v(n * h, grid, params),
+                 w = problem.solutions.w(n * h, grid, params))
+             for n in 0:length(result.traces)]
+    energies(levels) = MultisymplecticIntegrators.box_energies(problem, levels)
+    return energies(result.traces), energies(exact)
+end
+
+# The energy errors `|E_h(t_n) − E_*(t_n)| / E_*(0)` of a series of run energies `Eh` against the
+# exact energies `Ex`, whose first entry is the energy at `t = 0`.
+energy_errors(Eh, Ex) = abs.(Eh .- Ex[2:end]) ./ Ex[1]
+
+# The largest energy error over the first period `(0, PERIOD]`, the largest over the last
+# `[tend − PERIOD, tend]`, and their ratio.
+function energy_periods(Eh, Ex, h, tend)
+    errors = energy_errors(Eh, Ex)
+    times = h .* (1:length(errors))
+    first_period = maximum(errors[times .≤ PERIOD + h / 2])
+    last_period = maximum(errors[times .≥ tend - PERIOD - h / 2])
+    return (; first_period, last_period, ratio = last_period / first_period)
 end

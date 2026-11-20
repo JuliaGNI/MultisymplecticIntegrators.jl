@@ -2,7 +2,7 @@ using GeometricBase: parameters
 using GeometricIntegratorsBase: GeometricIntegrator, cache
 using MultisymplecticIntegrators
 using Random: Xoshiro
-using SimpleSplines: Dirichlet, Free
+using SimpleSplines: Dirichlet
 using Test
 
 const M = MultisymplecticIntegrators
@@ -10,57 +10,6 @@ const SEED = 20261115
 
 include("../helpers/testsetup.jl")
 include("../helpers/manufactured.jl")
-
-# The B-spline couplings, each with the space boundary condition it runs on: `u*` vanishes at both
-# ends, so the two couplings that take Dirichlet data in space run on it.
-const COUPLINGS = (("CoefficientRestriction", CoefficientRestriction(), Dirichlet()),
-    ("WeakInitialCondition", WeakInitialCondition(), Dirichlet()),
-    ("WeakInitialAndBoundaryConditions", WeakInitialAndBoundaryConditions(), Free()))
-
-const TEND = 1.0
-
-# One slab run of the manufactured problem to `tend`, one time cell per slab: the top trace at the
-# last step, the space rule's weights, the `L²` error of the trace against `u*`, and whether every
-# step converged.
-function slab_run(coupling, boundary, p, h, nx, D; T = Float64, tend = TEND,
-        forcing = manufactured_forcing(D))
-    problem = manufactured_problem(;
-        D = D, timestep = h, nx = nx, T = T, tend = tend, forcing = forcing)
-    ansatz = TensorBSplineAnsatz(degree = p, ncells = (1, nx), xspan = (zero(T), one(T)),
-        x_boundary = boundary)
-    int = GeometricIntegrator(problem, SpaceTimeGalerkin(ansatz, coupling))
-    result = integrate(int)
-    nodes = space_quadrature_nodes(ansatz)
-    weights = M.space_quadrature_weights(ansatz)
-    u = result.traces[end].u
-    exact = problem.solutions.u(T(tend), nodes, parameters(problem))
-    return (; result, u, weights, error = l2_norm(weights, u .- exact, D),
-        steps = length(result.traces), converged = all_steps_converge(result, int))
-end
-
-# One box run of the manufactured problem to `tend`: the level at the last step, the trapezoid
-# weights of the grid, the `L²` error of the level against `u*` at the grid nodes, and whether every
-# step converged.
-function box_run(h, nx, D; T = Float64, tend = TEND, forcing = manufactured_forcing(D))
-    problem = manufactured_problem(;
-        D = D, timestep = h, nx = nx, T = T, tend = tend, forcing = forcing)
-    int = GeometricIntegrator(problem, BoxScheme())
-    result = integrate(int)
-    grid = collect(xgrid(problem))
-    weights = fill(one(T) / nx, length(grid))
-    weights[1] /= 2
-    weights[end] /= 2
-    u = result.traces[end].u
-    exact = problem.solutions.u(T(tend), grid, parameters(problem))
-    return (; result, u, weights, error = l2_norm(weights, u .- exact, D),
-        steps = length(result.traces), converged = all_steps_converge(result, int))
-end
-
-# The `L²` norms of the differences of the last levels of consecutive runs of a ladder.
-function self_differences(runs, D)
-    return [l2_norm(runs[i].weights, runs[i].u .- runs[i + 1].u, D)
-            for i in 1:(length(runs) - 1)]
-end
 
 function check_ladder(runs, values, expected, label; steps)
     @test all(run -> run.converged, runs)
@@ -77,7 +26,7 @@ end
     @testset "the joint ladder of $name, p = $p, D = $D" for (name, coupling, boundary) in COUPLINGS,
         p in (1, 2), D in (1, 2)
         # `h = 1/nx`, so `c·h/Δx = 0.5` on every rung: the order is `p + 1`.
-        ladder = (20, 40, 80)
+        ladder = JOINT_LADDER
         runs = [slab_run(coupling, boundary, p, 1 / nx, nx, D) for nx in ladder]
         check_ladder(runs, [run.error for run in runs], p + 1,
             "manufactured joint ladder, $name, p = $p, D = $D, nx = $ladder";
@@ -87,26 +36,26 @@ end
     @testset "the self-difference ladder of $name, p = $p, D = $D" for (name, coupling, boundary) in COUPLINGS,
         p in (1, 2), D in (1, 2)
         # The same ansatz at four steps, `c·h/Δx = 1, 0.5, 0.25, 0.125`: the order in `h` is `2p`.
-        steps = (0.1, 0.05, 0.025, 0.0125)
-        runs = [slab_run(coupling, boundary, p, h, 20, D) for h in steps]
+        steps, nx = SELF_DIFFERENCE_STEPS, SLAB_SELF_DIFFERENCE_NX
+        runs = [slab_run(coupling, boundary, p, h, nx, D) for h in steps]
         check_ladder(runs, self_differences(runs, D), 2p,
-            "manufactured self-difference ladder, $name, p = $p, D = $D, nx = 20, h = $steps";
+            "manufactured self-difference ladder, $name, p = $p, D = $D, nx = $nx, h = $steps";
             steps = [10, 20, 40, 80])
     end
 
     @testset "the box scheme's space ladder, D = $D" for D in (1, 2)
-        ladder = (10, 20, 40)
-        runs = [box_run(1 / 640, nx, D) for nx in ladder]
+        ladder = BOX_SPACE_LADDER
+        runs = [box_run(BOX_SPACE_STEP, nx, D) for nx in ladder]
         check_ladder(runs, [run.error for run in runs], 2,
             "manufactured box space ladder, D = $D, h = 1/640, nx = $ladder";
             steps = fill(640, 3))
     end
 
     @testset "the box scheme's self-difference ladder, D = $D" for D in (1, 2)
-        steps = (0.1, 0.05, 0.025, 0.0125)
-        runs = [box_run(h, 40, D) for h in steps]
+        steps, nx = SELF_DIFFERENCE_STEPS, BOX_SELF_DIFFERENCE_NX
+        runs = [box_run(h, nx, D) for h in steps]
         check_ladder(runs, self_differences(runs, D), 2,
-            "manufactured box self-difference ladder, D = $D, nx = 40, h = $steps";
+            "manufactured box self-difference ladder, D = $D, nx = $nx, h = $steps";
             steps = [10, 20, 40, 80])
     end
 
