@@ -811,11 +811,10 @@ makes it worth keeping.
   `test/helpers/manufactured.jl`**, with their values: `COUPLINGS`, `slab_run`, `box_run`,
   `self_differences`, `wave_run`, `quadrature_energy`, `energy_periods`, the ladder constants and
   `LONG_TIME`, so the tests and `scripts/manual_verification.jl` run one copy of them. The energy
-  series of a long-time run come from `slab_run_energies`, `box_run_energies` and `energy_errors`
-  there too. Every test of the two files stays. **`xstep` has a docstring**, and
+  series of a long-time run come from `slab_run_energies`, `box_wave_run`, `box_run_energies` and
+  `energy_errors` there too. Every test of the two files stays. **`xstep` has a docstring**, and
   `test/quality/sources.jl` asserts that every exported name has a docstring of the package or of
   one of its submodules.
-
 - **The direct linear solve is a `:last_layer` network's option, and its factorisation is the
   solver's own.** `check_method` admits `linear_solver = true` for a `NetworkAnsatz` in
   `:last_layer` mode on a linear density beside the ansatz it already admitted — one whose step is
