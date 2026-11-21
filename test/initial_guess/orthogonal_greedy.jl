@@ -1,6 +1,7 @@
 using GeometricIntegratorsBase
 using LinearAlgebra: dot, norm
 using MultisymplecticIntegrators
+using SimpleSolvers
 using Test
 
 import GeometricBase: timestep, timespan
@@ -316,6 +317,28 @@ end
             M.fit!(w₆₄, double, ansatz, sample, fresh)
             @test w₃₂ == w₆₄
         end
+        # A `BigFloat` slab converts the `Float64` ends of the method to new `BigFloat` objects
+        # at every fit, and a second fit with the same method keeps the table the first one built.
+        # The LAPACK solver of a network refuses `BigFloat`, so the slab names a plain-Julia one.
+        T = BigFloat
+        problem = Wave.problem(T = T, timespan = (zero(T), T(0.05)), timestep = T(0.05),
+            xstep = T(0.05))
+        ansatz = NetworkAnsatz(
+            S = 2, xspan = (zero(T), one(T)), ncells = (2, 5), degree = 3,
+            quadrature_order = 4)
+        c = cache(GeometricIntegrator(problem,
+            SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions());
+            linear_solver_method = SimpleSolvers.PivotedQR()))
+        sample, _ = greedy_sample(T, c, problem, (t, x) -> sin(2 * π * x) * cos(π * t))
+        w, method = zeros(T, ansatz.np), OrthogonalGreedy(Nw = 4, Nb = 4)
+        M.fit!(w, method, ansatz, sample, c)
+        table = c.ansatz.fit.table
+        M.fit!(w, method, ansatz, sample, c)
+        @test c.ansatz.fit.table === table
+        # a method of other ends builds the table again
+        M.fit!(w, OrthogonalGreedy(bias_interval = (-1.0, 1.0), Nw = 4, Nb = 4), ansatz,
+            sample, c)
+        @test c.ansatz.fit.table !== table
     end
 
     @testset "G2 the dictionary holds no duplicate atom" for T in (Float64, Float32)

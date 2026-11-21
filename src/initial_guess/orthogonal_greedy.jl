@@ -48,8 +48,10 @@ function fit_network!(f::NetworkFit{ST}, method::OrthogonalGreedy,
     t, x = tabulation.time, tabulation.space
     qt, qx = nquadrature(t), nquadrature(x)
     m, N = (method.Nw + 1) * (method.Nb + 1), qt * qx
-    key = OrthogonalGreedy{ST}(method)
-    if f.method != key || size(f.table) != (m, N) || size(f.chosen, 2) != S ||
+    key, old = OrthogonalGreedy{ST}(method), f.method
+    # the ends compare by value: a `BigFloat` end is a new object at every conversion
+    if old === nothing || old.bias_interval != key.bias_interval || old.Nw != key.Nw ||
+       old.Nb != key.Nb || size(f.table) != (m, N) || size(f.chosen, 2) != S ||
        size(f.residual, 2) != D
         f.atoms, f.selected, f.taken = greedy_atoms(method, ST), zeros(Int, S), falses(m)
         f.table, f.chosen = zeros(ST, m, N), zeros(ST, N, S)

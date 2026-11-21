@@ -218,6 +218,9 @@ include("../helpers/testsetup.jl")
             (0.0, 1.0), 2.0^-63)
         @test_throws r"^ArgumentError: xstep .* leaves more grid points" grid(
             (0.0f0, 1.0f0), nextfloat(0.0f0))
+        # a count below `typemax(Int)` that rounds to it is refused as well, since `n` would wrap
+        @test_throws r"^ArgumentError: xstep .* leaves more grid points" grid(
+            (big(0.0), big(1.0)), 1 / (big(typemax(Int)) - big(0.25)))
 
         # The grid ends on the span's end exactly, also where that end is zero.
         ending_at_zero = LinearTransport.problem(T = Float32, xspan = (-0.3f0, 0.0f0),
