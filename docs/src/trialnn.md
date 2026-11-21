@@ -6,8 +6,8 @@ CurrentModule = MultisymplecticIntegrators
 
 The trial-solution network of `TrialNN_PDE_int` is a [`NetworkAnsatz`](@ref) under
 [`HardConstraintLifting`](@ref). The slab's field is the network's field, projected so that it
-vanishes at both ends of `xspan` and at the bottom of the slab, plus a transfinite interpolant of the
-slab's data: the problem's boundary function at the two ends, and the initial condition at the
+vanishes at both ends of `xspan` and at the bottom of the slab, plus a transfinite interpolant of
+the slab's data: the problem's boundary function at the two ends, and the initial condition at the
 first slab and the previous slab's top after it. The data are met by construction, and the slab's
 interior weak form alone is the residual.
 

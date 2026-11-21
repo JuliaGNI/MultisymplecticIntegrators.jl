@@ -612,3 +612,50 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   asserts no convergence. Whether the arm must converge is open.
 - kind: not verified
 - found: 2026-11-21
+
+### K78 · The affine controls of the manual's network and ELM examples do not converge under the default solver options.
+
+- location: `docs/src/network.md:29`
+- evidence: on `Wave.problem(timespan = (0.0, 0.2), timestep = 0.1, xstep = 0.05)`, the second
+  example of `docs/src/network.md`, `NetworkAnsatz(S = 4, mode = :last_layer, xspan = (0.0, 1.0),
+  degree = 2, ncells = (2, 4))` under `WeakInitialAndBoundaryConditions()`, records
+  `iterations = [3, 3]`, `residuals = [0.005585, 0.005472]` from
+  `initial_residuals = [1.2278, 0.5532]` and `converged = [false, false]`. The second example of
+  `docs/src/elm.md`, the same ansatz with `FitTo(PreviousSlab(); method =
+  TrainedHiddenLayer(epochs = 5))` and `linear_solver = true`, records `iterations = [2, 2]`,
+  `residuals = [0.07234, 0.02230]` from `initial_residuals = [0.5681, 11.260]`; its Newton run in
+  the first example ends at the same residuals. §V names `:last_layer` an affine control that must
+  converge. `network_f_reltol` of `test/helpers/testsetup.jl` is measured at `S = 20`, with step
+  ratios up to `7.8e-6`; the examples use `S = 4` and `integrate`'s default options. Whether a
+  step at `S = 4` has a root that the residual norm can reach is open.
+- kind: not verified
+- found: 2026-11-21
+
+### K79 · Documenter renders the two Markdown assets of `docs/src/assets/` as pages of their own.
+
+- location: `docs/src/assets/convergence_tables.md`
+- evidence: a build of the manual writes `docs/build/assets/convergence_tables.html` and
+  `docs/build/assets/long_time_energy.html` beside the page *Verification*, which reads both files
+  with `Markdown.parse` (`docs/src/verification.md:22`, `:32`). Neither page is in the `pages` of
+  `docs/make.jl`, so each is reachable by its URL and from no menu.
+- kind: docs
+- found: 2026-11-21
+
+### K80 · The docs build warns that it cannot determine the repository root URL for the navbar link.
+
+- location: `docs/make.jl:10`
+- evidence: `makedocs` gets `repo` as a string, and Documenter warns "Unable to determine the
+  repository root URL for the navbar link. This can happen when a string is passed to the `repo`
+  keyword of `makedocs`." The base `cac800e` has the same `repo` line.
+- kind: docs
+- found: 2026-11-21
+
+### K81 · Three library pages of the manual are above Documenter's `size_threshold_warn`.
+
+- location: `docs/src/ansatz.md`
+- evidence: a build of the manual warns "Generated HTML over size_threshold_warn limit" for
+  `couplings.md` (129.05 KiB), `library.md` (141.24 KiB) and `ansatz.md` (153.52 KiB), against
+  `size_threshold_warn` 100 KiB and `size_threshold` 200 KiB. Each of the three pages holds an
+  `@autodocs` block.
+- kind: docs
+- found: 2026-11-21

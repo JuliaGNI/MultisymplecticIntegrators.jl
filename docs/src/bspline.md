@@ -16,8 +16,8 @@ join consecutive slabs:
 
 At degree 1 under `CoefficientRestriction` the step is the bilinear finite-element scheme of the
 old FEM integrator. The step is a one-step form, so it needs no start-up, and its velocity is the
-ansatz's own `∂u/∂t̂ / h`. The space basis' boundary condition is SimpleSplines' `Dirichlet()` or `Free()`, and
-SimpleSplines counts the **degree** of a basis, not its order.
+ansatz's own `∂u/∂t̂ / h`. The space basis' boundary condition is SimpleSplines' `Dirichlet()` or
+`Free()`, and SimpleSplines counts the **degree** of a basis, not its order.
 
 ## The three couplings
 

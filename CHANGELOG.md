@@ -264,8 +264,8 @@ makes it worth keeping.
 - **A documentation build.** `docs/` holds `make.jl`, `Project.toml` and a manual, so
   `Documenter` has something to build and the doctest job has an environment. The page
   `docs/src/seam.md`, *The slab seam*, states the seam of the slab integrator and the action form
-  that it admits. The library is split over two pages, the package module and its submodules, so
-  that each page stays below Documenter's size threshold.
+  that it admits. The library is split over four pages, the core, the ansatz families, the
+  couplings and the problems, so that each stays below Documenter's 200 KiB `size_threshold`.
 - **`test/runtests.jl` runs the test files in worker processes.** It has the parallel form of the
   Harness test layout: one table `TESTS`, group → label → path, which ParallelTestRunner runs
   with each file in a worker process, in a module of its own, with no retry;
