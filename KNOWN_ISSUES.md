@@ -560,7 +560,8 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - evidence: `CHANGELOG.md:557` (`test/ansatz/network.jl` and
   `test/initial_guess/orthogonal_greedy.jl`), `:581` (`trained_hidden_layer.jl`), `:657`
   (`hard_constraint_lifting.jl`) and `:690` (`pinn_training.jl`) each say that the named files join
-  the `slow` group. `test/runtests.jl` lists `integration/benchmark.jl` alone under `"slow"`, and the
+  the `slow` group. `test/runtests.jl` lists only the benchmark matrix files,
+  `integration/benchmark.jl` and `integration/benchmark_failures.jl`, under `"slow"`, and the
   five files under `"ansatz"`, `"initialguess"` and `"couplings"`. The groups by topic already held
   them at `3cef8d8`. The entry on the CI groups (`:931`) says that "the other long files are in the
   groups by topic", and names neither the files nor their groups.
