@@ -1025,7 +1025,11 @@ makes it worth keeping.
   helpers they share move unchanged to `test/helpers/fixed_boundary_setup.jl`.
   `test/integration/benchmark.jl` (341 s) starts the smoke matrix once, under `Benchmark matrix`,
   and "the timing record", "each run in its own process" and "one table per problem and final
-  time" read its archives, where each ran the matrix itself. `test/ansatz/network.jl` (182 s) runs
+  time" read its archives, where each ran the matrix itself. Its costliest testset, "a run that
+  throws is a result", whose rows run in child processes, moves unchanged to
+  `test/integration/benchmark_failures.jl`, labelled `Benchmark matrix: failures` in the group
+  `slow`, and the helpers the two files share move unchanged to
+  `test/helpers/benchmark_setup.jl`. `test/ansatz/network.jl` (182 s) runs
   N1's `:all` run once per element type for N1 and N5, which ran the same run twice.
   `test/initial_guess/trained_hidden_layer.jl` (190 s) no longer trains for many epochs: E1a checks
   that one epoch at `learning_rate = 1e-2` lowers the misfit and that `misfit_gradient!` agrees

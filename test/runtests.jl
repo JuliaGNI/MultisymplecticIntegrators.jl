@@ -28,6 +28,7 @@ const TESTS = [
     ],
     "slow" => [
         "Benchmark matrix" => "integration/benchmark.jl",
+        "Benchmark matrix: failures" => "integration/benchmark_failures.jl"
     ],
     "ansatz" => [
         "Symbolic ansatz" => "ansatz/symbolic.jl",
