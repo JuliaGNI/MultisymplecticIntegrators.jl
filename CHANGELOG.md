@@ -1033,4 +1033,6 @@ keeping.
   `ForwardDiff` floor in the root `Project.toml`; the preamble no longer says that this file holds
   no entries. This closes the known issues K49, K67, K73, K74, K75, K80 and K82. Two findings of
   the audit of 2026-10-31 are recorded as the known issues K83, the size of
-  `src/couplings/weak_multipliers.jl`, and K84, the dense slab Jacobian.
+  `src/couplings/weak_multipliers.jl`, and K84, the dense slab Jacobian. The known issue K85
+  records that the docstring of `HardConstraintLifting` and the couplings page say the projection
+  vanishes on the whole bottom of the slab, where the B-spline page says it vanishes at the nodes.
