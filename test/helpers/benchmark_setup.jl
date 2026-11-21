@@ -1,7 +1,7 @@
 # The shared setup of the benchmark test files `test/integration/benchmark*.jl`: the scripts and the
 # helpers they include, the modules of the rows whose child ends on a code or a signal of its own,
-# and the rows and the differences the files build. Each file includes it after its own `using`
-# lines.
+# and the rows, the problems and the differences the files build. Each file includes it after its
+# own `using` lines.
 
 # The scripts are no part of the package, so the whole harness is tested through its files. The
 # reference records are included before the runner, which loads them itself only when its caller has
