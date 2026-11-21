@@ -231,13 +231,13 @@ function reference_error(coarse, fine)
     xf = fine["x"]
     steps = coarse["steps"]
     iszero(steps) && return Float64[]
-    shared = [searchsortedfirst(xf, node) for node in xc]
-    for (j, node) in enumerate(xc)
-        k = shared[j]
-        k <= length(xf) && isapprox(xf[k], node; atol = 0, rtol = 1.0e-12) ||
+    shared = map(xc) do node
+        k = shared_index(xf, node)
+        k > 0 ||
             throw(ArgumentError("the node $node of the coarse run is not a node of the finer " *
                                 "run's grid; a reference comparison is made at the nodes the two " *
                                 "share"))
+        return k
     end
     rows = fine_time_rows(coarse["t"], fine["t"], steps)
     fields = [field[rows, :] for field in fine["u"]]
@@ -266,8 +266,8 @@ function fine_time_rows(tc, tf, steps)
     rows = Vector{Int}(undef, steps + 1)
     for n in 0:steps
         t = tc[n + 1]
-        k = nearest_time(tf, t)
-        k > 0 && isapprox(tf[k], t; atol = 0, rtol = 1.0e-12) ||
+        k = shared_index(tf, t)
+        k > 0 ||
             throw(ArgumentError("the time $t of the coarse run is not a time of the finer run; " *
                                 "a reference comparison is made at the times the two store"))
         rows[n + 1] = k
@@ -275,15 +275,20 @@ function fine_time_rows(tc, tf, steps)
     return rows
 end
 
-# The index of the time of `tf` nearest to `t`, or `0` for a run that stored no time. The two runs'
-# times are the same values, but a time each computes from its own step count can sit a unit in the
-# last place away, so the nearer of the sorted neighbours is the candidate and the caller checks it.
-function nearest_time(tf, t)
-    isempty(tf) && return 0
-    k = searchsortedfirst(tf, t)
-    k > length(tf) && return length(tf)
-    k > 1 && abs(tf[k - 1] - t) < abs(tf[k] - t) && return k - 1
-    return k
+# The index of the entry of the sorted `values` that is `value` to a relative `1e-12`, or `0` where
+# none is: the match of a coarse run's node on a finer grid and of a coarse run's time among a finer
+# run's times. Two runs share a node or a time as the same value, but a value each computes from its
+# own count can sit a unit in the last place away on either side, so the nearer of the two sorted
+# neighbours is the candidate.
+function shared_index(values, value)
+    isempty(values) && return 0
+    k = searchsortedfirst(values, value)
+    if k > length(values)
+        k = length(values)
+    elseif k > 1 && abs(values[k - 1] - value) < abs(values[k] - value)
+        k -= 1
+    end
+    return isapprox(values[k], value; atol = 0, rtol = 1.0e-12) ? k : 0
 end
 
 """

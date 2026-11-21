@@ -1016,3 +1016,12 @@ makes it worth keeping.
   `.github/workflows/CI.yml` runs with `check_bounds: auto`, and ParallelTestRunner starts its
   workers from `Base.julia_cmd()`, which carries the parent's `--check-bounds` setting, so the guard
   is true in CI and the assertions run there.
+- **A reference comparison matches the nodes as it matches the times.** `reference_error` in
+  `scripts/benchmark.jl` finds a coarse run's node on the finer grid with `shared_index`, the
+  lookup that already found its times: the nearer of the two sorted neighbours, accepted within a
+  relative `1e-12`. A node of the finer grid one unit in the last place below the coarse node was
+  refused before, while a time one unit off was accepted. This closes the known issue K55.
+- **The renderer and the archive reader write the backtrace of a failure.** The `catch` of
+  `scripts/figures.jl` that skips a figure it cannot draw, and the one of `load_runs` in
+  `scripts/archives.jl` that skips an archive it cannot read, keep their one-line report and also
+  write the exception with its backtrace to `stderr`, as `scripts/run_family.jl` does.

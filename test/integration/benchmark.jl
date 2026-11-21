@@ -215,6 +215,21 @@ end
         nudged["t"] = copy(finest["t"])
         nudged["t"][5] = prevfloat(nudged["t"][5])
         @test reference_error(runs[1], nudged) ≈ runs[1]["error"]
+        # A node is matched as a time is: a node of the finer grid one unit in the last place below
+        # the coarse run's node is that node, and one further away than the match's relative
+        # tolerance of `1e-12` is not.
+        node = runs[1]["x"][2]
+        k = argmin(abs.(finest["x"] .- node))
+        below = copy(finest)
+        below["x"] = copy(finest["x"])
+        below["x"][k] = prevfloat(node)
+        @test below["x"][k] < node
+        @test reference_error(runs[1], below) ≈ runs[1]["error"]
+        apart = copy(finest)
+        apart["x"] = copy(finest["x"])
+        apart["x"][k] = node * (1 - 1.0e-10)
+        @test_throws r"^ArgumentError: the node \S+ of the coarse run is not a node of the finer run's grid" reference_error(
+            runs[1], apart)
         # A time of the coarse run that the finer run does not hold is refused rather than matched
         # to a neighbouring step: in the middle of the finer grid, past its end, and where the finer
         # run holds no time at all.
@@ -804,5 +819,30 @@ end
         elm = Set(entry.stem for entry in family_entries(:elm))
         @test !isempty(elm)
         @test !any(entry -> entry.stem in elm, [row.entry for row in rows])
+    end
+
+    # The renderer ends its own process, so it runs in a child, on an archive of a kind the
+    # extension refuses to draw: the archive's line on stdout names the failure, and the backtrace
+    # of the refusal goes to stderr.
+    @testset "the renderer writes the backtrace of a figure it cannot draw" begin
+        directory = mktempdir()
+        try
+            runs_dir = joinpath(directory, "runs")
+            mkpath(runs_dir)
+            jldsave(joinpath(runs_dir, "undrawable.jld2"); kind = "phase-portrait")
+            script = joinpath(@__DIR__, "..", "..", "scripts", "figures.jl")
+            command = `$(Base.julia_cmd()) --startup-file=no --project=$(Base.active_project()) $(script) --runs-dir $(runs_dir) --results-dir $(joinpath(directory, "results"))`
+            out = IOBuffer()
+            err = IOBuffer()
+            process = run(pipeline(ignorestatus(command); stdout = out, stderr = err))
+            output = String(take!(out))
+            errors = String(take!(err))
+            @test process.termsignal == 0 && process.exitcode == 1
+            @test occursin(r"undrawable\s+FAILED: ArgumentError: ", output)
+            @test occursin(r"^ArgumentError: .*\nStacktrace:\n"sm, errors)
+            @test occursin(r"Stacktrace:.*figures\.jl:\d+"s, errors)
+        finally
+            rm(directory; recursive = true, force = true)
+        end
     end
 end
