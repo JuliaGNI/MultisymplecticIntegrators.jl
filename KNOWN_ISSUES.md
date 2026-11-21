@@ -624,8 +624,10 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `docs/src/elm.md`, the same ansatz with `FitTo(PreviousSlab(); method =
   TrainedHiddenLayer(epochs = 5))` and `linear_solver = true`, records `iterations = [2, 2]`,
   `residuals = [0.07234, 0.02230]` from `initial_residuals = [0.5681, 11.260]`; its Newton run in
-  the first example ends at the same residuals. §V names `:last_layer` an affine control that must
-  converge. `network_f_reltol` of `test/helpers/testsetup.jl` is measured at `S = 20`, with step
+  the first example ends at the same residuals. The docstring of `NetworkAnsatz`
+  (`src/ansatz/network.jl:22`) says that two Newton iterations reach the tolerance of a
+  `:last_layer` step wherever the output weights carry every constraint row of the coupling.
+  `network_f_reltol` of `test/helpers/testsetup.jl` is measured at `S = 20`, with step
   ratios up to `7.8e-6`; the examples use `S = 4` and `integrate`'s default options. Whether a
   step at `S = 4` has a root that the residual norm can reach is open.
 - kind: not verified
