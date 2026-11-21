@@ -93,9 +93,9 @@ function (density::LagrangianDensity)(u, v, w, params = density.params)
 end
 
 """
-The value of a built derivative at the type of its arguments: a derivative that is identically
-zero, or constant, is built as an integer literal, which this promotes to the arguments' type. A
-value of a wider type keeps that type.
+The value of a built derivative at the type of its arguments: a derivative that is an integer
+constant, such as one that is identically zero, is built as an integer literal, which this promotes
+to the arguments' type. A value of a wider type keeps that type.
 """
 @inline function promote_derivative(value, u, v, w)
     return convert(promote_type(typeof(value), typeof(u), typeof(v), typeof(w)), value)

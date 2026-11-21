@@ -210,6 +210,14 @@ include("../helpers/testsetup.jl")
         @test_throws r"^ArgumentError: xstep must be positive" Wave.problem(xstep = -0.25)
         @test_throws r"^ArgumentError: xstep .* leaves more grid points" Wave.problem(
             xstep = nextfloat(0.0))
+        # The grid is a lazy range, so the bound is read at its two sides without a collect: a
+        # count of `2^62` intervals is below `typemax(Int)`, and one of `2^63` is not.
+        grid = MultisymplecticIntegrators._xgrid
+        @test length(grid((0.0, 1.0), 2.0^-62)) == 2^62 + 1
+        @test_throws r"^ArgumentError: xstep .* leaves more grid points" grid(
+            (0.0, 1.0), 2.0^-63)
+        @test_throws r"^ArgumentError: xstep .* leaves more grid points" grid(
+            (0.0f0, 1.0f0), nextfloat(0.0f0))
 
         # The grid ends on the span's end exactly, also where that end is zero.
         ending_at_zero = LinearTransport.problem(T = Float32, xspan = (-0.3f0, 0.0f0),
