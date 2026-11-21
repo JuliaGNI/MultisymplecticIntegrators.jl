@@ -17,6 +17,15 @@ makedocs(;
     ),
     pages = [
         "Home" => "index.md",
+        "The families" => [
+            "The B-spline family" => "bspline.md",
+            "The multiplier network" => "network.md",
+            "The ELM family" => "elm.md",
+            "The TrialNN family" => "trialnn.md",
+            "The symbolic family" => "symbolic.md",
+            "The fixed-boundary network" => "fixed_boundary.md",
+            "The box scheme" => "box_scheme.md"
+        ],
         "The slab seam" => "seam.md",
         "Library" => "library.md",
         "The ansatz families" => "ansatz.md",
