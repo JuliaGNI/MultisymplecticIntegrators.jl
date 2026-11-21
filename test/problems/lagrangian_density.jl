@@ -24,6 +24,33 @@ include("../helpers/testsetup.jl")
         end
     end
 
+    @testset "every derivative has the element type of the arguments" for T in (
+        Float32, Float64)
+        # The wave density has no `u` term, so its built `∂L/∂u` is the literal `0`, and a density
+        # of `u` alone has the literal `0` for `∂L/∂v` and `∂L/∂w`; the parameters are of type
+        # `T`, so that no derivative is wider than the arguments.
+        densities = (Wave.density(params = (c = T(Wave.default_parameters().c),)),
+            LagrangianDensity(-u^2 / 2, u, v, w),
+            SineGordon.density(params = (c = T(SineGordon.default_parameters().c),)),
+            LinearTransport.density(params = (c = T(LinearTransport.default_parameters().c),)))
+        for density in densities
+            D = density isa LagrangianDensity ? 1 : 2
+            uₜ, vₜ, wₜ = D == 1 ? (T(0.3), T(0.7), T(-0.2)) :
+                         (T[0.3, 1.1], T[0.7, 0.6], T[-0.2, -0.25])
+            partials = derivatives(density, uₜ, vₜ, wₜ)
+            for field in (:u, :v, :w)
+                value = getfield(partials, field)
+                if D == 1
+                    @test value isa T
+                else
+                    @test all(x -> x isa T, value)
+                end
+            end
+        end
+        # A wider result is not narrowed to the arguments' type.
+        @test derivative_w(Wave.density(), 0.3f0, 0.7f0, -0.2f0) isa Float64
+    end
+
     @testset "the parameters reach every built function" begin
         density = LagrangianDensity(v^2 / 2 - c^2 * w^2 / 2, u, v, w; params = (c = 0.5,))
         @test derivative_w(density, 0.0, 0.0, 1.0, (c = 2.0,)) ≈ -4.0

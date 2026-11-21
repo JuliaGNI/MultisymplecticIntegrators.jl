@@ -431,6 +431,18 @@ end
         assert_no_upcast(f.features, T)
     end
 
+    # The learning rate keeps the float type it is given, and an integer rate becomes `Float64`
+    # through `float`.
+    @testset "E1h the learning rate keeps its float type" begin
+        @test TrainedHiddenLayer(learning_rate = 0.1f0).learning_rate isa Float32
+        @test TrainedHiddenLayer().learning_rate === 1.0e-5
+        @test TrainedHiddenLayer(learning_rate = 0).learning_rate === 0.0
+        @test TrainedHiddenLayer(learning_rate = big(0.5)).learning_rate isa BigFloat
+        method = TrainedHiddenLayer(learning_rate = 0.1f0)
+        @test fieldtype(typeof(method), :learning_rate) === Float32
+        @test all(isconcretetype, fieldtypes(typeof(method)))
+    end
+
     # The fit's buffers and the block are of the problem's element type, and no evaluation of a
     # `Float32` slab reaches `Float64` — on a scalar field and on a vector-valued one.
     @testset "E1e the element type of the fit and of its workspace" for T in (Float64, Float32),

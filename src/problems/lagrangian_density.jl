@@ -92,19 +92,28 @@ function (density::LagrangianDensity)(u, v, w, params = density.params)
     density.L(u, v, w, parameter_values(density, params)...)
 end
 
+"""
+The value of a built derivative at the type of its arguments: a derivative that is identically
+zero, or constant, is built as an integer literal, which this promotes to the arguments' type. A
+value of a wider type keeps that type.
+"""
+@inline function promote_derivative(value, u, v, w)
+    return convert(promote_type(typeof(value), typeof(u), typeof(v), typeof(w)), value)
+end
+
 """`∂L/∂u` at `(u, v, w)`."""
 function derivative_u(density::LagrangianDensity, u, v, w, params = density.params)
-    density.∂u(u, v, w, parameter_values(density, params)...)
+    promote_derivative(density.∂u(u, v, w, parameter_values(density, params)...), u, v, w)
 end
 
 """`∂L/∂v` at `(u, v, w)`."""
 function derivative_v(density::LagrangianDensity, u, v, w, params = density.params)
-    density.∂v(u, v, w, parameter_values(density, params)...)
+    promote_derivative(density.∂v(u, v, w, parameter_values(density, params)...), u, v, w)
 end
 
 """`∂L/∂w` at `(u, v, w)`."""
 function derivative_w(density::LagrangianDensity, u, v, w, params = density.params)
-    density.∂w(u, v, w, parameter_values(density, params)...)
+    promote_derivative(density.∂w(u, v, w, parameter_values(density, params)...), u, v, w)
 end
 
 """

@@ -14,17 +14,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-26
 
-### K14 · `∂L/∂u` of the wave density is a literal zero of type `Int`.
-
-- location: `src/problems/lagrangian_density.jl`
-- evidence: the wave density has no `u` term, so `build_function` returns the literal `0`:
-  `derivatives(Wave.density(), 0.3, 0.7, -0.2).u` is `0 :: Int64` where the other two derivatives
-  have the element type of the arguments, and the kept test asserts the type of `.v` only. A
-  density with a mass term returns `Float64`, so the clause holds wherever `∂L/∂u` is not
-  identically zero.
-- kind: defect
-- found: 2026-10-26
-
 ### K21 · The `WAVE_GALERKIN_BSPLINE` record is an unconverged solve of a singular layout.
 
 - location: `test/helpers/reference_values.jl:45`
@@ -52,49 +41,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   sine-Gordon's order at the head is measured against its exact solution instead.
 - kind: defect
 - found: 2026-10-28; one issue with K21
-
-### K31 · A7a's `integrate!` run does not assert convergence.
-
-- location: `test/couplings/weak_multipliers.jl:107-126`
-- evidence: `multiplier_momentum`, which A7a calls, drives a 50-step `VectorWave` run (β = 0.5)
-  through `integrate!` and does not read `cache(int).converged`. The `integrate` run of the same
-  problem and method in A7a (`:511-514`) asserts `all(result.stats.converged)`, so a step that does
-  not converge still fails A7a, but the run whose momenta A7a checks has no assertion of its own.
-- kind: missing test
-- found: 2026-11-01
-
-### K35 · The side-data testset's symmetric span cannot see `left` and `right` swapped.
-
-- location: `test/couplings/weak_multipliers.jl:561`
-- evidence: the testset "the side data of every component reaches the slab" builds its problem on
-  `xspan = (0.2, 0.8)`, and `Wave`'s closed form is `sin(πx/l)` in space, whose two ends carry the
-  same value: `Wave.solution_u(0.0, 0.2, Wave.default_parameters())` is `0.7053423027509678` and
-  the same call at `0.8` is `0.7053423027509679`. A target filled with `bcs.right.u[d]` at the left
-  end and `bcs.left.u[d]` at the right passes all 25 assertions of each precision. The mutant that
-  swaps them is caught by A6a of the same file, whose travelling wave differs at its two ends.
-- kind: missing test
-- found: 2026-11-07
-
-### K36 · No test passes a zero or a negative `xstep` to a problem constructor.
-
-- location: `src/problems/lagrangian_problem.jl:98`
-- evidence: `grep -rn 'xstep = 0[,)]\|xstep = zero\|xstep = -' test/` finds nothing, so every test
-  problem passes a positive step and the guard `xh > zero(T) || throw(ArgumentError("xstep must be
-  positive, got $xh"))` is unasserted: the mutant that deletes the line survived the round-2 run of
-  `test/problems/lagrangian_problem.jl` (`E7: a non-positive xstep is accepted`). Without the guard,
-  `xstep = 0.0` reaches `round(Int, (xsp[2] - xsp[1]) / xh)` and throws `InexactError`.
-- kind: missing test
-- found: 2026-11-07
-
-### K37 · A `xstep` at the smallest positive `Float64` throws `InexactError`, not `ArgumentError`.
-
-- location: `src/problems/lagrangian_problem.jl:269`
-- evidence: `Wave.problem(xstep = nextfloat(0.0))` passes the positive-step guard and throws
-  `InexactError: Int64(Inf)` from `round(Int, (xsp[2] - xsp[1]) / xh)`, where the constructor's
-  refusals are `ArgumentError`s. A stepped range of that step fails alike:
-  `collect(0.0:nextfloat(0.0):1.0)` throws `InexactError: Int64(Inf)`.
-- kind: defect
-- found: 2026-11-07
 
 ### K38 · The `WAVE_NN_FULLY` run is an unconverged iterate.
 
@@ -527,16 +473,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   Neither the docstring of the predictor nor the CHANGELOG entry of the forcing says so.
 - kind: docs
 - found: #72
-
-### K71 · The `ArgumentError` of `quality_problem` for a `D` other than 1 and 2 cannot be thrown.
-
-- location: `test/helpers/quality_cases.jl:29`
-- evidence: `quality_problem(T, D)` has one caller, `quality_entry` (`:111`), and the two callers of
-  `quality_entry`, `test/quality/inference.jl` and `test/quality/jet.jl`, take `D` from
-  `QUALITY_COMPONENTS = (1, 2)`. Removing the `throw` and returning `VectorWave.problem` for
-  `D == 2` as the last line does the same.
-- kind: dead code
-- found: #71
 
 ### K72 · A cache lookup of a `NetworkAnsatz` integrator allocates.
 

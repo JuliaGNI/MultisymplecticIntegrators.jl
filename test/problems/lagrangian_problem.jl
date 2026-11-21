@@ -204,6 +204,13 @@ include("../helpers/testsetup.jl")
             bcs_function = bcs, timespan = (0.0, Inf), timestep = 0.1, xspan = (0.0, 1.0),
             xstep = 0.25)
 
+        # A zero or a negative step is refused by its own guard, and a step so small that the span
+        # holds more points than an `Int` counts is refused before the grid is built.
+        @test_throws r"^ArgumentError: xstep must be positive" Wave.problem(xstep = 0.0)
+        @test_throws r"^ArgumentError: xstep must be positive" Wave.problem(xstep = -0.25)
+        @test_throws r"^ArgumentError: xstep .* leaves more grid points" Wave.problem(
+            xstep = nextfloat(0.0))
+
         # The grid ends on the span's end exactly, also where that end is zero.
         ending_at_zero = LinearTransport.problem(T = Float32, xspan = (-0.3f0, 0.0f0),
             xstep = 0.3f0 / 15)

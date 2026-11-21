@@ -282,6 +282,42 @@ end
         @test w == expected
     end
 
+    # The bias interval keeps the float type it is given, an integer interval becomes `Float64`
+    # through `float`, and two ends of different float types promote. The workspace's key holds the
+    # method at the block's element type, so it is concretely typed.
+    @testset "G6 the bias interval keeps its float type" begin
+        @test OrthogonalGreedy(bias_interval = (-1.0f0, 1.0f0)).bias_interval isa
+              Tuple{Float32, Float32}
+        @test OrthogonalGreedy().bias_interval isa Tuple{Float64, Float64}
+        @test OrthogonalGreedy().bias_interval === (-Float64(π), Float64(π))
+        @test OrthogonalGreedy(bias_interval = (-1, 1)).bias_interval === (-1.0, 1.0)
+        @test OrthogonalGreedy(bias_interval = (-1.0f0, 1.0)).bias_interval === (-1.0, 1.0)
+        @test OrthogonalGreedy(bias_interval = (big(-1.0), big(1.0))).bias_interval isa
+              Tuple{BigFloat, BigFloat}
+        # the promoted ends must increase strictly
+        @test_throws r"^ArgumentError: bias_interval must increase" OrthogonalGreedy(
+            bias_interval = (0.5f0, 0.5))
+        @test_throws r"^ArgumentError: bias_interval must increase" OrthogonalGreedy(
+            bias_interval = (1, 0.5f0))
+        for T in (Float64, Float32)
+            @test isconcretetype(fieldtype(OrthogonalGreedy{T}, :bias_interval))
+            @test fieldtype(M.NetworkFit{T}, :method) ===
+                  Union{Nothing, OrthogonalGreedy{T}}
+            # one dictionary, whichever float type the method carries its interval in
+            single = OrthogonalGreedy(bias_interval = (-1.0f0, 0.5f0))
+            double = OrthogonalGreedy(bias_interval = (-1.0, 0.5))
+            @test M.greedy_atoms(single, T) == M.greedy_atoms(double, T)
+            ansatz, c, problem = greedy_slab(T)
+            sample, _ = greedy_sample(T, c, problem, (t, x) -> sin(2 * π * x) * cos(π * t))
+            w₃₂, w₆₄ = zeros(T, ansatz.np), zeros(T, ansatz.np)
+            M.fit!(w₃₂, single, ansatz, sample, c)
+            @test c.ansatz.fit.method isa OrthogonalGreedy{T}
+            _, fresh, _ = greedy_slab(T)
+            M.fit!(w₆₄, double, ansatz, sample, fresh)
+            @test w₃₂ == w₆₄
+        end
+    end
+
     @testset "G2 the dictionary holds no duplicate atom" for T in (Float64, Float32)
         method = OrthogonalGreedy()
         atoms = M.greedy_atoms(method, T)
