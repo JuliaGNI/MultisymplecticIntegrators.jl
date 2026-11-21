@@ -562,7 +562,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   (`hard_constraint_lifting.jl`) and `:690` (`pinn_training.jl`) each say that the named files join
   the `slow` group. `test/runtests.jl` lists `integration/benchmark.jl` alone under `"slow"`, and the
   five files under `"ansatz"`, `"initialguess"` and `"couplings"`. The groups by topic already held
-  them at `3cef8d8`. The entry on the CI groups (`:929`) says that "the other long files are in the
+  them at `3cef8d8`. The entry on the CI groups (`:931`) says that "the other long files are in the
   groups by topic", and names neither the files nor their groups.
 - kind: found late
 - found: 2026-11-21
@@ -616,8 +616,9 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   one iteration, as under `WeakInitialCondition` on the same page. The kernel of 20 dimensions is
   measured in `Float64`; whether it is exact is open. The testset
   "L5 a B-spline ansatz runs under the lifting" of `test/couplings/hard_constraint_lifting.jl`
-  records this arm's iterations and residuals and asserts no convergence. Whether the arm must
-  converge is open.
+  runs this arm on another configuration, `lifting_problem` with `ncells = (2, 5)` and
+  `FitTo(ExactSolution())`, logs its iterations and residuals with `@info`, and asserts nothing
+  about their convergence. Whether the arm must converge is open.
 - kind: not verified
 - found: 2026-11-21
 
@@ -672,7 +673,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K82 · The docstring of `HardConstraintLifting` and the couplings page say the bottom datum is met by construction, but it is met only at the quadrature nodes.
 
-- location: `src/couplings/hard_constraint_lifting.jl:24`
+- location: `src/couplings/hard_constraint_lifting.jl:25`
 - evidence: the docstring says the field "is the data at the three parts of the boundary by
   construction", and `docs/src/couplings.md:17` says the initial and boundary conditions "are
   therefore met by construction". `lifting_datum` (`src/couplings/hard_constraint_lifting.jl:169`)

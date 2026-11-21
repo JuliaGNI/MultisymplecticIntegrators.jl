@@ -37,8 +37,11 @@ names the pull request that removed it.
 | 24 | `Lagrangian_PDE_solution.jl` (`LPDE_solution`) | — | — | **no own functionality**: never included, superseded by `GeometricSolution`, removed by #25 |
 | 25 | `solvers.jl` (`initsolver` with backtracking) | — | — | **no own functionality**: never included, names undefined at load, removed by #25 |
 
-Row 3's `multiplier_stride` is gone: every trace function carries a multiplier, the corners
-excepted. Row 7 needs no start-up, because the step is a one-step form, and its velocity is the
-ansatz's `∂u/∂t̂ / h`. Row 19's carry is each coupling's; the lifting of the TrialNN family carries
-none, and the other couplings' carries are tested in `test/couplings/coefficient_restriction.jl`
-and `test/couplings/weak_multipliers.jl`.
+Row 1's tests check the wave energy alone. The sine-Gordon and transport energies are checked only
+for their element type, by "a Float32 SineGordon problem evaluates its energy in Float32" of
+`test/problems/lagrangian_problem.jl` and "a Float32 problem evaluates its energy in Float32" of
+`test/problems/linear_transport.jl`. Row 3's `multiplier_stride` is gone: every trace function
+carries a multiplier, the corners excepted. Row 7 needs no start-up, because the step is a one-step
+form, and its velocity is the ansatz's `∂u/∂t̂ / h`. Row 19's carry is each coupling's; the lifting
+of the TrialNN family carries none, and the other couplings' carries are tested in
+`test/couplings/coefficient_restriction.jl` and `test/couplings/weak_multipliers.jl`.
