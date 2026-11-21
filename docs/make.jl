@@ -26,6 +26,9 @@ makedocs(;
             "The fixed-boundary network" => "fixed_boundary.md",
             "The box scheme" => "box_scheme.md"
         ],
+        "The initial guess" => "guess.md",
+        "Verification" => "verification.md",
+        "From the old stack" => "inventory.md",
         "The slab seam" => "seam.md",
         "Library" => "library.md",
         "The ansatz families" => "ansatz.md",

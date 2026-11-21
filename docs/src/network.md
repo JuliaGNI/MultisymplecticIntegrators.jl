@@ -39,7 +39,8 @@ A network is not linear in its parameters, so a [`Projection`](@ref) is refused 
 [`default_fit`](@ref) is [`OrthogonalGreedy`](@ref), the greedy fit of the old `OGA2D` seed, which
 [`Continuation`](@ref) uses at the first slab. [`TrainedHiddenLayer`](@ref) trains the hidden
 layer of a `:last_layer` network (the [ELM family](elm.md)), and [`PINNTraining`](@ref) descends
-every free parameter (the [TrialNN family](trialnn.md)).
+every free parameter (the [TrialNN family](trialnn.md)). The page
+[The initial guess](guess.md) runs each of them.
 
 ```@example network
 method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions();

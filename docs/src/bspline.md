@@ -46,6 +46,15 @@ result = integrate(problem, SpaceTimeGalerkin(free, WeakInitialAndBoundaryCondit
 result.stats
 ```
 
+Both weak couplings take the keyword `multiplier_basis`: `:bspline`, the ansatz's own trace basis,
+the default, or `:lagrange`, the nodal basis of the same set of functions.
+
+```@example bspline
+result = integrate(problem,
+    SpaceTimeGalerkin(ansatz, WeakInitialCondition(multiplier_basis = :lagrange)))
+result.stats
+```
+
 `result` is the named tuple `(; solution, traces, stats)` of [`integrate`](@ref): the
 `GeometricSolution` on the output grid, the top trace of every step, and the record of every
 step's Newton solve.
