@@ -195,7 +195,7 @@ end
 """
     ansatz_data(ansatz, problem, ST)
 
-The ansatz's block of the slab cache, built once per integrator.
+The ansatz's block of the slab cache, built once for each cache an integrator builds.
 """
 function ansatz_data(a::TensorBSplineAnsatz{T}, problem::LagrangianPDEProblem,
         ::Type{ST}) where {T, ST}

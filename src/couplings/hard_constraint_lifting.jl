@@ -22,8 +22,10 @@ the slab's data,
 ```
 
 at the physical time `t = t_0 + h \\hat t`, with `g_a` and `g_b` the problem's `bcs_function` at the
-two ends and `u_b` the bottom datum. The field of the slab is `P[N] + ℓ`, so it is the data at the
-three parts of the boundary by construction: `P[N]` is zero there and `ℓ` is the datum.
+two ends and `u_b` the bottom datum. The field of the slab is `P[N] + ℓ`. It meets the side data
+exactly. The bottom datum `u_b` is stored at the space nodes of the ansatz's rule
+(`lifting_datum`): the field meets it at those nodes, and between two nodes `u_b` is the
+linear blend of their two values.
 
 The corner correction is the term `ψ_L(x) * (1 - t̂)` at the left end and `ψ_R(x) * (1 - t̂)` at the
 right. With it `ℓ` interpolates the sides at the slab's start and the bottom along the whole slab;
@@ -320,7 +322,7 @@ the residual, so a `Free()` space basis — free at the ends, and lifted there �
 the wrong time.
 
 The corner check of the slab's data is not a refusal and is not here: the block's
-[`coupling_data`](@ref) reports it, once per integrator, as a warning.
+[`coupling_data`](@ref) reports it as a warning, which one integrator gives once.
 """
 check_coupling(::LagrangianPDEProblem, ::HardConstraintLifting, ::NetworkAnsatz) = nothing
 

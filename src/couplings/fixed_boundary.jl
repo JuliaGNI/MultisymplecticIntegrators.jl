@@ -158,6 +158,10 @@ if !@isdefined(FixedBoundaryData)
     predictor's top and the bubble to what the predictor has beyond the interpolation of the two
     levels.
 
+    The predictor integrates the unforced equation: it reads the density alone and no forcing of the
+    problem. Only the solved slab reads the forcing, so on a forced problem the guess is a step of
+    the unforced equation and the solve adds the load.
+
     It is a target of a [`FixedBoundaryNetwork`](@ref) alone, and its acceleration reads the density's
     velocity derivative as one constant `m` times the velocity — which holds for the wave equation,
     for sine-Gordon and for a generated density, and fails for a density whose momentum is not of
@@ -689,7 +693,8 @@ else
     The predictor's acceleration at the grid points, `(∂L/∂u − ∂ₓ(∂L/∂w)) / m`: the slope in space by
     central differences of the field, and the divergence of the density's flux by central differences
     of `∂L/∂w`. The two ends carry no acceleration, because the side data is imposed there at every
-    substep.
+    substep. The acceleration is that of the unforced equation: `∂L/∂u` is the density's alone,
+    and the problem's forcing, which the solved slab adds to `∂L/∂u`, is not read here.
     """
     function predictor_force!(acc::AbstractMatrix, u::AbstractMatrix, v::AbstractMatrix,
             w::AbstractMatrix, du::AbstractMatrix, dw::AbstractMatrix, density, params, dx,

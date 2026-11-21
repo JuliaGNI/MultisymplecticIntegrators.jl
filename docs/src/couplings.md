@@ -13,9 +13,10 @@ targets this package ships, and the fits that bring an ansatz to one of them.
 field itself. The field of the slab is `P[N] + ℓ`: the transfinite projection of the ansatz's field
 that vanishes at the two ends of `xspan` and at the bottom of the slab, plus the transfinite
 interpolant `ℓ` of the slab's data — the problem's boundary function at the two ends, and the
-initial condition's bottom on the first slab and the previous slab's top afterwards. The initial and
-boundary conditions are therefore met by construction and the interior weak form alone is the
-residual.
+initial condition's bottom on the first slab and the previous slab's top afterwards. The boundary
+conditions are met exactly. The bottom datum is stored at the space nodes of the ansatz's rule and
+is met at those nodes; between two nodes it is the linear blend of their two values. The interior
+weak form alone is the residual.
 
 The slab carries **no momentum** between steps: the coupling adds no surface term and no load at the
 bottom of the slab, and `coupling_unknowns` is zero, so the solver's vector is the ansatz's own. That
