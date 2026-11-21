@@ -617,3 +617,29 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   between them, and the side value outside them. The base `cac800e` has both sentences.
 - kind: docs
 - found: #82
+
+### K87 · The `method` field of `FixedBoundaryFit` is not concretely typed.
+
+- location: `src/couplings/fixed_boundary.jl:133`
+- evidence: `mutable struct FixedBoundaryFit{ST}` declares `method::Union{Nothing, BubbleGreedy}`,
+  and `BubbleGreedy{R <: Tuple{Vararg{Real, 2}}}` (`:72`) is a `UnionAll`, so the field's type is
+  abstract and each read of `f.method` is dispatched at run time. `NetworkFit{ST}` keys its
+  workspace on `Union{Nothing, OrthogonalGreedy{ST}}` for the same purpose. The field is the same
+  at `f9ed372`.
+- kind: defect
+- found: 2026-11-22
+
+### K88 · A `BigFloat` slab fitted by a `Float64` `OrthogonalGreedy` rebuilds its fit workspace at every fit.
+
+- location: `src/initial_guess/orthogonal_greedy.jl:52`
+- evidence: `fit_network!` keys the workspace on `OrthogonalGreedy{ST}(method)` (`:51`) and
+  compares it with `f.method != key`. `OrthogonalGreedy` defines no `==`, so the default compares
+  the fields with `===`, and a `BigFloat` is mutable, so two `BigFloat` ends compare by identity.
+  The conversion constructor (`src/initial_guess/fit_methods.jl:66`) makes new `BigFloat` ends from
+  a `Float64` method at every call. A struct of the same form gives `false` for
+  `G{BigFloat}(m64) == G{BigFloat}(m64)` and `true` for a `BigFloat` method and for `Float32`, on
+  Julia 1.13. The default `OrthogonalGreedy()` holds `Float64` ends, so a `BigFloat` slab with the
+  default method rebuilds the dictionary and its table at every fit: the result is correct, and
+  the fit allocates.
+- kind: defect
+- found: 2026-11-22
