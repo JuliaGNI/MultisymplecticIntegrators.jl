@@ -54,7 +54,8 @@ makes it worth keeping.
 - **`test/Project.toml` carries no `[compat]` bound for a dependency of the root `Project.toml`.**
   The entries `BenchmarkTools`, `GeometricIntegratorsBase`, `Plots` and `Revise` are removed, and
   its `[compat]` table holds bounds only for the test-only dependencies `Aqua`, `CairoMakie`,
-  `ExplicitImports`, `ForwardDiff`, `JLD2` and `SafeTestsets`, none of which the root depends on.
+  `ExplicitImports`, `ForwardDiff`, `JLD2` and `ParallelTestRunner`, none of which the root
+  depends on.
   The test environment contains the package, so the resolver applies the root's bounds to every
   shared dependency; a test bound could only narrow them, and tests that run on narrower bounds
   than the package claims do not test what the package admits. This is the tree-wide rule of the
@@ -232,13 +233,19 @@ makes it worth keeping.
   `docs/src/seam.md`, *The slab seam*, states the seam of the slab integrator and the action form
   that it admits. The library is split over two pages, the package module and its submodules, so
   that each page stays below Documenter's size threshold.
-- **`test/runtests.jl` runs each test file in its own `@safetestset`.** Empty `ARGS` runs every
-  group that `test/ci-groups.toml` lists. The `core` group holds seventeen files: the Aqua,
-  explicit-imports and sources quality checks, the Lagrangian density and Lagrangian problem tests,
-  the linear transport and vector wave tests, the tensor B-spline ansatz, coefficient restriction,
-  coupling seam and initial-guess tests, the integrator shell, archive and registry tests, the box
-  scheme, and the diagnostics and plotting tests. The other groups are in the entry on the CI test
-  groups.
+- **`test/runtests.jl` runs the test files in worker processes.** It has the parallel form of the
+  Harness test layout: one table `TESTS`, group → label → path, which ParallelTestRunner runs
+  with each file in a worker process, in a module of its own, with no retry;
+  `test/Project.toml` bounds it at `ParallelTestRunner = "2.10"`. Group names in `ARGS`
+  select groups, an argument that starts with `--`, such as `--jobs=4`, goes to the runner, an
+  unknown group stops the run with an error, and empty `ARGS` runs every group that
+  `test/ci-groups.toml` lists. The `core` group holds thirteen files: the Lagrangian density and
+  Lagrangian problem tests, the linear transport and vector wave tests, the tensor B-spline ansatz,
+  coefficient restriction, coupling seam and initial-guess tests, the integrator shell, archive and
+  registry tests, the box scheme, and the diagnostics tests. The `quality` group holds the six
+  files under `test/quality/` and the plotting test. `test/quality/inference.jl` is thus no `core`
+  file, and the 60 s limit of a `core` file does not apply to it; this closes the known issue K69.
+  The other groups are in the entry on the CI test groups.
 - **Reference values of the integrators at `294f023`.** `scripts/reference_values.jl` runs every
   integrator family on short `Wave` and `SineGordon` cases and writes
   `test/helpers/reference_values.jl`. Two cases fail at `294f023`. The script does not run on this
@@ -373,7 +380,7 @@ makes it worth keeping.
   `test/helpers/action_oracle.jl` builds the discrete slab action from the density, the data
   functions and SimpleSplines' evaluation of the ansatz, with each coupling's terms and datums, and
   differentiates it with ForwardDiff. Six files under `test/verification/properties/`, in the
-  groups `derivatives` and `invariants`, assert in `Float64` and `Float32` the generator's
+  group `verification`, assert in `Float64` and `Float32` the generator's
   controls and the oracle's independence, and under all three couplings: that `residual!` is the
   gradient of the action on the first and the second slab; that the solver's Jacobian equals central differences; that a linear density
   converges in at most two Newton iterations; that the rotation charge of a Noether problem is
@@ -759,12 +766,12 @@ makes it worth keeping.
   stability bound.** The largest energy error over the last period is at most twice the largest
   over the first under the three couplings and the box scheme; at `c·h/Δx = 0.9` the largest `L²`
   error of 80 steps is at most `1e-2` at degrees 1 and 2; the run at `c·h/Δx = 4` is recorded
-  without a bound. The bound itself is the known issue K62. Both files run in the `invariants`
+  without a bound. The bound itself is the known issue K62. Both files run in the `verification`
   group, and write every error, order and ratio with `@info`.
 - **Inference and JET checks of the Newton solve's two entry points.** `test/quality/inference.jl`
   asserts `@inferred residual!(b, x, sol, params, int)` and `@inferred cache(int, T)`, and
   `test/quality/jet.jl` asserts that `JET.report_opt` with
-  `target_modules = (MultisymplecticIntegrators,)` reports nothing on either. Both run in the `core`
+  `target_modules = (MultisymplecticIntegrators,)` reports nothing on either. Both run in the `quality`
   group over 80 entries, built in `test/helpers/quality_cases.jl`: nine of the ten pairs of an
   ansatz and a coupling that `SpaceTimeGalerkin` accepts, with a network's two modes counted apart
   (all but a `:last_layer` network under `HardConstraintLifting`), and `BoxScheme()`, in `Float64`
@@ -783,7 +790,7 @@ makes it worth keeping.
   `jet.jl` records one `@test_skip` on a Julia where JET does not run. JET `0.13` is a test
   dependency.
 - **Every method type of the package keeps the contract of `GeometricBase.AbstractMethod`, and a
-  test checks it.** `test/quality/interface.jl`, in the `core` group, asserts that
+  test checks it.** `test/quality/interface.jl`, in the `quality` group, asserts that
   `GeometricBase.interface_violations` finds no entry on one instance of each concrete method type
   the package owns: the ten methods of the inference and JET checks at `Float64` and `D = 1`, the
   B-spline ansatz under the coefficient restriction with `linear_solver = true`,
@@ -873,19 +880,20 @@ makes it worth keeping.
   iterations, and both ranks and floors on every slab of the test.
 - **CI coverage and cache.** CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of
   `Julia min`, and a test job saves the Julia cache only when it succeeds.
-- **The tests run in CI as eight groups, one job each:** `core`, `slow`, `ansatz`, `couplings`,
-  `initialguess`, `derivatives`, `invariants` and `fixedboundary`. `test/ci-groups.toml` lists
-  them, and empty `ARGS` still runs every group. `slow` keeps the benchmark matrix; the other
-  files of the former `slow` group move to the six new groups by topic, so that one job no longer
-  runs past the 120-minute timeout. `.github/workflows/CI.yml`, `codecov.yml` and the git hooks in
-  `.githooks/` follow the Harness template, which runs one CI job per group and checks the group
-  files.
+- **The tests run in CI as eight groups, in one test job per matrix entry:** `core`, `quality`,
+  `slow`, `ansatz`, `couplings`, `initialguess`, `verification` and `fixedboundary`.
+  `test/ci-groups.toml` lists them, and empty `ARGS` runs every group. `slow` keeps the benchmark
+  matrix, and the other long files are in the groups by topic. `split = false` runs all groups of
+  a CI matrix entry in one job, and `once = ["quality", "verification"]` makes a pull request and
+  a push run those two groups on Ubuntu with Julia 1 only; the weekly run, a tag and a run by hand
+  run every group on every entry. The required checks are those of a repository without test
+  groups: the four `Julia … - default` jobs and the doctests. `.github/workflows/CI.yml`,
+  `codecov.yml` and the git hooks in `.githooks/` follow the Harness template, whose `groups` job
+  plans the test jobs from `test/ci-groups.toml` and whose hooks check the group files.
 - **Test floors for the merged downgrade check.** CI's Downgrade job resolves `Project.toml` and
   `test/Project.toml` together at their lower bounds and requires each bound to be the version it
   resolves to. `test/Project.toml` raises `ForwardDiff` from `0.10` to `0.10.36, 1`, the lowest
-  release that the resolve of the merged environment reaches. It adds `SafeTestsets = "0.1"`, so
-  that every test dependency outside the standard library has a bound; 0.1.0 is again the lowest
-  release that the merged resolve reaches.
+  release that the resolve of the merged environment reaches.
 - **`SimpleSplines` 0.3.5 is the floor**, from 0.3.4. With FFTA 0.3.2 or later loaded beside
   FFTW, as CairoMakie loads it, SimpleSplines 0.3.4 builds the periodic mass solver through
   FFTA's `plan_rfft`, which takes no `flags` keyword. The ansatz with a `Periodic()` boundary then
