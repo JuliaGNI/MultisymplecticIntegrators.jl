@@ -62,6 +62,13 @@ function archived_difference(coarse, fine; by_index = false)
 end
 
 @testset "Benchmark matrix" begin
+    # The smoke matrix, run once by the driver into a directory of its own: "the timing record",
+    # "each run in its own process" and "one table per problem and final time" read its archives,
+    # and none of them writes into the directory.
+    smoke = mktempdir()
+    @test main(["--tag", "smoke", "--runs-dir", smoke]) == 0
+    smoke_files = filter(file -> endswith(file, ".jld2"), readdir(smoke))
+
     @testset "a selection by method, problem or tag" begin
         # Registered in reverse stem order, so that the stem order a selection returns is not the
         # order the registry holds its rows in.
@@ -340,12 +347,9 @@ end
     @testset "the timing record" begin
         # The matrix's numbers are its own, from a child process that records what they mean; no
         # wall time is asserted, and the schema and the metadata are.
-        directory = mktempdir()
-        @test main(["--tag", "smoke", "--runs-dir", directory]) == 0
-        files = filter(file -> endswith(file, ".jld2"), readdir(directory))
-        @test length(files) >= 2
-        for file in files
-            data = load(joinpath(directory, file))
+        @test length(smoke_files) >= 2
+        for file in smoke_files
+            data = load(joinpath(smoke, file))
             steps = data["steps"]
             @test length(data["wall_per_step"]) == max(steps - 1, 0)
             @test all(time -> isfinite(time) && time > 0, data["wall_per_step"])
@@ -360,10 +364,7 @@ end
     end
 
     @testset "each run in its own process" begin
-        directory = mktempdir()
-        @test main(["--tag", "smoke", "--runs-dir", directory]) == 0
-        files = filter(file -> endswith(file, ".jld2"), readdir(directory))
-        pids = [load(joinpath(directory, file))["pid"] for file in files]
+        pids = [load(joinpath(smoke, file))["pid"] for file in smoke_files]
         @test length(pids) >= 2
         @test length(unique(pids)) == length(pids)
         @test !(getpid() in pids)
@@ -550,10 +551,7 @@ end
     end
 
     @testset "one table per problem and final time, with the historical rows" begin
-        directory = mktempdir()
-        @test main(["--tag", "smoke", "--runs-dir", directory]) == 0
-        runs = [load(joinpath(directory, file))
-                for file in filter(file -> endswith(file, ".jld2"), readdir(directory))]
+        runs = [load(joinpath(smoke, file)) for file in smoke_files]
         tables = benchmark_tables(runs)
         page = join(values(tables), "\n")
         # Each archive is in one table, the one of its problem and of the time of its last stored
@@ -649,7 +647,7 @@ end
         # The rows of the network, symbolic, ELM, TrialNN and fixed-boundary families: each family
         # registers a `benchmark` and no `run`, holds every method on every problem it takes at three
         # resolutions, and each row builds its integrator with its own solver keywords, without a
-        # step. A row is never `:smoke`, so the gate's two smoke testsets run none of them.
+        # step. A row is never `:smoke`, so the gate's one smoke run runs none of them.
         problem_keys = Dict(:wave => keys(Wave.problem().params),
             :sine_gordon => keys(SineGordon.problem().params),
             :vector_wave => keys(VectorWave.problem().params))

@@ -53,7 +53,11 @@ const TESTS = [
         "Long-time energy" => "verification/long_time_energy.jl"
     ],
     "fixedboundary" => [
-        "Fixed boundary" => "couplings/fixed_boundary.jl",
+        "Fixed boundary: gradient" => "couplings/fixed_boundary_gradient.jl",
+        "Fixed boundary: Jacobian" => "couplings/fixed_boundary_jacobian.jl",
+        "Fixed boundary: steps" => "couplings/fixed_boundary_steps.jl",
+        "Fixed boundary: runs" => "couplings/fixed_boundary_runs.jl",
+        "Fixed boundary" => "couplings/fixed_boundary.jl"
     ]
 ]
 

@@ -173,6 +173,9 @@ function gauss_rule(::Type{T}, a, b, ncells::Integer, n::Integer = 4) where {T}
 end
 
 @testset "Network ansatz" begin
+    # The `:all` run of N1's case, once per element type: N1 and N5 read it, and neither changes it.
+    all_runs = Dict(T => network_run(T; mode = :all) for T in (Float64, Float32))
+
     @testset "S1b a projection on a network is refused" for T in (Float64, Float32)
         problem = wave_problem(T)
         ansatz = network_ansatz(T)
@@ -260,7 +263,7 @@ end
     end
 
     @testset "N5 the element type is the problem's" for T in (Float64, Float32)
-        _, _, int, result = network_run(T; steps = 2)
+        _, _, int, result = all_runs[T]
         c = cache(int)
         assert_no_upcast(result.solution.u, T)
         assert_no_upcast(result.solution.v, T)
@@ -303,7 +306,7 @@ end
     @testset "N1 the network integrates Wave under both modes" for T in (Float64, Float32)
         for (mode, name, entry) in ((:all, :WAVE_NN_FULLY, WAVE_NN_FULLY),
             (:last_layer, :WAVE_NN_PARTIALLY, WAVE_NN_PARTIALLY))
-            _, _, int, result = network_run(T; mode = mode)
+            _, _, int, result = mode === :all ? all_runs[T] : network_run(T; mode = mode)
             c = cache(int)
             @test length(result.traces) == NETWORK_STEPS
             @test length(result.stats.iterations) == NETWORK_STEPS
