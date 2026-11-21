@@ -244,6 +244,14 @@ function ntime(problem::LagrangianPDEProblem)
 end
 
 xspan(problem::LagrangianPDEProblem) = problem.xspan
+
+"""
+    xstep(problem)
+
+The spacing of the problem's output grid, in the element type of the problem. [`xgrid`](@ref)
+rounds the number of grid cells to the nearest integer, so the grid's actual spacing can differ
+from `xstep` when it does not divide the span.
+"""
 xstep(problem::LagrangianPDEProblem) = problem.xstep
 
 """The number of components of the field."""

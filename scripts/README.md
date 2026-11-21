@@ -8,6 +8,9 @@ root and git-ignored. The driver and the renderer, and the scans that archive, t
 and `--results-dir`, so the same run can write into a paper's or a talk's figure directory without
 being copied there.
 
+`manual_verification.jl` writes the manual's convergence tables and its long-time energy figure
+into `docs/src/assets/`, where they are committed, so the docs build reads them and runs no sweep.
+
 ```sh
 julia --project=scripts -e 'using Pkg; Pkg.instantiate()'
 ```
@@ -86,13 +89,14 @@ failed run.
 | `symbolic_matrix_model.jl` | the symbolic family's matrix rows: the standing wave of `Wave` at its period over two periods, at three space resolutions of the trace basis, 3 rows. Its problem and method are `symbolic_model.jl`'s. |
 | `elm_matrix_model.jl` | the ELM family's matrix rows: the family's ansatz, guess and settings on `Wave` and `SineGordon` at three time steps each, 6 rows. Its method is `elm_model.jl`'s. |
 | `trialnn_matrix_model.jl` | the TrialNN family's matrix rows: the family's ansatz, coupling and guess on `Wave` and `SineGordon` at three time steps each, 6 rows. Its method is `trialnn_model.jl`'s. |
-| `figures.jl` | globs `runs/`, draws each archive as the kind it declares, and writes `results/<stem>.pdf` through `atomic_write`. **The only place `save` is called.** |
+| `figures.jl` | globs `runs/`, draws each archive as the kind it declares, and writes `results/<stem>.pdf` through `atomic_write`. **The only place an archive's figure is saved.** |
 | `spline_energy_scan.jl` | the relative energy error over time at a ladder of time steps, archived as one `"energy"` run that `figures.jl` draws as a comparison. |
 | `spline_phase_drift_scan.jl` | the error against the exact solution at the final time, at a ladder of ansatz resolutions. Prints a table and writes nothing. |
 | `profile_residual.jl` | one slab's residual, timed, with its allocations and the cost of a full step. |
 | `weak_initial_condition_reference.jl` | the reference run of `WeakInitialCondition` on `Wave`, written to `test/helpers/weak_initial_condition_reference.jl` with the commit, the Julia version, the `--check-bounds` flag and the dependency versions in its header. Runs in the package's own environment: `julia --startup-file=no --project=. --check-bounds=yes scripts/weak_initial_condition_reference.jl`. |
 | `linear_solver_accuracy.jl` | the direct linear solve (`linear_solver = true`) against Newton, slab by slab, on the runs of the `linear_solver` testset of `test/ansatz/tensor_bspline.jl`, in `Float32` and `Float64`, and both against a `Float64` Newton reference. Prints a table and writes nothing. Runs in the package's own environment: `julia --startup-file=no --project=. scripts/linear_solver_accuracy.jl`. |
 | `action_residual_spike.jl` | the slab residual and Jacobian as the AD gradient and Hessian of the property suite's discrete action (`test/helpers/action_oracle.jl`), checked against `residual!` and the solver's Jacobian and then timed against them, with ForwardDiff and with Enzyme (Mooncake where Enzyme fails), one fresh process per backend and problem. Prints a table and writes nothing. |
+| `manual_verification.jl` | the manual's verification assets, written into `docs/src/assets/` or into the directory of `--out`: `convergence_tables.md`, one table per B-spline coupling and one for the box scheme, with the errors or differences and the observed orders of the ladders of `test/verification/manufactured.jl`; `long_time_energy.svg`, the relative energy error of the four ten-period runs of `test/verification/long_time_energy.jl`, drawn by `Diagnostics.plot_energy_error`; and `long_time_energy.md`, its caption. It includes `test/helpers/manufactured.jl`, which holds the ladders and the runs that the tests assert on. Each table and the caption name the commit and the Julia version, and the script refuses a tree whose `src/`, `test/helpers/` or script differ from the commit. `julia --startup-file=no --project=scripts scripts/manual_verification.jl [--out <dir>]`. |
 | `kernel_build_order.jl` | whether two symbolic builds of one network architecture, made around the cache of `network_kernels`, generate the same kernels, by their code and by their values at fixed inputs, with a `GC.gc()` between builds, and E4a's pair of first steps looped with builds and a `GC.gc()` between them, counting the pairs that are not bitwise equal (known issue K59). Prints one record per element type and writes nothing. Runs in the package's own environment: `julia --startup-file=no --project=. scripts/kernel_build_order.jl [builds gcevery trials churn]`. |
 
 The spike's gate is `--quick`, the smallest size with one sample, and `--selfcheck`, which must exit
