@@ -10,7 +10,7 @@ names the pull request that removed it.
 
 | # | feature at `294f023` | test file | testset | page |
 |--:|:--|:--|:--|:--|
-| 1 | `Wave`, `SineGordon`, `LinearTransport` problems, with exact solutions and energies | `test/problems/lagrangian_problem.jl` | "the exact solution is a vector at both call shapes" | [Example problems and diagnostics](problems.md) |
+| 1 | `Wave`, `SineGordon`, `LinearTransport` problems, with exact solutions and energies | `test/problems/lagrangian_problem.jl` | "the wave functions see the problem's parameters", "the sine-Gordon functions see the problem's parameters" and "the transport functions see the problem's parameters" for the exact solutions; "S2a the energy density is the density's Hamiltonian" of `test/diagnostics.jl` for the wave energy | [Example problems and diagnostics](problems.md) |
 | 2 | Lagrangians as Symbolics expressions, derivatives generated | `test/problems/lagrangian_density.jl` | "the wave density against its closed form" | [Example problems and diagnostics](problems.md) |
 | 3 | Full-multiplier spline Galerkin (`Galerkin_Bspline_Integrator`), with `multiplier_stride` | `test/couplings/weak_multipliers.jl` | "A2a the plane wave" | [The B-spline family](bspline.md) |
 | 4 | Dirichlet spline Galerkin with an initial multiplier (`Galerkin_Dirichlet_Bspline_Integrator`) | `test/couplings/weak_multipliers.jl` | "A1a the Dirichlet reference" | [The B-spline family](bspline.md) |

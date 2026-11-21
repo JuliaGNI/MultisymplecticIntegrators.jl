@@ -669,3 +669,14 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `@autodocs` block.
 - kind: docs
 - found: 2026-11-21
+
+### K82 · The docstring of `HardConstraintLifting` and the couplings page say the bottom datum is met by construction, but it is met only at the quadrature nodes.
+
+- location: `src/couplings/hard_constraint_lifting.jl:24`
+- evidence: the docstring says the field "is the data at the three parts of the boundary by
+  construction", and `docs/src/couplings.md:17` says the initial and boundary conditions "are
+  therefore met by construction". `lifting_datum` (`src/couplings/hard_constraint_lifting.jl:169`)
+  returns the stored value at a space node of the ansatz's rule, the linear blend of two nodes
+  between them, and the side value outside them. The base `cac800e` has both sentences.
+- kind: docs
+- found: #82

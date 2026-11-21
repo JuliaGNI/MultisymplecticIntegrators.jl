@@ -43,6 +43,11 @@ quadrature.
 | [`TargetFunction`](@ref) | a user function `f(t, x, params)` in physical time |
 | [`Predictor`](@ref) | a Störmer–Verlet run of the slab; a target of a [`FixedBoundaryNetwork`](@ref) alone |
 
+A [`FixedBoundaryNetwork`](@ref) takes `InitialCondition`, `ExactSolution`, `TargetFunction` and
+`Predictor` alone. `integrate` refuses `PreviousSlab` and every user-defined target on it with an
+`ArgumentError`, before any step runs. For a target function of your own on that ansatz, use
+`TargetFunction`.
+
 ```@example guess
 guessed(FitTo(InitialCondition()))
 ```
@@ -124,6 +129,19 @@ end
 
 guessed(FitTo(StandingProfile(); method = Projection()))
 ```
+
+On a [`NetworkAnsatz`](@ref), `TrainedHiddenLayer` and `PINNTraining` also read the target at
+single points: `TrainedHiddenLayer` on the four surfaces of the slab, `PINNTraining` at its sampled
+points. A user-defined target for these two fit methods therefore needs a second method of the
+unexported
+
+```julia
+MultisymplecticIntegrators.target_point!(values, target, cache, ansatz, problem, sol, t̂, x)
+```
+
+which fills `values`, a vector of the `D` components, with the target's value at the point
+`(t̂, x)` of the slab. `t̂` is the slab's own time in `[0, 1]`, at the physical time `t₀ + h t̂`,
+and `x` is in `xspan`. Without this method, the fit raises a `MethodError`.
 
 ## A fit method of your own
 

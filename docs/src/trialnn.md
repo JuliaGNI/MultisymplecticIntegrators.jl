@@ -8,8 +8,13 @@ The trial-solution network of `TrialNN_PDE_int` is a [`NetworkAnsatz`](@ref) und
 [`HardConstraintLifting`](@ref). The slab's field is the network's field, projected so that it
 vanishes at both ends of `xspan` and at the bottom of the slab, plus a transfinite interpolant of
 the slab's data: the problem's boundary function at the two ends, and the initial condition at the
-first slab and the previous slab's top after it. The data are met by construction, and the slab's
-interior weak form alone is the residual.
+first slab and the previous slab's top after it. The slab's interior weak form alone is the
+residual.
+
+The boundary function is met at the two ends at every time. The bottom datum is stored at the space
+nodes of the ansatz's quadrature rule and is met at those nodes. Between two nodes the interpolant
+takes the linear blend of their two values, and outside the outer nodes it takes the boundary
+function's value at that end at the slab's start.
 
 The family carries **no momentum** between slabs, on purpose: the coupling has no unknowns of its
 own, no surface term and no load at the bottom of a slab.

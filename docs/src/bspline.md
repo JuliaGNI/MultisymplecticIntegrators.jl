@@ -62,11 +62,14 @@ step's Newton solve.
 ## The lifting on a Dirichlet ansatz
 
 [`HardConstraintLifting`](@ref), the coupling of the TrialNN family, also takes a B-spline ansatz
-whose space basis is `Dirichlet()`: the slab's field is the ansatz's field plus a transfinite
-interpolant of the slab's data, and no momentum is carried. The call below does not converge on
-this page's problem: the slab's Jacobian is singular to round-off, as K77 of `KNOWN_ISSUES.md`
-records, so the call is shown and not run. The lifting's tests record this arm's solves and do not
-assert that they converge.
+whose space basis is `Dirichlet()`. The slab's field is `P[N] + ℓ`: the ansatz's field `N`
+projected so that it vanishes at both ends of `xspan` and at the bottom of the slab, plus the
+transfinite interpolant `ℓ` of the slab's data. A Dirichlet basis makes `N` zero at the two ends,
+but not at the bottom, so the projection still subtracts the bottom trace of `N`. The bottom datum
+is stored at the space nodes of the ansatz's quadrature rule, as the [TrialNN page](trialnn.md)
+describes. No momentum is carried. The call below does not converge on this page's problem: the
+slab's Jacobian is singular to round-off, as K77 of `KNOWN_ISSUES.md` records, so the call is shown
+and not run. The lifting's tests record this arm's solves and do not assert that they converge.
 
 ```julia
 result = integrate(problem, SpaceTimeGalerkin(ansatz, HardConstraintLifting()))
