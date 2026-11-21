@@ -1,3 +1,5 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 MultisymplecticIntegrators = "287958db-332d-4045-951c-e8138db0f134"
+SimpleSplines = "ac480f6c-9a94-4d53-a283-9db69f109154"
+Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"

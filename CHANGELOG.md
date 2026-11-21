@@ -16,11 +16,44 @@ makes it worth keeping.
 
 ### Breaking Changes
 
-- **The package is rebuilt on the current GeometricBase stack, and every integrator family leaves
-  `src/`** for a return of its own. `LPDEProblem`, `LPDESystem`, `PDEIntegrator` and every
-  `*_Integrator` type are gone. The names that replace them are `LagrangianPDEProblem` and
-  `LagrangianDensity`, together with the `SpaceTimeAnsatz`, `SlabCoupling` and `SlabInitialGuess`
-  abstract types. A caller of a family that has not returned yet works at `294f023`.
+- **The package is rebuilt on the current GeometricBase stack, and every integrator family is back
+  under a new name.** A method is a `SpaceTimeGalerkin` of an ansatz, a coupling and an initial
+  guess, beside the `BoxScheme` baseline; the abstract types are `SpaceTimeAnsatz`, `SlabCoupling`
+  and `SlabInitialGuess`. The old names map to the new ones, one line per old name:
+  - `LPDESystem` → `LagrangianDensity`
+  - `LPDEProblem` → `LagrangianPDEProblem`
+  - `PDEIntegrator` → GeometricIntegratorsBase's `GeometricIntegrator`
+  - `Galerkin_Bspline_Integrator` → `SpaceTimeGalerkin(TensorBSplineAnsatz(…; x_boundary = Free()),
+    WeakInitialAndBoundaryConditions())`
+  - `Galerkin_Dirichlet_Bspline_Integrator` → `SpaceTimeGalerkin(TensorBSplineAnsatz(…;
+    x_boundary = Dirichlet()), WeakInitialCondition())`
+  - `Galerkin_Full_Restriction_Bspline_Integrator` → `SpaceTimeGalerkin(TensorBSplineAnsatz(…),
+    CoefficientRestriction())`
+  - `SpaceTime_Spline_Wave_Integrator` → `SpaceTimeGalerkin(TensorBSplineAnsatz(…),
+    CoefficientRestriction(); linear_solver = true)` on a linear density
+  - `FEM_Multisymplectic_Integrator` → `SpaceTimeGalerkin(TensorBSplineAnsatz(degree = 1, …),
+    CoefficientRestriction())`
+  - `NN_PDE_Integrator` → `SpaceTimeGalerkin(NetworkAnsatz(…), WeakInitialAndBoundaryConditions())`
+  - `NN_PDE_Integrator_Symbolic` → `SpaceTimeGalerkin(NetworkAnsatz(…),
+    WeakInitialAndBoundaryConditions())`, whose derivatives are symbolic
+  - `Sindy_PDE_Integrator` → `SpaceTimeGalerkin(SymbolicAnsatz(…),
+    WeakInitialAndBoundaryConditions())`
+  - `ELM_PDE_int` → `SpaceTimeGalerkin(NetworkAnsatz(…; mode = :last_layer),
+    WeakInitialAndBoundaryConditions(); initial_guess = FitTo(target; method =
+    TrainedHiddenLayer(…)))`
+  - `TrialNN_PDE_int` → `SpaceTimeGalerkin(NetworkAnsatz(…), HardConstraintLifting())`
+  - `OGA2D` → `OrthogonalGreedy`
+  - `LSGD` → `TrainedHiddenLayer`
+  - `PINN` → `PINNTraining`
+  - `RT` → the time entry of the `n` keyword of `TensorBSplineAnsatz` and `SymbolicAnsatz` (Gauss
+    nodes per cell), `quadrature_order` of `NetworkAnsatz`, and `nq[1]` of `FixedBoundaryNetwork`
+  - `RX` → the space entry of `n`, and `nq[2]` of `FixedBoundaryNetwork`; a network's space rule
+    is its trace basis'
+  - `λ₀_x_coes`, `λ₁_x_coes`, `μ₀_t_coes`, `μ₁_t_coes` → the `initial_multiplier`,
+    `top_multiplier` and `boundary_multiplier` fields of a weak coupling's block
+  - the `λ` and `μ` multipliers → `initial_multiplier` and `top_multiplier` for `λ`, and
+    `boundary_multiplier` for `μ`
+  - `show_status` → removed (`solution_error`, `energy_error`)
 - **`SpaceTimeQuadrature` and `boundary_points` are removed, with their test.** Nothing in the
   package used them: the slab integrates on the tensor-product rule of `SimpleSplines` that the
   ansatz owns. The package no longer exports `nodes`, `weights` and `nnodes`, whose only methods of
@@ -228,11 +261,11 @@ makes it worth keeping.
   the package does not load).
 - **Continuous integration.** `.github/workflows/` holds three workflows, `CI.yml`, `Documenter.yml`
   and `TagBot.yml`.
-- **A documentation build.** `docs/` holds `make.jl`, `Project.toml` and a four-page manual, so
+- **A documentation build.** `docs/` holds `make.jl`, `Project.toml` and a manual, so
   `Documenter` has something to build and the doctest job has an environment. The page
   `docs/src/seam.md`, *The slab seam*, states the seam of the slab integrator and the action form
-  that it admits. The library is split over two pages, the package module and its submodules, so
-  that each page stays below Documenter's size threshold.
+  that it admits. The library is split over four pages, the core, the ansatz families, the
+  couplings and the problems, so that each stays below Documenter's 200 KiB `size_threshold`.
 - **`test/runtests.jl` runs the test files in worker processes.** It has the parallel form of the
   Harness test layout: one table `TESTS`, group → label → path, which ParallelTestRunner runs
   with each file in a worker process, in a module of its own, with no retry;
@@ -811,6 +844,16 @@ makes it worth keeping.
   its caption. Each table and the caption name the commit the script ran on and the Julia version,
   and the script refuses a tree whose `src/`, `test/helpers/` or script differ from that commit.
   The three files are committed.
+- **The manual has a page for each integrator family, with examples that run at each docs
+  build.** The B-spline family under its three couplings, with the lifting, the direct linear solve
+  and the stability bound `c·h/Δx ≤ 1` (K62); the multiplier network in both modes, with
+  `regularization_factor`; the ELM, TrialNN, symbolic and fixed-boundary families; and the box
+  scheme. Each example integrates `Wave` for two steps, and a method that may fail shows its stats.
+  Three more pages: *The initial guess* runs the default, every target and every fit method and a
+  user-defined target; *Verification* shows the committed convergence tables and the long-time
+  energy figure and says why five families have no table; *From the old stack* maps every feature
+  of `294f023` to its test and its page. `docs/Project.toml` adds `SimpleSplines` and `Symbolics`,
+  which the examples load. The "mid-rebuild" notes of `README.md` and the manual's index are gone.
 
 ### Changed
 
@@ -966,3 +1009,8 @@ makes it worth keeping.
   `scripts/` loads the package by path, so its bound must overlap the package's. GeometricSolutions
   0.7 changes only the type parameters of `EnsembleSolution`, which neither the package nor the
   scripts use.
+- **The known issue K34 is closed: CI evaluates the allocation assertions under
+  `Base.JLOptions().check_bounds != 1`.** Every `julia-actions/julia-runtest` step of
+  `.github/workflows/CI.yml` runs with `check_bounds: auto`, and ParallelTestRunner starts its
+  workers from `Base.julia_cmd()`, which carries the parent's `--check-bounds` setting, so the guard
+  is true in CI and the assertions run there.
