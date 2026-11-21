@@ -845,15 +845,17 @@ makes it worth keeping.
   and the script refuses a tree whose `src/`, `test/helpers/` or script differ from that commit.
   The three files are committed.
 - **The manual has a page for each integrator family, with examples that run at each docs
-  build.** The B-spline family under its three couplings, with the lifting, the direct linear solve
-  and the stability bound `c·h/Δx ≤ 1` (K62); the multiplier network in both modes, with
-  `regularization_factor`; the ELM, TrialNN, symbolic and fixed-boundary families; and the box
-  scheme. Each example integrates `Wave` for two steps, and a method that may fail shows its stats.
-  Three more pages: *The initial guess* runs the default, every target and every fit method and a
-  user-defined target; *Verification* shows the committed convergence tables and the long-time
-  energy figure and says why five families have no table; *From the old stack* maps every feature
-  of `294f023` to its test and its page. `docs/Project.toml` adds `SimpleSplines` and `Symbolics`,
-  which the examples load. The "mid-rebuild" notes of `README.md` and the manual's index are gone.
+  build.** The B-spline family under its three couplings, with the direct linear solve and the
+  stability bound `c·h/Δx ≤ 1` (K62), and the lifting on a Dirichlet B-spline ansatz shown and not
+  run, because its slab Jacobian is singular to round-off (K77); the multiplier network in both
+  modes, with `regularization_factor`; the ELM, TrialNN, symbolic and fixed-boundary families; and
+  the box scheme. Each example integrates `Wave` for two steps, and a method that may fail shows
+  its stats. Three more pages: *The initial guess* runs the default, every target and every fit
+  method and a user-defined target; *Verification* shows the committed convergence tables and the
+  long-time energy figure and says why five families have no table; *From the old stack* maps every
+  feature of `294f023` to its test and its page. `docs/Project.toml` adds `SimpleSplines` and
+  `Symbolics`, which the examples load. The "mid-rebuild" notes of `README.md` and the manual's
+  index are gone.
 
 ### Changed
 

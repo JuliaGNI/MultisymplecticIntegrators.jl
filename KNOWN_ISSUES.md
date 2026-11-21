@@ -597,19 +597,27 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: not verified
 - found: 2026-11-21
 
-### K77 · The hard-constraint lifting on a Dirichlet B-spline ansatz does not converge on `Wave`: its Newton solve stays at its initial residual.
+### K77 · The hard-constraint lifting on a Dirichlet B-spline ansatz does not converge on `Wave`: its slab Jacobian is singular to round-off.
 
 - location: `src/couplings/hard_constraint_lifting.jl`
-- evidence: the example of `docs/src/bspline.md`, `integrate(problem, SpaceTimeGalerkin(ansatz,
-  HardConstraintLifting()))` with `Wave.problem(timespan = (0.0, 0.2), timestep = 0.1,
-  xstep = 0.05)` and `TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0),
-  x_boundary = Dirichlet())`, records `iterations = [9, 18]`, `residuals = [0.026945, 0.026945]`
-  from `initial_residuals = [0.026946, 0.026947]` and `converged = [false, false]`, on Julia 1.13.4.
-  The same ansatz converges at both steps in one iteration under `CoefficientRestriction` and
-  `WeakInitialCondition` on the same page. The
-  testset "L5 a B-spline ansatz runs under the lifting" of
-  `test/couplings/hard_constraint_lifting.jl` records this arm's iterations and residuals and
-  asserts no convergence. Whether the arm must converge is open.
+- evidence: the call that `docs/src/bspline.md` shows and does not run, `integrate(problem,
+  SpaceTimeGalerkin(ansatz, HardConstraintLifting()))` with `Wave.problem(timespan = (0.0, 0.2),
+  timestep = 0.1, xstep = 0.05)` and `TensorBSplineAnsatz(degree = 2, ncells = (1, 20),
+  xspan = (0.0, 1.0), x_boundary = Dirichlet())`, records on macOS `iterations = [9, 18]`,
+  `residuals = [0.026945, 0.026945]` from `initial_residuals = [0.026946, 0.026947]` and
+  `converged = [false, false]`, on Julia 1.13.4. On ubuntu-latest the same call throws
+  `SingularException: matrix is singular; factorization failed. Zero pivot found at index 59` from
+  SimpleSolvers' `ldiv!` (the Documentation job of CI run 44897936595 on pull request #82). The
+  slab Jacobian at zero that `linear_solver = true` factorises, read as
+  `jacobianmatrix(solver(int))` after `integrate(int)`, is 60 × 60 with numerical rank 40 on
+  macOS, Julia 1.13.4: its 40th singular value is `0.0987`, the 41st `1.69e-16` and the smallest
+  `4.7e-19`, against a largest of `1.057`. Under `CoefficientRestriction` the same ansatz gives a
+  40 × 40 Jacobian of full rank, smallest singular value `0.0827`, and converges at both steps in
+  one iteration, as under `WeakInitialCondition` on the same page. The kernel of 20 dimensions is
+  measured in `Float64`; whether it is exact is open. The testset
+  "L5 a B-spline ansatz runs under the lifting" of `test/couplings/hard_constraint_lifting.jl`
+  records this arm's iterations and residuals and asserts no convergence. Whether the arm must
+  converge is open.
 - kind: not verified
 - found: 2026-11-21
 

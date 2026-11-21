@@ -63,13 +63,13 @@ step's Newton solve.
 
 [`HardConstraintLifting`](@ref), the coupling of the TrialNN family, also takes a B-spline ansatz
 whose space basis is `Dirichlet()`: the slab's field is the ansatz's field plus a transfinite
-interpolant of the slab's data, and no momentum is carried. The run below shows its stats; the
-lifting's tests record this arm's solves and do not assert that they converge, and K77 of
-`KNOWN_ISSUES.md` records that this run does not converge.
+interpolant of the slab's data, and no momentum is carried. The call below does not converge on
+this page's problem: the slab's Jacobian is singular to round-off, as K77 of `KNOWN_ISSUES.md`
+records, so the call is shown and not run. The lifting's tests record this arm's solves and do not
+assert that they converge.
 
-```@example bspline
+```julia
 result = integrate(problem, SpaceTimeGalerkin(ansatz, HardConstraintLifting()))
-result.stats
 ```
 
 ## The direct linear solve
