@@ -571,3 +571,46 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   would remove it.
 - kind: defect
 - found: 2026-11-15
+
+### K73 · Four `[Unreleased]` entries put a test file in the `slow` group, which holds only the benchmark matrix.
+
+- location: `CHANGELOG.md:524`
+- evidence: `CHANGELOG.md:524` (`test/ansatz/network.jl` and
+  `test/initial_guess/orthogonal_greedy.jl`), `:548` (`trained_hidden_layer.jl`), `:624`
+  (`hard_constraint_lifting.jl`) and `:657` (`pinn_training.jl`) each say that the named files join
+  the `slow` group. `test/runtests.jl` lists `integration/benchmark.jl` alone under `"slow"`, and the
+  five files under `"ansatz"`, `"initialguess"` and `"couplings"`. The groups by topic already held
+  them at `3cef8d8`. The entry on the CI groups (`:869`) says that "the other long files are in the
+  groups by topic", and names neither the files nor their groups.
+- kind: found late
+- found: 2026-11-21
+
+### K74 · The `[Unreleased]` entries on the test bounds name a `ForwardDiff` bound that `test/Project.toml` does not hold, and leave out `JET`.
+
+- location: `CHANGELOG.md:57`
+- evidence: `CHANGELOG.md:56–58` lists the test-only bounds as `Aqua`, `CairoMakie`,
+  `ExplicitImports`, `ForwardDiff`, `JLD2` and `ParallelTestRunner`, and `:878` says that
+  `test/Project.toml` raises `ForwardDiff` from `0.10` to `0.10.36, 1`. The `[compat]` table of
+  `test/Project.toml` holds `Aqua`, `CairoMakie`, `ExplicitImports`, `JET`, `JLD2` and
+  `ParallelTestRunner`, and no `ForwardDiff`; the root `Project.toml` holds
+  `ForwardDiff = "0.10.36, 1"` (`:29`). The same holds at `3cef8d8`.
+- kind: found late
+- found: 2026-11-21
+
+### K75 · The preamble of `CHANGELOG.md` says that the file deliberately holds no entries.
+
+- location: `CHANGELOG.md:9`
+- evidence: `CHANGELOG.md:9–13` says "This file was started on 2026-08-31 and deliberately holds no
+  entries", and the `[Unreleased]` section below it holds entries. The same holds at `3cef8d8`.
+- kind: docs
+- found: 2026-11-21
+
+### K76 · `test/ansatz/tensor_bspline.jl` reaches the 60 s that a `core` file may take.
+
+- location: `test/ansatz/tensor_bspline.jl`
+- evidence: two cold runs of `run-tests.jl <repository> core` on Julia 1.13.4, 13 files, all pass:
+  196 s at load 6.25 and 188 s at load 7.39. The file took 61.1 s in the first run and less than
+  60 s in the second. It is a `core` file at `3cef8d8` too. Whether it is above the limit at the
+  machine's usual load is open.
+- kind: not verified
+- found: 2026-11-21
