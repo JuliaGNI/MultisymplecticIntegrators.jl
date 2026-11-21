@@ -682,6 +682,8 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `shared_index(fine, nextfloat(0.0))` return `0`, and `shared_index(fine, 0.0)` returns `6`. A
   coarse run whose middle node is computed as `5e-17` is therefore refused. `xgrid` builds each
   grid with `range`, which gives exactly `0.0` at the middle of a symmetric span, so no registered
-  row reaches the case. The time match before `shared_index` used the same tolerance.
+  row reaches the case. The time match goes through the same `shared_index`, so a finer run's time
+  near a coarse time of `0.0` is refused the same way. The base `f9ed372` has the same tolerance in
+  its time match.
 - kind: defect
 - found: 2026-11-21
