@@ -19,8 +19,8 @@ consecutive runs is the base-2 logarithm of the ratio of their values.
 
 ```@eval
 using Markdown, MultisymplecticIntegrators
-Markdown.parse(read(pkgdir(MultisymplecticIntegrators, "docs", "src", "assets",
-    "convergence_tables.md"), String))
+Markdown.parse(read(pkgdir(MultisymplecticIntegrators, "docs/src/assets/convergence_tables.md"),
+    String))
 ```
 
 ## The long-time energy
@@ -29,8 +29,8 @@ Markdown.parse(read(pkgdir(MultisymplecticIntegrators, "docs", "src", "assets",
 
 ```@eval
 using Markdown, MultisymplecticIntegrators
-Markdown.parse(read(pkgdir(MultisymplecticIntegrators, "docs", "src", "assets",
-    "long_time_energy.md"), String))
+Markdown.parse(read(pkgdir(MultisymplecticIntegrators, "docs/src/assets/long_time_energy.md"),
+    String))
 ```
 
 ## The stability bound
@@ -47,8 +47,9 @@ family, a `:last_layer` network with [`TrainedHiddenLayer`](@ref); the TrialNN f
 under [`HardConstraintLifting`](@ref); the symbolic family, [`SymbolicAnsatz`](@ref); and the
 fixed-boundary network, [`FixedBoundaryNetwork`](@ref). Their accuracy is set by the network or by
 the expression, not by the time step `h` and the space step `Δx`, so a table of orders in `h` and
-`Δx` would not measure it. Their tests check the implementation instead: the residual against the gradient
-of an independent discrete action, the Jacobian against central differences, and an affine control.
+`Δx` would not measure it. Their tests check the implementation instead: the residual against the
+gradient of an independent discrete action, the Jacobian against central differences, and an
+affine control.
 
 ## The scans and the benchmark matrix
 

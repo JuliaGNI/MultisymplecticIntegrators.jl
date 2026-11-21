@@ -27,9 +27,9 @@ result.stats
 ```
 
 ```@example network
-last = NetworkAnsatz(S = 4, mode = :last_layer, xspan = (0.0, 1.0), degree = 2,
+last_layer = NetworkAnsatz(S = 4, mode = :last_layer, xspan = (0.0, 1.0), degree = 2,
     ncells = (2, 4))
-result = integrate(problem, SpaceTimeGalerkin(last, WeakInitialAndBoundaryConditions()))
+result = integrate(problem, SpaceTimeGalerkin(last_layer, WeakInitialAndBoundaryConditions()))
 result.stats
 ```
 

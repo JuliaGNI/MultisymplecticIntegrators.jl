@@ -19,7 +19,7 @@ names the pull request that removed it.
 | 7 | Bilinear FEM wave integrator (`FEM_Multisymplectic_Integrator`), with `:exact` and Taylor start-up and BDF2 velocity | `test/ansatz/tensor_bspline.jl` | "A1a the FEM equivalence at degree 1" | [The B-spline family](bspline.md) |
 | 8 | Network integrator (`NN_PDE_Integrator`), `:Fully` and `:Partially` | `test/ansatz/network.jl` | "N1 the network integrates Wave under both modes" | [The multiplier network](network.md) |
 | 9 | Multiplier bases `:BSplineDirichlet` and `:Lagrange` (nodal) | `test/couplings/weak_multipliers.jl` | "A3a the two bases agree as the mesh refines" | [The B-spline family](bspline.md) |
-| 10 | Symbolic network (`NN_PDE_Integrator_Symbolic`, a hand-built Symbolics expression) | `test/ansatz/symbolic.jl` | "A4a the closed form over five slabs" | [The symbolic family](symbolic.md) |
+| 10 | Symbolic network (a hand-built Symbolics expression) | `test/ansatz/symbolic.jl` | "A4a the closed form over five slabs" | [The symbolic family](symbolic.md) |
 | 11 | SINDy integrator (`Sindy_PDE_Integrator`, a closed-form symbolic ansatz) | `test/ansatz/symbolic.jl` | "A4b the vector field of two expressions" | [The symbolic family](symbolic.md) |
 | 12 | ELM (`ELM_PDE_int`): random-feature hidden layers, output layer solved | `test/initial_guess/trained_hidden_layer.jl` | "E4a the family on Wave without an exact solution" | [The ELM family](elm.md) |
 | 13 | ELM's LSGD training of the hidden layers | `test/initial_guess/trained_hidden_layer.jl` | "E1a the fit at epochs = 0 and at epochs > 0" | [The ELM family](elm.md) |

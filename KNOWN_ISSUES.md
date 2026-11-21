@@ -63,24 +63,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: missing test
 - found: 2026-11-01
 
-### K34 · CI never evaluates the allocation assertions that a bounds check would change.
-
-- location: `test/ansatz/tensor_bspline.jl`, `test/diagnostics.jl`
-- evidence: `.github/workflows/CI.yml` runs `julia-actions/julia-runtest@v1` without a
-  `check_bounds` input, and the action's `action.yml` gives `check_bounds` the default `yes`. Every
-  `@allocated` assertion of the testset "R2 single density_derivatives! and zero-allocation
-  VectorWave residual!" sits under `if Base.JLOptions().check_bounds != 1`: `residual!` of the
-  `D = 2` vector wave with the three couplings, `density_derivatives!`, `momentum_load!` and
-  `flux_load!` at `D = 3`, and `residual!` of `Wave.problem(D = D)` at `D = 4` and `5`, all at
-  0 B. The `D = 1` assertion of A1g in the same file and the `derivatives` assertion of S3b in
-  `test/couplings/coefficient_restriction.jl` sit under the same guard, and the 512 B bound on
-  `energy_error` of a coupled density in `test/diagnostics.jl` is skipped under
-  `Base.JLOptions().check_bounds == 1`. A CI run passes these
-  testsets without evaluating the bounds, so only a local run under `--check-bounds=auto` checks
-  them.
-- kind: missing test
-- found: #40
-
 ### K35 · The side-data testset's symmetric span cannot see `left` and `right` swapped.
 
 - location: `test/couplings/weak_multipliers.jl:561`
@@ -106,7 +88,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K37 · A `xstep` at the smallest positive `Float64` throws `InexactError`, not `ArgumentError`.
 
-- location: `src/problems/lagrangian_problem.jl:261`
+- location: `src/problems/lagrangian_problem.jl:269`
 - evidence: `Wave.problem(xstep = nextfloat(0.0))` passes the positive-step guard and throws
   `InexactError: Int64(Inf)` from `round(Int, (xsp[2] - xsp[1]) / xh)`, where the constructor's
   refusals are `ArgumentError`s. A stepped range of that step fails alike:
@@ -525,7 +507,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K66 · No forced run has a space span other than `[0, 1]` or a time span that starts away from `t = 0`.
 
-- location: `test/helpers/manufactured.jl:63`
+- location: `test/helpers/manufactured.jl:65`
 - evidence: every forced problem of the tests is `manufactured_problem`, on the spans
   `(0, tend)` and `(0, 1)`. On `x ∈ [0, 1]` a physical position and a position on the unit
   interval agree, so no test tells the space nodes at which the slab and the box scheme read the
@@ -574,22 +556,22 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K73 · Four `[Unreleased]` entries put a test file in the `slow` group, which holds only the benchmark matrix.
 
-- location: `CHANGELOG.md:524`
-- evidence: `CHANGELOG.md:524` (`test/ansatz/network.jl` and
-  `test/initial_guess/orthogonal_greedy.jl`), `:548` (`trained_hidden_layer.jl`), `:624`
-  (`hard_constraint_lifting.jl`) and `:657` (`pinn_training.jl`) each say that the named files join
+- location: `CHANGELOG.md:557`
+- evidence: `CHANGELOG.md:557` (`test/ansatz/network.jl` and
+  `test/initial_guess/orthogonal_greedy.jl`), `:581` (`trained_hidden_layer.jl`), `:657`
+  (`hard_constraint_lifting.jl`) and `:690` (`pinn_training.jl`) each say that the named files join
   the `slow` group. `test/runtests.jl` lists `integration/benchmark.jl` alone under `"slow"`, and the
   five files under `"ansatz"`, `"initialguess"` and `"couplings"`. The groups by topic already held
-  them at `3cef8d8`. The entry on the CI groups (`:869`) says that "the other long files are in the
+  them at `3cef8d8`. The entry on the CI groups (`:929`) says that "the other long files are in the
   groups by topic", and names neither the files nor their groups.
 - kind: found late
 - found: 2026-11-21
 
 ### K74 · The `[Unreleased]` entries on the test bounds name a `ForwardDiff` bound that `test/Project.toml` does not hold, and leave out `JET`.
 
-- location: `CHANGELOG.md:57`
-- evidence: `CHANGELOG.md:56–58` lists the test-only bounds as `Aqua`, `CairoMakie`,
-  `ExplicitImports`, `ForwardDiff`, `JLD2` and `ParallelTestRunner`, and `:878` says that
+- location: `CHANGELOG.md:90`
+- evidence: `CHANGELOG.md:89–91` lists the test-only bounds as `Aqua`, `CairoMakie`,
+  `ExplicitImports`, `ForwardDiff`, `JLD2` and `ParallelTestRunner`, and `:938` says that
   `test/Project.toml` raises `ForwardDiff` from `0.10` to `0.10.36, 1`. The `[compat]` table of
   `test/Project.toml` holds `Aqua`, `CairoMakie`, `ExplicitImports`, `JET`, `JLD2` and
   `ParallelTestRunner`, and no `ForwardDiff`; the root `Project.toml` holds
@@ -612,5 +594,21 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   196 s at load 6.25 and 188 s at load 7.39. The file took 61.1 s in the first run and less than
   60 s in the second. It is a `core` file at `3cef8d8` too. Whether it is above the limit at the
   machine's usual load is open.
+- kind: not verified
+- found: 2026-11-21
+
+### K77 · The hard-constraint lifting on a Dirichlet B-spline ansatz does not converge on `Wave`: its Newton solve stays at its initial residual.
+
+- location: `src/couplings/hard_constraint_lifting.jl`
+- evidence: the example of `docs/src/bspline.md`, `integrate(problem, SpaceTimeGalerkin(ansatz,
+  HardConstraintLifting()))` with `Wave.problem(timespan = (0.0, 0.2), timestep = 0.1,
+  xstep = 0.05)` and `TensorBSplineAnsatz(degree = 2, ncells = (1, 20), xspan = (0.0, 1.0),
+  x_boundary = Dirichlet())`, records `iterations = [9, 18]`, `residuals = [0.026945, 0.026945]`
+  from `initial_residuals = [0.026946, 0.026947]` and `converged = [false, false]`, on Julia 1.13.4.
+  The same ansatz converges at both steps in one iteration under `CoefficientRestriction` and
+  `WeakInitialCondition` on the same page. The
+  testset "L5 a B-spline ansatz runs under the lifting" of
+  `test/couplings/hard_constraint_lifting.jl` records this arm's iterations and residuals and
+  asserts no convergence. Whether the arm must converge is open.
 - kind: not verified
 - found: 2026-11-21

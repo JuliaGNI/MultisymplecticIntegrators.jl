@@ -15,8 +15,8 @@ join consecutive slabs:
 | [`WeakInitialAndBoundaryConditions`](@ref) | the initial and the boundary conditions by multipliers | `Free()` | `Galerkin_Bspline_Integrator` |
 
 At degree 1 under `CoefficientRestriction` the step is the bilinear finite-element scheme of the
-old FEM integrator, and the velocity is the ansatz's own `∂u/∂t̂ / h`, so the one-step form needs
-no start-up. The space basis' boundary condition is SimpleSplines' `Dirichlet()` or `Free()`, and
+old FEM integrator. The step is a one-step form, so it needs no start-up, and its velocity is the
+ansatz's own `∂u/∂t̂ / h`. The space basis' boundary condition is SimpleSplines' `Dirichlet()` or `Free()`, and
 SimpleSplines counts the **degree** of a basis, not its order.
 
 ## The three couplings
@@ -64,7 +64,8 @@ step's Newton solve.
 [`HardConstraintLifting`](@ref), the coupling of the TrialNN family, also takes a B-spline ansatz
 whose space basis is `Dirichlet()`: the slab's field is the ansatz's field plus a transfinite
 interpolant of the slab's data, and no momentum is carried. The run below shows its stats; the
-lifting's tests record this arm's solves and do not assert that they converge.
+lifting's tests record this arm's solves and do not assert that they converge, and K77 of
+`KNOWN_ISSUES.md` records that this run does not converge.
 
 ```@example bspline
 result = integrate(problem, SpaceTimeGalerkin(ansatz, HardConstraintLifting()))
@@ -74,8 +75,8 @@ result.stats
 ## The direct linear solve
 
 For an ansatz whose step is affine in its unknowns and a linear density, such as `Wave`'s,
-`linear_solver = true` replaces Newton's iterations by one factorisation of the slab's Jacobian and
-two solves.
+`linear_solver = true` replaces Newton's iterations by two solves per step with one factorisation
+of the slab's Jacobian, taken at the run's first step.
 
 ```@example bspline
 result = integrate(problem,
