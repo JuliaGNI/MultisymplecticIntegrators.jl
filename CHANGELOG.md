@@ -1019,8 +1019,8 @@ makes it worth keeping.
 - **Every derivative of a `LagrangianDensity` has the type of its arguments.** `derivative_u`,
   `derivative_v` and `derivative_w` promote a derivative that is built as an integer literal, such
   as the wave density's `∂L/∂u = 0`, to the arguments' type, and never narrow a wider value: a
-  `Float32` density gives `Float32` for `.u`, `.v` and `.w` of `derivatives`. This closes the known
-  issue K14.
+  density with `Float32` parameters gives `Float32` for `.u`, `.v` and `.w` of `derivatives` at
+  `Float32` arguments. This closes the known issue K14.
 - **A problem constructor refuses an `xstep` so small that the span holds more grid points than an
   `Int` counts with an `ArgumentError` that names `xstep`**, where `Wave.problem(xstep =
   nextfloat(0.0))` threw `InexactError: Int64(Inf)`. A zero or a negative step keeps its own
