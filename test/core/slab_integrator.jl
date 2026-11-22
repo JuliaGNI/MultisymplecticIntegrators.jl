@@ -269,7 +269,7 @@ end
         # the output grid moved onto the nodes of the trace, so both are read at the same points
         c.ansatz = M.TensorBSplineSlab{T, T}(
             s.coeffs, s.residual, s.top, s.tabulation, s.trace,
-            s.trace, s.top_slope)
+            s.trace, s.top_slope, s.top_derivatives, s.top_expansion)
         nq, D = size(c.trace_u)
         u, v, w = zeros(T, nq * D), zeros(T, nq * D), zeros(T, nq * D)
         M.assign!(u, v, w, c, problem)

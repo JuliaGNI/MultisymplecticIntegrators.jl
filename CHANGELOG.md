@@ -1107,3 +1107,17 @@ keeping.
   that this file holds no entries. This closes the known issues K49, K67, K73, K74, K75, K80 and
   K82. Two findings of the audit of 2026-10-31 are recorded as the known issues K83, the size of
   `src/couplings/weak_multipliers.jl`, and K84, the dense slab Jacobian.
+- **`PINNTraining` keeps the float type of its step.** `PINNTraining{T, R}` stores `step` as `T`,
+  in place of `Float64`; an integer step becomes `Float64` through `float`, and the default stays
+  `1e-2` in `Float64`. The descent converts the step to the slab's element type, as before.
+- **A network's point evaluation no longer copies the parameters into the kernels' layout.** The
+  arrays of the parameter set that the network's kernels read are views into the block's flat
+  parameter vector, so every write into `params` — the solver's vector, a fit, a guess — is what
+  the next evaluation reads, and `evaluate_at!` calls no `unflatten!`.
+- **The extrapolation of the previous slab on a `TensorBSplineAnsatz` allocates nothing after the
+  first step.** The block holds the time functions' derivatives at the top of the slab,
+  `top_derivatives`, built once with the cache, and the buffer of the expansion,
+  `top_expansion`, where `evaluate!(sample, ::PreviousSlab, …)` evaluated the time basis and
+  allocated an `nx × D × (degree + 1)` array at every call. The known issue K83 also records the
+  scalar loops of `src/couplings/weak_multipliers.jl` that a `mul!` on its trace tables would
+  replace.

@@ -18,6 +18,28 @@ include("../helpers/action_oracle.jl")
 # The helpers this file shares with `test/ansatz/network_cases.jl`, which holds N3, N4 and A1.
 include("../helpers/network_setup.jl")
 
+"""
+    reads_its_parameters(s, problem, point)
+
+Whether the block `s` evaluates, at `point`, the field of the parameters it holds: its values and
+their parameter derivative against those of a block built fresh with a copy of `s.params`, and
+against the network's own allocating functions, which lay out the flat vector they are given at
+each call. Each pair agrees within `8 eps(T)` relative.
+"""
+function reads_its_parameters(s, problem, point::AbstractVector{T}) where {T}
+    held = copy(s.params)
+    M.evaluate_at!(s, point[1], point[2])
+    values, gradient = copy(s.values), copy(s.gradient)
+    fresh = M.ansatz_data(s.ansatz, problem, T)
+    M.set_parameters!(fresh, held)
+    M.evaluate_at!(fresh, point[1], point[2])
+    rtol = 8 * eps(T)
+    return isapprox(values, fresh.values; rtol = rtol) &&
+           isapprox(gradient, fresh.gradient; rtol = rtol) &&
+           isapprox(values, s.ansatz.field(point, held); rtol = rtol) &&
+           isapprox(gradient, s.ansatz.gradient(point, held); rtol = rtol)
+end
+
 @testset "Network ansatz" begin
     # The `:all` run of N1's case, once per element type: N1 and N5 read it, and neither changes it.
     all_runs = Dict(T => network_run(T; mode = :all) for T in (Float64, Float32))
@@ -141,6 +163,58 @@ include("../helpers/network_setup.jl")
                 @test allocations(evaluate, point) == 0
             end
         end
+    end
+
+    # Every writer of a block's parameters is followed by an evaluation of the field those
+    # parameters describe: the solver's vector in `slab_field!`, the descent of a `PINNTraining`
+    # fit, the fit of a `TrainedHiddenLayer`, and a guess that sets the parameters. Each write moves
+    # the parameters, so an evaluation that reads an earlier set fails the comparison.
+    @testset "N9 an evaluation reads the parameters of the last write, $T, D = $D" for T in (
+            Float64, Float32),
+        D in (1, 2)
+
+        point = T[T(3 // 10), T(2 // 5)]
+        target = TargetFunction(D == 1 ? ((t, x, p) -> sinpi(x) * cospi(t)) :
+                                ((t, x, p) -> (sinpi(x) * cospi(t), sinpi(2x) / 2)))
+        # a guess that sets the parameters: the block's parameters at build are zero, the guess'
+        # fit is not
+        slab = network_slab(T; D = D)
+        c = cache(slab.int)
+        s = c.ansatz
+        @test any(!iszero, s.params)
+        @test reads_its_parameters(s, slab.problem, point)
+        # the solver's vector, through the field of the slab it describes
+        before = copy(s.params)
+        x = 2 .* rand(Xoshiro(20261122), T, s.ansatz.nfree) .- 1
+        qt, qx = M.nquadrature(s.tabulation.time), M.nquadrature(s.tabulation.space)
+        u, v, w = (zeros(T, qt, qx, D) for _ in 1:3)
+        M.slab_field!(u, v, w, s, x, nothing, s.ansatz.nfree, timestep(slab.problem))
+        @test s.params != before
+        @test reads_its_parameters(s, slab.problem, point)
+        # the descent of a `PINNTraining` fit
+        now = current(slab.solstep)
+        interior = zeros(T, qt, qx, D)
+        M.evaluate!(interior, target, c, s.ansatz, slab.problem, now)
+        pinn = PINNTraining(epochs = 1, nsamples = 200, batch = 50)
+        before = copy(s.params)
+        θ = copy(s.params)
+        M.fit!(θ, pinn, s.ansatz,
+            M.fit_sample(pinn, interior, target, c, s.ansatz, slab.problem, now), c)
+        @test s.params != before
+        @test reads_its_parameters(s, slab.problem, point)
+        # the fit of a `TrainedHiddenLayer`, which trains the hidden layer of a `:last_layer` block
+        last = network_slab(T; D = D, mode = :last_layer)
+        cl = cache(last.int)
+        sl = cl.ansatz
+        nowl = current(last.solstep)
+        M.evaluate!(interior, target, cl, sl.ansatz, last.problem, nowl)
+        trained = TrainedHiddenLayer(epochs = 2)
+        before = copy(sl.params)
+        θ = copy(sl.params)
+        M.fit!(θ, trained, sl.ansatz,
+            M.fit_sample(trained, interior, target, cl, sl.ansatz, last.problem, nowl), cl)
+        @test sl.params != before
+        @test reads_its_parameters(sl, last.problem, point)
     end
 
     # The two `S = 10` arms are records: in `:last_layer` mode the sixteen constraint rows of the

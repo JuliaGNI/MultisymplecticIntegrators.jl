@@ -442,17 +442,16 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K72 · A cache lookup of a `NetworkAnsatz` integrator allocates.
 
-- location: `src/ansatz/network.jl:596`
+- location: `src/ansatz/network.jl:603`
 - evidence: `ansatz_data_type` of a `NetworkAnsatz` returns
-  `NetworkSlab{ST, T, typeof(a), typeof(parameter_set(a, ST))}`, and `parameter_set` builds a
-  parameter set (`zeros(ST, a.np)` laid out by `unflatten`). The type folds to a constant, but the
-  compiler keeps the call, so `cache(int, T)` builds the set at every lookup, and `residual!` and
-  the solve's other calls of `cache(int, ST)` pay for it. `@allocated` of a warm
-  `cache(int, T)` with `T` known at the call site, over the unforced entries of
-  `test/helpers/quality_cases.jl`: 544 and 608 bytes at `Float64` (`D = 1`, `2`) and 416 and
-  448 bytes at `Float32` for the three network methods, and 0 bytes for the other six slab
-  methods, the same on Julia 1.13.4 and 1.14.0-beta1. A type-level form of the parameter set's type
-  would remove it.
+  `NetworkSlab{ST, T, typeof(a), typeof(parameter_set(a, Vector{ST}(undef, a.np)))}`, and
+  `parameter_set` builds a parameter set of views into that new vector. The type folds to a
+  constant, but the compiler keeps the call, so `cache(int, T)` allocates the vector at every
+  lookup, and `residual!` and the solve's other calls of `cache(int, ST)` pay for it.
+  `@allocated` of a warm `cache(int, T)` with `T` known at the call site, over the unforced
+  entries of `test/helpers/quality_cases.jl`: 192 and 224 bytes at `Float64` (`D = 1`, `2`) and
+  128 and 144 bytes at `Float32` for the three network methods, and 0 bytes for the other six slab
+  methods, on Julia 1.13.4. A type-level form of the parameter set's type would remove it.
 - kind: defect
 - found: 2026-11-15
 
@@ -540,6 +539,10 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `SymbolicAnsatz` (`:480`) and `NetworkAnsatz` (`:653`). The redraw of the kernels and couplings
   (`e7df04f`) left 395 lines; the symbolic ansatz added 179 (`3094f5f`) and the network ansatz 199
   (`72a9df4`), as `git diff --shortstat <c>^ <c> -- src/couplings/weak_multipliers.jl` prints.
+  The file also contracts its trace tables in scalar loops that a `mul!` on the tables would
+  replace: `row_dot` (`:223`), a row of a table against a vector, and the sum in `basis_load!`
+  (`:194`) of the multipliers' coefficients against the basis at each node. They stay as they are
+  until the rewrite to about 350 lines, of which replacing them is a part.
 - kind: defect
 - found: 2026-10-31
 
