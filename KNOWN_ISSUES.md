@@ -576,8 +576,19 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - location: `src/problems/lagrangian_problem.jl:100`
 - evidence: `_xgrid` (`:268-276`) refuses only a count that is not below `typemax(Int)`, and the
   constructor then calls `ics_function(collect(grid), params)`. `Wave.problem(xstep = 1e-17)`
-  asks for `10^17 + 1` points and throws `OutOfMemoryError` from `collect`, not an
+  asks for about `10^17` points and throws `OutOfMemoryError` from `collect`, not an
   `ArgumentError` that names `xstep`. A bound on the memory of the grid is a design choice that
   the constructor does not make.
+- kind: defect
+- found: #85
+
+### K90 · The bubble fit builds its whole dictionary on every fit, also when it keeps its workspace.
+
+- location: `src/couplings/fixed_boundary.jl:922`
+- evidence: `fit_bubble!` calls `bubble_atoms(key, ST)` before it decides whether to rebuild the
+  workspace, and uses the result there only to compare sizes and, on a rebuild, to store it; a fit
+  that keeps the workspace allocates an `nα nβ nγ × 3` matrix and discards it. The greedy fit of a
+  network builds its dictionary only inside its rebuild branch (`fit_network!`,
+  `src/initial_guess/orthogonal_greedy.jl:53-56`). The call is the same at `dd937ed`.
 - kind: defect
 - found: #85
