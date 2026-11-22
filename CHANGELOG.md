@@ -1021,6 +1021,35 @@ keeping.
   `.github/workflows/CI.yml` runs with `check_bounds: auto`, and ParallelTestRunner starts its
   workers from `Base.julia_cmd()`, which carries the parent's `--check-bounds` setting, so the guard
   is true in CI and the assertions run there.
+- **Every derivative of a `LagrangianDensity` has the type of its arguments.** `derivative_u`,
+  `derivative_v` and `derivative_w` promote a derivative that is built as an integer literal, such
+  as the wave density's `∂L/∂u = 0`, to the arguments' type, and never narrow a wider value: a
+  density with `Float32` parameters gives `Float32` for `.u`, `.v` and `.w` of `derivatives` at
+  `Float32` arguments. This closes the known issue K14.
+- **A problem constructor refuses an `xstep` so small that the span holds more grid points than an
+  `Int` counts with an `ArgumentError` that names `xstep`**, where `Wave.problem(xstep =
+  nextfloat(0.0))` threw `InexactError: Int64(Inf)`. A zero or a negative step keeps its own
+  message, "xstep must be positive", which `test/problems/lagrangian_problem.jl` now asserts. This
+  closes the known issues K36 and K37.
+- **`OrthogonalGreedy` and `TrainedHiddenLayer` keep the float type of their parameters.**
+  `OrthogonalGreedy{T}` stores `bias_interval` as `Tuple{T, T}` and `TrainedHiddenLayer{T, R}`
+  stores `learning_rate` as `T`, in place of `Float64`; an integer value becomes `Float64` through
+  `float`, and two ends of different float types promote. The defaults stay `(-π, π)` and `1e-5`
+  in `Float64`. The greedy fit's workspace keys on the method converted to its element type, so
+  its field stays concretely typed.
+- **The bubble fit of a `FixedBoundaryNetwork` keys its workspace on the method converted to the
+  slab's element type.** `FixedBoundaryFit{ST}` holds a `BubbleGreedy{NTuple{2, ST}}`, in place of
+  the abstract `BubbleGreedy`, and compares it by value, so a `BigFloat` slab keeps its dictionary
+  across fits. `bubble_atoms` converts the ends of the three ranges to the element type before it
+  builds them, so each atom is computed in that type and not in `Float64`.
+- **The helper `multiplier_momentum` of `test/couplings/weak_multipliers.jl` asserts that every
+  step of its `integrate!` run converged.** This closes the known issue K31.
+- **The side-data testset of `test/couplings/weak_multipliers.jl` runs on `xspan = (0.1, 0.7)`**,
+  which is not symmetric about the middle of the domain, and asserts that the data at its two ends
+  are separated, so a target with the left and right data swapped fails it. This closes the known
+  issue K35.
+- **`quality_problem` of `test/helpers/quality_cases.jl` loses its unreachable `throw`**: every
+  caller passes `D = 1` or `D = 2`. This closes the known issue K71.
 - **Seven known issues of the docstrings, the manual, the docs build and this file are closed.**
   The `coupling_data` and `ansatz_data` docstrings say that a block is built once for each cache
   an integrator builds, not once per integrator. The docstrings of `Predictor` and

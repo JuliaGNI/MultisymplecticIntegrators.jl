@@ -266,7 +266,11 @@ The output grid of the problem: `n = round(Int, Δx / xstep) + 1` equally spaced
 xgrid(problem::LagrangianPDEProblem) = _xgrid(problem.xspan, problem.xstep)
 
 function _xgrid(xsp::NTuple{2, T}, xh::T) where {T}
-    n = round(Int, (xsp[2] - xsp[1]) / xh) + 1
+    intervals = round((xsp[2] - xsp[1]) / xh)
+    # an infinite or a NaN count fails the comparison too
+    intervals < typemax(Int) || throw(ArgumentError(
+        "xstep $xh leaves more grid points on xspan $xsp than an Int counts"))
+    n = Int(intervals) + 1
     n ≥ 2 || throw(ArgumentError("xstep $xh is too large for xspan $xsp"))
     return range(xsp[1], xsp[2]; length = n)
 end
