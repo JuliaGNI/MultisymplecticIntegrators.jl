@@ -1030,7 +1030,8 @@ makes it worth keeping.
   `test/integration/benchmark_failures.jl`, labelled `Benchmark matrix: failures` in the group
   `slow`, and the helpers the two files share move unchanged to
   `test/helpers/benchmark_setup.jl`. `test/ansatz/network.jl` (182 s) runs
-  N1's `:all` run once per element type for N1 and N5, which ran the same run twice.
+  N1's 5-step `:all` run once per element type, and N5 reads that run in place of its own
+  2-step run.
   `test/initial_guess/trained_hidden_layer.jl` (190 s) no longer trains for many epochs: E1a checks
   that one epoch at `learning_rate = 1e-2` lowers the misfit and that `misfit_gradient!` agrees
   with central differences of the misfit, at output weights that give each component a field of
