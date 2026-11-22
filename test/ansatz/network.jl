@@ -165,10 +165,10 @@ end
         end
     end
 
-    # Every writer of a block's parameters is followed by an evaluation of the field those
-    # parameters describe: the solver's vector in `slab_field!`, the descent of a `PINNTraining`
-    # fit, the fit of a `TrainedHiddenLayer`, and a guess that sets the parameters. Each write moves
-    # the parameters, so an evaluation that reads an earlier set fails the comparison.
+    # After each of four writers of a block's parameters, the next evaluation gives the field of the
+    # parameters written: the solver's vector in `slab_field!`, the descent of a `PINNTraining` fit,
+    # the fit of a `TrainedHiddenLayer`, and a guess that sets the parameters. Each write moves the
+    # parameters, so an evaluation that reads an earlier set fails the comparison.
     @testset "N9 an evaluation reads the parameters of the last write, $T, D = $D" for T in (
             Float64, Float32),
         D in (1, 2)
