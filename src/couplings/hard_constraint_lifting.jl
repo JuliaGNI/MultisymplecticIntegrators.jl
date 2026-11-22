@@ -4,8 +4,8 @@
 The coupling of the hard-constraint formulation: the field of the slab is the ansatz's field
 projected onto the slab's data, plus the data.
 
-The projection is the transfinite one, which vanishes at the two ends of `xspan` and at the bottom
-of the slab,
+The projection is the transfinite one, which vanishes at the two ends of `xspan` and, on a network
+ansatz, on the whole bottom of the slab,
 
 ```math
 P[N] = N - T_1[N] + T_2[N],\\quad
@@ -24,8 +24,11 @@ the slab's data,
 at the physical time `t = t_0 + h \\hat t`, with `g_a` and `g_b` the problem's `bcs_function` at the
 two ends and `u_b` the bottom datum. The field of the slab is `P[N] + ℓ`. It meets the side data
 exactly. The bottom datum `u_b` is stored at the space nodes of the ansatz's rule
-(`lifting_datum`): the field meets it at those nodes, and between two nodes `u_b` is the
-linear blend of their two values.
+(`lifting_datum`): between two nodes `u_b` is the linear blend of their two values, and beyond the
+outer nodes it is the side value. A network ansatz evaluates `N(0, x)` at each point, so its field
+equals that `u_b` on the whole bottom. A tensor B-spline ansatz replaces `N(0, x)` by the same
+linear blend of its bottom samples at the nodes, so its `P[N]` vanishes on the bottom at the nodes
+alone, and its field meets `u_b` there.
 
 The corner correction is the term `ψ_L(x) * (1 - t̂)` at the left end and `ψ_R(x) * (1 - t̂)` at the
 right. With it `ℓ` interpolates the sides at the slab's start and the bottom along the whole slab;
@@ -70,7 +73,7 @@ end
 """
     coupling_unknowns(::HardConstraintLifting, ansatz, problem)
 
-The lifting's own unknowns, which are none: the data are imposed by construction and no multiplier
+The lifting's own unknowns, which are none: the field transform imposes the data and no multiplier
 is carried, so the solver's vector is the ansatz's own.
 """
 function coupling_unknowns(::HardConstraintLifting, ::SpaceTimeAnsatz,
@@ -285,8 +288,8 @@ end
 """
     coupling_term!(b, x, data::HardConstraintLiftingData, cache, ansatz, problem)
 
-The lifting's own part of the residual, which is none: the field carries the data by construction,
-so the interior weak form alone is the slab's residual and no surface row is added.
+The lifting's own part of the residual, which is none: the field transform imposes the data, so
+the interior weak form alone is the slab's residual and no surface row is added.
 """
 function coupling_term!(b::AbstractVector, x, data::HardConstraintLiftingData,
         c::SpaceTimeGalerkinCache, ansatz::SpaceTimeAnsatz, problem::LagrangianPDEProblem)

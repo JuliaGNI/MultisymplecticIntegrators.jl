@@ -295,7 +295,7 @@ keeping.
   multiplier set leaves out the two corner functions of the trace basis, where they would constrain
   the corners twice and leave the first slab rank deficient by two (§Audit 2.8). The first slab's
   bottom multiplier is the initial momentum read into the multiplier set by the
-  quadrature-weighted `L²` projection, factorised once per integrator (§Audit 5.4), its bottom load
+  quadrature-weighted `L²` projection, factorised once per cache (§Audit 5.4), its bottom load
   vector is cached once per step in `slab_bottom!`, and the multipliers of a step are guessed in
   `initial_guess!` rather than inside a residual evaluation (§Audit 2.2). The multiplier blocks of
   the `D > 1` case keep their components apart (§Audit 1.3). Each coupling accepts one space
@@ -614,10 +614,11 @@ keeping.
   The thirty rows are the matrix's: `:fixed_boundary_matrix`, below.
 - **The TrialNN family returns as the network ansatz under `HardConstraintLifting`.** The coupling
   makes the field of a slab `P[N] + ℓ`: the transfinite projection of the ansatz's field that
-  vanishes at the two ends of `xspan` and at the bottom of the slab, plus the transfinite
+  vanishes at the two ends of `xspan` and on the whole bottom of the slab, plus the transfinite
   interpolant of the slab's data — the problem's `bcs_function` at the two ends, and the initial
-  condition's bottom on the first slab and the previous slab's top afterwards. The initial and
-  boundary conditions are therefore met by construction, the coupling carries no unknown of its own
+  condition's bottom on the first slab and the previous slab's top afterwards. The boundary
+  conditions are met exactly and the bottom datum at the space nodes of the ansatz's rule, as the
+  linear blend of two nodes between them; the coupling carries no unknown of its own
   (`coupling_unknowns` is zero, `bottom_datum` is `nothing` and `coupling_term!` adds nothing), and
   the interior weak form alone is the residual. The corners are corrected by the term
   `ψ_L(x) * (1 - t̂)` at the left end and `ψ_R(x) * (1 - t̂)` at the right; a problem whose boundary
@@ -1025,14 +1026,15 @@ keeping.
   an integrator builds, not once per integrator. The docstrings of `Predictor` and
   `predictor_force!` say that the predictor integrates the unforced equation and only the solved
   slab reads the forcing. The docstring of `HardConstraintLifting` and the couplings page say that
-  the side data are met exactly and the bottom datum at the ansatz's space nodes, with the linear
-  blend of two nodes between them. `docs/make.jl` passes `repo` as
-  `Remotes.GitHub("JuliaGNI", "MultisymplecticIntegrators.jl")`, so the docs build no longer warns
-  that it cannot determine the repository root URL. The entries above name the test group that
-  each long test file joins, list `JET` and not `ForwardDiff` among the test bounds, and put the
-  `ForwardDiff` floor in the root `Project.toml`; the preamble no longer says that this file holds
-  no entries. This closes the known issues K49, K67, K73, K74, K75, K80 and K82. Two findings of
-  the audit of 2026-10-31 are recorded as the known issues K83, the size of
-  `src/couplings/weak_multipliers.jl`, and K84, the dense slab Jacobian. The known issue K85
-  records that the docstring of `HardConstraintLifting` and the couplings page say the projection
-  vanishes on the whole bottom of the slab, where the B-spline page says it vanishes at the nodes.
+  the side data are met exactly, that the bottom datum is the linear blend of its values at the
+  ansatz's space nodes and the side value beyond the outer nodes, and that the projection vanishes
+  on the whole bottom of the slab on a network ansatz and at the nodes alone on a tensor B-spline
+  ansatz; the lifting's other docstrings no longer say the data are imposed "by construction".
+  `docs/make.jl` passes `repo` as `Remotes.GitHub("JuliaGNI", "MultisymplecticIntegrators.jl")`,
+  so the docs build no longer warns that it cannot determine the repository root URL, and
+  `docs/Project.toml` requires Documenter 1, which defines `Remotes`. The entries above name the
+  test group that each long test file joins, list `JET` and not `ForwardDiff` among the test
+  bounds, and put the `ForwardDiff` floor in the root `Project.toml`; the preamble no longer says
+  that this file holds no entries. This closes the known issues K49, K67, K73, K74, K75, K80 and
+  K82. Two findings of the audit of 2026-10-31 are recorded as the known issues K83, the size of
+  `src/couplings/weak_multipliers.jl`, and K84, the dense slab Jacobian.

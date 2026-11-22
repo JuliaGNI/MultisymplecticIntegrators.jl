@@ -634,15 +634,3 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   is deferred to a follow-up task.
 - kind: defect
 - found: 2026-10-31
-
-### K85 · Two pages say that the lifting's projection vanishes on the whole bottom of the slab.
-
-- location: `src/couplings/hard_constraint_lifting.jl:7`
-- evidence: the docstring of `HardConstraintLifting` (`:7-8`) and `docs/src/couplings.md:13-14`
-  say that the projection `P[N]` vanishes at the two ends of `xspan` and at the bottom of the
-  slab. `docs/src/bspline.md:68-70` says that on a `Dirichlet()` B-spline ansatz the projection
-  samples the bottom trace of `N` at the space nodes of the ansatz's rule and subtracts the linear
-  blend between two nodes, so `P[N]` vanishes on the bottom at those nodes, not between them.
-  Whether the general sentence holds on a network ansatz is not settled by reading.
-- kind: docs
-- found: 2026-11-21
