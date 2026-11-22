@@ -25,7 +25,8 @@ include("../helpers/testsetup.jl")
         # `m · k` steps of `h = λ/k` fill the span `(t₀, t₀ + m · λ)`, however the quotient of span
         # and step rounds. The float range `t₀:h:t₁` drops the last step where the quotient rounds
         # just below `m · k`: at `λ/21` and `5λ` it is `104.99999999999999`. `λ` is the wavelength of
-        # 100 GHz in centimetres, as the benchmark that found the drop computes it.
+        # 100 GHz in centimetres, `2π / k0` from the wavenumber `k0`: at `c / f` the quotient is
+        # `105.0`.
         k0 = 2π * 100e9 / 2.99792458e10
         λ = T(2π / k0)
         wrong = []
