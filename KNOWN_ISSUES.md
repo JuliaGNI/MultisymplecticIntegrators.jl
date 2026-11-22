@@ -671,19 +671,3 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   between them, and the side value outside them. The base `cac800e` has both sentences.
 - kind: docs
 - found: #82
-
-### K86 · The shared lookup of `scripts/benchmark.jl` matches no neighbour of a reference node or time that is exactly `0.0`.
-
-- location: `scripts/benchmark.jl:291` (`shared_index`)
-- evidence: `shared_index` accepts a candidate with `isapprox(...; atol = 0, rtol = 1.0e-12)`, and
-  a relative tolerance about `0.0` is `0.0`. On the finer grid
-  `collect(range(-0.5, 0.5; length = 11))` of `xspan = (-0.5, 0.5)`, whose middle node is `0.0`,
-  `shared_index(fine, -0.3 + 3 * 0.1)` (the value `5.551115123125783e-17`) and
-  `shared_index(fine, nextfloat(0.0))` return `0`, and `shared_index(fine, 0.0)` returns `6`. A
-  coarse run whose middle node is computed as `5e-17` is therefore refused. `xgrid` builds each
-  grid with `range`, which gives exactly `0.0` at the middle of a symmetric span, so no registered
-  row reaches the case. The time match goes through the same `shared_index`, so a finer run's time
-  near a coarse time of `0.0` is refused the same way. The base `f9ed372` has the same tolerance in
-  its time match.
-- kind: defect
-- found: 2026-11-21

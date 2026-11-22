@@ -275,11 +275,12 @@ function fine_time_rows(tc, tf, steps)
     return rows
 end
 
-# The index of the entry of the sorted `values` that is `value` to a relative `1e-12`, or `0` where
-# none is: the match of a coarse run's node on a finer grid and of a coarse run's time among a finer
-# run's times. Two runs share a node or a time as the same value, but a value each computes from its
-# own count can sit a unit in the last place away on either side, so the nearer of the two sorted
-# neighbours is the candidate.
+# The index of the entry of the sorted `values` that is `value` to a relative `1e-12`, or to `1e-12`
+# times the span `last(values) - first(values)`, or `0` where none is: the match of a coarse run's
+# node on a finer grid and of a coarse run's time among a finer run's times. Two runs share a node
+# or a time as the same value, but a value each computes from its own count can sit a rounding error
+# away on either side, so the nearer of the two sorted neighbours is the candidate. The absolute
+# term matches a value near a shared `0.0`, about which a relative tolerance is `0`.
 function shared_index(values, value)
     isempty(values) && return 0
     k = searchsortedfirst(values, value)
@@ -288,7 +289,8 @@ function shared_index(values, value)
     elseif k > 1 && abs(values[k - 1] - value) < abs(values[k] - value)
         k -= 1
     end
-    return isapprox(values[k], value; atol = 0, rtol = 1.0e-12) ? k : 0
+    atol = 1.0e-12 * (last(values) - first(values))
+    return isapprox(values[k], value; atol, rtol = 1.0e-12) ? k : 0
 end
 
 """
