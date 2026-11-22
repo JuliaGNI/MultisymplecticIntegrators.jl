@@ -1,7 +1,8 @@
 """The workspace of one fit: its dictionary, the table of that dictionary at the slab's nodes, the
-buffers of the selection, and the method whose parameters built them."""
+buffers of the selection, and the method whose parameters built them, at the element type `ST`
+that the dictionary is built in."""
 mutable struct NetworkFit{ST}
-    method::Union{Nothing, OrthogonalGreedy}
+    method::Union{Nothing, OrthogonalGreedy{ST}}
     atoms::Matrix{ST}
     table::Matrix{ST}
     chosen::Matrix{ST}
@@ -47,9 +48,12 @@ function fit_network!(f::NetworkFit{ST}, method::OrthogonalGreedy,
     t, x = tabulation.time, tabulation.space
     qt, qx = nquadrature(t), nquadrature(x)
     m, N = (method.Nw + 1) * (method.Nb + 1), qt * qx
-    if f.method != method || size(f.table) != (m, N) || size(f.chosen, 2) != S ||
-       size(f.residual, 2) != D
-        f.atoms, f.selected, f.taken = greedy_atoms(method, ST), zeros(Int, S), falses(m)
+    key, old = OrthogonalGreedy{ST}(method), f.method
+    # the ends compare by value: a `BigFloat` end is a new object at every conversion
+    if old === nothing ||
+       (old.bias_interval, old.Nw, old.Nb) != (key.bias_interval, key.Nw, key.Nb) ||
+       size(f.table) != (m, N) || size(f.chosen, 2) != S || size(f.residual, 2) != D
+        f.atoms, f.selected, f.taken = greedy_atoms(key, ST), zeros(Int, S), falses(m)
         f.table, f.chosen = zeros(ST, m, N), zeros(ST, N, S)
         f.gram, f.residual = zeros(ST, S, S), zeros(ST, N, D)
         f.coefficients, f.correlations = zeros(ST, S, D), zeros(ST, m, D)
@@ -60,7 +64,7 @@ function fit_network!(f::NetworkFit{ST}, method::OrthogonalGreedy,
                 f.atoms[k, 1] * t.node[q] + f.atoms[k, 2] * x.node[r] + f.atoms[k, 3])
         end
     end
-    f.method = method
+    f.method = key
     for q in 1:qt, r in 1:qx, d in 1:D
         f.residual[(q - 1) * qx + r, d] = sqrt(t.weight[q] * x.weight[r]) * sample[q, r, d]
     end

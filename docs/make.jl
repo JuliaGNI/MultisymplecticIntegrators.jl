@@ -7,7 +7,7 @@ DocMeta.setdocmeta!(MultisymplecticIntegrators, :DocTestSetup,
 makedocs(;
     modules = [MultisymplecticIntegrators],
     authors = "Michael Kraus",
-    repo = "https://github.com/JuliaGNI/MultisymplecticIntegrators.jl/blob/{commit}{path}#{line}",
+    repo = Remotes.GitHub("JuliaGNI", "MultisymplecticIntegrators.jl"),
     sitename = "MultisymplecticIntegrators.jl",
     format = Documenter.HTML(;
         prettyurls = get(ENV, "CI", "false") == "true",
