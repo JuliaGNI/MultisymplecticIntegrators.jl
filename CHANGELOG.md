@@ -1081,3 +1081,19 @@ keeping.
   that this file holds no entries. This closes the known issues K49, K67, K73, K74, K75, K80 and
   K82. Two findings of the audit of 2026-10-31 are recorded as the known issues K83, the size of
   `src/couplings/weak_multipliers.jl`, and K84, the dense slab Jacobian.
+
+### Bug Fixes
+
+- **A span of whole steps keeps its last step.** `ntime(problem)` and the time grid of
+  `GeometricSolution(problem)` both came from the float range `t₀:h:t₁`, which drops the last step
+  where `(t₁ − t₀)/h` rounds just below an integer: at `h = λ/21` over `t₁ = 5λ` (λ the 100 GHz
+  wavelength in cm) the quotient is `104.99999999999999`, and `integrate` took 104 steps of 105 and
+  ended at `t = 1.485` instead of `1.499`. In a sweep of `h = λ/k`, `k = 1:200`, over the spans
+  `mλ`, `m = 1:10`, 183 of 2000 `Float64` spans and 92 of 2000 `Float32` spans dropped a step.
+  `ntime` now counts the whole steps of `h` in the span and takes a count `n` whose end `t₀ + n·h`
+  lies within 8 ulp of `t₁` as filling it; a span that whole steps do not fill still ends at the
+  last whole step before `t₁`. `GeometricSolution(problem::LagrangianPDEProblem, args...)` builds
+  the solution on the problem's own grid `t₀ + n·h`, `n = 0:ntime(problem)` (the internal helper
+  `timegrid`, not exported), so the step count of the problem and of its solution agree and the
+  last time is `t₁` to within a few ulp. A run over such a span now takes one more step than before
+  and ends at `t₁`; runs over other spans are unchanged.
