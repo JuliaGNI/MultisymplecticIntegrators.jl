@@ -1037,6 +1037,11 @@ keeping.
   `float`, and two ends of different float types promote. The defaults stay `(-π, π)` and `1e-5`
   in `Float64`. The greedy fit's workspace keys on the method converted to its element type, so
   its field stays concretely typed.
+- **The bubble fit of a `FixedBoundaryNetwork` keys its workspace on the method converted to the
+  slab's element type.** `FixedBoundaryFit{ST}` holds a `BubbleGreedy{NTuple{2, ST}}`, in place of
+  the abstract `BubbleGreedy`, and compares it by value, so a `BigFloat` slab keeps its dictionary
+  across fits. `bubble_atoms` converts the ends of the three ranges to the element type before it
+  builds them, so each atom is computed in that type and not in `Float64`.
 - **The helper `multiplier_momentum` of `test/couplings/weak_multipliers.jl` asserts that every
   step of its `integrate!` run converged.** This closes the known issue K31.
 - **The side-data testset of `test/couplings/weak_multipliers.jl` runs on `xspan = (0.1, 0.7)`**,

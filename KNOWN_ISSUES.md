@@ -571,13 +571,13 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-31
 
-### K87 · The `method` field of `FixedBoundaryFit` is not concretely typed.
+### K89 · A problem constructor throws `OutOfMemoryError` for an `xstep` whose grid an `Int` counts but memory cannot hold.
 
-- location: `src/couplings/fixed_boundary.jl:133`
-- evidence: `mutable struct FixedBoundaryFit{ST}` declares `method::Union{Nothing, BubbleGreedy}`,
-  and `BubbleGreedy{R <: Tuple{Vararg{Real, 2}}}` (`:72`) is a `UnionAll`, so the field's type is
-  abstract and each read of `f.method` is dispatched at run time. `NetworkFit{ST}` keys its
-  workspace on `Union{Nothing, OrthogonalGreedy{ST}}` for the same purpose. The field is the same
-  at `f9ed372`.
+- location: `src/problems/lagrangian_problem.jl:100`
+- evidence: `_xgrid` (`:268-276`) refuses only a count that is not below `typemax(Int)`, and the
+  constructor then calls `ics_function(collect(grid), params)`. `Wave.problem(xstep = 1e-17)`
+  asks for `10^17 + 1` points and throws `OutOfMemoryError` from `collect`, not an
+  `ArgumentError` that names `xstep`. A bound on the memory of the grid is a design choice that
+  the constructor does not make.
 - kind: defect
-- found: 2026-11-22
+- found: #85

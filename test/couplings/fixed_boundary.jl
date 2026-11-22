@@ -1057,6 +1057,67 @@ end
     w2 = collect(c.ansatz.params)
     M.fit!(w2, BubbleGreedy(γ_range = (-3.0, 3.0)), ansatz, sample, c)
     @test second ≈ w2
+    # The workspace keys on the method converted to the slab's element type, so its field is
+    # concretely typed, and a `Float32` slab keeps a `Float32` key and `Float32` atoms.
+    for T in (Float64, Float32)
+        @test fieldtype(M.FixedBoundaryFit{T}, :method) ===
+              Union{Nothing, BubbleGreedy{NTuple{2, T}}}
+        @test isconcretetype(BubbleGreedy{NTuple{2, T}})
+    end
+    p32 = WF.problem(T = Float32, timespan = (0.0f0, 0.1f0), timestep = 0.05f0,
+        xstep = 0.05f0, xspan = (0.0f0, 1.0f0))
+    a32 = fixed_ansatz(p32)
+    s32 = fixed_slab(p32, a32)
+    c32 = cache(s32.int)
+    tb32 = a32.tabulation
+    sample32 = zeros(Float32, length(tb32.tnode), length(tb32.xnode), a32.D)
+    M.evaluate!(sample32, InitialCondition(), c32, a32, p32, current(s32.solstep))
+    w32 = collect(c32.ansatz.params)
+    M.fit!(w32, BubbleGreedy(nα = 3, nβ = 3, nγ = 3), a32, sample32, c32)
+    @test c32.ansatz.fit.method isa BubbleGreedy{NTuple{2, Float32}}
+    @test c32.ansatz.fit.atoms isa Matrix{Float32}
+    # The dictionary is built from ends converted to the element type: at `BigFloat` the value
+    # `-1/3` of the range `(-1, 1)` on four points carries `BigFloat`'s precision, not `Float64`'s,
+    # in each of the three columns.
+    third = bubble_atoms(
+        BubbleGreedy(nα = 4, nβ = 4, nγ = 4, α_range = (-1.0, 1.0), β_range = (-1.0, 1.0),
+            γ_range = (-1.0, 1.0)),
+        BigFloat)
+    for j in 1:3
+        @test minimum(abs(third[i, j] + big(1) / 3) for i in axes(third, 1)) ≤
+              4 * eps(BigFloat)
+    end
+    # A `BigFloat` slab converts the `Float64` ranges to new `BigFloat` objects at every fit; the
+    # key compares by value, so a second fit with the same method keeps the table the first built,
+    # and a method of other ranges builds it again. `GeometricSolutions` builds no solution at
+    # `BigFloat` (K53) and the fits of the levels take an `svd` that `BigFloat` lacks, so the slab
+    # gets its side data alone and the bubble's fit runs on its own.
+    pbig = WF.problem(T = BigFloat, timespan = (big"0.0", big"0.1"), timestep = big"0.05",
+        xstep = big"0.05", xspan = (big"0.0", big"1.0"))
+    abig = fixed_ansatz(pbig; Sx = 4, St = 4)
+    cbig = cache(GeometricIntegrator(pbig, SpaceTimeGalerkin(abig, FixedBoundary());
+        f_reltol = big"1e-30"))
+    tbbig = abig.tabulation
+    for (row, t̂) in enumerate((zero(BigFloat), tbbig.tnode..., one(BigFloat)))
+        M.side_row!(cbig.coupling, pbig, row, timestep(pbig) * t̂)
+    end
+    samplebig = BigFloat[sin(π * x) * (1 + t)
+                         for t in tbbig.tnode, x in tbbig.xnode, _ in 1:abig.D]
+    wbig, small = collect(cbig.ansatz.params), BubbleGreedy(nα = 3, nβ = 3, nγ = 3)
+    M.fit_bubble!(wbig, small, abig, cbig.coupling, samplebig, cbig.ansatz)
+    table = cbig.ansatz.fit.table
+    @test cbig.ansatz.fit.method isa BubbleGreedy{NTuple{2, BigFloat}}
+    M.fit_bubble!(wbig, small, abig, cbig.coupling, samplebig, cbig.ansatz)
+    @test cbig.ansatz.fit.table === table
+    # each of the three ranges is part of the key
+    for other in ((; α_range = (-4.0, 4.0)), (; β_range = (-4.0, 4.0)),
+        (; γ_range = (-3.0, 3.0)))
+        M.fit_bubble!(wbig, small, abig, cbig.coupling, samplebig, cbig.ansatz)
+        before = cbig.ansatz.fit.table
+        M.fit_bubble!(wbig, BubbleGreedy(; nα = 3, nβ = 3, nγ = 3, other...), abig,
+            cbig.coupling, samplebig, cbig.ansatz)
+        @test cbig.ansatz.fit.table !== before
+    end
 end
 
 # ---- FB14 ----------------------------------------------------------------------------
