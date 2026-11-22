@@ -28,6 +28,10 @@ module ExitingRow end
 # arm does not exist on Windows.
 module SignalledRow end
 
+# The same, for the row whose child process cannot start: the driver's `child_command` is replaced
+# there by a command whose executable does not exist, which the tree's own driver must not see.
+module UnstartableRow end
+
 # One row's metadata, which a family's rows carry and a test builds for a run of its own. Its
 # `problem_label` is the display name the families' rows carry, from the registry's
 # `matrix_problem_label`.
@@ -215,6 +219,45 @@ end
         nudged["t"] = copy(finest["t"])
         nudged["t"][5] = prevfloat(nudged["t"][5])
         @test reference_error(runs[1], nudged) ≈ runs[1]["error"]
+        # A node is matched as a time is: a node of the finer grid one unit in the last place below
+        # the coarse run's node is that node, and one a relative `1e-10` away, beyond the match's
+        # tolerance, is not.
+        node = runs[1]["x"][2]
+        k = argmin(abs.(finest["x"] .- node))
+        below = copy(finest)
+        below["x"] = copy(finest["x"])
+        below["x"][k] = prevfloat(node)
+        @test below["x"][k] < node
+        @test reference_error(runs[1], below) ≈ runs[1]["error"]
+        apart = copy(finest)
+        apart["x"] = copy(finest["x"])
+        apart["x"][k] = node * (1 - 1.0e-10)
+        @test_throws r"^ArgumentError: the node \S+ of the coarse run is not a node of the finer run's grid" reference_error(
+            runs[1], apart)
+        # A reference value of exactly `0.0`, as at the middle of a symmetric span, is matched by a
+        # value computed a rounding error away from it: the absolute tolerance is the relative one
+        # times the span of the sorted values. A midpoint, a relative miss of `1e-10`, a value past
+        # the ends and an empty grid stay unmatched, and a one-node grid matches its node only.
+        symmetric = collect(range(-0.5, 0.5; length = 11))
+        @test symmetric[6] === 0.0
+        @test 0.0 < -0.3 + 3 * 0.1 < 1.0e-12
+        @test shared_index(symmetric, -0.3 + 3 * 0.1) == 6
+        @test shared_index(symmetric, nextfloat(0.0)) == 6
+        @test shared_index(symmetric, 0.0) == 6
+        @test shared_index(symmetric, -1.0e-14) == 6
+        @test shared_index(symmetric, 2.0e-12) == 0
+        wide = collect(range(-50.0, 50.0; length = 11))
+        @test shared_index(wide, 5.0e-11) == 6
+        @test shared_index(wide, 2.0e-10) == 0
+        @test shared_index(symmetric, 0.05) == 0
+        @test shared_index(symmetric, 0.3 * (1 + 1.0e-10)) == 0
+        @test shared_index(symmetric, 0.31) == 0
+        @test shared_index(symmetric, 0.5 + 1.0e-11) == 0
+        @test shared_index(symmetric, -0.5 - 1.0e-11) == 0
+        @test shared_index(Float64[], 0.0) == 0
+        @test shared_index([0.25], 0.25) == 1
+        @test shared_index([0.25], nextfloat(0.25)) == 1
+        @test shared_index([0.0], nextfloat(0.0)) == 0
         # A time of the coarse run that the finer run does not hold is refused rather than matched
         # to a neighbouring step: in the middle of the finer grid, past its end, and where the finer
         # run holds no time at all.
@@ -804,5 +847,68 @@ end
         elm = Set(entry.stem for entry in family_entries(:elm))
         @test !isempty(elm)
         @test !any(entry -> entry.stem in elm, [row.entry for row in rows])
+    end
+
+    # The renderer ends its own process, so it runs in a child, on an archive of a kind the
+    # extension refuses to draw: the archive's line on stdout names the failure, and the backtrace
+    # of the refusal goes to stderr.
+    @testset "the renderer writes the backtrace of a figure it cannot draw" begin
+        directory = mktempdir()
+        try
+            runs_dir = joinpath(directory, "runs")
+            mkpath(runs_dir)
+            jldsave(joinpath(runs_dir, "undrawable.jld2"); kind = "phase-portrait")
+            script = joinpath(@__DIR__, "..", "..", "scripts", "figures.jl")
+            command = `$(Base.julia_cmd()) --startup-file=no --project=$(Base.active_project()) $(script) --runs-dir $(runs_dir) --results-dir $(joinpath(directory, "results"))`
+            out = IOBuffer()
+            err = IOBuffer()
+            process = run(pipeline(ignorestatus(command); stdout = out, stderr = err))
+            output = String(take!(out))
+            errors = String(take!(err))
+            @test process.termsignal == 0 && process.exitcode == 1
+            @test occursin(r"undrawable\s+FAILED: ArgumentError: ", output)
+            @test occursin(r"^ArgumentError: .*\nStacktrace:\n"sm, errors)
+            @test occursin(r"Stacktrace:.*figures\.jl:\d+"s, errors)
+        finally
+            rm(directory; recursive = true, force = true)
+        end
+    end
+
+    # A child process that cannot start is reported on stdout with one line, its backtrace goes to
+    # stderr, and the row is archived by the driver as a failure.
+    @testset "the driver writes the backtrace of a child it cannot start" begin
+        directory = mktempdir()
+        try
+            Base.include(UnstartableRow,
+                joinpath(@__DIR__, "..", "..", "scripts", "run_benchmark.jl"))
+            nowhere = joinpath(directory, "no-such-julia")
+            Core.eval(UnstartableRow, :(child_command(stem) = Cmd([$nowhere, stem])))
+            UnstartableRow.RUNS_DIR[] = joinpath(directory, "runs")
+            mkpath(UnstartableRow.RUNS_DIR[])
+            entry = row("unstartable-row", :box, :wave, :matrix, (timestep = 1 / 20,))
+            out = joinpath(directory, "stdout.txt")
+            err = joinpath(directory, "stderr.txt")
+            archived = open(out, "w") do stdout_io
+                open(err, "w") do stderr_io
+                    redirect_stdio(; stdout = stdout_io, stderr = stderr_io) do
+                        Base.invokelatest(UnstartableRow.run_row,
+                            (family = :box, entry = entry, benchmark = identity))
+                    end
+                end
+            end
+            @test archived
+            output = read(out, String)
+            errors = read(err, String)
+            @test occursin(r"unstartable-row\s+FAILED to start: ", output)
+            @test occursin(r"^IOError: could not spawn .*\nStacktrace:\n"s, errors)
+            @test occursin(r"Stacktrace:.*run_benchmark\.jl:\d+"s, errors)
+            # The trace is the one of the spawn that threw, not one taken where the catch prints.
+            @test occursin(r"Stacktrace:.*process\.jl:\d+"s, errors)
+            on_disk = load(joinpath(UnstartableRow.RUNS_DIR[], "unstartable-row.jld2"))
+            @test on_disk["status"] == :failed
+            @test occursin("code 1", on_disk["message"])
+        finally
+            rm(directory; recursive = true, force = true)
+        end
     end
 end

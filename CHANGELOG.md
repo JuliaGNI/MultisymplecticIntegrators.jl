@@ -1021,6 +1021,20 @@ keeping.
   `.github/workflows/CI.yml` runs with `check_bounds: auto`, and ParallelTestRunner starts its
   workers from `Base.julia_cmd()`, which carries the parent's `--check-bounds` setting, so the guard
   is true in CI and the assertions run there.
+- **A reference comparison matches the nodes as it matches the times.** `reference_error` in
+  `scripts/benchmark.jl` finds a coarse run's node on the finer grid with `shared_index`, the
+  lookup that already found its times: the nearer of the two sorted neighbours, accepted within a
+  relative `1e-12` or within `1e-12` times the span of the finer run's values. A node of the finer
+  grid one unit in the last place below the coarse node was refused before, while a time one unit
+  off was accepted. The absolute term matches a node or a time a rounding error away from a shared
+  `0.0`, such as `-0.3 + 3 * 0.1` against the middle node of `xspan = (-0.5, 0.5)`, which both
+  matches refused before. This closes the known issue K55.
+- **The renderer, the archive reader and the benchmark driver write the backtrace of a failure.**
+  The `catch` of `scripts/figures.jl` that skips a figure it cannot draw, the one of `load_runs` in
+  `scripts/archives.jl` that skips an archive it cannot read, and the one of `run_row` in
+  `scripts/run_benchmark.jl` that reports a child process it cannot start keep their one-line
+  report and also write the exception with its backtrace to `stderr`, as `scripts/run_family.jl`
+  does.
 - **Every derivative of a `LagrangianDensity` has the type of its arguments.** `derivative_u`,
   `derivative_v` and `derivative_w` promote a derivative that is built as an integer literal, such
   as the wave density's `∂L/∂u = 0`, to the arguments' type, and never narrow a wider value: a

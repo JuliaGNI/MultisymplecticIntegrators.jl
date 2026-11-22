@@ -300,16 +300,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-11-11
 
-### K55 · The shared-node and shared-time matches are two routines that disagree at one ulp.
-
-- location: `scripts/benchmark.jl:234` and `:265`
-- evidence: the nodes are matched by one routine and the times by another; only the time one
-  tolerates a neighbour in the last place, so a grid compared on its nodes and a grid compared on its
-  times answer differently for the same pair. One `shared_index(sorted, value)` would serve both and
-  remove about twelve lines.
-- kind: dead code
-- found: 2026-11-11
-
 ### K56 · The box scheme copies the initial level into its cache twice on the first step.
 
 - location: `src/baselines/box_scheme.jl:457` (`initial_guess!`) and `:508` (`read_initial_level!`)

@@ -163,8 +163,9 @@ Every archive under `runs/`, sorted by file name, and the names of the files tha
 
 Read from the directory rather than enumerated from a registry: the directory is the record of what
 exists, and a registry that has drifted from the stem a driver wrote produces a figure that silently
-is not drawn. A file that fails to load is reported with a warning and left out of `runs`, so one
-corrupt archive does not stop the figures of the others; the caller counts `unreadable` as failures.
+is not drawn. A file that fails to load is reported with a warning, its backtrace is written to
+`stderr`, and it is left out of `runs`, so one corrupt archive does not stop the figures of the
+others; the caller counts `unreadable` as failures.
 A name that starts with a dot is skipped: `atomic_write` names its temporary that way, so a
 temporary whose writer was killed is not read as a corrupt archive.
 """
@@ -178,6 +179,7 @@ function load_runs()
         catch exception
             push!(unreadable, file)
             @warn "cannot read the archive $(file): $(failure_message(exception))"
+            println(stderr, sprint(showerror, exception, catch_backtrace()))
             continue
         end
         # The file name is the stem, by construction in `store_run!`.
