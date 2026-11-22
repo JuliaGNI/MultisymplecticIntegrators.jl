@@ -104,6 +104,7 @@ function run_row(row)
         (Int(process.exitcode), Int(process.termsignal))
     catch raised
         report(stem, "FAILED to start: $(failure_message(raised))")
+        println(stderr, sprint(showerror, raised, catch_backtrace()))
         (1, 0)
     end
     if isfile(path)

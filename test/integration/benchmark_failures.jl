@@ -1,5 +1,6 @@
 # The benchmark matrix: a run that throws, or whose child process ends without its archive, is a
-# result. One of the files of `test/integration/benchmark*.jl`, which share
+# result, and the renderer and the driver write the backtrace of a figure they cannot draw and of a
+# child they cannot start. One of the files of `test/integration/benchmark*.jl`, which share
 # `test/helpers/benchmark_setup.jl`.
 using JLD2
 using MultisymplecticIntegrators
@@ -134,6 +135,69 @@ include(joinpath(@__DIR__, "..", "helpers", "benchmark_setup.jl"))
             @test killed["status"] == :failed
             @test occursin("killed by signal 9", killed["message"])
             @test killed["steps"] == 0
+        end
+    end
+
+    # The renderer ends its own process, so it runs in a child, on an archive of a kind the
+    # extension refuses to draw: the archive's line on stdout names the failure, and the backtrace
+    # of the refusal goes to stderr.
+    @testset "the renderer writes the backtrace of a figure it cannot draw" begin
+        directory = mktempdir()
+        try
+            runs_dir = joinpath(directory, "runs")
+            mkpath(runs_dir)
+            jldsave(joinpath(runs_dir, "undrawable.jld2"); kind = "phase-portrait")
+            script = joinpath(@__DIR__, "..", "..", "scripts", "figures.jl")
+            command = `$(Base.julia_cmd()) --startup-file=no --project=$(Base.active_project()) $(script) --runs-dir $(runs_dir) --results-dir $(joinpath(directory, "results"))`
+            out = IOBuffer()
+            err = IOBuffer()
+            process = run(pipeline(ignorestatus(command); stdout = out, stderr = err))
+            output = String(take!(out))
+            errors = String(take!(err))
+            @test process.termsignal == 0 && process.exitcode == 1
+            @test occursin(r"undrawable\s+FAILED: ArgumentError: ", output)
+            @test occursin(r"^ArgumentError: .*\nStacktrace:\n"sm, errors)
+            @test occursin(r"Stacktrace:.*figures\.jl:\d+"s, errors)
+        finally
+            rm(directory; recursive = true, force = true)
+        end
+    end
+
+    # A child process that cannot start is reported on stdout with one line, its backtrace goes to
+    # stderr, and the row is archived by the driver as a failure.
+    @testset "the driver writes the backtrace of a child it cannot start" begin
+        directory = mktempdir()
+        try
+            Base.include(UnstartableRow,
+                joinpath(@__DIR__, "..", "..", "scripts", "run_benchmark.jl"))
+            nowhere = joinpath(directory, "no-such-julia")
+            Core.eval(UnstartableRow, :(child_command(stem) = Cmd([$nowhere, stem])))
+            UnstartableRow.RUNS_DIR[] = joinpath(directory, "runs")
+            mkpath(UnstartableRow.RUNS_DIR[])
+            entry = row("unstartable-row", :box, :wave, :matrix, (timestep = 1 / 20,))
+            out = joinpath(directory, "stdout.txt")
+            err = joinpath(directory, "stderr.txt")
+            archived = open(out, "w") do stdout_io
+                open(err, "w") do stderr_io
+                    redirect_stdio(; stdout = stdout_io, stderr = stderr_io) do
+                        Base.invokelatest(UnstartableRow.run_row,
+                            (family = :box, entry = entry, benchmark = identity))
+                    end
+                end
+            end
+            @test archived
+            output = read(out, String)
+            errors = read(err, String)
+            @test occursin(r"unstartable-row\s+FAILED to start: ", output)
+            @test occursin(r"^IOError: could not spawn .*\nStacktrace:\n"s, errors)
+            @test occursin(r"Stacktrace:.*run_benchmark\.jl:\d+"s, errors)
+            # The trace is the one of the spawn that threw, not one taken where the catch prints.
+            @test occursin(r"Stacktrace:.*process\.jl:\d+"s, errors)
+            on_disk = load(joinpath(UnstartableRow.RUNS_DIR[], "unstartable-row.jld2"))
+            @test on_disk["status"] == :failed
+            @test occursin("code 1", on_disk["message"])
+        finally
+            rm(directory; recursive = true, force = true)
         end
     end
 end

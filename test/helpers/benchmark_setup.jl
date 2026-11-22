@@ -1,7 +1,7 @@
 # The shared setup of the benchmark test files `test/integration/benchmark*.jl`: the scripts and the
-# helpers they include, the modules of the rows whose child ends on a code or a signal of its own,
-# and the rows, the problems and the differences the files build. Each file includes it after its
-# own `using` lines.
+# helpers they include, the modules of the rows whose child ends on a code or a signal of its own
+# or cannot start, and the rows, the problems and the differences the files build. Each file
+# includes it after its own `using` lines.
 
 # The scripts are no part of the package, so the whole harness is tested through its files. The
 # reference records are included before the runner, which loads them itself only when its caller has
@@ -20,6 +20,10 @@ module ExitingRow end
 # The same, for the row whose child the operating system kills: the parent reads the signal, and the
 # arm does not exist on Windows.
 module SignalledRow end
+
+# The same, for the row whose child process cannot start: the driver's `child_command` is replaced
+# there by a command whose executable does not exist, which the tree's own driver must not see.
+module UnstartableRow end
 
 # One row's metadata, which a family's rows carry and a test builds for a run of its own. Its
 # `problem_label` is the display name the families' rows carry, from the registry's

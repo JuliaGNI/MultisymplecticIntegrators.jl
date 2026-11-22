@@ -34,14 +34,18 @@ The dictionary is `Nw + 1` directions of equal angle on the half-open circle `[0
 weights and the biases stay where the dictionary put them; a `Projection()` is refused on such an
 ansatz, and this fit replaces it as the ansatz's [`default_fit`](@ref).
 
+The interval keeps the float type of its ends: an integer end becomes `Float64` through `float`,
+two ends of different float types promote, and the dictionary converts them to the element type of
+the slab.
+
 ```julia
 method = SpaceTimeGalerkin(NetworkAnsatz(S = 10, xspan = (0.0, 1.0), ncells = (2, 5),
         degree = 3), WeakInitialAndBoundaryConditions();
     initial_guess = FitTo(ExactSolution(); method = OrthogonalGreedy(Nw = 50, Nb = 50)))
 ```
 """
-struct OrthogonalGreedy <: SlabFitMethod
-    bias_interval::Tuple{Float64, Float64}
+struct OrthogonalGreedy{T <: Real} <: SlabFitMethod
+    bias_interval::Tuple{T, T}
     Nw::Int
     Nb::Int
 
@@ -50,11 +54,17 @@ struct OrthogonalGreedy <: SlabFitMethod
             throw(ArgumentError("bias_interval must hold two values, got $bias_interval"))
         all(isfinite, bias_interval) ||
             throw(ArgumentError("bias_interval must be finite, got $bias_interval"))
-        float(bias_interval[1]) < float(bias_interval[2]) ||
-            throw(ArgumentError("bias_interval must increase, got $bias_interval"))
+        a, b = promote(float(bias_interval[1]), float(bias_interval[2]))
+        a < b || throw(ArgumentError("bias_interval must increase, got $bias_interval"))
         Nw ≥ 1 || throw(ArgumentError("Nw must be at least 1, got $Nw"))
         Nb ≥ 1 || throw(ArgumentError("Nb must be at least 1, got $Nb"))
-        return new((Float64(bias_interval[1]), Float64(bias_interval[2])), Int(Nw), Int(Nb))
+        return new{typeof(a)}((a, b), Int(Nw), Int(Nb))
+    end
+
+    # The method at the element type of a slab, which may be a `Dual` inside a Jacobian: the key
+    # of the fit's workspace, whose dictionary is built from exactly these converted ends.
+    function OrthogonalGreedy{T}(method::OrthogonalGreedy) where {T <: Real}
+        return new{T}(convert.(T, method.bias_interval), method.Nw, method.Nb)
     end
 end
 
@@ -75,7 +85,9 @@ initial and boundary data into the fit.
 `epochs = 0` fits the output layer alone on the hidden layer the `rng` draws; a larger `epochs`
 descends first. The draw is taken from `rng` and never from the process's global generator, and the
 generator is copied per call, so one method object gives the same fit to every integrator that
-shares it. The buffers of the fit live in the ansatz's block, not in the method.
+shares it. The buffers of the fit live in the ansatz's block, not in the method. The learning rate
+keeps the float type it is given, an integer rate becoming `Float64` through `float`, and the step
+converts it to the element type of the slab.
 
 A network in `:all` mode is refused, because Newton determines the hidden layer there.
 
@@ -85,9 +97,9 @@ method = SpaceTimeGalerkin(NetworkAnsatz(S = 20, mode = :last_layer, xspan = (0.
     initial_guess = FitTo(InitialCondition(); method = TrainedHiddenLayer(epochs = 20)))
 ```
 """
-struct TrainedHiddenLayer{R <: AbstractRNG} <: SlabFitMethod
+struct TrainedHiddenLayer{T <: AbstractFloat, R <: AbstractRNG} <: SlabFitMethod
     epochs::Int
-    learning_rate::Float64
+    learning_rate::T
     rng::R
 end
 
@@ -96,7 +108,7 @@ function TrainedHiddenLayer(; epochs::Integer = 100, learning_rate::Real = 1e-5,
     epochs ≥ 0 || throw(ArgumentError("epochs must be at least 0, got $epochs"))
     isfinite(learning_rate) && learning_rate ≥ 0 || throw(ArgumentError(
         "learning_rate must be finite and at least 0, got $learning_rate"))
-    return TrainedHiddenLayer(Int(epochs), Float64(learning_rate), rng)
+    return TrainedHiddenLayer(Int(epochs), float(learning_rate), rng)
 end
 
 """

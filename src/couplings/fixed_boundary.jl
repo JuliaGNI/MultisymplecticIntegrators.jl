@@ -98,6 +98,15 @@ if !@isdefined(FixedBoundaryData)
         return BubbleGreedy(Int(nα), Int(nβ), Int(nγ), ranges..., Int(iterations))
     end
 
+    # The method at the element type of a slab: the key of the fit's workspace, whose dictionary is
+    # built from exactly these converted ranges.
+    function BubbleGreedy{NTuple{2, T}}(method::BubbleGreedy) where {T <: Real}
+        ranges = map(r -> (convert(T, r[1]), convert(T, r[2])),
+            (method.α_range, method.β_range, method.γ_range))
+        return BubbleGreedy{NTuple{2, T}}(
+            method.nα, method.nβ, method.nγ, ranges..., method.iterations)
+    end
+
     @doc """
         bubble_atoms(method::BubbleGreedy, ::Type{T})
 
@@ -106,9 +115,10 @@ if !@isdefined(FixedBoundaryData)
     are dropped so that both forms of the bubble start from the same units.
     """
     function bubble_atoms(method::BubbleGreedy, ::Type{T}) where {T}
-        α = range(method.α_range[1], method.α_range[2]; length = method.nα)
-        β = range(method.β_range[1], method.β_range[2]; length = method.nβ)
-        γ = range(method.γ_range[1], method.γ_range[2]; length = method.nγ)
+        # the ends are converted before the ranges are built, so that each atom is computed in `T`
+        α = range(T(method.α_range[1]), T(method.α_range[2]); length = method.nα)
+        β = range(T(method.β_range[1]), T(method.β_range[2]); length = method.nβ)
+        γ = range(T(method.γ_range[1]), T(method.γ_range[2]); length = method.nγ)
         atoms = Matrix{T}(undef, method.nα * method.nβ * method.nγ, 3)
         k = 0
         for c in γ, b in β, a in α
@@ -126,11 +136,13 @@ if !@isdefined(FixedBoundaryData)
     dictionary tabulated at the slab's nodes and weighted by `√(ωₜωₓ)`, the buffers of the greedy
     selection over the atoms and the components, and the output weights it leaves.
 
-    The workspace is keyed on the method's own parameters as well as on the sizes, so that a second
-    fit of the same size reads its own dictionary and not the first one's.
+    The workspace is keyed on the method converted to `ST` as well as on the sizes, so that a second
+    fit of the same size reads its own dictionary and not the first one's; the key compares by
+    value, so that a `BigFloat` slab, whose converted ranges are new objects at every fit, keeps its
+    workspace.
     """
     mutable struct FixedBoundaryFit{ST}
-        method::Union{Nothing, BubbleGreedy}
+        method::Union{Nothing, BubbleGreedy{NTuple{2, ST}}}
         atoms::Matrix{ST}
         table::Matrix{ST}
         target::Matrix{ST}
@@ -157,6 +169,10 @@ if !@isdefined(FixedBoundaryData)
     slab's top velocity, with the side data imposed at every substep. The guess fits the level to the
     predictor's top and the bubble to what the predictor has beyond the interpolation of the two
     levels.
+
+    The predictor integrates the unforced equation: it reads the density alone and no forcing of the
+    problem. Only the solved slab reads the forcing, so on a forced problem the guess is a step of
+    the unforced equation and the solve adds the load.
 
     It is a target of a [`FixedBoundaryNetwork`](@ref) alone, and its acceleration reads the density's
     velocity derivative as one constant `m` times the velocity — which holds for the wave equation,
@@ -689,7 +705,8 @@ else
     The predictor's acceleration at the grid points, `(∂L/∂u − ∂ₓ(∂L/∂w)) / m`: the slope in space by
     central differences of the field, and the divergence of the density's flux by central differences
     of `∂L/∂w`. The two ends carry no acceleration, because the side data is imposed there at every
-    substep.
+    substep. The acceleration is that of the unforced equation: `∂L/∂u` is the density's alone,
+    and the problem's forcing, which the solved slab adds to `∂L/∂u`, is not read here.
     """
     function predictor_force!(acc::AbstractMatrix, u::AbstractMatrix, v::AbstractMatrix,
             w::AbstractMatrix, du::AbstractMatrix, dw::AbstractMatrix, density, params, dx,
@@ -900,9 +917,16 @@ else
         tb = a.tabulation
         qt, qx, D, St = length(tb.tnode), length(tb.xnode), a.D, a.St
         N = qt * qx
-        atoms = bubble_atoms(method, ST)
         f = s.fit
-        if f.method != method || size(f.table) != (size(atoms, 1), N) ||
+        key, old = BubbleGreedy{NTuple{2, ST}}(method), f.method
+        atoms = bubble_atoms(key, ST)
+        # the ranges compare by value: a `BigFloat` end is a new object at every conversion
+        if old === nothing ||
+           (old.nα, old.nβ, old.nγ, old.α_range,
+               old.β_range, old.γ_range, old.iterations) !=
+           (key.nα, key.nβ, key.nγ, key.α_range,
+               key.β_range, key.γ_range, key.iterations) ||
+           size(f.table) != (size(atoms, 1), N) ||
            size(f.residual, 2) != D || size(f.coefficients, 1) != St ||
            size(f.atoms) != size(atoms)
             f.atoms = atoms
@@ -928,7 +952,7 @@ else
                 end
             end
         end
-        f.method = method
+        f.method = key
         # the remainder of the target beyond the two levels and the lift, at the slab's nodes: the
         # solved level is the one this fit is building, not the block's buffer, which the guess's
         # own fit has already overwritten

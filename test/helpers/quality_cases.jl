@@ -25,8 +25,7 @@ const QUALITY_FORCED = (false, true)
 function quality_problem(T, D)
     kwargs = (T = T, timespan = (zero(T), T(0.2)), timestep = T(0.1), xstep = T(0.05))
     D == 1 && return Wave.problem(; kwargs...)
-    D == 2 && return VectorWave.problem(; kwargs...)
-    throw(ArgumentError("the quality checks run D = 1 and D = 2, got D = $(D)"))
+    return VectorWave.problem(; kwargs...)
 end
 
 function quality_spline(T, x_boundary)

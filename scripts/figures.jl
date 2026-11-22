@@ -132,6 +132,7 @@ function main(args)
         catch exception
             failures += 1
             report(stem, "FAILED: $(failure_message(exception))")
+            println(stderr, sprint(showerror, exception, catch_backtrace()))
             continue
         end
         # The stem names the file, and the figure is written through a sibling temporary so that a

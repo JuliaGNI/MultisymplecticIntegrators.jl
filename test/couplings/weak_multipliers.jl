@@ -121,6 +121,9 @@ function multiplier_momentum(problem, method)
         end
         push!(momenta, value)
     end
+    # the spline family must converge at every step, under its integrator's own tolerances
+    @test length(c.converged) == ntime(solution)
+    @test all(c.converged)
     return momenta
 end
 
@@ -562,8 +565,10 @@ end
         # Entry `[rt, d]` of the boundary target is component `d`'s value at the left end at the
         # node's time, and `[qt + rt, d]` its value at the right end. The span leaves out the two
         # ends of `sin(πx/l)`, and the two components of `VectorWave` differ, so a target filled
-        # from component 1 for every component is not the closed form.
-        a, b = T(0.2), T(0.8)
+        # from component 1 for every component is not the closed form. The span is not symmetric
+        # about the middle of the domain, so the field differs at its two ends, and a target
+        # filled with the right end's data at the left end is not the closed form either.
+        a, b = T(0.1), T(0.7)
         problem = VectorWave.problem(T = T, timespan = (zero(T), T(0.1)),
             timestep = T(0.05), xspan = (a, b), xstep = (b - a) / 8)
         ansatz = TensorBSplineAnsatz(degree = 2, ncells = (2, 4), xspan = (a, b), n = 3,
@@ -585,6 +590,9 @@ end
                     VectorWave.component_parameters(params, d))
                 @test target[qt + rt, d] ≈ Wave.solution_u(t, b,
                     VectorWave.component_parameters(params, d))
+                # the two ends are separated far beyond the tolerance of the two checks above
+                @test abs(target[rt, d] - target[qt + rt, d]) >
+                      100 * sqrt(eps(T)) * max(abs(target[rt, d]), abs(target[qt + rt, d]))
             end
         end
         @test target[1, 1] != target[1, 2]

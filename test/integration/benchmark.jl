@@ -173,6 +173,45 @@ include(joinpath(@__DIR__, "..", "helpers", "benchmark_setup.jl"))
         nudged["t"] = copy(finest["t"])
         nudged["t"][5] = prevfloat(nudged["t"][5])
         @test reference_error(runs[1], nudged) ≈ runs[1]["error"]
+        # A node is matched as a time is: a node of the finer grid one unit in the last place below
+        # the coarse run's node is that node, and one a relative `1e-10` away, beyond the match's
+        # tolerance, is not.
+        node = runs[1]["x"][2]
+        k = argmin(abs.(finest["x"] .- node))
+        below = copy(finest)
+        below["x"] = copy(finest["x"])
+        below["x"][k] = prevfloat(node)
+        @test below["x"][k] < node
+        @test reference_error(runs[1], below) ≈ runs[1]["error"]
+        apart = copy(finest)
+        apart["x"] = copy(finest["x"])
+        apart["x"][k] = node * (1 - 1.0e-10)
+        @test_throws r"^ArgumentError: the node \S+ of the coarse run is not a node of the finer run's grid" reference_error(
+            runs[1], apart)
+        # A reference value of exactly `0.0`, as at the middle of a symmetric span, is matched by a
+        # value computed a rounding error away from it: the absolute tolerance is the relative one
+        # times the span of the sorted values. A midpoint, a relative miss of `1e-10`, a value past
+        # the ends and an empty grid stay unmatched, and a one-node grid matches its node only.
+        symmetric = collect(range(-0.5, 0.5; length = 11))
+        @test symmetric[6] === 0.0
+        @test 0.0 < -0.3 + 3 * 0.1 < 1.0e-12
+        @test shared_index(symmetric, -0.3 + 3 * 0.1) == 6
+        @test shared_index(symmetric, nextfloat(0.0)) == 6
+        @test shared_index(symmetric, 0.0) == 6
+        @test shared_index(symmetric, -1.0e-14) == 6
+        @test shared_index(symmetric, 2.0e-12) == 0
+        wide = collect(range(-50.0, 50.0; length = 11))
+        @test shared_index(wide, 5.0e-11) == 6
+        @test shared_index(wide, 2.0e-10) == 0
+        @test shared_index(symmetric, 0.05) == 0
+        @test shared_index(symmetric, 0.3 * (1 + 1.0e-10)) == 0
+        @test shared_index(symmetric, 0.31) == 0
+        @test shared_index(symmetric, 0.5 + 1.0e-11) == 0
+        @test shared_index(symmetric, -0.5 - 1.0e-11) == 0
+        @test shared_index(Float64[], 0.0) == 0
+        @test shared_index([0.25], 0.25) == 1
+        @test shared_index([0.25], nextfloat(0.25)) == 1
+        @test shared_index([0.0], nextfloat(0.0)) == 0
         # A time of the coarse run that the finer run does not hold is refused rather than matched
         # to a neighbouring step: in the middle of the finer grid, past its end, and where the finer
         # run holds no time at all.

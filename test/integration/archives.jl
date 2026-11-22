@@ -59,6 +59,34 @@ include(joinpath(@__DIR__, "..", "..", "scripts", "archives.jl"))
             @test only(runs)["t"] == [0.0, 1.0]
             @test isempty(unreadable)
         end
+
+        @testset "load_runs writes the backtrace of an archive it cannot read" begin
+            corrupt = joinpath(RUNS_DIR[], "corrupt.jld2")
+            write(corrupt, "not an archive")
+            captured = joinpath(directory, "stderr.txt")
+            runs, unreadable = open(captured, "w") do io
+                redirect_stderr(io) do
+                    @test_logs (:warn, r"^cannot read the archive corrupt\.jld2: ") load_runs()
+                end
+            end
+            @test unreadable == ["corrupt.jld2"]
+            @test [run["stem"] for run in runs] == ["whole"]
+            errors = read(captured, String)
+            # JLD2's failure reaches `load_runs` as a `CapturedException`, which prints a trace of
+            # its own; the backtrace of the catch is one trace more than the exception itself shows.
+            own = redirect_stderr(devnull) do
+                try
+                    load(corrupt)
+                    ""
+                catch exception
+                    sprint(showerror, exception)
+                end
+            end
+            @test !isempty(own)
+            @test count("\nStacktrace:\n", errors) == count("\nStacktrace:\n", own) + 1
+            @test occursin("load_runs", last(split(errors, "\nStacktrace:\n")))
+            rm(corrupt)
+        end
     finally
         rm(directory; recursive = true, force = true)
     end
