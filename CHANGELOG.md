@@ -1038,5 +1038,6 @@ makes it worth keeping.
   at `learning_rate = 1e-2` lowers the misfit and that `misfit_gradient!` agrees with central
   differences of the misfit, at output weights that give each component a field of its own, and
   the 60-epoch misfit fraction (`TRAINED_MISFIT_FRACTION`, `TRAINED_MISFITS`) and E5a move to the
-  new `scripts/trained_hidden_layer_records.jl`. The times are the census of 2026-11-15 on this
-  machine at Julia 1.13.4; no tolerance changes.
+  new `scripts/trained_hidden_layer_records.jl`. E3c, E4a, E4b, E7a and E7b train their guesses
+  for one epoch, where E3c trained for 60 and the others for 20. The times are the census of
+  2026-11-15 on this machine at Julia 1.13.4; no tolerance changes.

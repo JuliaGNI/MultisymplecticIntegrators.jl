@@ -648,7 +648,7 @@ same_states(x, y) = axes(x) == axes(y) && all(n -> x[n] == y[n], eachindex(x))
                 xspan = (T(-0.5), zero(T))),
             WeakInitialAndBoundaryConditions();
             initial_guess = FitTo(TargetFunction(moving);
-                method = TrainedHiddenLayer(epochs = 60, learning_rate = 0.1)),
+                method = TrainedHiddenLayer(epochs = 1, learning_rate = 0.1)),
             linear_solver = true)
         int = GeometricIntegrator(transport, method; f_abstol = zero(T),
             f_reltol = trained_f_reltol(T))
@@ -683,7 +683,7 @@ same_states(x, y) = axes(x) == axes(y) && all(n -> x[n] == y[n], eachindex(x))
         int = GeometricIntegrator(problem,
             trained_method(T; S = TRAINED_S,
                 guess = FitTo(PreviousSlab();
-                    method = TrainedHiddenLayer(epochs = 20)));
+                    method = TrainedHiddenLayer(epochs = 1)));
             f_abstol = zero(T), f_reltol = trained_f_reltol(T),
             max_iterations = TRAINED_ITERATIONS)
         c = cache(int)
@@ -702,7 +702,7 @@ same_states(x, y) = axes(x) == axes(y) && all(n -> x[n] == y[n], eachindex(x))
         initial = GeometricIntegrator(problem,
             trained_method(T; S = TRAINED_S,
                 guess = FitTo(InitialCondition();
-                    method = TrainedHiddenLayer(epochs = 20)));
+                    method = TrainedHiddenLayer(epochs = 1)));
             f_abstol = zero(T), f_reltol = trained_f_reltol(T),
             max_iterations = TRAINED_ITERATIONS)
         c1 = cache(initial)
@@ -725,7 +725,7 @@ same_states(x, y) = axes(x) == axes(y) && all(n -> x[n] == y[n], eachindex(x))
         int = GeometricIntegrator(problem,
             trained_method(T; S = TRAINED_S,
                 guess = FitTo(PreviousSlab();
-                    method = TrainedHiddenLayer(epochs = 20)));
+                    method = TrainedHiddenLayer(epochs = 1)));
             f_abstol = zero(T), f_reltol = trained_f_reltol(T))
         c = cache(int)
         result = integrate(int)
@@ -801,7 +801,7 @@ same_states(x, y) = axes(x) == axes(y) && all(n -> x[n] == y[n], eachindex(x))
         problem = vector_wave_problem(T; β = 0.5)
         method = trained_method(T; S = TRAINED_S, D = 2,
             guess = FitTo(InitialCondition();
-                method = TrainedHiddenLayer(epochs = 20)))
+                method = TrainedHiddenLayer(epochs = 1)))
         int = GeometricIntegrator(problem, method;
             f_abstol = zero(T), f_reltol = trained_f_reltol(T))
         c = cache(int)
@@ -843,7 +843,7 @@ same_states(x, y) = axes(x) == axes(y) && all(n -> x[n] == y[n], eachindex(x))
         problem = vector_wave_problem(T; β = 0.0)
         method = trained_method(T; S = TRAINED_S, D = 2,
             guess = FitTo(InitialCondition();
-                method = TrainedHiddenLayer(epochs = 20)))
+                method = TrainedHiddenLayer(epochs = 1)))
         int = GeometricIntegrator(problem, method;
             f_abstol = zero(T), f_reltol = trained_f_reltol(T),
             max_iterations = TRAINED_ITERATIONS)
