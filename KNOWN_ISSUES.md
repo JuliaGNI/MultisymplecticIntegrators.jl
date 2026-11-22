@@ -625,9 +625,13 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   whole slab residual into a dense matrix, which `factorize!(lsolver, jacobianmatrix(s))` factorises
   (`src/core/slab_integrator.jl:690-691`) under `linear_solver = true`. The fixed-boundary
   network's `LevenbergMarquardt` takes `ForwardDiff`'s `jacobian` of the residual as well
-  (`jacobian_of`, `src/core/levenberg_marquardt.jl:156`). Under a B-spline ansatz a
-  coefficient reaches only the residual rows of its own support, so the matrix is sparse there and
-  is stored and factorised dense. A sparse Jacobian is deferred to a follow-up task.
+  (`jacobian_of`, `src/core/levenberg_marquardt.jl:156`). Under a B-spline ansatz with a
+  coupling that adds no lifting, a coefficient reaches only the residual rows of its own support,
+  so the matrix is sparse there and is stored and factorised dense. Under `HardConstraintLifting`,
+  `transform_field!` subtracts `(1 - t̂)` times the coefficient-dependent bottom correction from
+  every time row, so a coefficient with a nonzero bottom trace also reaches the rows outside its
+  temporal support; a sparse pattern for that coupling holds these entries too. A sparse Jacobian
+  is deferred to a follow-up task.
 - kind: defect
 - found: 2026-10-31
 
