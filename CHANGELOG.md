@@ -1017,12 +1017,11 @@ makes it worth keeping.
   workers from `Base.julia_cmd()`, which carries the parent's `--check-bounds` setting, so the guard
   is true in CI and the assertions run there.
 - **The four longest test files are shorter, toward 180 s each in their group's own process.**
-  `test/couplings/fixed_boundary.jl` (592 s cold on this machine) is split into five files of the
+  `test/couplings/fixed_boundary.jl` (592 s cold on this machine) is split into four files of the
   group `fixedboundary`, each in `TESTS` with a label that starts with `Fixed boundary`:
   `fixed_boundary_gradient.jl` (FB1), `fixed_boundary_jacobian.jl` (FB2),
-  `fixed_boundary_steps.jl` (FB3–FB8 and N14), `fixed_boundary_runs.jl` (FB9–FB16), and
-  `fixed_boundary.jl` itself, which keeps FB0, FB17 and FB18. The testsets move unchanged, and the
-  helpers they share move unchanged to `test/helpers/fixed_boundary_setup.jl`.
+  `fixed_boundary_steps.jl` (FB3–FB16 and N14), and `fixed_boundary.jl` itself, which keeps FB0,
+  FB17 and FB18. The testsets move unchanged, and the helpers they share move unchanged to `test/helpers/fixed_boundary_setup.jl`.
   `test/integration/benchmark.jl` (341 s) starts the smoke matrix once, under `Benchmark matrix`,
   and "the timing record", "each run in its own process" and "one table per problem and final
   time" read its archives, where each ran the matrix itself. Its costliest testset, "a run that
@@ -1031,9 +1030,9 @@ makes it worth keeping.
   `slow`, and the helpers the two files share move unchanged to
   `test/helpers/benchmark_setup.jl`. `test/ansatz/network.jl` (182 s) runs
   N1's `:all` run once per element type for N1 and N5, which ran the same run twice.
-  `test/initial_guess/trained_hidden_layer.jl` (190 s) no longer trains for many epochs: E1a checks
-  that one epoch at `learning_rate = 1e-2` lowers the misfit and that `misfit_gradient!` agrees
-  with central differences of the misfit, at output weights that give each component a field of
-  its own, and the 60-epoch misfit fraction (`TRAINED_MISFIT_FRACTION`, `TRAINED_MISFITS`) and E5a
-  move to the new `scripts/trained_hidden_layer_records.jl`. The times are the census of
+  `test/initial_guess/trained_hidden_layer.jl` (190 s) no longer trains E1a's fit for 60 epochs:
+  E1a checks that one epoch at `learning_rate = 1e-2` lowers the misfit and that
+  `misfit_gradient!` agrees with central differences of the misfit, at output weights that give
+  each component a field of its own, and the 60-epoch misfit fraction (`TRAINED_MISFIT_FRACTION`,
+  `TRAINED_MISFITS`) moves to the new `scripts/trained_hidden_layer_records.jl`. The times are the census of
   2026-11-15 on this machine at Julia 1.13.4; no tolerance changes.

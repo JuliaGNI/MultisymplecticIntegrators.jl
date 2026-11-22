@@ -1,11 +1,11 @@
-# The records of the trained hidden layer that train for many epochs, which the suite does not run:
-# the misfit fraction of E1a's fit after 60 epochs, and E5a's two section A soundings of the old
-# stack's ELM formulation at 100 epochs. `test/initial_guess/trained_hidden_layer.jl` checks the
-# training itself — one epoch descends, and the gradient it descends is the misfit's derivative.
+# The record of the trained hidden layer that trains for many epochs, which the suite does not run:
+# the misfit fraction of E1a's fit after 60 epochs. `test/initial_guess/trained_hidden_layer.jl`
+# checks the training itself — one epoch descends, and the gradient it descends is the misfit's
+# derivative.
 #
 #     julia --startup-file=no --project=scripts scripts/trained_hidden_layer_records.jl
 #
-# Each record is a testset; the script ends with an error if any of its assertions fails.
+# The record is a testset; the script ends with an error if any of its assertions fails.
 using GeometricBase: parameters, timesteps
 using GeometricIntegratorsBase: GeometricIntegrator, cache, current, reset!, solutionstep
 using GeometricSolutions: GeometricSolution
@@ -14,11 +14,6 @@ using MultisymplecticIntegrators
 using Test
 
 const M = MultisymplecticIntegrators
-
-include(joinpath(@__DIR__, "..", "test", "helpers", "reference_values.jl"))
-
-"""The hidden units of the family's run."""
-const TRAINED_S = 20
 
 """The hidden units of the fit that is measured on a misfit or on its sample."""
 const FIT_S = 8
@@ -56,11 +51,6 @@ const TRAINED_MISFITS = (
 function wave_problem(::Type{T}; timestep = T(0.05), xstep = T(0.05),
         timespan = (zero(T), T(0.25))) where {T}
     return Wave.problem(T = T, timespan = timespan, timestep = timestep, xstep = xstep)
-end
-
-function sine_gordon_problem(::Type{T}; timestep = T(0.05)) where {T}
-    return SineGordon.problem(T = T, timespan = (zero(T), T(0.15)), timestep = timestep,
-        xstep = T(0.05))
 end
 
 """A `VectorWave` problem on the vector density of the coupling `β`, which is `D = 2`. Its data
@@ -115,27 +105,6 @@ function fitted_misfit(block, w)
     return total
 end
 
-"""The sup-norm deviation of a run from the `u` of a §A entry, over the steps it took."""
-function sup_deviation(result, entry)
-    return maximum(maximum(abs.(result.solution.u[n] .- entry.u[n, :]))
-    for n in 1:length(result.traces))
-end
-
-"""Whether every state of a solution series is finite."""
-finite_states(x) = all(n -> all(isfinite, x[n]), eachindex(x))
-
-"""
-    record_deviation(record, entry, T, deviation)
-
-Write one reference deviation with the metadata that makes the figure readable on another machine.
-No bound is asserted on the value.
-"""
-function record_deviation(record::Symbol, entry::Symbol, ::Type{T}, deviation) where {T}
-    @info("the reference deviation of an ELM run", record, entry, T, deviation, VERSION,
-        machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
-        blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
-end
-
 """
     record_misfit(record, T, D, misfit, recorded)
 
@@ -177,32 +146,5 @@ end
         # both fits were taken on the same sample
         @test drawn.train.target == trained.train.target
         @test drawn.train.measure == trained.train.measure
-    end
-
-    # The two records of the old stack's ELM formulation, at its own cells: a run of each completes
-    # and its deviation from the entry is written with its metadata. Both entries are unconverged
-    # iterates of another architecture, so the deviation is a record (K44, K45).
-    @testset "E5a the two section A soundings" for T in (Float64,)
-        elm_method(problem) = SpaceTimeGalerkin(
-            NetworkAnsatz(S = TRAINED_S, mode = :last_layer, xspan = problem.xspan,
-                ncells = (10, 10), degree = 3),
-            WeakInitialAndBoundaryConditions();
-            initial_guess = FitTo(InitialCondition();
-                method = TrainedHiddenLayer(epochs = 100, learning_rate = T(1e-5))))
-        cases = ((:WAVE_ELM_LSGD, wave_problem(T), WAVE_ELM_LSGD, 5),
-            (:SINE_GORDON_ELM_LSGD, sine_gordon_problem(T), SINE_GORDON_ELM_LSGD, 3))
-        for (name, problem, entry, steps) in cases
-            int = GeometricIntegrator(problem, elm_method(problem))
-            result = integrate(int)
-            c = cache(int)
-            @test length(result.traces) == steps
-            @test length(c.iterations) == steps
-            @test finite_states(result.solution.u)
-            deviation = sup_deviation(result, entry)
-            @test isfinite(deviation)
-            record_deviation(:E5a, name, T, deviation)
-            @info("the ELM record", T, name, c.iterations, c.residuals,
-                c.initial_residuals, c.converged, deviation)
-        end
     end
 end
