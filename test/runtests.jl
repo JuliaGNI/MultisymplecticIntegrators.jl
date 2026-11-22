@@ -32,7 +32,8 @@ const TESTS = [
     ],
     "ansatz" => [
         "Symbolic ansatz" => "ansatz/symbolic.jl",
-        "Network ansatz" => "ansatz/network.jl"
+        "Network ansatz" => "ansatz/network.jl",
+        "Network ansatz: cases" => "ansatz/network_cases.jl"
     ],
     "couplings" => [
         "Weak multipliers" => "couplings/weak_multipliers.jl",

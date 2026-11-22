@@ -12,7 +12,6 @@ import GeometricIntegratorsBase: cache, current, solutionstep, solver, reset!
 import SimpleSolvers: config, jacobian!, jacobianmatrix
 
 include("../helpers/testsetup.jl")
-include("../helpers/reference_values.jl")
 include("../helpers/action_oracle.jl")
 
 const M = MultisymplecticIntegrators
@@ -201,29 +200,11 @@ function record_ratio(
         blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
 end
 
-"""The sup-norm deviation of a run from the `u` of a §A entry, over the steps it took."""
-function sup_deviation(result, entry)
-    return maximum(maximum(abs.(result.solution.u[n] .- entry.u[n, :]))
-    for n in 1:length(result.traces))
-end
-
 """Whether every state of a solution series is finite."""
 finite_states(x) = all(n -> all(isfinite, x[n]), eachindex(x))
 
 """Whether two solution series are bit-identical on every state they hold."""
 same_states(x, y) = axes(x) == axes(y) && all(n -> x[n] == y[n], eachindex(x))
-
-"""
-    record_deviation(record, entry, T, deviation)
-
-Write one reference deviation with the metadata that makes the figure readable on another machine.
-No bound is asserted on the value.
-"""
-function record_deviation(record::Symbol, entry::Symbol, ::Type{T}, deviation) where {T}
-    @info("the reference deviation of an ELM run", record, entry, T, deviation, VERSION,
-        machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
-        blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
-end
 
 @testset "Trained hidden layer" begin
     # The fit's two ends: the drawn hidden layer with its output layer solved, and the same after
@@ -756,33 +737,6 @@ end
         @test finite_states(result.solution.u)
         @info("the family's SineGordon run", T, c.iterations, c.residuals,
             c.initial_residuals, c.converged)
-    end
-
-    # The two records of the old stack's ELM formulation, at its own cells: a run of each completes
-    # and its deviation from the entry is written with its metadata. Both entries are unconverged
-    # iterates of another architecture, so the deviation is a record (K44, K45).
-    @testset "E5a the two section A soundings" for T in (Float64,)
-        elm_method(problem) = SpaceTimeGalerkin(
-            NetworkAnsatz(S = TRAINED_S, mode = :last_layer, xspan = problem.xspan,
-                ncells = (10, 10), degree = 3),
-            WeakInitialAndBoundaryConditions();
-            initial_guess = FitTo(InitialCondition();
-                method = TrainedHiddenLayer(epochs = 100, learning_rate = T(1e-5))))
-        cases = ((:WAVE_ELM_LSGD, wave_problem(T), WAVE_ELM_LSGD, 5),
-            (:SINE_GORDON_ELM_LSGD, sine_gordon_problem(T), SINE_GORDON_ELM_LSGD, 3))
-        for (name, problem, entry, steps) in cases
-            int = GeometricIntegrator(problem, elm_method(problem))
-            result = integrate(int)
-            c = cache(int)
-            @test length(result.traces) == steps
-            @test length(c.iterations) == steps
-            @test finite_states(result.solution.u)
-            deviation = sup_deviation(result, entry)
-            @test isfinite(deviation)
-            record_deviation(:E5a, name, T, deviation)
-            @info("the ELM record", T, name, c.iterations, c.residuals,
-                c.initial_residuals, c.converged, deviation)
-        end
     end
 
     # The action oracle of the mode that frees a part of the parameters reads the fixed ones from
