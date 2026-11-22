@@ -211,20 +211,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-11-09
 
-### K49 · `coupling_data`'s docstring says the block is built once per integrator.
-
-- location: `src/core/slab_integrator.jl:192`
-- evidence: the docstring of `coupling_data` reads "The coupling's block of the slab cache, built
-  once per integrator", and the core builds it inside `Cache{ST}` (`src/core/slab_integrator.jl:427`):
-  an integrator builds the cache of the problem's element type, and a solver then builds a cache of
-  the dual type on its first Jacobian, so the block is built once per cache. A coupling's own
-  `coupling_data` docstring that counts on the rate — the lifting's says which cache speaks —
-  therefore disagrees with the generic one. Recorded rather than fixed: the part's decision keeps
-  the core's diff against `0e2af8d` to the transform's signature, its docstring and its two call
-  sites, and this line is none of the three.
-- kind: docs
-- found: 2026-11-10
-
 ### K50 · No live-branch variant of the fixed-boundary network converges, and its `:last_layer` affine control has no solution under `FitTo(Predictor())`.
 
 - location: `src/couplings/fixed_boundary.jl`, `src/core/levenberg_marquardt.jl`,
@@ -464,16 +450,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: missing test
 - found: #72
 
-### K67 · The fixed-boundary network's predictor integrates the unforced equation, and no text says so.
-
-- location: `src/couplings/fixed_boundary.jl:694`
-- evidence: `predictor_force!` computes the acceleration from `∂L/∂u` and `∂L/∂w` of the density
-  alone, and `src/couplings/fixed_boundary.jl` reads no forcing. The forcing enters `∂L/∂u` only in
-  `slab_residual!`, so the solved slab is forced and the initial guess of `Predictor()` is not.
-  Neither the docstring of the predictor nor the CHANGELOG entry of the forcing says so.
-- kind: docs
-- found: #72
-
 ### K72 · A cache lookup of a `NetworkAnsatz` integrator allocates.
 
 - location: `src/ansatz/network.jl:596`
@@ -489,39 +465,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   would remove it.
 - kind: defect
 - found: 2026-11-15
-
-### K73 · Four `[Unreleased]` entries put a test file in the `slow` group, which holds only the benchmark matrix.
-
-- location: `CHANGELOG.md:557`
-- evidence: `CHANGELOG.md:557` (`test/ansatz/network.jl` and
-  `test/initial_guess/orthogonal_greedy.jl`), `:581` (`trained_hidden_layer.jl`), `:657`
-  (`hard_constraint_lifting.jl`) and `:690` (`pinn_training.jl`) each say that the named files join
-  the `slow` group. `test/runtests.jl` lists `integration/benchmark.jl` alone under `"slow"`, and the
-  five files under `"ansatz"`, `"initialguess"` and `"couplings"`. The groups by topic already held
-  them at `3cef8d8`. The entry on the CI groups (`:931`) says that "the other long files are in the
-  groups by topic", and names neither the files nor their groups.
-- kind: found late
-- found: 2026-11-21
-
-### K74 · The `[Unreleased]` entries on the test bounds name a `ForwardDiff` bound that `test/Project.toml` does not hold, and leave out `JET`.
-
-- location: `CHANGELOG.md:90`
-- evidence: `CHANGELOG.md:89–91` lists the test-only bounds as `Aqua`, `CairoMakie`,
-  `ExplicitImports`, `ForwardDiff`, `JLD2` and `ParallelTestRunner`, and `:938` says that
-  `test/Project.toml` raises `ForwardDiff` from `0.10` to `0.10.36, 1`. The `[compat]` table of
-  `test/Project.toml` holds `Aqua`, `CairoMakie`, `ExplicitImports`, `JET`, `JLD2` and
-  `ParallelTestRunner`, and no `ForwardDiff`; the root `Project.toml` holds
-  `ForwardDiff = "0.10.36, 1"` (`:29`). The same holds at `3cef8d8`.
-- kind: found late
-- found: 2026-11-21
-
-### K75 · The preamble of `CHANGELOG.md` says that the file deliberately holds no entries.
-
-- location: `CHANGELOG.md:9`
-- evidence: `CHANGELOG.md:9–13` says "This file was started on 2026-08-31 and deliberately holds no
-  entries", and the `[Unreleased]` section below it holds entries. The same holds at `3cef8d8`.
-- kind: docs
-- found: 2026-11-21
 
 ### K76 · `test/ansatz/tensor_bspline.jl` reaches the 60 s that a `core` file may take.
 
@@ -588,15 +531,6 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: docs
 - found: 2026-11-21
 
-### K80 · The docs build warns that it cannot determine the repository root URL for the navbar link.
-
-- location: `docs/make.jl:10`
-- evidence: `makedocs` gets `repo` as a string, and Documenter warns "Unable to determine the
-  repository root URL for the navbar link. This can happen when a string is passed to the `repo`
-  keyword of `makedocs`." The base `cac800e` has the same `repo` line.
-- kind: docs
-- found: 2026-11-21
-
 ### K81 · Three library pages of the manual are above Documenter's `size_threshold_warn`.
 
 - location: `docs/src/ansatz.md`
@@ -607,16 +541,35 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: docs
 - found: 2026-11-21
 
-### K82 · The docstring of `HardConstraintLifting` and the couplings page say the bottom datum is met by construction, but it is met only at the quadrature nodes.
+### K83 · `src/couplings/weak_multipliers.jl` has 841 lines, against a target of about 350.
 
-- location: `src/couplings/hard_constraint_lifting.jl:25`
-- evidence: the docstring says the field "is the data at the three parts of the boundary by
-  construction", and `docs/src/couplings.md:17` says the initial and boundary conditions "are
-  therefore met by construction". `lifting_datum` (`src/couplings/hard_constraint_lifting.jl:169`)
-  returns the stored value at a space node of the ansatz's rule, the linear blend of two nodes
-  between them, and the side value outside them. The base `cac800e` has both sentences.
-- kind: docs
-- found: #82
+- location: `src/couplings/weak_multipliers.jl`
+- evidence: `wc -l src/couplings/weak_multipliers.jl` prints `841`. The file holds
+  `WeakInitialCondition` and `WeakInitialAndBoundaryConditions`, and the audit of 2026-10-31 set
+  its target at about 350 lines. It has methods for `TensorBSplineAnsatz` (`:95`),
+  `SymbolicAnsatz` (`:480`) and `NetworkAnsatz` (`:653`). The redraw of the kernels and couplings
+  (`e7df04f`) left 395 lines; the symbolic ansatz added 179 (`3094f5f`) and the network ansatz 199
+  (`72a9df4`), as `git diff --shortstat <c>^ <c> -- src/couplings/weak_multipliers.jl` prints.
+- kind: defect
+- found: 2026-10-31
+
+### K84 · The slab Jacobian is dense and built by ForwardDiff over the whole residual.
+
+- location: `src/core/slab_integrator.jl:101`
+- evidence: `default_solver(::SpaceTimeGalerkin) = Newton()`, and the package gives the solver no
+  Jacobian of its own, so SimpleSolvers' `Newton()` builds it with `ForwardDiff.jacobian!` over the
+  whole slab residual into a dense matrix, which `factorize!(lsolver, jacobianmatrix(s))` factorises
+  (`src/core/slab_integrator.jl:690-691`) under `linear_solver = true`. The fixed-boundary
+  network's `LevenbergMarquardt` takes `ForwardDiff`'s `jacobian` of the residual as well
+  (`jacobian_of`, `src/core/levenberg_marquardt.jl:156`). Under a B-spline ansatz with a
+  coupling that adds no lifting, a coefficient reaches only the residual rows of its own support,
+  so the matrix is sparse there and is stored and factorised dense. Under `HardConstraintLifting`,
+  `transform_field!` subtracts `(1 - t̂)` times the coefficient-dependent bottom correction from
+  every time row, so a coefficient with a nonzero bottom trace also reaches the rows outside its
+  temporal support; a sparse pattern for that coupling holds these entries too. A sparse Jacobian
+  is deferred to a follow-up task.
+- kind: defect
+- found: 2026-10-31
 
 ### K87 · The `method` field of `FixedBoundaryFit` is not concretely typed.
 

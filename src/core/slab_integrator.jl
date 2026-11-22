@@ -189,8 +189,8 @@ end
 """
     coupling_data(coupling, ansatz, problem, ST)
 
-The coupling's block of the slab cache, built once per integrator. A coupling that keeps no data
-of its own gets a [`NoCouplingData`](@ref).
+The coupling's block of the slab cache, built once for each cache an integrator builds. A
+coupling that keeps no data of its own gets a [`NoCouplingData`](@ref).
 """
 function coupling_data(coupling::SlabCoupling, ::SpaceTimeAnsatz, ::LagrangianPDEProblem,
         ::Type{ST}) where {ST}
