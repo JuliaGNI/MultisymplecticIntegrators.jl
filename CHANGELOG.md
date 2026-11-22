@@ -6,11 +6,11 @@ This package is pre-1.0, so *every* minor release is potentially breaking in the
 [SemVer](https://semver.org) for `0.x` versions. The sections below name what actually
 changed, so that a compat-only bump can be told apart from a rename or a change in results.
 
-This file was started on 2026-08-31 and deliberately holds no entries. Nothing has been
-released yet — there are no tags, and `Project.toml` stands at `0.1.0` — so the development
-history that predates this file is in `git log` alone. It is named as a gap rather than
-reconstructed, because a changelog assembled after the fact loses exactly the reasoning that
-makes it worth keeping.
+This file was started on 2026-08-31, and its entries begin there. Nothing has been released
+yet — there are no tags, and `Project.toml` stands at `0.1.0` — so the development history that
+predates this file is in `git log` alone. It is named as a gap rather than reconstructed,
+because a changelog assembled after the fact loses exactly the reasoning that makes it worth
+keeping.
 
 ## [Unreleased] — targeting 0.1.0
 
@@ -87,8 +87,7 @@ makes it worth keeping.
 - **`test/Project.toml` carries no `[compat]` bound for a dependency of the root `Project.toml`.**
   The entries `BenchmarkTools`, `GeometricIntegratorsBase`, `Plots` and `Revise` are removed, and
   its `[compat]` table holds bounds only for the test-only dependencies `Aqua`, `CairoMakie`,
-  `ExplicitImports`, `ForwardDiff`, `JLD2` and `ParallelTestRunner`, none of which the root
-  depends on.
+  `ExplicitImports`, `JET`, `JLD2` and `ParallelTestRunner`, none of which the root depends on.
   The test environment contains the package, so the resolver applies the root's bounds to every
   shared dependency; a test bound could only narrow them, and tests that run on narrower bounds
   than the package claims do not test what the package admits. This is the tree-wide rule of the
@@ -296,7 +295,7 @@ makes it worth keeping.
   multiplier set leaves out the two corner functions of the trace basis, where they would constrain
   the corners twice and leave the first slab rank deficient by two (§Audit 2.8). The first slab's
   bottom multiplier is the initial momentum read into the multiplier set by the
-  quadrature-weighted `L²` projection, factorised once per integrator (§Audit 5.4), its bottom load
+  quadrature-weighted `L²` projection, factorised once per cache (§Audit 5.4), its bottom load
   vector is cached once per step in `slab_bottom!`, and the multipliers of a step are guessed in
   `initial_guess!` rather than inside a residual evaluation (§Audit 2.2). The multiplier blocks of
   the `D > 1` case keep their components apart (§Audit 1.3). Each coupling accepts one space
@@ -554,7 +553,8 @@ makes it worth keeping.
   `AbstractNeuralNetworks` (compat `0.10`), `SymbolicNeuralNetworks` (compat `0.10`) and
   `NeuralNetworkParameters` (compat `0.5`) join `[deps]`, `SimpleSolvers`' floor rises from `0.14.1`
   to `0.14.2`, the first release whose `NeuralNetworkParameters` bound admits `0.5`, and
-  `test/ansatz/network.jl` and `test/initial_guess/orthogonal_greedy.jl` join the `slow` group.
+  `test/ansatz/network.jl` joins the `ansatz` test group and
+  `test/initial_guess/orthogonal_greedy.jl` the `initialguess` group.
 - **The ELM family returns as a fit of the network ansatz: `TrainedHiddenLayer`.**
   `TrainedHiddenLayer(; epochs = 100, learning_rate = 1e-5, rng = Xoshiro(1234))` is the fit of a
   `NetworkAnsatz` in `:last_layer` mode whose hidden layer is trained instead of taken from a
@@ -578,7 +578,7 @@ makes it worth keeping.
   determines every layer there.
   `Random` returns to `[deps]` with a `1` bound, for the generator of the draw alone; the
   `julia = "1.12"` entry under Breaking Changes records its removal.
-  `test/initial_guess/trained_hidden_layer.jl` joins the `slow` group.
+  `test/initial_guess/trained_hidden_layer.jl` joins the `initialguess` test group.
 - **`scripts/elm_model.jl` registers the ELM family in the append-only registry.** One model file
   builds the family's problem, ansatz, method and archive — the wave equation, at `S = 20` hidden
   units, `degree = 3` and `ncells = (2, 5)`, at two time steps — and `register_family!(:elm, ELM;
@@ -614,10 +614,11 @@ makes it worth keeping.
   The thirty rows are the matrix's: `:fixed_boundary_matrix`, below.
 - **The TrialNN family returns as the network ansatz under `HardConstraintLifting`.** The coupling
   makes the field of a slab `P[N] + ℓ`: the transfinite projection of the ansatz's field that
-  vanishes at the two ends of `xspan` and at the bottom of the slab, plus the transfinite
+  vanishes at the two ends of `xspan` and on the whole bottom of the slab, plus the transfinite
   interpolant of the slab's data — the problem's `bcs_function` at the two ends, and the initial
-  condition's bottom on the first slab and the previous slab's top afterwards. The initial and
-  boundary conditions are therefore met by construction, the coupling carries no unknown of its own
+  condition's bottom on the first slab and the previous slab's top afterwards. The boundary
+  conditions are met exactly and the bottom datum at the space nodes of the ansatz's rule, as the
+  linear blend of two nodes between them; the coupling carries no unknown of its own
   (`coupling_unknowns` is zero, `bottom_datum` is `nothing` and `coupling_term!` adds nothing), and
   the interior weak form alone is the residual. The corners are corrected by the term
   `ψ_L(x) * (1 - t̂)` at the left end and `ψ_R(x) * (1 - t̂)` at the right; a problem whose boundary
@@ -654,7 +655,7 @@ makes it worth keeping.
   `transform_field!` gains the ansatz's block as an argument, so that a coupling whose transform
   depends on the field's parameters can read them; the slab core passes `c.ansatz` at both of its
   call sites, and `test/core/slab_integrator.jl`'s `Lifted` fixture takes the argument.
-  `test/couplings/hard_constraint_lifting.jl` joins the `slow` group.
+  `test/couplings/hard_constraint_lifting.jl` joins the `couplings` test group.
 - **`PINNTraining` fits a network to a sampled target by gradient descent.** After the family's PINN
   branch and `PINN_for_init.jl` at `294f023`: `epochs` passes over the target's `nsamples` points,
   each pass cut into consecutive batches of `batch` points in their drawn order, with one plain step
@@ -687,7 +688,7 @@ makes it worth keeping.
   that names it on a coefficient ansatz is refused at the first fit, by one `fit!` method that both
   fitting `apply_guess!` methods call; a `SymbolicAnsatz`, whose `apply_guess!` has no `FitTo`
   method at all, raises a `MethodError` there before any fit.
-  `test/initial_guess/pinn_training.jl` joins the `slow` group.
+  `test/initial_guess/pinn_training.jl` joins the `initialguess` test group.
 - **`scripts/trialnn_model.jl` registers the TrialNN family in the append-only registry.** One model
   file builds the family's problem, ansatz, method and archive — `Wave` over five steps and
   `SineGordon` over three, at `S = 10`, `degree = 3` and `ncells = (2, 5)` — and
@@ -782,8 +783,10 @@ makes it worth keeping.
   `λ(½|v|² − ½c²|w|² − V(u))` the forced equation is `λ(u_tt − c² u_xx + V′(u)) = f`; the density
   is unchanged. The slab integrator adds it at every quadrature node of the slab, at the node's
   absolute time, in the residual and in the update, so the top row that `CoefficientRestriction`
-  hands on carries it; the box scheme adds it at each box centre. Its values are converted to the
-  problem's element type. The constructor reads the forcing once and throws an `ArgumentError` for
+  hands on carries it; the box scheme adds it at each box centre. The `Predictor()` target of the
+  fixed-boundary network integrates the unforced equation, so its initial guess reads no forcing,
+  and only the solved slab does. The forcing's values are converted to the problem's element
+  type. The constructor reads the forcing once and throws an `ArgumentError` for
   any other value. Without a forcing the residual reads no time and every run gives the result it
   gave before. A non-finite forcing value is not guarded: no step converges, and
   `CoefficientRestriction` and the box scheme return the run's record, while the two weak couplings
@@ -937,8 +940,10 @@ makes it worth keeping.
   plans the test jobs from `test/ci-groups.toml` and whose hooks check the group files.
 - **Test floors for the merged downgrade check.** CI's Downgrade job resolves `Project.toml` and
   `test/Project.toml` together at their lower bounds and requires each bound to be the version it
-  resolves to. `test/Project.toml` raises `ForwardDiff` from `0.10` to `0.10.36, 1`, the lowest
-  release that the resolve of the merged environment reaches.
+  resolves to. The `ForwardDiff` floor is in the root `Project.toml`, as the bound
+  `"0.10.36, 1"`: `0.10.36` is the lowest release that the resolve of the merged environment
+  reaches. `test/Project.toml` holds no bound for it, because the package itself depends on
+  `ForwardDiff`.
 - **`SimpleSplines` 0.3.5 is the floor**, from 0.3.4. With FFTA 0.3.2 or later loaded beside
   FFTW, as CairoMakie loads it, SimpleSplines 0.3.4 builds the periodic mass solver through
   FFTA's `plan_rfft`, which takes no `flags` keyword. The ansatz with a `Periodic()` boundary then
@@ -1016,3 +1021,20 @@ makes it worth keeping.
   `.github/workflows/CI.yml` runs with `check_bounds: auto`, and ParallelTestRunner starts its
   workers from `Base.julia_cmd()`, which carries the parent's `--check-bounds` setting, so the guard
   is true in CI and the assertions run there.
+- **Seven known issues of the docstrings, the manual, the docs build and this file are closed.**
+  The `coupling_data` and `ansatz_data` docstrings say that a block is built once for each cache
+  an integrator builds, not once per integrator. The docstrings of `Predictor` and
+  `predictor_force!` say that the predictor integrates the unforced equation and only the solved
+  slab reads the forcing. The docstring of `HardConstraintLifting` and the couplings page say that
+  the side data are met exactly, that the bottom datum is the linear blend of its values at the
+  ansatz's space nodes and the side value beyond the outer nodes, and that the projection vanishes
+  on the whole bottom of the slab on a network ansatz and at the nodes alone on a tensor B-spline
+  ansatz; the lifting's other docstrings no longer say the data are imposed "by construction".
+  `docs/make.jl` passes `repo` as `Remotes.GitHub("JuliaGNI", "MultisymplecticIntegrators.jl")`,
+  so the docs build no longer warns that it cannot determine the repository root URL, and
+  `docs/Project.toml` requires Documenter 1, which defines `Remotes`. The entries above name the
+  test group that each long test file joins, list `JET` and not `ForwardDiff` among the test
+  bounds, and put the `ForwardDiff` floor in the root `Project.toml`; the preamble no longer says
+  that this file holds no entries. This closes the known issues K49, K67, K73, K74, K75, K80 and
+  K82. Two findings of the audit of 2026-10-31 are recorded as the known issues K83, the size of
+  `src/couplings/weak_multipliers.jl`, and K84, the dense slab Jacobian.
