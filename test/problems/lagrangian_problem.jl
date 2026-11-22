@@ -42,6 +42,23 @@ include("../helpers/testsetup.jl")
         @test isempty(wrong)
     end
 
+    @testset "a span from a negative start keeps every step" for T in (Float64, Float32)
+        # The end `t₀ + k·h` of `k` steps of `h = (t₁ - t₀)/k` carries a rounding error of the
+        # spacing of floats near `|t₀|`, not near `t₁`. A tolerance of `8 eps(t₁)` drops a step at
+        # `k = 13` of `(-3.1, 0.2)` in Float64 and at `k = 53` of `(-1000, 1)` in Float32.
+        wrong = []
+        spans = ((T(-1000), T(1)), (T(-3.1), T(0.2)))
+        for ((t₀, t₁), k) in Iterators.product(spans, 1:200)
+            h = (t₁ - t₀) / k
+            problem = Wave.problem(T = T, timespan = (t₀, t₁), timestep = h, xstep = T(0.25))
+            grid = timesteps(GeometricSolution(problem))
+            ok = ntime(problem) == k && ntime(grid) == k &&
+                 abs(grid[end] - t₁) ≤ 8 * eps(T) * max(abs(t₀), abs(t₁))
+            ok || push!(wrong, (; t₀, t₁, k, steps = ntime(problem), grid = ntime(grid)))
+        end
+        @test isempty(wrong)
+    end
+
     @testset "a span that whole steps do not fill ends before t₁" for T in (Float64, Float32)
         # `0.8 / 0.3` is `2.67`: two steps fit, the third would end past `t₁`, and the nearest count
         # is three.

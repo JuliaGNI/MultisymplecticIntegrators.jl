@@ -243,8 +243,10 @@ end
 
 The number of steps a run of the problem takes, which is the number of steps its solution holds:
 the whole steps of `timestep` that fit into `timespan = (t₀, t₁)`. A count `n` whose end `t₀ + n·h`
-lies within 8 ulp of `t₁` fills the span, on either side of `t₁`, so a quotient `(t₁ - t₀)/h` that
-rounds just below an integer loses no step.
+lies within `8 eps(T) max(|t₀|, |t₁|)` of `t₁` fills the span, on either side of `t₁`, so a
+quotient `(t₁ - t₀)/h` that rounds just below an integer loses no step. The tolerance scales with
+the larger end of the span and not with `t₁` alone, because the rounding error of `t₀ + n·h` does:
+a span `(-1000, 1)` resolves its end only to the spacing of floats near `1000`.
 """
 function ntime(problem::LagrangianPDEProblem{T}) where {T}
     (t₀, t₁), h = problem.timespan, problem.timestep
