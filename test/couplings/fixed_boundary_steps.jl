@@ -1,7 +1,7 @@
 # The fixed-boundary coupling: the two types and their pair; the momentum, the side data, the solves
 # and their tolerances over one or two steps; the runs, the continuation, the predictor, the bubble
-# fit, the element type, the two charts and a failed step; the family's rows. One of the files of `test/couplings/fixed_boundary*.jl`, which share
-# `test/helpers/fixed_boundary_setup.jl`.
+# fit, the element type, the two charts and a failed step; the family's rows. One of the files of
+# `test/couplings/fixed_boundary*.jl`, which share `test/helpers/fixed_boundary_setup.jl`.
 using GeometricBase: parameters, timestep, timespan
 using GeometricIntegratorsBase
 using GeometricSolutions
