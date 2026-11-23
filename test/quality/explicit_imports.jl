@@ -11,8 +11,7 @@ using Test
 # `residual!`, `solutionstep`, `solver` and `solverstate` from `GeometricIntegratorsBase`;
 # `initial_residual`, `isconverged`, `jacobian!`, `jacobianmatrix`, `linearsolver` and `method`
 # from `SimpleSolvers`; `Jacobian` and `derivative` from `SymbolicNeuralNetworks`; `layers` from
-# `AbstractNeuralNetworks`; `ntimesteps` from `GeometricSolutions`; and `gradient`, `jacobian` and
-# `value` from `ForwardDiff`.
+# `AbstractNeuralNetworks`; and `gradient`, `jacobian` and `value` from `ForwardDiff`.
 test_explicit_imports(
     MultisymplecticIntegrators;
     no_implicit_imports = false,

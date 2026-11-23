@@ -68,7 +68,7 @@ keeping.
   dependency `[weakdeps] Makie` with `[extensions] MultisymplecticIntegratorsPlots = "Makie"`. Every
   `[compat]` entry is a patch-level floor
   (`GeometricBase = "0.15.5"`, `GeometricEquations = "0.21.8"`, `GeometricIntegratorsBase = "0.7.2"`,
-  `GeometricSolutions = "0.7.1"`, `SimpleSplines = "0.3.4"`,
+  `GeometricSolutions = "0.7.2"`, `SimpleSplines = "0.3.4"`,
   `SimpleSolvers = "0.14.1"`, `Symbolics = "7.18.1"`), except `LinearAlgebra = "1"` and `SparseArrays = "1"`,
   which name the major. `SimpleSplines` requires `DomainSets = "0.8"`, which `Symbolics` accepts only from `7.18.1`,
   so the `Symbolics` floor is that patch rather than the major.
@@ -1131,12 +1131,13 @@ keeping.
   The code, its examples and its test assertions are unchanged, and no warning is raised. The
   known issues K40 and K42 merge into K38, K46 into K39, K45 into K44 and K48 into K47, each
   merged entry with the measurement behind the decision.
-- **`GeometricSolutions = "0.7.1"` is the bound of `Project.toml` and of `scripts/Project.toml`,
+- **`GeometricSolutions = "0.7.2"` is the bound of `Project.toml` and of `scripts/Project.toml`,
   and GeometricSolutions 0.6 is no longer supported.** GeometricSolutions 0.7.1 counts the steps of
-  a time series with `ntimesteps`, which `ntime` of a `LagrangianPDEProblem` now calls, so the
-  package needs that release (see the bug fix "A span of whole steps keeps its last step").
-  GeometricSolutions 0.7.1 requires GeometricEquations 0.21.8, so the `GeometricEquations` floor
-  of `Project.toml` is `"0.21.8"`, the lowest version that resolves with it.
+  a time series with `ntimesteps`, which `ntime` of a `LagrangianPDEProblem` now calls (see the
+  bug fix "A span of whole steps keeps its last step"), and 0.7.2 declares `ntimesteps` public, so
+  the package imports no internal name for it. GeometricSolutions 0.7.2 requires GeometricEquations
+  0.21.8, so the `GeometricEquations` floor of `Project.toml` is `"0.21.8"`, the lowest version
+  that resolves with it.
 
 ### Bug Fixes
 
@@ -1154,5 +1155,5 @@ keeping.
   `GeometricSolution(problem)` of GeometricSolutions 0.7.1 builds its `TimeSeries(t₀, t₁, h)` with
   the same rule, so the step count of the problem and of its solution agree. A run over such a
   span now takes one more step than before and ends at `t₁`; runs over other spans are unchanged.
-  The package needs GeometricSolutions 0.7.1 for this, as the `[compat]` entry under "Changed"
+  The package needs GeometricSolutions 0.7.2 for this, as the `[compat]` entry under "Changed"
   records.
