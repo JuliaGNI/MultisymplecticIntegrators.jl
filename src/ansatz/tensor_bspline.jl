@@ -180,7 +180,10 @@ The block of a [`TensorBSplineAnsatz`](@ref) in the slab cache: what the ansatz 
 form, and `top` the top row of the last solved slab. `tabulation` holds the tables of the slab's
 quadrature, which the ansatz owns. `output` and `trace` evaluate the space basis at the output grid
 and at the nodes of the space quadrature, and `top_slope` holds the time functions' first
-derivatives at the top of the slab.
+derivatives at the top of the slab. `top_derivatives[a, k + 1]` is the `k`-th derivative of the
+time function `a` at the top of the slab, for `k` from 0 to the time degree, and `top_expansion`,
+of size `(Nx, D, degree + 1)`, the buffer that the extrapolation of the previous slab expands the
+top time cell into.
 """
 struct TensorBSplineSlab{ST, T}
     coeffs::Array{ST, 3}
@@ -190,6 +193,8 @@ struct TensorBSplineSlab{ST, T}
     output::PointEvaluation{T}
     trace::PointEvaluation{T}
     top_slope::Vector{T}
+    top_derivatives::Matrix{ST}
+    top_expansion::Array{ST, 3}
 end
 
 """
@@ -203,11 +208,15 @@ function ansatz_data(a::TensorBSplineAnsatz{T}, problem::LagrangianPDEProblem,
     nx = nspace_functions(a)
     coeffs = zeros(ST, nt, nx, components(problem))
     xb = space_basis(a)
+    tb = time_basis(a)
+    order = degree(tb)
     return TensorBSplineSlab{ST, T}(
         coeffs, similar(coeffs), zeros(ST, nx, components(problem)),
         SlabTabulation(quadrature(a)), PointEvaluation(xb, xgrid(problem)),
         PointEvaluation(xb, space_quadrature_nodes(a)),
-        [evaluate(time_basis(a), k, one(T), 1) for k in 1:nt])
+        [evaluate(tb, k, one(T), 1) for k in 1:nt],
+        ST[convert(ST, evaluate(tb, j, one(T), k)) for j in 1:nt, k in 0:order],
+        zeros(ST, nx, components(problem), order + 1))
 end
 
 """

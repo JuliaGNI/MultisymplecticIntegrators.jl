@@ -1107,6 +1107,24 @@ keeping.
   that this file holds no entries. This closes the known issues K49, K67, K73, K74, K75, K80 and
   K82. Two findings of the audit of 2026-10-31 are recorded as the known issues K83, the size of
   `src/couplings/weak_multipliers.jl`, and K84, the dense slab Jacobian.
+- **`PINNTraining` keeps the float type of its step.** `PINNTraining{T, R}` stores `step` as `T`,
+  in place of `Float64`; an integer step becomes `Float64` through `float`, and the default stays
+  `1e-2` in `Float64`. The descent converts the step to the slab's element type first and forms
+  the rate per batch in that type, as `TrainedHiddenLayer` does with its learning rate, so a
+  `BigFloat` step allocates nothing per batch and a `Float32` step on a `Float64` slab enters the
+  rate as its own `Float64` value. A `Float64` step on a `Float64` slab gives the rate it gave
+  before.
+- **A network's point evaluation no longer copies the parameters into the kernels' layout.** The
+  arrays of the parameter set that the network's kernels read are views into the block's flat
+  parameter vector, so every write into `params` — the solver's vector, a fit, a guess — is what
+  the next evaluation reads, and `evaluate_at!` calls no `unflatten!`.
+- **The extrapolation of the previous slab on a `TensorBSplineAnsatz` allocates nothing after the
+  first step.** The block holds the time functions' derivatives at the top of the slab,
+  `top_derivatives`, built once with the cache, and the buffer of the expansion,
+  `top_expansion`, where `evaluate!(sample, ::PreviousSlab, …)` evaluated the time basis and
+  allocated an `nx × D × (degree + 1)` array at every call. The known issue K83 also records the
+  scalar loops of `src/couplings/weak_multipliers.jl` that a `mul!` on its trace tables would
+  replace.
 - **Four network families are declined by the method and kept for comparison.** `NetworkAnsatz`
   in `:all` mode (K38), `NetworkAnsatz` in `:last_layer` mode (K39), the ELM family of
   `TrainedHiddenLayer` (K44) and the TrialNN family, `HardConstraintLifting` on a `NetworkAnsatz`

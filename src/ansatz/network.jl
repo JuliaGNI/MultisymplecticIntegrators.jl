@@ -163,9 +163,15 @@ end
 flat_layout(f) = f.layout
 flat_kernel!(f) = f.f.kernel!
 
-# The parameter set of element type `ST` that the network's kernels read.
-function parameter_set(a::NetworkAnsatz, ::Type{ST}) where {ST}
-    return unflatten(flat_layout(a.field), zeros(ST, a.np))
+# The parameter set that the network's kernels read, whose arrays are views into the flat vector
+# `params`: every write into `params` is what the next evaluation reads, with no copy between the
+# two. The positions of each array in the flat vector come from the layout, as the index sets that
+# `unflatten` lays out of the range `1:np`, which it slices and reshapes without a copy.
+function parameter_set(a::NetworkAnsatz, params::Vector)
+    positions = unflatten(flat_layout(a.field), 1:(a.np))
+    return mapparameters(positions) do i
+        return reshape(view(params, first(i):last(i)), size(i))
+    end
 end
 
 """The space interval of the slab."""
@@ -358,7 +364,7 @@ function fit!(w::AbstractVector{ST}, method::PINNTraining, ansatz::NetworkAnsatz
             end
             # one step per batch, on that batch's mean squared residual: the last batch is the
             # shorter one and is averaged over its own size
-            rate = convert(ST, 2 * method.step / (last - first + 1))
+            rate = 2 * convert(ST, method.step) / (last - first + 1)
             for k in 1:nf
                 w[lo + k - 1] -= rate * gradient[k]
                 s.params[lo + k - 1] = w[lo + k - 1]
@@ -523,9 +529,9 @@ core evaluates the top of the slab at, and `fit` the workspace of the greedy fit
 
 `values` and `gradient` are the scratch of one evaluation — the `3D` values of the field, its two
 derivatives and their parameter derivative — `input` its two-entry argument, and `parameter_set`
-the parameters laid out as the network's kernels read them, which every evaluation refreshes from
-`params`. `train` is the workspace of the [`TrainedHiddenLayer`](@ref) fit, which trains the hidden
-layer in place.
+the parameters laid out as the network's kernels read them, as views into `params`, so that every
+evaluation reads the parameters of the last write into `params`. `train` is the workspace of the
+[`TrainedHiddenLayer`](@ref) fit, which trains the hidden layer in place.
 """
 struct NetworkSlab{ST, T, A <: NetworkAnsatz{T}, P}
     ansatz::A
@@ -575,9 +581,10 @@ function ansatz_data(a::NetworkAnsatz{T}, problem::LagrangianPDEProblem,
     nf, D = a.nfree, a.D
     zero3(q1, q2) = zeros(ST, q1, q2, D)
     zeroJ(q1, q2) = zeros(ST, q1, q2, D, nf)
-    ps = parameter_set(a, ST)
+    params = zeros(ST, a.np)
+    ps = parameter_set(a, params)
     return NetworkSlab{ST, T, typeof(a), typeof(ps)}(a,
-        zeros(ST, a.np), zeros(ST, nf),
+        params, zeros(ST, nf),
         zero3(qt, qx), zero3(qt, qx), zero3(qt, qx),
         zeroJ(qt, qx), zeroJ(qt, qx), zeroJ(qt, qx),
         zeros(ST, qxt, D), zeros(ST, qxt, D), zeros(ST, qtt, D), zeros(ST, qtt, D),
@@ -598,7 +605,7 @@ The type of [`ansatz_data`](@ref)`(ansatz, problem, ST)`, computed without build
 """
 function ansatz_data_type(a::NetworkAnsatz{T}, ::LagrangianPDEProblem,
         ::Type{ST}) where {T, ST}
-    return NetworkSlab{ST, T, typeof(a), typeof(parameter_set(a, ST))}
+    return NetworkSlab{ST, T, typeof(a), typeof(parameter_set(a, Vector{ST}(undef, a.np)))}
 end
 
 """The normalised time nodes and the space nodes of the slab's own quadrature."""
@@ -622,7 +629,6 @@ scratch, without allocating.
     a = s.ansatz
     s.input[1] = t̂
     s.input[2] = x
-    unflatten!(s.parameter_set, flat_layout(a.field), s.params)
     flat_kernel!(a.field)(s.values, s.input, s.parameter_set, 1)
     flat_kernel!(a.gradient)(s.gradient, s.input, s.parameter_set, 1)
     return nothing
