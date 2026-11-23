@@ -14,10 +14,10 @@ takes this coupling and nothing else.
 The default solver of the method is SimpleSolvers' `Newton()`, which takes the minimum-norm step of
 a pivoted QR of the slab Jacobian cut at the family's [`fixed_boundary_qr_cut`](@ref). That QR is
 LAPACK's, which refuses an element type LAPACK does not provide, such as `BigFloat`, so a run at
-such a type names its solver as well as its tolerance. A caller may
-name [`LevenbergMarquardt`](@ref) instead, which damps the step by a shift on the singular values of
-the Jacobian; `LevenbergMarquardt(variable_projection = true)` eliminates the bubble's output weights
-in an inner solve.
+such a type names its solver as well as its tolerance. A caller may name
+[`LevenbergMarquardt`](@ref) instead, which damps the step by a shift on the singular values of the
+Jacobian; `LevenbergMarquardt(variable_projection = true)` eliminates the bubble's output weights in
+an inner solve.
 
 The default guess, [`Continuation`](@ref), starts the solved level at the previous level's
 parameters and the bubble at the previous slab's, and at the first slab at the datum and at
