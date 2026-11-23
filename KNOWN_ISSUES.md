@@ -610,3 +610,56 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `src/initial_guess/orthogonal_greedy.jl:53-56`). The call is the same at `dd937ed`.
 - kind: defect
 - found: #85
+
+### K91 · The relative convergence rule asks a fixed-boundary step with a small initial residual for a residual below the floor its slab reaches.
+
+- location: `src/couplings/fixed_boundary.jl:219` (`fixed_boundary_f_reltol`), `:405`
+  (`default_options`)
+- evidence: a step converges at `r ≤ f_abstol + f_reltol · r₀`, and the family's defaults are
+  `f_reltol = 1e-8` and `f_abstol = 0`. The case is a problem with a position-dependent density
+  parameter, which the package does not hold, on 71 cells at `h = 0.1499` over 119 steps, `:tsr`,
+  with `FixedBoundaryNetwork(Sx = 8, St = 10, ncells = 20, nq = (6, 4))`, `Continuation()` and the
+  default `Newton()`, in `Float64` (Julia 1.13, SimpleSolvers 0.14). Step 80 stops after 37
+  iterations at `r₀ = 174.7` and `r/r₀ = 1.71e-8`: SimpleSolvers reports stagnation at
+  `‖r‖ = 2.98e-6`, a floor that no step lowers, because the residual lies outside the range of the
+  Jacobian (share 1.000), and Levenberg–Marquardt from that iterate stops at its μ cap without
+  moving. Seven converged steps of the same run end above that floor, at `3.0e-6 … 6.2e-6`. `r₀` is
+  110–175 at the turning points of the field (steps 1, 20–21, 40–41, 60–61, 80–81) and up to `6.0e3`
+  between them, so with `f_abstol = 0` the relative rule asks those steps for the smallest absolute
+  residual of the run. Which steps fail depends on round-off in the history: a 21-step run of the
+  same case differs from the 119-step run from step 7 on, as K59 records for the network's
+  generated kernels. The tolerance stays as it is; an `f_abstol` would be a change of the rule.
+- kind: defect
+- found: 2026-11-23
+
+### K92 · The family's pivoted QR keeps a direction that the SVD's rank cut drops, and the Newton step along it grows the residual.
+
+- location: `src/couplings/fixed_boundary.jl:461` (`initsolver(::Newton, …)`), `:202`
+  (`fixed_boundary_qr_cut`)
+- evidence: on the case of K91, step 21 stops at the cap of 300 iterations at `r₀ = 129.3` and
+  `r/r₀ = 9.97e-3`. At the cut `1e-12 σ₁` the SVD of the slab Jacobian keeps 30 directions, and
+  its step leaves `1.3e-4` of `‖r‖`. `LapackPivotedQR(rtol = 1e-12)` keeps rank 31, because its
+  31st `|R_ii|` lies above the cut while `σ₃₁/σ₁ = 9.0e-13` lies below it; it takes a step 150
+  times longer (`5.0e-3` against `3.3e-5`) and multiplies `‖r‖` by 2.9 at the full step.
+  Levenberg–Marquardt from the same iterate converges in 20 trials (`r/r₀ = 3.4e-9`). Which steps
+  fail depends on round-off in the history: the 21-step run of the same case converges at step 21,
+  as K59 records for the network's generated kernels. The route of the fix is the cut SVD of the
+  port to `GeometricSolvers`; the package keeps the pivoted QR until then.
+- kind: defect
+- found: 2026-11-23
+
+### K93 · SimpleSolvers' Newton loop makes no progress for 298 iterations at a step that two plain Newton steps solve.
+
+- location: `src/couplings/fixed_boundary.jl:461` (`initsolver(::Newton, …)`); SimpleSolvers 0.14,
+  its Newton loop
+- evidence: `Wave` at `h = 0.05` over 160 steps to `t = 8`, `:tsr`, with
+  `FixedBoundaryNetwork(Sx = 8, St = 10, ncells = 20, nq = (6, 4))`, `Continuation()` and the
+  default `Newton()`, in `Float64` (Julia 1.13, SimpleSolvers 0.14), converges at 159 of 160
+  steps. Step 25 (`t = 1.25`) stops at the cap of 300 iterations at `r₀ = 1.014` and
+  `r/r₀ = 1.445e-4`, with no progress for 298 iterations and no line-search failure in the status.
+  At the final iterate the QR step and the SVD step agree (rank 27, `‖δ‖ = 2.9e-3`), and two plain
+  full Newton steps of the same factorization converge (`r/r₀ = 2.1e-6`, then `1.3e-11`), so the
+  stall is in the loop of `SimpleSolvers` and not in the factorization. Which steps fail depends
+  on round-off in the history, as K59 records for the network's generated kernels.
+- kind: upstream
+- found: 2026-11-23

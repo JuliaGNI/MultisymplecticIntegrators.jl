@@ -128,6 +128,16 @@ keeping.
   `field_side_data`, so the two modules keep neither helper: `SineGordon.problem` and
   `LinearTransport.problem` build their data from the closed forms they carry. `Wave` keeps
   `initial_data` and its `boundary_data` is now `side_data`.
+- **The default solver of a fixed-boundary method is `Newton()`, not `LevenbergMarquardt()`, so a
+  fixed-boundary run that names no `solver` gives a different result.** `default_solver` of a
+  `SpaceTimeGalerkin` over a `FixedBoundaryNetwork` returns `Newton()`, which the family builds with
+  its minimum-norm `LapackPivotedQR` step, its tolerance and its 300 iterations; no tolerance, cut
+  or solver code changes. Under `Continuation()` it converges at every step of the eight `Wave` and
+  `SineGordon` runs at `h = 0.1` and `0.05`, in both bubble forms, to `t = 0.2`, and at 612 of 615
+  steps over those, the `h = 0.025` rows, long runs and a 119-step screen of a problem with a
+  position-dependent density parameter, where Levenberg–Marquardt as the default converged at 44 of
+  the 119 steps of the screen, with errors of the same size. The three steps that fail are K91, K92 and K93 in `KNOWN_ISSUES.md`; pass
+  `solver = LevenbergMarquardt()` for the previous behaviour.
 
 ### New Features
 
