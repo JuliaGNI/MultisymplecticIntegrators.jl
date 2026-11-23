@@ -165,10 +165,11 @@ end
         end
     end
 
-    # After each of four writers of a block's parameters, the next evaluation gives the field of the
+    # After each of five writers of a block's parameters, the next evaluation gives the field of the
     # parameters written: the solver's vector in `slab_field!`, the descent of a `PINNTraining` fit,
-    # the fit of a `TrainedHiddenLayer`, and a guess that sets the parameters. Each write moves the
-    # parameters, so an evaluation that reads an earlier set fails the comparison.
+    # the fit of a `TrainedHiddenLayer`, a guess that sets the parameters, and the copy of the fixed
+    # parameters into the block the solver works in. Each write moves the parameters, so an
+    # evaluation that reads an earlier set fails the comparison.
     @testset "N9 an evaluation reads the parameters of the last write, $T, D = $D" for T in (
             Float64, Float32),
         D in (1, 2)
@@ -215,6 +216,12 @@ end
             M.fit_sample(trained, interior, target, cl, sl.ansatz, last.problem, nowl), cl)
         @test sl.params != before
         @test reads_its_parameters(sl, last.problem, point)
+        # the copy of the fixed parameters into the block the solver works in, built at zero
+        solver_block = M.ansatz_data(sl.ansatz, last.problem, T)
+        M.evaluate_at!(solver_block, point[1], point[2])
+        M.copy_ansatz_data!(solver_block, sl)
+        @test any(!iszero, solver_block.params)
+        @test reads_its_parameters(solver_block, last.problem, point)
     end
 
     # The two `S = 10` arms are records: in `:last_layer` mode the sixteen constraint rows of the
