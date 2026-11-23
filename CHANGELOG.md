@@ -139,7 +139,7 @@ keeping.
   the 119 steps of the screen, with errors of the same size. The three steps that fail are K91, K92
   and K93 in `KNOWN_ISSUES.md`; pass `solver = LevenbergMarquardt()` for the previous behaviour. A
   `BigFloat` run that names its `f_reltol` and no solver is now refused, because LAPACK's pivoted QR
-  does not provide that element type; it names `solver = LevenbergMarquardt()` as well.
+  does not provide that element type; such a run names `solver = LevenbergMarquardt()` as well.
 
 ### New Features
 

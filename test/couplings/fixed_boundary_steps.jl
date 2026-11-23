@@ -459,7 +459,7 @@ end
     @test eltype(nlsolution(cache(big_int))) === BigFloat
     @test config(solver(big_int)).f_reltol == big"1e-30"
     @test_throws r"^ArgumentError: the fixed-boundary network has no measured f_reltol at BigFloat; name the tolerance as an option of its own$" GeometricIntegrator(
-        big, big_method)
+        big, big_method; solver = LevenbergMarquardt())
     # the family's rank cut is one value per element type, `1e-12` at `Float64` and `10 eps(T)`
     # for another type
     @test M.fixed_boundary_qr_cut(Float64) == 1e-12
