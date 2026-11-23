@@ -25,6 +25,12 @@ struct FixtureFit <: SlabFitMethod end
 
 M.default_fit(::NonlinearFixtureAnsatz) = FixtureFit()
 
+"""The allocations of one extrapolation of the previous slab, after one warm-up call."""
+function extrapolation_allocations(sample, c, ansatz, problem)
+    M.evaluate!(sample, PreviousSlab(), c, ansatz, problem, nothing)
+    return @allocated M.evaluate!(sample, PreviousSlab(), c, ansatz, problem, nothing)
+end
+
 function guess_run(::Type{T}, guess; timestep = T(0.05), xstep = T(0.05),
         problem = Wave.problem(T = T, timespan = (zero(T), T(0.25)), timestep = timestep,
             xstep = xstep)) where {T}
@@ -109,6 +115,32 @@ end
             u = one(T) + c.ansatz.tabulation.time.node[q]
             @test abs(sample[q, r, 1] - field(u, xq[r])) ≤ scale
         end
+    end
+
+    # The extrapolation reads the time basis at the top of the slab from a table the cache builds
+    # once, and expands into a buffer of the cache: a call after the first step allocates nothing
+    # that grows with the slab, where an expansion allocated per call is `nx · D · (order + 1)`
+    # floats.
+    @testset "A4e the extrapolation allocates nothing, D = $D" for D in (1, 2)
+        T = Float64
+        ansatz = TensorBSplineAnsatz(degree = 2, ncells = (3, 20),
+            xspan = (zero(T), one(T)), n = 3)
+        make = D == 1 ? Wave.problem : VectorWave.problem
+        problem = make(T = T, timespan = (zero(T), T(0.25)), timestep = T(0.05),
+            xstep = T(0.05))
+        c = cache(GeometricIntegrator(problem,
+            SpaceTimeGalerkin(ansatz, CoefficientRestriction();
+                initial_guess = FitTo(PreviousSlab()))))
+        c.ansatz.coeffs .= reshape(
+            range(-one(T), one(T); length = length(c.ansatz.coeffs)),
+            size(c.ansatz.coeffs))
+        c.steps = 1
+        qt = M.nquadrature(c.ansatz.tabulation.time)
+        qx = M.nquadrature(c.ansatz.tabulation.space)
+        sample = Array{T, 3}(undef, qt, qx, D)
+        @test extrapolation_allocations(sample, c, ansatz, problem) ≤ 64
+        @test all(isfinite, sample)
+        @test any(!iszero, sample)
     end
 
     @testset "A4d the three roles fail at construction" begin

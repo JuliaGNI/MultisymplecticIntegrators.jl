@@ -91,6 +91,10 @@ converts it to the element type of the slab.
 
 A network in `:all` mode is refused, because Newton determines the hidden layer there.
 
+The ELM family, a `:last_layer` network fitted by `TrainedHiddenLayer`, is declined by the method
+and is kept for comparison: its slab has no root, because the coupling's data rows outnumber what
+the output weights can satisfy (K44 in `KNOWN_ISSUES.md`).
+
 ```julia
 method = SpaceTimeGalerkin(NetworkAnsatz(S = 20, mode = :last_layer, xspan = (0.0, 1.0),
         ncells = (2, 5), degree = 3), WeakInitialAndBoundaryConditions();
@@ -118,7 +122,9 @@ end
 The fit method of a [`NetworkAnsatz`](@ref) that trains every free parameter of the network against
 a sample of the slab's target, by plain gradient descent: `epochs` passes over the `nsamples` points
 of the slab's target, each pass cut into consecutive batches of `batch` points in their drawn order,
-with one step of the fixed `step` per batch on that batch's mean squared residual.
+with one step of the fixed `step` per batch on that batch's mean squared residual. The step keeps
+the float type it is given, an integer step becoming `Float64` through `float`, and the descent
+converts it to the element type of the slab.
 
 The points are drawn once per fit, uniformly over `[0, 1] × xspan`, from a copy of `rng` taken at
 the call and never from the process's global generator, so one method object gives every integrator
@@ -140,9 +146,9 @@ method = SpaceTimeGalerkin(NetworkAnsatz(S = 10, xspan = (0.0, 1.0), ncells = (2
     initial_guess = FitTo(InitialCondition(); method = PINNTraining(epochs = 100)))
 ```
 """
-struct PINNTraining{R <: AbstractRNG} <: SlabFitMethod
+struct PINNTraining{T <: AbstractFloat, R <: AbstractRNG} <: SlabFitMethod
     epochs::Int
-    step::Float64
+    step::T
     batch::Int
     nsamples::Int
     rng::R
@@ -155,7 +161,7 @@ function PINNTraining(; epochs::Integer = 100, step::Real = 1e-2, batch::Integer
         throw(ArgumentError("step must be finite and at least 0, got $step"))
     batch ≥ 1 || throw(ArgumentError("batch must be at least 1, got $batch"))
     nsamples ≥ 1 || throw(ArgumentError("nsamples must be at least 1, got $nsamples"))
-    return PINNTraining(Int(epochs), Float64(step), Int(batch), Int(nsamples), rng)
+    return PINNTraining(Int(epochs), float(step), Int(batch), Int(nsamples), rng)
 end
 
 """

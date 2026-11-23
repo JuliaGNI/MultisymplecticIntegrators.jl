@@ -330,6 +330,29 @@ end
             "the PINN fit of a zero network"]
     end
 
+    # The step keeps the float type it is given, and an integer step becomes `Float64` through
+    # `float`; the guess that holds the method keeps its type concrete.
+    @testset "P8 the step keeps its float type" begin
+        @test PINNTraining(step = 0.1f0).step isa Float32
+        @test PINNTraining().step === 1.0e-2
+        @test PINNTraining(step = 1).step === 1.0
+        @test PINNTraining(step = big(0.5)).step isa BigFloat
+        method = PINNTraining(step = 0.1f0)
+        @test fieldtype(typeof(method), :step) === Float32
+        @test all(isconcretetype, fieldtypes(typeof(method)))
+        guess = FitTo(InitialCondition(); method = method)
+        @test fieldtype(typeof(guess), :method) === typeof(method)
+        galerkin = SpaceTimeGalerkin(
+            NetworkAnsatz(S = 4, xspan = (0.0, 1.0), ncells = (2, 5), degree = 3),
+            HardConstraintLifting(); initial_guess = guess)
+        @test fieldtype(typeof(galerkin), :initial_guess) === typeof(guess)
+        # the checks on the step stay, with their messages
+        @test_throws r"^ArgumentError: step must be finite and at least 0, got -0\.1$" PINNTraining(
+            step = -0.1f0)
+        @test_throws r"^ArgumentError: step must be finite and at least 0, got Inf$" PINNTraining(
+            step = Inf)
+    end
+
     @testset "the fit's refusal on an ansatz with no parameters" begin
         # a coefficient ansatz has no free parameters for the descent, so a `PINNTraining` fit on
         # one is refused at the first fit, which both fitting `apply_guess!` methods reach, and not

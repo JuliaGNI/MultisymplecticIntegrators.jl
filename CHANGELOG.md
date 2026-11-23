@@ -67,7 +67,7 @@ keeping.
   carries no `Plots` dependency: the plotting layer of the entry below arrives as the weak
   dependency `[weakdeps] Makie` with `[extensions] MultisymplecticIntegratorsPlots = "Makie"`. Every
   `[compat]` entry is a patch-level floor
-  (`GeometricBase = "0.15.5"`, `GeometricEquations = "0.21.5"`, `GeometricIntegratorsBase = "0.7.2"`,
+  (`GeometricBase = "0.15.5"`, `GeometricEquations = "0.21.8"`, `GeometricIntegratorsBase = "0.7.2"`,
   `GeometricSolutions = "0.7.1"`, `SimpleSplines = "0.3.4"`,
   `SimpleSolvers = "0.14.1"`, `Symbolics = "7.18.1"`), except `LinearAlgebra = "1"` and `SparseArrays = "1"`,
   which name the major. `SimpleSplines` requires `DomainSets = "0.8"`, which `Symbolics` accepts only from `7.18.1`,
@@ -977,9 +977,9 @@ keeping.
   second build of one architecture adds no entry; with `network_kernels` bypassed, N7 reports 2
   errors in 20 assertions.
 - **The fixed-boundary Jacobian test reads the Jacobian along directions.** The testset "FB2 the
-  Jacobian is the derivative of the residual" of `test/couplings/fixed_boundary.jl` took a central
-  difference per unknown, two residuals per column, and that was the costly part of the
-  `Fixed boundary` file. It now checks `J · d` along three random directions per vector, drawn
+  Jacobian is the derivative of the residual", in `test/couplings/fixed_boundary_jacobian.jl`,
+  took a central difference per unknown, two residuals per column, and that was the costly part
+  of the fixed-boundary tests. It now checks `J · d` along three random directions per vector, drawn
   in `Float64` and rounded to `T` from a second seeded generator, `drng = Xoshiro(12)`, so that
   the testset's `rng = Xoshiro(11)` draws the vectors alone, against `directional_differences`,
   the central difference of the residual along `d` with two residuals per direction, to the bound
@@ -1016,6 +1016,32 @@ keeping.
   `.github/workflows/CI.yml` runs with `check_bounds: auto`, and ParallelTestRunner starts its
   workers from `Base.julia_cmd()`, which carries the parent's `--check-bounds` setting, so the guard
   is true in CI and the assertions run there.
+- **The four longest test files are shorter, toward 180 s each in their group's own process.**
+  `test/couplings/fixed_boundary.jl` (592 s cold on this machine) is split into four files of the
+  group `fixedboundary`, each in `TESTS` with a label that starts with `Fixed boundary`:
+  `fixed_boundary_gradient.jl` (FB1), `fixed_boundary_jacobian.jl` (FB2),
+  `fixed_boundary_steps.jl` (FB0, FB3–FB16, N14 and FB18), and `fixed_boundary.jl` itself, which
+  keeps FB17. The testsets move unchanged, and the helpers they share move unchanged to
+  `test/helpers/fixed_boundary_setup.jl`.
+  `test/integration/benchmark.jl` (341 s) starts the smoke matrix once, under `Benchmark matrix`,
+  and "the timing record", "each run in its own process" and "one table per problem and final
+  time" read its archives, where each ran the matrix itself. Its costliest testset, "a run that
+  throws is a result", whose rows run in child processes, moves unchanged to
+  `test/integration/benchmark_failures.jl`, labelled `Benchmark matrix: failures` in the group
+  `slow`, which also holds the two testsets on the backtraces that the renderer and the driver
+  write, and the helpers the two files share move unchanged to
+  `test/helpers/benchmark_setup.jl`. `test/ansatz/network.jl` (182 s) runs
+  N1's `:all` run once per element type for N1 and N5, which ran the same run twice. Its N3, N4
+  and A1 move unchanged to `test/ansatz/network_cases.jl`, labelled `Network ansatz: cases` in the
+  group `ansatz`, and the helpers the two files share move unchanged to
+  `test/helpers/network_setup.jl`. `test/initial_guess/trained_hidden_layer.jl` (190 s) no longer
+  trains E1a's fit for 60 epochs or runs E5a's soundings at 100 epochs: E1a checks that one epoch
+  at `learning_rate = 1e-2` lowers the misfit and that `misfit_gradient!` agrees with central
+  differences of the misfit, at output weights that give each component a field of its own, and
+  the 60-epoch misfit fraction (`TRAINED_MISFIT_FRACTION`, `TRAINED_MISFITS`) and E5a move to the
+  new `scripts/trained_hidden_layer_records.jl`. E3c, E4a, E4b, E7a and E7b train their guesses
+  for one epoch, where E3c trained for 60 and the others for 20. The times are the census of
+  2026-11-15 on this machine at Julia 1.13.4; no tolerance changes.
 - **A reference comparison matches the nodes as it matches the times.** `reference_error` in
   `scripts/benchmark.jl` finds a coarse run's node on the finer grid with `shared_index`, the
   lookup that already found its times: the nearer of the two sorted neighbours, accepted within a
@@ -1076,10 +1102,41 @@ keeping.
   that this file holds no entries. This closes the known issues K49, K67, K73, K74, K75, K80 and
   K82. Two findings of the audit of 2026-10-31 are recorded as the known issues K83, the size of
   `src/couplings/weak_multipliers.jl`, and K84, the dense slab Jacobian.
+- **`PINNTraining` keeps the float type of its step.** `PINNTraining{T, R}` stores `step` as `T`,
+  in place of `Float64`; an integer step becomes `Float64` through `float`, and the default stays
+  `1e-2` in `Float64`. The descent converts the step to the slab's element type first and forms
+  the rate per batch in that type, as `TrainedHiddenLayer` does with its learning rate, so a
+  `BigFloat` step allocates nothing per batch and a `Float32` step on a `Float64` slab enters the
+  rate as its own `Float64` value. A `Float64` step on a `Float64` slab gives the rate it gave
+  before.
+- **A network's point evaluation no longer copies the parameters into the kernels' layout.** The
+  arrays of the parameter set that the network's kernels read are views into the block's flat
+  parameter vector, so every write into `params` — the solver's vector, a fit, a guess — is what
+  the next evaluation reads, and `evaluate_at!` calls no `unflatten!`.
+- **The extrapolation of the previous slab on a `TensorBSplineAnsatz` allocates nothing after the
+  first step.** The block holds the time functions' derivatives at the top of the slab,
+  `top_derivatives`, built once with the cache, and the buffer of the expansion,
+  `top_expansion`, where `evaluate!(sample, ::PreviousSlab, …)` evaluated the time basis and
+  allocated an `nx × D × (degree + 1)` array at every call. The known issue K83 also records the
+  scalar loops of `src/couplings/weak_multipliers.jl` that a `mul!` on its trace tables would
+  replace.
+- **Four network families are declined by the method and kept for comparison.** `NetworkAnsatz`
+  in `:all` mode (K38), `NetworkAnsatz` in `:last_layer` mode (K39), the ELM family of
+  `TrainedHiddenLayer` (K44) and the TrialNN family, `HardConstraintLifting` on a `NetworkAnsatz`
+  (K47), do not converge because of the method and not because of a defect of the code: the slab
+  of the two `:last_layer` families has no root, no solver variant converges the `:all` mode, and
+  the lifting converges on `Wave` only under variable projection, with the error of the
+  unconverged run. The docstrings of `NetworkAnsatz`, `TrainedHiddenLayer` and
+  `HardConstraintLifting` and the manual's pages `network.md`, `elm.md` and `trialnn.md` say so.
+  The code, its examples and its test assertions are unchanged, and no warning is raised. The
+  known issues K40 and K42 merge into K38, K46 into K39, K45 into K44 and K48 into K47, each
+  merged entry with the measurement behind the decision.
 - **`GeometricSolutions = "0.7.1"` is the bound of `Project.toml` and of `scripts/Project.toml`,
   and GeometricSolutions 0.6 is no longer supported.** GeometricSolutions 0.7.1 counts the steps of
   a time series with `ntimesteps`, which `ntime` of a `LagrangianPDEProblem` now calls, so the
   package needs that release (see the bug fix "A span of whole steps keeps its last step").
+  GeometricSolutions 0.7.1 requires GeometricEquations 0.21.8, so the `GeometricEquations` floor
+  of `Project.toml` is `"0.21.8"`, the lowest version that resolves with it.
 
 ### Bug Fixes
 

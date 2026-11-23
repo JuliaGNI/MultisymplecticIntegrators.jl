@@ -42,12 +42,12 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-10-28; one issue with K21
 
-### K38 · The `WAVE_NN_FULLY` run is an unconverged iterate.
+### K38 · `NetworkAnsatz` in `:all` mode is declined by the method: no solver variant converges it, and its three records are unconverged iterates.
 
-- location: `test/helpers/reference_values.jl:55`, `src/ansatz/network.jl`
-- evidence: the §A case of the entry — `Wave` at `h = 0.05`, `xspan = (0, 1)`, `S = 10`, `tanh`,
-  `Nw = Nb = 50`, the exact solution as the guess with `OrthogonalGreedy()` — run with
-  `NetworkAnsatz(; mode = :all)` and `WeakInitialAndBoundaryConditions()` takes
+- location: `test/helpers/reference_values.jl:55`, `:59` and `:69`, `src/ansatz/network.jl`
+- evidence: the §A case of the `WAVE_NN_FULLY` entry — `Wave` at `h = 0.05`, `xspan = (0, 1)`,
+  `S = 10`, `tanh`, `Nw = Nb = 50`, the exact solution as the guess with `OrthogonalGreedy()` — run
+  with `NetworkAnsatz(; mode = :all)` and `WeakInitialAndBoundaryConditions()` takes
   `iterations = [54, 77, 51, 53, 51]` at `residual = [0.1088, 0.1346, 0.2991, 0.6403, 0.6917]`,
   each from an initial residual of `[15.31, 70.66, 79.15, 50.10, 68.46]`, and `converged = false`
   at every step, in `Float64`. The entry itself reports `converged = true` at
@@ -57,13 +57,40 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `:all` arm with the initial condition as the guess deviates by `0.6894` and `1.340` there. The
   record is that run and not a reference: the network's rows are the gradient of a discrete action
   the Newton solve cannot drive to round-off, which is the measured result and not a defect of the
-  assembly.
+  assembly. The three-step sine-Gordon case of the `SINE_GORDON_NN_FULLY` entry takes
+  `iterations = [134, 62, 118]` at `residual = [1.79e-3, 5.19e-3, 2.26e-3]`, each from an initial
+  residual of `[0.6580, 0.5470, 0.5158]`, and `converged = false` in `Float64`; the entry reports
+  `converged = true` at `residual = [0.2339, 1.549, 139.9]`. Its sup-norm deviation from the entry
+  is `0.0137` in `Float64` and `0.0222` in `Float32` over the three steps, on the same machine and
+  Julia, and that record too is the run and not a reference. The `WAVE_NN_SYMBOLIC_FULLY` entry is
+  the symbolic integrator of the old stack on the same §A case, and this tree's counterpart to it is
+  the `:all` arm above, whose deviation from it is `0.2451` in `Float64` and `14.74` in `Float32`
+  over the five steps, on the same machine and Julia. The entry's own `u` differs from
+  `WAVE_NN_FULLY`'s by up to `0.7615`, so the two entries are separate records and neither is the
+  other's reference; `maximum(abs, WAVE_NN_FULLY.u)` is `1.48`. The entry reports
+  `converged = true` at `iterations = [5, 2, 27, 7, 1]` and
+  `residual = [0.602, 8.766, 6.202, 65.82, 47.99]`, so that record too is the run and not a
+  reference. The family is declined by the method and kept in the package for comparison. The
+  measurement behind that is a run of this package at `4adae16` with a position-dependent density
+  parameter added, at Julia 1.13 and SimpleSolvers 0.14, in `Float64`, over three slab steps, at
+  `S = 10`, `tanh` and a degree-3 trace basis on `(2, n)` cells. The package's solver runs at its
+  defaults, `f_abstol = 8 eps = 1.78e-15` and `f_reltol = 1.49e-8`, and the Levenberg–Marquardt
+  and variable-projection variants stop on the relative test `r ≤ 1.49e-8 r₀` alone. The layer
+  case is the linear-layer Klein–Gordon case of a FEEC–FDTD benchmark at 5 GHz (`h = 0.1499`, 71
+  space intervals), whose density depends on the position; the package does not hold that problem.
+  On the layer case with 71 trace cells the step has no root, with 82 data rows against 40
+  parameters, and stops at `r/r₀ = 4.5e-6, 7.2e-6, 5.1e-5`. On `Wave` with 5 cells it is a
+  nonlinear crawl, at `r/r₀ = 2.2e-4, 0.33, 2.9e-3`: the residual is in the range of `J`, and the
+  true residual grows along the Newton step. Levenberg–Marquardt from the stall reaches `1.6e-5`
+  on `Wave` after 3000 trials, and variable projection reaches `1.2e-5, 1.2e-6, 5.6e-6` on `Wave`
+  and errors of 1.5 to 13 on the layer case: no variant converges on either problem.
 - kind: defect
-- found: 2026-11-07
+- found: 2026-11-07; declined 2026-11-22
 
-### K39 · The `WAVE_NN_PARTIALLY` run does not converge at the solver's default tolerances.
+### K39 · `NetworkAnsatz` in `:last_layer` mode is declined by the method: its slab has no root, its `WAVE_NN_PARTIALLY` run does not converge, and no cutoff conserves its rotation charge.
 
-- location: `test/helpers/reference_values.jl:57`, `src/ansatz/network.jl`
+- location: `test/helpers/reference_values.jl:57`, `test/initial_guess/trained_hidden_layer.jl`,
+  `src/ansatz/network.jl`
 - evidence: the same §A case with `mode = :last_layer` takes `iterations = [3, 4, 4, 3, 3]` at
   `residual = [9.41e-4, 1.59e-3, 2.34e-3, 3.12e-3, 2.28e-3]`, each from an initial residual of
   `[2.175, 32.10, 61.90, 92.79, 119.7]`, and `converged = false` at every step, in `Float64`: the
@@ -79,35 +106,42 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   accuracy of this run. The initial condition as the guess instead of the exact solution gives
   `580.5` and `580.5` in that order. The affine control at `S = 20`, where the freed output weights
   carry every row, converges in two iterations to `7.8e-6` of its initial residual in `Float64` and
-  `6.4e-3` in `Float32`, which is what the family's `network_f_reltol` records.
+  `6.4e-3` in `Float32`, which is what the family's `network_f_reltol` records. The rotation charge
+  of a `:last_layer` run drifts, and no cutoff conserves it: `J_h = Σⱼ (u¹ⱼ λ²ⱼ − u²ⱼ λ¹ⱼ)` over
+  the top trace and the top multiplier of a `VectorWave` run at `β = 0`, `S = 20`, `D = 2`,
+  `degree = 3`, `ncells = (2, 5)`, `f_abstol = 0` and `f_reltol = trained_f_reltol(T)` drifts from
+  `-0.4362` to `-0.5558` over ten steps in `Float64`, a largest deviation of `0.1196`, and from
+  `-0.4101` to `-0.4783` in `Float32`, `0.0682`; both runs converge at every step in two
+  iterations, at largest step ratios of `3.26e-5` and `4.26e-3`. `λ_top` lies in the near-null
+  space of the `:last_layer` saddle point, whose constraint block reaches only the output weights —
+  the `LinearTransport` Jacobian at `S = 10` and `D = 2` has rank 40 of 52 — so resolving it makes
+  the run unstable and truncating it leaves the slab's equations unsatisfied there: at a cutoff of
+  `1e-14` the residual reaches round-off and the charge grows to `7.3e16`, at `1e-10` and `1e-12`
+  to `-1763`, and the drift is identical to five digits at `1e-2` uncapped, at a cap of two
+  iterations, and at `1e-12` with fifty. The factorisation's cutoff is LAPACK's default,
+  `sqrt(eps(T))`, because `initsolver` builds `LapackPivotedQR()` with no argument. Measured in
+  `Float64` and `Float32` on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3, four BLAS
+  threads and `--check-bounds=auto`. The weights are the coupling's own: the trace rule's weights
+  pair `λ_top` with the trace, and the unweighted sum drifts by `8.97`. The family is declined by
+  the method and kept in the package for comparison. The measurement behind that is a run of this
+  package at `4adae16` with a position-dependent density parameter added, at Julia 1.13 and
+  SimpleSolvers 0.14, in `Float64`, over three slab steps unless a count is named, with `tanh` and
+  a degree-3 trace basis on `(2, n)` cells. The package's solver runs at its defaults,
+  `f_abstol = 8 eps = 1.78e-15` and `f_reltol = 1.49e-8`, and the Levenberg–Marquardt variant stops
+  on the relative test `r ≤ 1.49e-8 r₀` alone. The layer case is the linear-layer Klein–Gordon
+  case of a FEEC–FDTD benchmark at 5 GHz (`h = 0.1499`, 71 space intervals), whose density depends
+  on the position; the package does not hold that problem. The slab has no root: 97–100 % of the
+  residual left at the stall is outside the range of the slab Jacobian. On `Wave` at `S = 10` with
+  5 cells the steps stop at `r/r₀ = 1.5e-3, 6.2e-5, 7.0e-5`, with a constraint block of 16 × 10;
+  on the layer case at `S = 40` with 20 cells the block is 31 × 40 of rank 28. The affine control
+  at `S = 20` has a root behind the `√eps` rank cut: Levenberg–Marquardt over the full SVD
+  converges at 20 of 20 steps on `Wave`, with an error of `5.7e-3 → 0.17` over the 20 steps,
+  against `1.5e-3 → 3.5e-2` for the package's unconverged run. With the data rows reduced to `k`
+  directions of the range of the constraint block, the dropped data grow: on the layer case at
+  `S = 40` and `k = 29`, the block's rank, the error grows from `2.6` to `6.5e24` over 10 steps,
+  and on `Wave` at `k = 6` of rank 10 the dropped data grow from `3.2e-3` to `0.22` in 5 steps.
 - kind: defect
-- found: 2026-11-07
-
-### K40 · The `SINE_GORDON_NN_FULLY` run is an unconverged iterate.
-
-- location: `test/helpers/reference_values.jl:69`, `src/ansatz/network.jl`
-- evidence: the three-step sine-Gordon case of the entry takes `iterations = [134, 62, 118]` at
-  `residual = [1.79e-3, 5.19e-3, 2.26e-3]`, each from an initial residual of `[0.6580, 0.5470,
-  0.5158]`, and `converged = false` in `Float64`; the entry reports `converged = true` at
-  `residual = [0.2339, 1.549, 139.9]`. Its sup-norm deviation from the entry is `0.0137` in
-  `Float64` and `0.0222` in `Float32` over the three steps, on `arm64-apple-darwin27.0.0`
-  (`apple-m4`) at Julia 1.13.3. As for K38 the record is that run and not a reference.
-- kind: defect
-- found: 2026-11-07
-
-### K42 · The `WAVE_NN_SYMBOLIC_FULLY` run is an unconverged iterate of the same case.
-
-- location: `test/helpers/reference_values.jl:59`, `src/ansatz/network.jl`
-- evidence: the entry is the symbolic integrator of the old stack on the §A case of K38, and this
-  tree's counterpart to it is the `:all` arm of K38, whose deviation from it is `0.2451` in
-  `Float64` and `14.74` in `Float32` over the five steps, on `arm64-apple-darwin27.0.0`
-  (`apple-m4`) at Julia 1.13.3. The entry's own `u` differs from
-  `WAVE_NN_FULLY`'s by up to `0.7615`, so the two entries are separate records and neither is the
-  other's reference; `maximum(abs, WAVE_NN_FULLY.u)` is `1.48`. The entry reports `converged = true`
-  at `iterations = [5, 2, 27, 7, 1]` and `residual = [0.602, 8.766, 6.202, 65.82, 47.99]`, so as
-  for K38 the record is that run and not a reference.
-- kind: defect
-- found: 2026-11-08
+- found: 2026-11-07; declined 2026-11-22
 
 ### K43 · The network family's surface code repeats the symbolic ansatz's.
 
@@ -124,13 +158,15 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: #44
 
-### K44 · The `WAVE_ELM_LSGD` sounding is an unconverged iterate of another architecture.
+### K44 · The ELM family, a `:last_layer` `NetworkAnsatz` fitted by `TrainedHiddenLayer`, is declined by the method: its slab has no root, and its two soundings are unconverged iterates of another architecture.
 
-- location: `test/helpers/reference_values.jl:61`, `src/initial_guess/trained_hidden_layer.jl`
-- evidence: the entry is the old stack's `LSGD` branch on `Wave` at `h = 0.05` over five steps, a
-  network of two hidden layers of twenty units whose field's derivative came from `Zygote`, and its
-  own record is `iterations = [4, 6, 7, 4, 4]` at `residual = [3.46e-6, 2.25e-4, 2.13e-3, 2.69e-2,
-  6.22e-1]`, with `energy_error` rising to `2.74e14`. This tree's counterpart is the `:last_layer`
+- location: `test/helpers/reference_values.jl:61` and `:71`,
+  `src/initial_guess/trained_hidden_layer.jl`
+- evidence: the `WAVE_ELM_LSGD` entry is the old stack's `LSGD` branch on `Wave` at `h = 0.05`
+  over five steps, a network of two hidden layers of twenty units whose field's derivative came
+  from `Zygote`, and its own record is `iterations = [4, 6, 7, 4, 4]` at
+  `residual = [3.46e-6, 2.25e-4, 2.13e-3, 2.69e-2, 6.22e-1]`, with `energy_error` rising to
+  `2.74e14`. This tree's counterpart is the `:last_layer`
   network at `S = 20` fitted by `TrainedHiddenLayer(epochs = 100, learning_rate = 1e-5)` from the
   seed 1234, `degree = 3` and `ncells = (10, 10)`, the old constructor's cells: it takes
   `iterations = [3, 3, 3, 3, 5]` at `residual = [9.61e-5, 8.91e-5, 1.55e-4, 2.21e-4, 3.87e-4]`,
@@ -139,51 +175,34 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `u` is `1.79e6`, measured in `Float64` in a cold process on `arm64-apple-darwin27.0.0`
   (`apple-m4`) at Julia 1.13.3, four BLAS threads and `--check-bounds=auto`. The record is that run
   and not a reference: the two are unconverged iterates of two architectures, one with two hidden
-  layers and one with one.
+  layers and one with one. The `SINE_GORDON_ELM_LSGD` entry is the same `LSGD` branch on
+  `SineGordon` over three steps at `h = 0.05`, and its own record is `iterations = [13, 3, 27]` at
+  `residual = [1.56e-7, 2.17e-2, 5.56e-3]`, with `energy_error` rising to `4.89e6`. This tree's
+  counterpart, the same `:last_layer` method on the same cells, takes `iterations = [4, 6, 4]` at
+  `residual = [1.23e-5, 1.22e-5, 1.66e-5]`, each from an initial residual of `[4.31, 4.46, 4.37]`,
+  and `converged = false` at every step. Its sup-norm deviation from the entry's `u` is `151.3`, on
+  the same machine and with the same settings, and that record too is the run and not a reference.
+  The family is declined by the method and kept in the package for comparison. The measurement
+  behind that is a run of this package at `4adae16` with a position-dependent density parameter
+  added, at Julia 1.13 and SimpleSolvers 0.14, in `Float64`, over three slab steps, at `S = 20`,
+  `tanh` and a degree-3 trace basis on `(2, n)` cells, with the package's solver at its defaults,
+  `f_abstol = 8 eps = 1.78e-15` and `f_reltol = 1.49e-8`. The layer case is the linear-layer
+  Klein–Gordon case of a FEEC–FDTD benchmark at 5 GHz (`h = 0.1499`, 71 space intervals), whose
+  density depends on the position; the package does not hold that problem. The slab has no root.
+  On `Wave` with 5 cells the steps stop at `r/r₀ = 1.9e-5, 1.0e-5, 1.3e-5`, with a constraint block
+  of 16 × 20 of rank 15; on the layer case with 71 cells the block is 82 × 20 of rank 18, 17 and 4,
+  and `‖r‖` goes `0.033 → 0.15 → 30`.
 - kind: defect
-- found: 2026-11-08
+- found: 2026-11-08; declined 2026-11-22
 
-### K45 · The `SINE_GORDON_ELM_LSGD` sounding is an unconverged iterate of another architecture.
+### K47 · `HardConstraintLifting` on a `NetworkAnsatz`, the TrialNN family, is declined by the method: it converges on `Wave` only under variable projection, with the error of the unconverged run, and its two soundings are unconverged iterates.
 
-- location: `test/helpers/reference_values.jl:71`, `src/initial_guess/trained_hidden_layer.jl`
-- evidence: the entry is the same `LSGD` branch on `SineGordon` over three steps at `h = 0.05`, and
-  its own record is `iterations = [13, 3, 27]` at `residual = [1.56e-7, 2.17e-2, 5.56e-3]`, with
-  `energy_error` rising to `4.89e6`. This tree's counterpart, the same `:last_layer` method of K44
-  on the same cells, takes `iterations = [4, 6, 4]` at `residual = [1.23e-5, 1.22e-5, 1.66e-5]`,
-  each from an initial residual of `[4.31, 4.46, 4.37]`, and `converged = false` at every step. Its
-  sup-norm deviation from the entry's `u` is `151.3`, on the machine and with the settings of K44.
-  As for K44 the record is that run and not a reference.
-- kind: defect
-- found: 2026-11-08
-
-### K46 · The rotation charge of a `:last_layer` run drifts, and no cutoff conserves it.
-
-- location: `test/initial_guess/trained_hidden_layer.jl`, `src/ansatz/network.jl`
-- evidence: `J_h = Σⱼ (u¹ⱼ λ²ⱼ − u²ⱼ λ¹ⱼ)` over the top trace and the top multiplier of a
-  `VectorWave` run at `β = 0`, `S = 20`, `D = 2`, `degree = 3`, `ncells = (2, 5)`,
-  `f_abstol = 0` and `f_reltol = trained_f_reltol(T)` drifts from `-0.4362` to `-0.5558` over ten
-  steps in `Float64`, a largest deviation of `0.1196`, and from `-0.4101` to `-0.4783` in
-  `Float32`, `0.0682`; both runs converge at every step in two iterations, at largest step ratios
-  of `3.26e-5` and `4.26e-3`. `λ_top` lies in the near-null space of the `:last_layer` saddle
-  point, whose constraint block reaches only the output weights — the `LinearTransport` Jacobian
-  at `S = 10` and `D = 2` has rank 40 of 52 — so resolving it makes the run unstable and
-  truncating it leaves the slab's equations unsatisfied there: at a cutoff of `1e-14` the
-  residual reaches round-off and the charge grows to `7.3e16`, at `1e-10` and `1e-12` to `-1763`,
-  and the drift is identical to five digits at `1e-2` uncapped, at a cap of two iterations, and at
-  `1e-12` with fifty. The factorisation's cutoff is LAPACK's default, `sqrt(eps(T))`, because
-  `initsolver` builds `LapackPivotedQR()` with no argument. Measured in `Float64` and `Float32` on
-  `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3, four BLAS threads and
-  `--check-bounds=auto`. The weights are the coupling's own: the trace rule's weights pair `λ_top`
-  with the trace, and the unweighted sum drifts by `8.97`.
-- kind: defect
-- found: 2026-11-08
-
-### K47 · The `WAVE_TRIALNN_OGA2D` sounding under the lifting is an unconverged iterate.
-
-- location: `test/helpers/reference_values.jl:63`, `src/couplings/hard_constraint_lifting.jl`
-- evidence: the §A case of the entry — `Wave` at `h = 0.05`, `xspan = (0, 1)`, `xstep = 0.05`,
-  `S = 10`, `tanh`, `degree = 3`, `ncells = (2, 5)`, the exact solution as the guess with
-  `OrthogonalGreedy(Nw = 50, Nb = 50)`, five steps — run under `HardConstraintLifting` takes
+- location: `test/helpers/reference_values.jl:63` and `:73`,
+  `src/couplings/hard_constraint_lifting.jl`
+- evidence: the §A case of the `WAVE_TRIALNN_OGA2D` entry — `Wave` at `h = 0.05`,
+  `xspan = (0, 1)`, `xstep = 0.05`, `S = 10`, `tanh`, `degree = 3`, `ncells = (2, 5)`, the exact
+  solution as the guess with `OrthogonalGreedy(Nw = 50, Nb = 50)`, five steps — run under
+  `HardConstraintLifting` takes
   `iterations = [56, 70, 75, 54, 80]` at `residual = [0.01289, 0.07862, 0.0009895, 0.006161,
   0.005156]`, each from an initial residual of `[2.090, 5.846, 9.451, 12.25, 11.16]`, and
   `converged = false` at every step, in `Float64`. The entry itself reports `status = :failed` after
@@ -193,23 +212,29 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   four BLAS threads and `--check-bounds=auto`; the test asserts that the deviation is finite and
   writes it with `@info`, and no bound is asserted on it. The record is that run and not a
   reference: the network's rows are the gradient of a discrete action the Newton solve cannot drive
-  to round-off, as for K38, and the two runs are iterates of two formulations.
+  to round-off, as for K38, and the two runs are iterates of two formulations. The same method on
+  `SineGordon`, the case of the `SINE_GORDON_TRIALNN_OGA2D` entry, over three steps at `h = 0.05`
+  takes `iterations = [63, 54, 63]` at `residual = [0.004098, 0.06072, 0.002168]`, each from an
+  initial residual of `[0.5118, 1.0346, 1.5374]`, and `converged = false` at every step, in
+  `Float64`. The entry reports `status = :ok` after its three steps, and the run's sup-norm
+  deviation from its `u` is `0.02603` there, where the entry's `u` peaks at `5.045`, measured on the
+  same machine and with the same settings; the deviation is recorded with `@info` and no bound is
+  asserted on it, and that record too is the run and not a reference. The family is declined by the
+  method and kept in the package for comparison; the lifting on a `TensorBSplineAnsatz` is not part
+  of that decision. The measurement behind it is a run of this package at `4adae16` with a
+  position-dependent density parameter added, at Julia 1.13 and SimpleSolvers 0.14, in `Float64`,
+  over three slab steps, at `S = 10`, `tanh` and a degree-3 trace basis on `(2, n)` cells. The
+  package's solver runs at its defaults, `f_abstol = 8 eps = 1.78e-15` and `f_reltol = 1.49e-8`,
+  and the Levenberg–Marquardt and variable-projection variants stop on the relative test
+  `r ≤ 1.49e-8 r₀` alone. The layer case is the linear-layer Klein–Gordon case of a FEEC–FDTD
+  benchmark at 5 GHz (`h = 0.1499`, 71 space intervals), whose density depends on the position; the
+  package does not hold that problem. Variable projection converges on `Wave` at every step, in 17
+  to 79 trials, with the error of the unconverged run: `8.8e-2` after step 3, against `9.1e-2` for
+  plain Levenberg–Marquardt and `0.11` for the package's own solve. On the layer case no variant
+  converges: variable projection ends 113 times above the tolerance at step 1, and 6 and 2 times
+  above it at steps 2 and 3, at an error of `0.16`.
 - kind: defect
-- found: 2026-11-09
-
-### K48 · The `SINE_GORDON_TRIALNN_OGA2D` sounding under the lifting is an unconverged iterate.
-
-- location: `test/helpers/reference_values.jl:73`, `src/couplings/hard_constraint_lifting.jl`
-- evidence: the same method on `SineGordon` over three steps at `h = 0.05` takes
-  `iterations = [63, 54, 63]` at `residual = [0.004098, 0.06072, 0.002168]`, each from an initial
-  residual of `[0.5118, 1.0346, 1.5374]`, and `converged = false` at every step, in `Float64`. The
-  entry reports `status = :ok` after its three steps, and the run's sup-norm deviation from its `u`
-  is `0.02603` there, where the entry's `u` peaks at `5.045`. Measured in `Float64` in a cold
-  `run-tests.jl` run on `arm64-apple-darwin27.0.0` (`apple-m4`) at Julia 1.13.3, four BLAS threads
-  and `--check-bounds=auto`; the deviation is recorded with `@info` and no bound is asserted on it.
-  As for K47 the record is that run and not a reference.
-- kind: defect
-- found: 2026-11-09
+- found: 2026-11-09; declined 2026-11-22
 
 ### K50 · No live-branch variant of the fixed-boundary network converges, and its `:last_layer` affine control has no solution under `FitTo(Predictor())`.
 
@@ -327,7 +352,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K59 · A network's generated kernels follow the GC history, so a trained run reproduces only within one process.
 
-- location: `src/ansatz/network.jl:145` (`network_kernels`) and `:112` (`network_functions`);
+- location: `src/ansatz/network.jl:150` (`network_kernels`) and `:117` (`network_functions`);
   `SymbolicUtils` 4.56.1, `src/code.jl:1949` (`_cse_compute`) and `src/symbolic_ops/addsub.jl:129`
   (`_dict_copy_into!` in the call method of `AddWorkerBuffer`, `:96`, which `add_worker` reaches)
 - evidence: `network_kernels` builds the `field` and `gradient` kernels of an architecture once
@@ -442,17 +467,16 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 
 ### K72 · A cache lookup of a `NetworkAnsatz` integrator allocates.
 
-- location: `src/ansatz/network.jl:596`
+- location: `src/ansatz/network.jl:608`
 - evidence: `ansatz_data_type` of a `NetworkAnsatz` returns
-  `NetworkSlab{ST, T, typeof(a), typeof(parameter_set(a, ST))}`, and `parameter_set` builds a
-  parameter set (`zeros(ST, a.np)` laid out by `unflatten`). The type folds to a constant, but the
-  compiler keeps the call, so `cache(int, T)` builds the set at every lookup, and `residual!` and
-  the solve's other calls of `cache(int, ST)` pay for it. `@allocated` of a warm
-  `cache(int, T)` with `T` known at the call site, over the unforced entries of
-  `test/helpers/quality_cases.jl`: 544 and 608 bytes at `Float64` (`D = 1`, `2`) and 416 and
-  448 bytes at `Float32` for the three network methods, and 0 bytes for the other six slab
-  methods, the same on Julia 1.13.4 and 1.14.0-beta1. A type-level form of the parameter set's type
-  would remove it.
+  `NetworkSlab{ST, T, typeof(a), typeof(parameter_set(a, Vector{ST}(undef, a.np)))}`, and
+  `parameter_set` builds a parameter set of views into that new vector. The type folds to a
+  constant, but the compiler keeps the call, so `cache(int, T)` allocates the vector at every
+  lookup, and `residual!` and the solve's other calls of `cache(int, ST)` pay for it.
+  `@allocated` of a warm `cache(int, T)` with `T` known at the call site, over the unforced
+  entries of `test/helpers/quality_cases.jl`: 192 and 224 bytes at `Float64` (`D = 1`, `2`) and
+  128 and 144 bytes at `Float32` for the three network methods, and 0 bytes for the other six slab
+  methods, on Julia 1.13.4. A type-level form of the parameter set's type would remove it.
 - kind: defect
 - found: 2026-11-15
 
@@ -540,6 +564,10 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `SymbolicAnsatz` (`:480`) and `NetworkAnsatz` (`:653`). The redraw of the kernels and couplings
   (`e7df04f`) left 395 lines; the symbolic ansatz added 179 (`3094f5f`) and the network ansatz 199
   (`72a9df4`), as `git diff --shortstat <c>^ <c> -- src/couplings/weak_multipliers.jl` prints.
+  The file also contracts its trace tables in scalar loops that a `mul!` on the tables would
+  replace: `row_dot` (`:223`), a row of a table against a vector, and the sum in `basis_load!`
+  (`:194`) of the multipliers' coefficients against the basis at each node. They stay as they are
+  until the rewrite to about 350 lines, of which replacing them is a part.
 - kind: defect
 - found: 2026-10-31
 

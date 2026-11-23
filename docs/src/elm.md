@@ -16,6 +16,9 @@ under [`WeakInitialAndBoundaryConditions`](@ref), whose hidden layer comes from 
   step of a linear density: it factorises the Jacobian at the first step, and again only at a step
   whose guess has moved the hidden layer.
 
+The family is declined by the method and is kept for comparison: its slab has no root, because the
+coupling's data rows outnumber what the output weights can satisfy (K44 in `KNOWN_ISSUES.md`).
+
 `TrainedHiddenLayer` draws its random features from its own generator, `rng = Xoshiro(1234)` by
 default. The run may fail, so the example prints its stats, and nothing reads them.
 

@@ -20,7 +20,7 @@ import SimpleSplines: SplineQuadrature, TensorProductBasis, TensorProductQuadrat
 import SimpleSolvers: initial_residual, method, solve_with_status!, NonlinearSolverException
 import SimpleSolvers: config, jacobian!, jacobianmatrix, linearsolver, isconverged
 import AbstractNeuralNetworks: Chain, Dense, NeuralNetwork, layers, params
-import NeuralNetworkParameters: flatten, unflatten, unflatten!
+import NeuralNetworkParameters: flatten, mapparameters, unflatten
 import SymbolicNeuralNetworks: SymbolicNeuralNetwork, Jacobian, derivative,
                                build_flat_function, flat_parameter_gradient
 import GeometricBase: datatype, timetype, arrtype, equtype, timespan, timestep, parameters,
