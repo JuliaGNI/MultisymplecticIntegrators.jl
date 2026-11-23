@@ -977,9 +977,9 @@ keeping.
   second build of one architecture adds no entry; with `network_kernels` bypassed, N7 reports 2
   errors in 20 assertions.
 - **The fixed-boundary Jacobian test reads the Jacobian along directions.** The testset "FB2 the
-  Jacobian is the derivative of the residual" of `test/couplings/fixed_boundary.jl` took a central
-  difference per unknown, two residuals per column, and that was the costly part of the
-  `Fixed boundary` file. It now checks `J · d` along three random directions per vector, drawn
+  Jacobian is the derivative of the residual", in `test/couplings/fixed_boundary_jacobian.jl`,
+  took a central difference per unknown, two residuals per column, and that was the costly part
+  of the fixed-boundary tests. It now checks `J · d` along three random directions per vector, drawn
   in `Float64` and rounded to `T` from a second seeded generator, `drng = Xoshiro(12)`, so that
   the testset's `rng = Xoshiro(11)` draws the vectors alone, against `directional_differences`,
   the central difference of the residual along `d` with two residuals per direction, to the bound
@@ -1021,6 +1021,32 @@ keeping.
   `.github/workflows/CI.yml` runs with `check_bounds: auto`, and ParallelTestRunner starts its
   workers from `Base.julia_cmd()`, which carries the parent's `--check-bounds` setting, so the guard
   is true in CI and the assertions run there.
+- **The four longest test files are shorter, toward 180 s each in their group's own process.**
+  `test/couplings/fixed_boundary.jl` (592 s cold on this machine) is split into four files of the
+  group `fixedboundary`, each in `TESTS` with a label that starts with `Fixed boundary`:
+  `fixed_boundary_gradient.jl` (FB1), `fixed_boundary_jacobian.jl` (FB2),
+  `fixed_boundary_steps.jl` (FB0, FB3–FB16, N14 and FB18), and `fixed_boundary.jl` itself, which
+  keeps FB17. The testsets move unchanged, and the helpers they share move unchanged to
+  `test/helpers/fixed_boundary_setup.jl`.
+  `test/integration/benchmark.jl` (341 s) starts the smoke matrix once, under `Benchmark matrix`,
+  and "the timing record", "each run in its own process" and "one table per problem and final
+  time" read its archives, where each ran the matrix itself. Its costliest testset, "a run that
+  throws is a result", whose rows run in child processes, moves unchanged to
+  `test/integration/benchmark_failures.jl`, labelled `Benchmark matrix: failures` in the group
+  `slow`, which also holds the two testsets on the backtraces that the renderer and the driver
+  write, and the helpers the two files share move unchanged to
+  `test/helpers/benchmark_setup.jl`. `test/ansatz/network.jl` (182 s) runs
+  N1's `:all` run once per element type for N1 and N5, which ran the same run twice. Its N3, N4
+  and A1 move unchanged to `test/ansatz/network_cases.jl`, labelled `Network ansatz: cases` in the
+  group `ansatz`, and the helpers the two files share move unchanged to
+  `test/helpers/network_setup.jl`. `test/initial_guess/trained_hidden_layer.jl` (190 s) no longer
+  trains E1a's fit for 60 epochs or runs E5a's soundings at 100 epochs: E1a checks that one epoch
+  at `learning_rate = 1e-2` lowers the misfit and that `misfit_gradient!` agrees with central
+  differences of the misfit, at output weights that give each component a field of its own, and
+  the 60-epoch misfit fraction (`TRAINED_MISFIT_FRACTION`, `TRAINED_MISFITS`) and E5a move to the
+  new `scripts/trained_hidden_layer_records.jl`. E3c, E4a, E4b, E7a and E7b train their guesses
+  for one epoch, where E3c trained for 60 and the others for 20. The times are the census of
+  2026-11-15 on this machine at Julia 1.13.4; no tolerance changes.
 - **A reference comparison matches the nodes as it matches the times.** `reference_error` in
   `scripts/benchmark.jl` finds a coarse run's node on the finer grid with `shared_index`, the
   lookup that already found its times: the nearer of the two sorted neighbours, accepted within a

@@ -10,62 +10,16 @@ using SimpleSolvers: SimpleSolvers, config
 using SimpleSplines: Dirichlet
 using Test
 
-# The scripts are no part of the package, so the whole harness is tested through its files. The
-# reference records are included before the runner, which loads them itself only when its caller has
-# not, and the driver then includes the archive layer, the registry, the matrix's runner and every
-# model file in the order it includes them itself.
-include(joinpath(@__DIR__, "..", "helpers", "reference_values.jl"))
-include(joinpath(@__DIR__, "..", "..", "scripts", "run_benchmark.jl"))
-include(joinpath(@__DIR__, "..", "helpers", "problem_generator.jl"))
-include(joinpath(@__DIR__, "..", "helpers", "testsetup.jl"))
-
-# The module a copy of the driver is included into, for the one row whose child process ends on an
-# exit code the tree's own registry cannot produce: the parent reads the child's code, so the row
-# that ends on a code of its own needs a registry, and therefore a copy, of its own.
-module ExitingRow end
-
-# The same, for the row whose child the operating system kills: the parent reads the signal, and the
-# arm does not exist on Windows.
-module SignalledRow end
-
-# The same, for the row whose child process cannot start: the driver's `child_command` is replaced
-# there by a command whose executable does not exist, which the tree's own driver must not see.
-module UnstartableRow end
-
-# One row's metadata, which a family's rows carry and a test builds for a run of its own. Its
-# `problem_label` is the display name the families' rows carry, from the registry's
-# `matrix_problem_label`.
-function row(stem, method, problem, tag, resolution; parameters = (k = 1,), kwargs...)
-    merge(
-        (stem = stem, label = stem, method = method, problem = problem,
-            problem_label = matrix_problem_label(problem),
-            tag = tag, resolution = resolution, parameters = parameters),
-        (; kwargs...))
-end
-
-# A problem whose density is the same but whose runs have no exact solution: the matrix measures
-# such a run against the finest run of its method instead.
-function unsolved_problem(base, xstep; timestep = base.timestep)
-    return LagrangianPDEProblem(base.density; D = base.D, ics_function = base.ics_function,
-        bcs_function = base.bcs_function, timespan = base.timespan,
-        timestep, xspan = base.xspan, xstep, params = base.params)
-end
-
-# The largest absolute difference of two archived runs' fields at the times the coarse run stored,
-# on the nodes their grids share — computed here, from the archives, and not by the code under
-# test. An archive's `"error"` holds one entry per stored step, so the comparison is per step too.
-# `by_index` compares the two runs at the same step index instead, the reading the archive must not
-# make once the resolutions refine the time step as well.
-function archived_difference(coarse, fine; by_index = false)
-    shared = [searchsortedfirst(fine["x"], node) for node in coarse["x"]]
-    rows = by_index ? collect(1:(coarse["steps"] + 1)) :
-           [searchsortedfirst(fine["t"], time) for time in coarse["t"]]
-    return [maximum(abs(coarse["u"][d][n + 1, j] - fine["u"][d][rows[n + 1], k])
-            for d in eachindex(coarse["u"]), (j, k) in enumerate(shared))
-            for n in 1:coarse["steps"]]
-end
+include(joinpath(@__DIR__, "..", "helpers", "benchmark_setup.jl"))
 
 @testset "Benchmark matrix" begin
+    # The smoke matrix, run once by the driver into a directory of its own: "the timing record",
+    # "each run in its own process" and "one table per problem and final time" read its archives,
+    # and none of them writes into the directory.
+    smoke = mktempdir()
+    @test main(["--tag", "smoke", "--runs-dir", smoke]) == 0
+    smoke_files = filter(file -> endswith(file, ".jld2"), readdir(smoke))
+
     @testset "a selection by method, problem or tag" begin
         # Registered in reverse stem order, so that the stem order a selection returns is not the
         # order the registry holds its rows in.
@@ -383,12 +337,9 @@ end
     @testset "the timing record" begin
         # The matrix's numbers are its own, from a child process that records what they mean; no
         # wall time is asserted, and the schema and the metadata are.
-        directory = mktempdir()
-        @test main(["--tag", "smoke", "--runs-dir", directory]) == 0
-        files = filter(file -> endswith(file, ".jld2"), readdir(directory))
-        @test length(files) >= 2
-        for file in files
-            data = load(joinpath(directory, file))
+        @test length(smoke_files) >= 2
+        for file in smoke_files
+            data = load(joinpath(smoke, file))
             steps = data["steps"]
             @test length(data["wall_per_step"]) == max(steps - 1, 0)
             @test all(time -> isfinite(time) && time > 0, data["wall_per_step"])
@@ -403,10 +354,7 @@ end
     end
 
     @testset "each run in its own process" begin
-        directory = mktempdir()
-        @test main(["--tag", "smoke", "--runs-dir", directory]) == 0
-        files = filter(file -> endswith(file, ".jld2"), readdir(directory))
-        pids = [load(joinpath(directory, file))["pid"] for file in files]
+        pids = [load(joinpath(smoke, file))["pid"] for file in smoke_files]
         @test length(pids) >= 2
         @test length(unique(pids)) == length(pids)
         @test !(getpid() in pids)
@@ -437,135 +385,6 @@ end
         @test first_run["parameters"] != second_run["parameters"]
     end
 
-    @testset "a run that throws is a result" begin
-        # A row whose boundary data raises at the third step of three: the archive holds the type,
-        # the message and the step, and the stats of the steps before it.
-        T = Float64
-        base = Wave.problem(timespan = (zero(T), T(3) / 20), timestep = T(1) / 20,
-            xspan = (zero(T), one(T)), xstep = T(1) / 20)
-        failing = (t, params) -> t >= T(3) / 20 ?
-                                 throw(DomainError(t, "the boundary data end")) :
-                                 base.bcs_function(t, params)
-        broken = LagrangianPDEProblem(base.density; D = base.D,
-            ics_function = base.ics_function, bcs_function = failing,
-            timespan = base.timespan, timestep = base.timestep, xspan = base.xspan,
-            xstep = base.xstep, params = base.params)
-        entry = row("throwing-row", :box, :wave, :matrix, (timestep = T(1) / 20,))
-        data = benchmark_run(broken, BoxScheme(), entry)
-        @test data["status"] == :failed
-        @test data["exception"] == "DomainError"
-        @test !isempty(data["message"])
-        @test data["failed_at_step"] == 3
-        @test data["steps"] == 2
-        @test length(data["converged"]) == 2
-        @test length(data["residuals"]) == 2
-        @test length(data["wall_per_step"]) == 1
-        # A row that throws at its first step archives empty stats and an empty time vector.
-        early = (t, params) -> throw(DomainError(t, "the boundary data end at once"))
-        first_failure = LagrangianPDEProblem(base.density; D = base.D,
-            ics_function = base.ics_function, bcs_function = early,
-            timespan = base.timespan, timestep = base.timestep, xspan = base.xspan,
-            xstep = base.xstep, params = base.params)
-        empty = benchmark_run(first_failure, BoxScheme(), entry)
-        @test empty["failed_at_step"] == 1
-        @test empty["steps"] == 0
-        @test isempty(empty["residuals"])
-        @test isempty(empty["wall_per_step"])
-        # A row whose method the problem does not support throws before its first step: the box
-        # scheme refuses a density outside its class when the integrator is built, so the archive
-        # holds no step and records the failure at step `0`.
-        transport = LinearTransport.problem(timespan = (zero(T), T(2) / 10),
-            timestep = T(1) / 10, xspan = (zero(T), one(T)), xstep = T(1) / 20)
-        construction = row("construction-row", :box, :linear_transport, :matrix,
-            (timestep = T(1) / 10,))
-        unbuilt = benchmark_run(transport, BoxScheme(), construction)
-        @test unbuilt["status"] == :failed
-        @test unbuilt["exception"] == "ArgumentError"
-        @test unbuilt["failed_at_step"] == 0
-        @test unbuilt["steps"] == 0
-        # A slab method whose coupling the ansatz does not support is refused when its integrator is
-        # built, and its cost count throws a `MethodError` as well: the row is archived as the
-        # construction's failure at step `0`, and the count never runs.
-        spline = TensorBSplineAnsatz(
-            degree = 2, ncells = (2, 10), xspan = (zero(T), one(T)),
-            n = 3)
-        uncounted = benchmark_run(base, SpaceTimeGalerkin(spline, FixedBoundary()),
-            row("uncounted-row", :spline_restriction,
-                :wave, :matrix, (timestep = T(1) / 20,)))
-        @test uncounted["status"] == :failed
-        @test uncounted["exception"] == "ArgumentError"
-        @test_throws MethodError row_cost(SpaceTimeGalerkin(spline, FixedBoundary()), base)
-        @test uncounted["failed_at_step"] == 0
-        @test uncounted["steps"] == 0
-        @test isempty(uncounted["cost"])
-        # A child process that ends without its archive is archived by the parent, with its exit
-        # code: the row below is one the child's registry does not hold.
-        directory = mktempdir()
-        RUNS_DIR[] = directory
-        unknown = row("unknown-row", :box, :wave, :matrix, (timestep = T(1) / 20,))
-        @test run_row((family = :box, entry = unknown, benchmark = box_benchmark))
-        on_disk = load(joinpath(directory, "unknown-row.jld2"))
-        @test on_disk["status"] == :failed
-        @test occursin("code", on_disk["message"])
-        @test on_disk["steps"] == 0
-        @test benchmark_archive("unknown-row", on_disk) === on_disk
-        # The driver's own selection over a failed row: the row no child's registry holds is
-        # archived as failed and the row beside it is archived, so the driver returns 0 for a
-        # selection that holds a failure.
-        selection_dir = mktempdir()
-        RUNS_DIR[] = selection_dir
-        ghost = row("ghost-row", :box, :wave, :matrix,
-            (timestep = T(1) / 10, xstep = T(1) / 10))
-        register_family!(:ghost, (ghost,); benchmark = box_benchmark)
-        @test main(["--runs-dir", selection_dir, "ghost-row", "wave-box-h0.1"]) == 0
-        ghosted = load(joinpath(selection_dir, "ghost-row.jld2"))
-        @test ghosted["status"] == :failed
-        @test occursin("code", ghosted["message"])
-        @test ghosted["steps"] == 0
-        @test load(joinpath(selection_dir, "wave-box-h0.1.jld2"))["status"] == :ok
-        # The child's own exit code reaches the archive. A row whose benchmark ends its process
-        # cannot be registered in the tree's own registry, so the driver reads the row from a copy
-        # of the scripts, and its child ends on code 3 — which no guess of the parent's makes.
-        copy = mktempdir()
-        cp(joinpath(@__DIR__, "..", "..", "scripts"), joinpath(copy, "scripts"))
-        mkpath(joinpath(copy, "test"))
-        cp(joinpath(@__DIR__, "..", "helpers"), joinpath(copy, "test", "helpers"))
-        write(joinpath(copy, "scripts", "zz_exiting_model.jl"), """
-            const EXITING = ((stem = "exits-three", label = "exits", method = :exiting,
-                problem = :wave, problem_label = "Wave", tag = :matrix,
-                resolution = (timestep = $(T(1) / 20),), parameters = (k = 1,)),)
-            register_family!(:exiting, EXITING; benchmark = entry -> exit(3))
-            """)
-        Base.include(ExitingRow, joinpath(copy, "scripts", "run_benchmark.jl"))
-        copied_runs = joinpath(copy, "runs")
-        mkpath(copied_runs)
-        @test Base.invokelatest(ExitingRow.main, [
-            "--runs-dir", copied_runs, "exits-three"]) == 0
-        exited = load(joinpath(copied_runs, "exits-three.jld2"))
-        @test exited["status"] == :failed
-        @test occursin("code 3", exited["message"])
-        @test exited["steps"] == 0
-        # A child the operating system kills is archived as a signal rather than as a code, and the
-        # driver still returns 0. Windows has no signal to raise, so the arm is Unix's.
-        if !Sys.iswindows()
-            write(
-                joinpath(copy, "scripts", "zz_signalled_model.jl"), """
-              const SIGNALLED = ((stem = "killed-nine", label = "killed", method = :signalled,
-                  problem = :wave, problem_label = "Wave", tag = :matrix,
-                  resolution = (timestep = $(T(1) / 20),), parameters = (k = 1,)),)
-              register_family!(:signalled, SIGNALLED;
-                  benchmark = entry -> ccall(:raise, Cint, (Cint,), 9))
-              """)
-            Base.include(SignalledRow, joinpath(copy, "scripts", "run_benchmark.jl"))
-            @test Base.invokelatest(SignalledRow.main, [
-                "--runs-dir", copied_runs, "killed-nine"]) == 0
-            killed = load(joinpath(copied_runs, "killed-nine.jld2"))
-            @test killed["status"] == :failed
-            @test occursin("killed by signal 9", killed["message"])
-            @test killed["steps"] == 0
-        end
-    end
-
     @testset "a run that does not converge is a result" begin
         # The spline family's sine-Gordon row on R1a's case: the steps' solve records a step that
         # did not converge, and the run is not a failure for it.
@@ -593,10 +412,7 @@ end
     end
 
     @testset "one table per problem and final time, with the historical rows" begin
-        directory = mktempdir()
-        @test main(["--tag", "smoke", "--runs-dir", directory]) == 0
-        runs = [load(joinpath(directory, file))
-                for file in filter(file -> endswith(file, ".jld2"), readdir(directory))]
+        runs = [load(joinpath(smoke, file)) for file in smoke_files]
         tables = benchmark_tables(runs)
         page = join(values(tables), "\n")
         # Each archive is in one table, the one of its problem and of the time of its last stored
@@ -692,7 +508,7 @@ end
         # The rows of the network, symbolic, ELM, TrialNN and fixed-boundary families: each family
         # registers a `benchmark` and no `run`, holds every method on every problem it takes at three
         # resolutions, and each row builds its integrator with its own solver keywords, without a
-        # step. A row is never `:smoke`, so the gate's two smoke testsets run none of them.
+        # step. A row is never `:smoke`, so the gate's one smoke run runs none of them.
         problem_keys = Dict(:wave => keys(Wave.problem().params),
             :sine_gordon => keys(SineGordon.problem().params),
             :vector_wave => keys(VectorWave.problem().params))
@@ -847,68 +663,5 @@ end
         elm = Set(entry.stem for entry in family_entries(:elm))
         @test !isempty(elm)
         @test !any(entry -> entry.stem in elm, [row.entry for row in rows])
-    end
-
-    # The renderer ends its own process, so it runs in a child, on an archive of a kind the
-    # extension refuses to draw: the archive's line on stdout names the failure, and the backtrace
-    # of the refusal goes to stderr.
-    @testset "the renderer writes the backtrace of a figure it cannot draw" begin
-        directory = mktempdir()
-        try
-            runs_dir = joinpath(directory, "runs")
-            mkpath(runs_dir)
-            jldsave(joinpath(runs_dir, "undrawable.jld2"); kind = "phase-portrait")
-            script = joinpath(@__DIR__, "..", "..", "scripts", "figures.jl")
-            command = `$(Base.julia_cmd()) --startup-file=no --project=$(Base.active_project()) $(script) --runs-dir $(runs_dir) --results-dir $(joinpath(directory, "results"))`
-            out = IOBuffer()
-            err = IOBuffer()
-            process = run(pipeline(ignorestatus(command); stdout = out, stderr = err))
-            output = String(take!(out))
-            errors = String(take!(err))
-            @test process.termsignal == 0 && process.exitcode == 1
-            @test occursin(r"undrawable\s+FAILED: ArgumentError: ", output)
-            @test occursin(r"^ArgumentError: .*\nStacktrace:\n"sm, errors)
-            @test occursin(r"Stacktrace:.*figures\.jl:\d+"s, errors)
-        finally
-            rm(directory; recursive = true, force = true)
-        end
-    end
-
-    # A child process that cannot start is reported on stdout with one line, its backtrace goes to
-    # stderr, and the row is archived by the driver as a failure.
-    @testset "the driver writes the backtrace of a child it cannot start" begin
-        directory = mktempdir()
-        try
-            Base.include(UnstartableRow,
-                joinpath(@__DIR__, "..", "..", "scripts", "run_benchmark.jl"))
-            nowhere = joinpath(directory, "no-such-julia")
-            Core.eval(UnstartableRow, :(child_command(stem) = Cmd([$nowhere, stem])))
-            UnstartableRow.RUNS_DIR[] = joinpath(directory, "runs")
-            mkpath(UnstartableRow.RUNS_DIR[])
-            entry = row("unstartable-row", :box, :wave, :matrix, (timestep = 1 / 20,))
-            out = joinpath(directory, "stdout.txt")
-            err = joinpath(directory, "stderr.txt")
-            archived = open(out, "w") do stdout_io
-                open(err, "w") do stderr_io
-                    redirect_stdio(; stdout = stdout_io, stderr = stderr_io) do
-                        Base.invokelatest(UnstartableRow.run_row,
-                            (family = :box, entry = entry, benchmark = identity))
-                    end
-                end
-            end
-            @test archived
-            output = read(out, String)
-            errors = read(err, String)
-            @test occursin(r"unstartable-row\s+FAILED to start: ", output)
-            @test occursin(r"^IOError: could not spawn .*\nStacktrace:\n"s, errors)
-            @test occursin(r"Stacktrace:.*run_benchmark\.jl:\d+"s, errors)
-            # The trace is the one of the spawn that threw, not one taken where the catch prints.
-            @test occursin(r"Stacktrace:.*process\.jl:\d+"s, errors)
-            on_disk = load(joinpath(UnstartableRow.RUNS_DIR[], "unstartable-row.jld2"))
-            @test on_disk["status"] == :failed
-            @test occursin("code 1", on_disk["message"])
-        finally
-            rm(directory; recursive = true, force = true)
-        end
     end
 end

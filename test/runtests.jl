@@ -28,10 +28,12 @@ const TESTS = [
     ],
     "slow" => [
         "Benchmark matrix" => "integration/benchmark.jl",
+        "Benchmark matrix: failures" => "integration/benchmark_failures.jl"
     ],
     "ansatz" => [
         "Symbolic ansatz" => "ansatz/symbolic.jl",
-        "Network ansatz" => "ansatz/network.jl"
+        "Network ansatz" => "ansatz/network.jl",
+        "Network ansatz: cases" => "ansatz/network_cases.jl"
     ],
     "couplings" => [
         "Weak multipliers" => "couplings/weak_multipliers.jl",
@@ -53,7 +55,10 @@ const TESTS = [
         "Long-time energy" => "verification/long_time_energy.jl"
     ],
     "fixedboundary" => [
-        "Fixed boundary" => "couplings/fixed_boundary.jl",
+        "Fixed boundary: gradient" => "couplings/fixed_boundary_gradient.jl",
+        "Fixed boundary: Jacobian" => "couplings/fixed_boundary_jacobian.jl",
+        "Fixed boundary: steps" => "couplings/fixed_boundary_steps.jl",
+        "Fixed boundary" => "couplings/fixed_boundary.jl"
     ]
 ]
 

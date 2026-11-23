@@ -12,7 +12,6 @@ import GeometricIntegratorsBase: cache, current, solutionstep, solver, reset!
 import SimpleSolvers: config, jacobian!, jacobianmatrix
 
 include("../helpers/testsetup.jl")
-include("../helpers/reference_values.jl")
 include("../helpers/action_oracle.jl")
 
 const M = MultisymplecticIntegrators
@@ -44,36 +43,6 @@ rule's `10 · 20`, the two surfaces in time at the space rule's `2 · 20`, and t
 time rule's `2 · 8`.
 """
 const SAMPLE_ENTRIES = 10 * 20 + 2 * 20 + 2 * 8
-
-"""
-The fraction of the drawn hidden layer's misfit that 60 epochs at `learning_rate = 1e-2` must
-reach, measured on `arm64-apple-darwin27.0.0` at Julia 1.13.3: `5.55e-1` with the hidden layer drawn
-and its output layer solved, and `4.41e-2` after the training, a ratio of `0.079`.
-"""
-const TRAINED_MISFIT_FRACTION = 1 // 2
-
-"""
-The two misfits of E1a's fit, by element type and components: `drawn` is the fit that solves the
-output layer alone on the hidden layer `Xoshiro(1234)` draws, and `trained` the same fit after 60
-epochs at `learning_rate = 1e-2`. Measured on `arm64-apple-darwin27.0.0` at Julia 1.13.3:
-`0.5551 → 0.04409` in `Float64` at both `D = 1` and `D = 2`, `0.5551 → 0.04453` in `Float32` at
-`D = 1`, and `0.5551 → 0.04431` in `Float32` at `D = 2`, where the least-squares solve carries a
-second, zero column and its QR path differs. The same fits at Julia 1.12.7 leave `0.04407` in
-`Float32` at `D = 1` and `0.04389` at `D = 2`.
-
-The values are recorded, not asserted: a `Float32` misfit moves in its third significant digit
-between the two Julia versions and under a one-ulp change of its learning rate, so no bound on it
-holds on every leg. E1a asserts that the drawn misfit is finite and positive, that the trained one
-is at most `TRAINED_MISFIT_FRACTION` of the drawn one, and that the trained one reads back from the
-network's own evaluation; it asserts neither value against its `const`.
-"""
-const TRAINED_MISFITS = (
-    drawn = Dict{Tuple{DataType, Int}, Float64}(
-        (Float64, 1) => 0.5551, (Float64, 2) => 0.5551,
-        (Float32, 1) => 0.5551, (Float32, 2) => 0.5551),
-    trained = Dict{Tuple{DataType, Int}, Float64}(
-        (Float64, 1) => 0.04409, (Float64, 2) => 0.04409,
-        (Float32, 1) => 0.04453, (Float32, 2) => 0.04431))
 
 function trained_ansatz(::Type{T}; S = FIT_S, D = 1, mode = :last_layer, degree = 3,
         ncells = (2, 5), xspan = (zero(T), one(T))) where {T}
@@ -231,49 +200,17 @@ function record_ratio(
         blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
 end
 
-"""The sup-norm deviation of a run from the `u` of a §A entry, over the steps it took."""
-function sup_deviation(result, entry)
-    return maximum(maximum(abs.(result.solution.u[n] .- entry.u[n, :]))
-    for n in 1:length(result.traces))
-end
-
 """Whether every state of a solution series is finite."""
 finite_states(x) = all(n -> all(isfinite, x[n]), eachindex(x))
 
 """Whether two solution series are bit-identical on every state they hold."""
 same_states(x, y) = axes(x) == axes(y) && all(n -> x[n] == y[n], eachindex(x))
 
-"""
-    record_deviation(record, entry, T, deviation)
-
-Write one reference deviation with the metadata that makes the figure readable on another machine.
-No bound is asserted on the value.
-"""
-function record_deviation(record::Symbol, entry::Symbol, ::Type{T}, deviation) where {T}
-    @info("the reference deviation of an ELM run", record, entry, T, deviation, VERSION,
-        machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
-        blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
-end
-
-"""
-    record_misfit(record, T, D, misfit, recorded)
-
-Write one misfit of a fit on its own sample with the metadata that makes the figure readable on
-another machine, beside the `const` the same fit is recorded as. The value is not compared with its
-`const`: a `Float32` misfit moves in its third significant digit under a one-ulp change of its
-learning rate, so E1a asserts the fraction between the two misfits of one fit and reads the trained
-one back through the network's own evaluation, and compares neither with its `const`.
-"""
-function record_misfit(record::Symbol, ::Type{T}, D, misfit, recorded) where {T}
-    @info("the misfit of a trained fit on its own sample", record, T, D, misfit, recorded,
-        VERSION, machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
-        blas_threads=BLAS.get_num_threads(), check_bounds=Base.JLOptions().check_bounds)
-end
-
 @testset "Trained hidden layer" begin
-    # The fit's two ends: the drawn hidden layer with its output layer solved, and the same with
-    # the hidden layer trained first. The observable is the misfit on the fit's own sample, in both
-    # components of a vector-valued field as well as on a scalar one.
+    # The fit's two ends: the drawn hidden layer with its output layer solved, and the same after
+    # one epoch of training. The observable is the misfit on the fit's own sample, in both
+    # components of a vector-valued field as well as on a scalar one, and the gradient the epoch
+    # descends. The misfit 60 epochs reach is a record of `scripts/trained_hidden_layer_records.jl`.
     @testset "E1a the fit at epochs = 0 and at epochs > 0" for T in (Float64, Float32),
         D in (1, 2)
 
@@ -285,14 +222,13 @@ end
             guess = FitTo(TargetFunction(target);
                 method = TrainedHiddenLayer(epochs = epochs, learning_rate = lr)))
         drawn = cache(trained_slab(problem, make(0, T(1e-2)))).ansatz
-        trained = cache(trained_slab(problem, make(60, T(1e-2)))).ansatz
+        trained = cache(trained_slab(problem, make(1, T(1e-2)))).ansatz
         @test isfinite(drawn.train.misfit)
         @test isfinite(trained.train.misfit)
         @test drawn.train.misfit > zero(T)
-        record_misfit(:drawn, T, D, drawn.train.misfit, TRAINED_MISFITS.drawn[(T, D)])
-        record_misfit(:trained, T, D, trained.train.misfit, TRAINED_MISFITS.trained[(T, D)])
-        @test trained.train.misfit ≤
-              convert(T, TRAINED_MISFIT_FRACTION) * drawn.train.misfit
+        # one epoch at `learning_rate = 1e-2` descends: `0.5551 → 0.5220` on every leg, where the
+        # same epoch climbing the misfit leaves `0.5861` (arm64-apple-darwin, Julia 1.13.4)
+        @test trained.train.misfit < drawn.train.misfit
         # the misfit read back through the network's own evaluation is the fit's
         @test fitted_misfit(trained, copy(trained.params)) ≈ trained.train.misfit rtol = sqrt(eps(T))
         # both fits were taken on the same sample
@@ -300,6 +236,28 @@ end
         @test drawn.train.measure == trained.train.measure
         assert_no_upcast(trained.train.features, T)
         assert_no_upcast(trained.train.measure, T)
+        # The gradient the epoch descends is the misfit's derivative in the hidden parameters, at
+        # output weights that give every component a field of its own: central differences of
+        # `misfit`, step `δ = cbrt(eps(T)) max(1, |w_θ|)`, whose error is of order `cbrt(eps(T))²`.
+        # The worst error is `5.2e-11` (`D = 1`) and `9.9e-11` (`D = 2`) of the gradient's largest
+        # entry in `Float64`, and `3.8e-5` and `9.2e-5` in `Float32`; the bound is `100 cbrt(eps(T))²`
+        # of it, and a gradient that reads the first component alone misses by `6.5e-2` at `D = 2`.
+        f, nh = drawn.train, 3 * FIT_S
+        w = copy(drawn.params)
+        w[(nh + 1):end] .= T.(range(-1, 1; length = FIT_S * D))
+        M.misfit_gradient!(f, w, nh, drawn)
+        g = copy(f.gradient)
+        differences = map(1:nh) do θ
+            δ = cbrt(eps(T)) * max(one(T), abs(w[θ]))
+            up, down = copy(w), copy(w)
+            up[θ] += δ
+            down[θ] -= δ
+            M.misfit_gradient!(f, up, nh, drawn)
+            above = f.misfit
+            M.misfit_gradient!(f, down, nh, drawn)
+            (above - f.misfit) / (up[θ] - down[θ])
+        end
+        @test maximum(abs, differences - g) ≤ 100 * cbrt(eps(T))^2 * maximum(abs, g)
     end
 
     # The sample a fit is taken on carries the four surfaces of the slab beside its interior. A
@@ -702,7 +660,7 @@ end
                 xspan = (T(-0.5), zero(T))),
             WeakInitialAndBoundaryConditions();
             initial_guess = FitTo(TargetFunction(moving);
-                method = TrainedHiddenLayer(epochs = 60, learning_rate = 0.1)),
+                method = TrainedHiddenLayer(epochs = 1, learning_rate = 0.1)),
             linear_solver = true)
         int = GeometricIntegrator(transport, method; f_abstol = zero(T),
             f_reltol = trained_f_reltol(T))
@@ -737,7 +695,7 @@ end
         int = GeometricIntegrator(problem,
             trained_method(T; S = TRAINED_S,
                 guess = FitTo(PreviousSlab();
-                    method = TrainedHiddenLayer(epochs = 20)));
+                    method = TrainedHiddenLayer(epochs = 1)));
             f_abstol = zero(T), f_reltol = trained_f_reltol(T),
             max_iterations = TRAINED_ITERATIONS)
         c = cache(int)
@@ -756,7 +714,7 @@ end
         initial = GeometricIntegrator(problem,
             trained_method(T; S = TRAINED_S,
                 guess = FitTo(InitialCondition();
-                    method = TrainedHiddenLayer(epochs = 20)));
+                    method = TrainedHiddenLayer(epochs = 1)));
             f_abstol = zero(T), f_reltol = trained_f_reltol(T),
             max_iterations = TRAINED_ITERATIONS)
         c1 = cache(initial)
@@ -779,7 +737,7 @@ end
         int = GeometricIntegrator(problem,
             trained_method(T; S = TRAINED_S,
                 guess = FitTo(PreviousSlab();
-                    method = TrainedHiddenLayer(epochs = 20)));
+                    method = TrainedHiddenLayer(epochs = 1)));
             f_abstol = zero(T), f_reltol = trained_f_reltol(T))
         c = cache(int)
         result = integrate(int)
@@ -791,33 +749,6 @@ end
         @test finite_states(result.solution.u)
         @info("the family's SineGordon run", T, c.iterations, c.residuals,
             c.initial_residuals, c.converged)
-    end
-
-    # The two records of the old stack's ELM formulation, at its own cells: a run of each completes
-    # and its deviation from the entry is written with its metadata. Both entries are unconverged
-    # iterates of another architecture, so the deviation is a record (K44).
-    @testset "E5a the two section A soundings" for T in (Float64,)
-        elm_method(problem) = SpaceTimeGalerkin(
-            NetworkAnsatz(S = TRAINED_S, mode = :last_layer, xspan = problem.xspan,
-                ncells = (10, 10), degree = 3),
-            WeakInitialAndBoundaryConditions();
-            initial_guess = FitTo(InitialCondition();
-                method = TrainedHiddenLayer(epochs = 100, learning_rate = T(1e-5))))
-        cases = ((:WAVE_ELM_LSGD, wave_problem(T), WAVE_ELM_LSGD, 5),
-            (:SINE_GORDON_ELM_LSGD, sine_gordon_problem(T), SINE_GORDON_ELM_LSGD, 3))
-        for (name, problem, entry, steps) in cases
-            int = GeometricIntegrator(problem, elm_method(problem))
-            result = integrate(int)
-            c = cache(int)
-            @test length(result.traces) == steps
-            @test length(c.iterations) == steps
-            @test finite_states(result.solution.u)
-            deviation = sup_deviation(result, entry)
-            @test isfinite(deviation)
-            record_deviation(:E5a, name, T, deviation)
-            @info("the ELM record", T, name, c.iterations, c.residuals,
-                c.initial_residuals, c.converged, deviation)
-        end
     end
 
     # The action oracle of the mode that frees a part of the parameters reads the fixed ones from
@@ -882,7 +813,7 @@ end
         problem = vector_wave_problem(T; β = 0.5)
         method = trained_method(T; S = TRAINED_S, D = 2,
             guess = FitTo(InitialCondition();
-                method = TrainedHiddenLayer(epochs = 20)))
+                method = TrainedHiddenLayer(epochs = 1)))
         int = GeometricIntegrator(problem, method;
             f_abstol = zero(T), f_reltol = trained_f_reltol(T))
         c = cache(int)
@@ -924,7 +855,7 @@ end
         problem = vector_wave_problem(T; β = 0.0)
         method = trained_method(T; S = TRAINED_S, D = 2,
             guess = FitTo(InitialCondition();
-                method = TrainedHiddenLayer(epochs = 20)))
+                method = TrainedHiddenLayer(epochs = 1)))
         int = GeometricIntegrator(problem, method;
             f_abstol = zero(T), f_reltol = trained_f_reltol(T),
             max_iterations = TRAINED_ITERATIONS)

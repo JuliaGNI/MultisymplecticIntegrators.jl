@@ -15,164 +15,13 @@ import SimpleSolvers: jacobian!, jacobianmatrix
 include("../helpers/testsetup.jl")
 include("../helpers/reference_values.jl")
 include("../helpers/action_oracle.jl")
-
-const M = MultisymplecticIntegrators
-
-# The deviation of a network run from its §A entry is a record, not an assertion: at `S = 10` the
-# `:last_layer` runs have sixteen constraint rows that reach only ten output weights, and the Newton
-# solve of the `:all` runs does not reach round-off (K38), so every step of these runs is an
-# unconverged Newton iterate, and no bound on its distance from the entry holds across machines.
-# Each test asserts that the deviation is finite and writes it with `@info`, beside the machine that
-# produced it; K38 and K39 record the figures of one machine.
-#
-# Neither entry reproduces bit for bit: the code that wrote them reads the bottom points in the
-# normalized coordinate (`xspan` is `(0, 1)`, so there the two coincide) and keeps a duplicate atom
-# in its dictionary, which costs the greedy a whole selection.
-
-"""The steps of the §A case."""
-const NETWORK_STEPS = 5
-
-"""The most Newton iterations the affine control of a `:last_layer` step may take."""
-const LAST_LAYER_ITERATIONS = 2
-
-"""The hidden units of the affine control, which frees its output weights alone."""
-const NETWORK_CONTROL_S = 20
-
-function network_ansatz(::Type{T}; S = 10, D = 1, mode = :all, degree = 3, ncells = (2, 5),
-        xspan = (zero(T), one(T)), quadrature_order = nothing) where {T}
-    return NetworkAnsatz(S = S, D = D, mode = mode, xspan = xspan, degree = degree,
-        ncells = ncells, quadrature_order = quadrature_order)
-end
-
-function wave_problem(::Type{T}; timespan = (zero(T), T(0.25)), timestep = T(0.05),
-        xstep = T(0.05), D = 1) where {T}
-    return Wave.problem(
-        T = T, D = D, timespan = timespan, timestep = timestep, xstep = xstep)
-end
-
-"""A whole run of one network mode on `Wave`: five steps of `h = 0.05`."""
-function network_run(::Type{T}; mode = :all, D = 1, S = 10,
-        guess = FitTo(InitialCondition(); method = OrthogonalGreedy()),
-        problem = wave_problem(T; D = D), steps = NETWORK_STEPS) where {T}
-    method = SpaceTimeGalerkin(network_ansatz(T; mode = mode, D = D, S = S),
-        WeakInitialAndBoundaryConditions(); initial_guess = guess)
-    int = GeometricIntegrator(problem, method)
-    result = integrate(int)
-    return problem, method, int, result
-end
-
-"""The sup-norm deviation of a run from the `u` of a §A entry, over the steps it took."""
-function sup_deviation(result, entry)
-    return maximum(maximum(abs.(result.solution.u[n] .- entry.u[n, :]))
-    for n in 1:length(result.traces))
-end
-
-"""Whether every state of a solution series is finite."""
-function finite_states(x)
-    return all(n -> all(isfinite, x[n]), eachindex(x))
-end
-
-"""
-    record_deviation(record, entry, T, deviation)
-
-Write one §A deviation with the metadata that makes the figure readable on another machine: the
-testset that measured it, the entry it is a distance from, the element type, the Julia version, the
-machine, the CPU, the BLAS thread count and the `--check-bounds` setting of the process (`0` auto,
-`1` yes, `2` no). No bound is asserted on the value.
-"""
-function record_deviation(record::Symbol, entry::Symbol, ::Type{T}, deviation) where {T}
-    @info("the §A deviation of a network run", record, entry, T, deviation, VERSION,
-        machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
-        blas_threads=BLAS.get_num_threads(),
-        check_bounds=Base.JLOptions().check_bounds)
-end
-
-"""Whether two solution series are bit-identical on every state they hold."""
-function same_states(x, y)
-    return axes(x) == axes(y) && all(n -> x[n] == y[n], eachindex(x))
-end
-
-"""
-    network_control(::Type{T})
-
-The affine control of a `:last_layer` slab: `S = 20` hidden units, whose freed output weights are
-the only unknowns the step's rows read, solved with `f_abstol = 0` at the family's relative
-tolerance and at most two Newton iterations.
-"""
-function network_control(::Type{T}; steps = NETWORK_STEPS) where {T}
-    problem = wave_problem(T; timespan = (zero(T), T(steps) * T(0.05)))
-    method = SpaceTimeGalerkin(
-        network_ansatz(T; S = NETWORK_CONTROL_S, mode = :last_layer),
-        WeakInitialAndBoundaryConditions();
-        initial_guess = FitTo(InitialCondition(); method = OrthogonalGreedy()))
-    int = GeometricIntegrator(problem, method; f_abstol = zero(T),
-        f_reltol = network_f_reltol(T), max_iterations = LAST_LAYER_ITERATIONS)
-    return integrate(int)
-end
-
-"""
-    network_slab(::Type{T}; S, mode, D, xspan, problem)
-
-The first slab of a network run, set up as the property suite does: its datum in the coupling's
-block, and the solver's vector from the method's guess, before the solver runs.
-"""
-function network_slab(::Type{T}; S = 10, mode = :all, D = 1, xspan = (zero(T), one(T)),
-        problem = wave_problem(T; D = D)) where {T}
-    method = SpaceTimeGalerkin(network_ansatz(T; S = S, mode = mode, D = D, xspan = xspan),
-        WeakInitialAndBoundaryConditions();
-        initial_guess = FitTo(InitialCondition(); method = OrthogonalGreedy()))
-    int = GeometricIntegrator(problem, method)
-    solution = GeometricSolution(problem)
-    solstep = solutionstep(int, solution[0])
-    reset!(solstep, timesteps(solution)[1])
-    c = cache(int)
-    M.slab_bottom!(c, c.coupling, problem, ansatz(method), current(solstep))
-    M.initial_guess!(solstep, nothing, parameters(problem), int)
-    return (; problem, method, int, solstep)
-end
-
-"""
-    central_differences(int, θ, params)
-
-The central differences of the slab's `residual!` at `θ`, one column per unknown, with the step
-`δ_k = cbrt(eps(T)) max(1, |θ_k|)`. Each column divides by the step as it is represented.
-"""
-function central_differences(int, θ::AbstractVector{T}, params) where {T}
-    N = length(θ)
-    J = zeros(T, N, N)
-    forward = zeros(T, N)
-    backward = zeros(T, N)
-    x = copy(θ)
-    for k in 1:N
-        δ = cbrt(eps(T)) * max(one(T), abs(θ[k]))
-        x[k] = θ[k] + δ
-        M.residual!(forward, x, nothing, params, int)
-        up = x[k]
-        x[k] = θ[k] - δ
-        M.residual!(backward, x, nothing, params, int)
-        J[:, k] .= (forward .- backward) ./ (up - x[k])
-        x[k] = θ[k]
-    end
-    return J
-end
-
-# The physical Gauss nodes and weights of one direction of a slab, computed here so that a node set
-# read in another coordinate shows up as a difference rather than as an error.
-function gauss_rule(::Type{T}, a, b, ncells::Integer, n::Integer = 4) where {T}
-    ξ = T[-0.8611363115940526, -0.3399810435848563, 0.3399810435848563, 0.8611363115940526]
-    ω = T[0.3478548451374538, 0.6521451548625461, 0.6521451548625461, 0.3478548451374538]
-    nodes = T[]
-    weights = T[]
-    width = (b - a) / ncells
-    for c in 0:(ncells - 1), k in 1:n
-
-        push!(nodes, a + width * (T(c) + (ξ[k] + one(T)) / 2))
-        push!(weights, width / 2 * ω[k])
-    end
-    return nodes, weights
-end
+# The helpers this file shares with `test/ansatz/network_cases.jl`, which holds N3, N4 and A1.
+include("../helpers/network_setup.jl")
 
 @testset "Network ansatz" begin
+    # The `:all` run of N1's case, once per element type: N1 and N5 read it, and neither changes it.
+    all_runs = Dict(T => network_run(T; mode = :all) for T in (Float64, Float32))
+
     @testset "S1b a projection on a network is refused" for T in (Float64, Float32)
         problem = wave_problem(T)
         ansatz = network_ansatz(T)
@@ -260,7 +109,7 @@ end
     end
 
     @testset "N5 the element type is the problem's" for T in (Float64, Float32)
-        _, _, int, result = network_run(T; steps = 2)
+        _, _, int, result = all_runs[T]
         c = cache(int)
         assert_no_upcast(result.solution.u, T)
         assert_no_upcast(result.solution.v, T)
@@ -303,7 +152,7 @@ end
     @testset "N1 the network integrates Wave under both modes" for T in (Float64, Float32)
         for (mode, name, entry) in ((:all, :WAVE_NN_FULLY, WAVE_NN_FULLY),
             (:last_layer, :WAVE_NN_PARTIALLY, WAVE_NN_PARTIALLY))
-            _, _, int, result = network_run(T; mode = mode)
+            _, _, int, result = mode === :all ? all_runs[T] : network_run(T; mode = mode)
             c = cache(int)
             @test length(result.traces) == NETWORK_STEPS
             @test length(result.stats.iterations) == NETWORK_STEPS
@@ -385,98 +234,6 @@ end
         @test norm(shifted - plain) > 100 * eps(T) * norm(plain)
     end
 
-    # The edges against the discrete action: a bottom or a top point read in the normalised
-    # coordinate moves the residual away from the oracle by a quarter of its scale, where the
-    # unmutated residual agrees with it to round-off.
-    @testset "N3 the boundary points are physical" for T in (Float64, Float32)
-        xspan = (T(-0.5), zero(T))
-        problem = LinearTransport.problem(T = T, timespan = (zero(T), T(0.15)),
-            timestep = T(0.05), xstep = T(0.05))
-        ansatz = network_ansatz(T; degree = 3, ncells = (2, 5), D = 2, xspan = xspan)
-        method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions();
-            initial_guess = FitTo(ExactSolution(); method = OrthogonalGreedy()))
-        int = GeometricIntegrator(problem, method)
-        result = integrate(int)
-        c = cache(int)
-        @test length(result.traces) == 3
-        @test length(result.stats.iterations) == 3
-        @test length(result.stats.residuals) == 3
-        # a fresh integrator's first slab, its datum fixed, at a vector away from its solution
-        slab = network_slab(T; D = 2, xspan = xspan, problem = problem)
-        oracle = ActionOracle(slab.problem, slab.method)
-        params = parameters(slab.problem)
-        N = length(cache(slab.int).x)
-        @test N == unknown_count(oracle)
-        θ = T.(2 .* rand(Xoshiro(1234), N) .- 1)
-        b = zeros(T, N)
-        M.residual!(b, θ, nothing, params, slab.int)
-        ∇S = oracle_residual(oracle, first_datum(oracle), θ)
-        @test all(isfinite, b)
-        @test maximum(abs, ∇S) ≥ T(1 // 100)
-        @test maximum(abs, b - ∇S) ≤ 100 * eps(T) * maximum(abs, ∇S)
-        # the block's own nodes are the physical ones, and the initial condition is read there
-        tnodes, xnodes = M.quadrature_points(c.ansatz)
-        xt, _ = gauss_rule(T, xspan[1], xspan[2], 5,
-            M.quadrature_order_of(M.trace_basis(ansatz))[2])
-        @test collect(extrema(xnodes)) ≈ collect(extrema(xt))
-        @test length(xnodes) == length(xt)
-        sample = zeros(T, length(tnodes), length(xnodes), 2)
-        M.evaluate!(sample, InitialCondition(), c, ansatz, problem,
-            solutionstep(int,
-                GeometricSolution(problem)[0]))
-        values = problem.ics_function(collect(xt), parameters(problem))
-        scale = maximum(abs, values.u)
-        for r in eachindex(xt), d in 1:2
-
-            @test abs(sample[1, r, d] - T(values.u[r, d])) ≤
-                  16 * eps(T) * max(scale, one(T))
-        end
-        # a node set read in the normalized coordinate is not the physical one
-        @test extrema(xnodes) != extrema(range(zero(T), one(T); length = length(xnodes)))
-    end
-
-    @testset "N4 a network with two outputs integrates VectorWave" for T in (Float64, Float32)
-        params = VectorWave.default_parameters()
-        problem = LagrangianPDEProblem(
-            VectorWave.vector_density(; params = params, β = T(0.5));
-            D = 2,
-            ics_function = VectorWave.problem(T = T; params = params, timestep = T(0.05)).ics_function,
-            bcs_function = VectorWave.problem(T = T; params = params, timestep = T(0.05)).bcs_function,
-            solutions = VectorWave.problem(T = T; params = params, timestep = T(0.05)).solutions,
-            timespan = (zero(T), T(0.5)), timestep = T(0.05), xspan = (zero(T), one(T)),
-            xstep = T(0.05), params = params)
-        ansatz = network_ansatz(T; S = 10, D = 2)
-        method = SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions();
-            initial_guess = FitTo(InitialCondition(); method = OrthogonalGreedy()))
-        int = GeometricIntegrator(problem, method)
-        result = integrate(int)
-        c = cache(int)
-        @test length(result.traces) == 10
-        @test finite_states(result.solution.u)
-        @test all(isfinite, c.trace_u)
-        @test all(isfinite, c.trace_v)
-        # each component holds its own output weights, one column of the fit's coefficients
-        @test M.output_weights(c.ansatz.params, ansatz, 1) !=
-              M.output_weights(c.ansatz.params, ansatz, 2)
-        # the step's residual is recorded: a network step is a record, and it may fail (U13, U24)
-        @test result.stats.residuals[1] ≤ result.stats.initial_residuals[1]
-        # the output dimension is the problem's, and the input layer's is two in either case: a
-        # network of two outputs on a scalar problem is refused when its cache is built
-        @test M.noutputs(ansatz) == 2
-        scalar = SpaceTimeGalerkin(network_ansatz(T; D = 2),
-            WeakInitialAndBoundaryConditions())
-        @test_throws ArgumentError GeometricIntegrator(wave_problem(T), scalar)
-        @test_throws ArgumentError NetworkAnsatz(
-            S = 4, xspan = (zero(T),), ncells = (2, 5),
-            degree = 3)
-        @test_throws ArgumentError NetworkAnsatz(S = 4, D = 0, xspan = (zero(T), one(T)),
-            ncells = (2, 5), degree = 3)
-        @test_throws ArgumentError NetworkAnsatz(S = 0, xspan = (zero(T), one(T)),
-            ncells = (2, 5), degree = 3)
-        @test_throws ArgumentError NetworkAnsatz(S = 4, xspan = (zero(T), one(T)),
-            ncells = (2, 5), degree = 3, mode = :full)
-    end
-
     @testset "N7 networks of one architecture share their kernels" for T in (Float64, Float32)
         a = network_ansatz(T; S = 6, D = 2)
         b = network_ansatz(T; S = 6, D = 2, mode = :last_layer)
@@ -499,36 +256,6 @@ end
             ncells = (2, 5), degree = 3)
         @test other.field !== a.field
         @test other.gradient !== a.gradient
-    end
-
-    @testset "A1 the §A case in both modes" for T in (Float64, Float32)
-        for (mode, name, entry) in ((:all, :WAVE_NN_FULLY, WAVE_NN_FULLY),
-            (:last_layer, :WAVE_NN_PARTIALLY, WAVE_NN_PARTIALLY))
-            _, _, _, result = network_run(T; mode = mode,
-                guess = FitTo(ExactSolution(); method = OrthogonalGreedy()))
-            @test length(result.traces) == NETWORK_STEPS
-            @test length(result.stats.iterations) == NETWORK_STEPS
-            @test finite_states(result.solution.u)
-            deviation = sup_deviation(result, entry)
-            @test isfinite(deviation)
-            record_deviation(:A1, name, T, deviation)
-            if mode === :all
-                symbolic = sup_deviation(result, WAVE_NN_SYMBOLIC_FULLY)
-                @test isfinite(symbolic)
-                record_deviation(:A1, :WAVE_NN_SYMBOLIC_FULLY, T, symbolic)
-            end
-        end
-        # the three-step SineGordon case of the entry
-        problem = SineGordon.problem(
-            T = T, timespan = (zero(T), T(0.15)), timestep = T(0.05),
-            xstep = T(0.05))
-        method = SpaceTimeGalerkin(network_ansatz(T), WeakInitialAndBoundaryConditions();
-            initial_guess = FitTo(ExactSolution(); method = OrthogonalGreedy()))
-        result = integrate(GeometricIntegrator(problem, method))
-        @test length(result.traces) == 3
-        deviation = sup_deviation(result, SINE_GORDON_NN_FULLY)
-        @test isfinite(deviation)
-        record_deviation(:A1, :SINE_GORDON_NN_FULLY, T, deviation)
     end
 end
 
