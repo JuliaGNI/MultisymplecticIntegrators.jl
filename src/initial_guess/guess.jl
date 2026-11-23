@@ -181,19 +181,18 @@ function evaluate!(sample::AbstractArray{ST, 3}, ::PreviousSlab,
     if c.steps == 0
         return evaluate!(sample, InitialCondition(), c, ansatz, problem, sol)
     end
-    tb = time_basis(ansatz)
     nt = ntime_functions(ansatz)
     nx = nspace_functions(ansatz)
     D = components(problem)
-    order = degree(tb)
-    T = eltype(ansatz.xspan)
+    order = degree(time_basis(ansatz))
     coeffs = c.ansatz.coeffs
+    top = c.ansatz.top_derivatives
     # the Taylor coefficients of the top time cell at t̂ = 1, one per space function and component
-    deriv = zeros(ST, nx, D, order + 1)
+    deriv = c.ansatz.top_expansion
     for k in 0:order, d in 1:D, j in 1:nx
         coefficient = zero(ST)
         for a in 1:nt
-            coefficient += coeffs[a, j, d] * evaluate(tb, a, one(T), k)
+            coefficient += coeffs[a, j, d] * top[a, k + 1]
         end
         deriv[j, d, k + 1] = coefficient
     end
