@@ -359,7 +359,7 @@ function fit!(w::AbstractVector{ST}, method::PINNTraining, ansatz::NetworkAnsatz
             end
             # one step per batch, on that batch's mean squared residual: the last batch is the
             # shorter one and is averaged over its own size
-            rate = convert(ST, 2 * method.step / (last - first + 1))
+            rate = 2 * convert(ST, method.step) / (last - first + 1)
             for k in 1:nf
                 w[lo + k - 1] -= rate * gradient[k]
                 s.params[lo + k - 1] = w[lo + k - 1]

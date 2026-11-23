@@ -1109,7 +1109,11 @@ keeping.
   `src/couplings/weak_multipliers.jl`, and K84, the dense slab Jacobian.
 - **`PINNTraining` keeps the float type of its step.** `PINNTraining{T, R}` stores `step` as `T`,
   in place of `Float64`; an integer step becomes `Float64` through `float`, and the default stays
-  `1e-2` in `Float64`. The descent converts the step to the slab's element type, as before.
+  `1e-2` in `Float64`. The descent converts the step to the slab's element type first and forms
+  the rate per batch in that type, as `TrainedHiddenLayer` does with its learning rate, so a
+  `BigFloat` step allocates nothing per batch and a `Float32` step on a `Float64` slab enters the
+  rate as its own `Float64` value. A `Float64` step on a `Float64` slab gives the rate it gave
+  before.
 - **A network's point evaluation no longer copies the parameters into the kernels' layout.** The
   arrays of the parameter set that the network's kernels read are views into the block's flat
   parameter vector, so every write into `params` — the solver's vector, a fit, a guess — is what
