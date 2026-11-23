@@ -242,33 +242,13 @@ end
     ntime(problem)
 
 The number of steps a run of the problem takes, which is the number of steps its solution holds:
-the whole steps of `timestep` that fit into `timespan = (t₀, t₁)`. A count `n` whose end `t₀ + n·h`
-lies within `8 eps(T) max(|t₀|, |t₁|)` of `t₁` fills the span, on either side of `t₁`, so a
-quotient `(t₁ - t₀)/h` that rounds just below an integer loses no step. The tolerance scales with
-the larger end of the span and not with `t₁` alone, because the rounding error of `t₀ + n·h` does:
-a span `(-1000, 1)` resolves its end only to the spacing of floats near `1000`.
+the whole steps of `timestep` that fit into `timespan = (t₀, t₁)`. The count is GeometricSolutions'
+`ntimesteps`, the rule of the solution's time grid `TimeSeries(t₀, t₁, h)`: a count `n` whose end
+`t₀ + n·h` lies within `8 eps(T) max(|t₀|, |t₁|)` of `t₁` fills the span, so a quotient
+`(t₁ - t₀)/h` that rounds just below an integer loses no step.
 """
-function ntime(problem::LagrangianPDEProblem{T}) where {T}
-    (t₀, t₁), h = problem.timespan, problem.timestep
-    n = round((t₁ - t₀) / h)
-    fills = abs(t₀ + n * h - t₁) ≤ 8 * eps(T) * max(abs(t₀), abs(t₁))
-    return Int(fills ? n : floor((t₁ - t₀) / h))
-end
-
-"""
-    timegrid(problem)
-
-The time grid of a run of the problem: the `ntime(problem) + 1` times `t₀ + n·h`, as a range.
-"""
-function timegrid(problem::LagrangianPDEProblem)
-    return range(problem.timespan[1]; step = problem.timestep, length = ntime(problem) + 1)
-end
-
-# The solution's time grid is the problem's own, so that it holds `ntime(problem)` steps: the
-# generic constructor's float range `t₀:h:t₁` drops the last step where `(t₁ - t₀)/h` rounds just
-# below an integer.
-function GeometricSolutions.GeometricSolution(problem::LagrangianPDEProblem, args...)
-    return GeometricSolution(TimeSeries(timegrid(problem), timestep(problem)), problem, args...)
+function ntime(problem::LagrangianPDEProblem)
+    return ntimesteps(problem.timespan..., problem.timestep)
 end
 
 xspan(problem::LagrangianPDEProblem) = problem.xspan

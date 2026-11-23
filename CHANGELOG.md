@@ -68,7 +68,7 @@ keeping.
   dependency `[weakdeps] Makie` with `[extensions] MultisymplecticIntegratorsPlots = "Makie"`. Every
   `[compat]` entry is a patch-level floor
   (`GeometricBase = "0.15.5"`, `GeometricEquations = "0.21.5"`, `GeometricIntegratorsBase = "0.7.2"`,
-  `GeometricSolutions = "0.6.6"`, `SimpleSplines = "0.3.4"`,
+  `GeometricSolutions = "0.7.1"`, `SimpleSplines = "0.3.4"`,
   `SimpleSolvers = "0.14.1"`, `Symbolics = "7.18.1"`), except `LinearAlgebra = "1"` and `SparseArrays = "1"`,
   which name the major. `SimpleSplines` requires `DomainSets = "0.8"`, which `Symbolics` accepts only from `7.18.1`,
   so the `Symbolics` floor is that patch rather than the major.
@@ -1011,11 +1011,6 @@ keeping.
   `transform_field!` in every residual of `HardConstraintLifting` at `D = 2`, and
   `lifting_corner_check` when its cache is built, as runtime dispatches that
   `test/quality/jet.jl` reports.
-- **`scripts/Project.toml` accepts GeometricSolutions 0.7.** Its `[compat]` bound is
-  `GeometricSolutions = "0.6.6, 0.7"`, as `Project.toml`'s is after the Dependabot update #78.
-  `scripts/` loads the package by path, so its bound must overlap the package's. GeometricSolutions
-  0.7 changes only the type parameters of `EnsembleSolution`, which neither the package nor the
-  scripts use.
 - **The known issue K34 is closed: CI evaluates the allocation assertions under
   `Base.JLOptions().check_bounds != 1`.** Every `julia-actions/julia-runtest` step of
   `.github/workflows/CI.yml` runs with `check_bounds: auto`, and ParallelTestRunner starts its
@@ -1081,6 +1076,10 @@ keeping.
   that this file holds no entries. This closes the known issues K49, K67, K73, K74, K75, K80 and
   K82. Two findings of the audit of 2026-10-31 are recorded as the known issues K83, the size of
   `src/couplings/weak_multipliers.jl`, and K84, the dense slab Jacobian.
+- **`GeometricSolutions = "0.7.1"` is the bound of `Project.toml` and of `scripts/Project.toml`,
+  and GeometricSolutions 0.6 is no longer supported.** GeometricSolutions 0.7.1 counts the steps of
+  a time series with `ntimesteps`, which `ntime` of a `LagrangianPDEProblem` now calls, so the
+  package needs that release (see the bug fix "A span of whole steps keeps its last step").
 
 ### Bug Fixes
 
@@ -1090,10 +1089,13 @@ keeping.
   wavelength in cm) the quotient is `104.99999999999999`, and `integrate` took 104 steps of 105 and
   ended at `t = 1.485` instead of `1.499`. In a sweep of `h = λ/k`, `k = 1:200`, over the spans
   `mλ`, `m = 1:10`, 183 of 2000 `Float64` spans and 92 of 2000 `Float32` spans dropped a step.
-  `ntime` now counts the whole steps of `h` in the span and takes a count `n` whose end `t₀ + n·h`
-  lies within 8 ulp of `t₁` as filling it; a span that whole steps do not fill still ends at the
-  last whole step before `t₁`. `GeometricSolution(problem::LagrangianPDEProblem, args...)` builds
-  the solution on the problem's own grid `t₀ + n·h`, `n = 0:ntime(problem)` (the internal helper
-  `timegrid`, not exported), so the step count of the problem and of its solution agree and the
-  last time is `t₁` to within a few ulp. A run over such a span now takes one more step than before
-  and ends at `t₁`; runs over other spans are unchanged.
+  `ntime(problem::LagrangianPDEProblem)` is now `GeometricSolutions.ntimesteps(t₀, t₁, h)`, the
+  counting rule of GeometricSolutions 0.7.1: a count `n` whose end `t₀ + n·h` lies within
+  `8 eps(T) max(|t₀|, |t₁|)` of `t₁` fills the span, and otherwise the count rounds down, so a span
+  that whole steps do not fill still ends at the last whole step before `t₁`. The package no longer
+  has its own `GeometricSolution(problem::LagrangianPDEProblem, args...)` method: the generic
+  `GeometricSolution(problem)` of GeometricSolutions 0.7.1 builds its `TimeSeries(t₀, t₁, h)` with
+  the same rule, so the step count of the problem and of its solution agree. A run over such a
+  span now takes one more step than before and ends at `t₁`; runs over other spans are unchanged.
+  The package needs GeometricSolutions 0.7.1 for this, as the `[compat]` entry under "Changed"
+  records.
