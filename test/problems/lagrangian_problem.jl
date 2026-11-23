@@ -1,6 +1,6 @@
 using GeometricBase
 using GeometricEquations
-using GeometricSolutions: GeometricSolution
+using GeometricSolutions: GeometricSolution, timesteps
 using MultisymplecticIntegrators
 using Test
 
@@ -19,6 +19,58 @@ include("../helpers/testsetup.jl")
         end
         @test ntime(Wave.problem(timespan = (0.0, 0.38), timestep = 0.076, xstep = 0.25)) ==
               5
+    end
+
+    @testset "a span of whole steps keeps every step" for T in (Float64, Float32)
+        # `m · k` steps of `h = λ/k` fill the span `(t₀, t₀ + m · λ)`, however the quotient of span
+        # and step rounds. The float range `t₀:h:t₁` drops the last step where the quotient rounds
+        # just below `m · k`: at `λ/21` and `5λ` it is `104.99999999999999`. `λ` is the wavelength of
+        # 100 GHz in centimetres, `2π / k0` from the wavenumber `k0`: at `c / f` the quotient is
+        # `105.0`.
+        k0 = 2π * 100e9 / 2.99792458e10
+        λ = T(2π / k0)
+        wrong = []
+        for t₀ in (zero(T), T(0.7)), k in 1:40, m in 1:5
+            h, t₁ = λ / k, t₀ + m * λ
+            problem = Wave.problem(T = T, timespan = (t₀, t₁), timestep = h, xstep = T(0.25))
+            grid = timesteps(GeometricSolution(problem))
+            ok = ntime(problem) == m * k && ntime(grid) == m * k &&
+                 isapprox(grid[end], t₁; rtol = 8 * eps(T)) &&
+                 all(n -> isapprox(grid[n], t₀ + n * h; rtol = 8 * eps(T)), 0:(m * k))
+            ok || push!(wrong, (; t₀, k, m, steps = ntime(problem), grid = ntime(grid)))
+        end
+        @test isempty(wrong)
+    end
+
+    @testset "a span from a negative start keeps every step" for T in (Float64, Float32)
+        # The end `t₀ + k·h` of `k` steps of `h = (t₁ - t₀)/k` carries a rounding error of the
+        # spacing of floats near `|t₀|`, not near `t₁`. A tolerance of `8 eps(t₁)` drops a step at
+        # `k = 13` of `(-3.1, 0.2)` in Float64 and at `k = 53` of `(-1000, 1)` in Float32.
+        wrong = []
+        spans = ((T(-1000), T(1)), (T(-3.1), T(0.2)))
+        for ((t₀, t₁), k) in Iterators.product(spans, 1:200)
+            h = (t₁ - t₀) / k
+            problem = Wave.problem(T = T, timespan = (t₀, t₁), timestep = h, xstep = T(0.25))
+            grid = timesteps(GeometricSolution(problem))
+            ok = ntime(problem) == k && ntime(grid) == k &&
+                 abs(grid[end] - t₁) ≤ 8 * eps(T) * max(abs(t₀), abs(t₁))
+            ok || push!(wrong, (; t₀, t₁, k, steps = ntime(problem), grid = ntime(grid)))
+        end
+        @test isempty(wrong)
+    end
+
+    @testset "a span that whole steps do not fill ends before t₁" for T in (Float64, Float32)
+        # `0.8 / 0.3` is `2.67`: two steps fit, the third would end past `t₁`, and the nearest count
+        # is three.
+        problem = Wave.problem(T = T, timespan = (T(0), T(0.8)), timestep = T(0.3),
+            xstep = T(0.25))
+        grid = timesteps(GeometricSolution(problem))
+        @test ntime(problem) == ntime(grid) == 2
+        @test grid[end] ≈ T(0.6) rtol = 8 * eps(T)
+        # a span `1e-4` short of ten steps holds nine
+        problem = Wave.problem(T = T, timespan = (T(0), T(1 - 1e-4)), timestep = T(0.1),
+            xstep = T(0.25))
+        @test ntime(problem) == ntime(GeometricSolution(problem)) == 9
     end
 
     @testset "the exact solution is a vector at both call shapes" for T in (Float64, Float32)

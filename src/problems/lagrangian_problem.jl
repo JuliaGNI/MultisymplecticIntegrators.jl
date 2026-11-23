@@ -238,9 +238,17 @@ function periodicity(problem::LagrangianPDEProblem)
     map(_ -> NullPeriodicity(), problem.ics)
 end
 
-"""The number of steps a run of the problem takes, which is the number of steps the solution holds."""
+"""
+    ntime(problem)
+
+The number of steps a run of the problem takes, which is the number of steps its solution holds:
+the whole steps of `timestep` that fit into `timespan = (t₀, t₁)`. The count is GeometricSolutions'
+`ntimesteps`, the rule of the solution's time grid `TimeSeries(t₀, t₁, h)`: a count `n` whose end
+`t₀ + n·h` lies within `8 eps(T) max(|t₀|, |t₁|)` of `t₁` fills the span, so a quotient
+`(t₁ - t₀)/h` that rounds just below an integer loses no step.
+"""
 function ntime(problem::LagrangianPDEProblem)
-    return length(problem.timespan[1]:problem.timestep:problem.timespan[2]) - 1
+    return ntimesteps(problem.timespan..., problem.timestep)
 end
 
 xspan(problem::LagrangianPDEProblem) = problem.xspan
