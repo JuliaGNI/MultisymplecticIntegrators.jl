@@ -10,7 +10,7 @@ const M = MultisymplecticIntegrators
 # solve of the `:all` runs does not reach round-off (K38), so every step of these runs is an
 # unconverged Newton iterate, and no bound on its distance from the entry holds across machines.
 # Each test asserts that the deviation is finite and writes it with `@info`, beside the machine that
-# produced it; K38–K40 and K42 record the figures of one machine.
+# produced it; K38 and K39 record the figures of one machine.
 #
 # Neither entry reproduces bit for bit: the code that wrote them reads the bottom points in the
 # normalized coordinate (`xspan` is `(0, 1)`, so there the two coincide) and keeps a duplicate atom

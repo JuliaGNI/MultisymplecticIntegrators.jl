@@ -24,6 +24,11 @@ wherever the output weights carry every constraint row of the coupling. The para
 ansatz's block in the slab cache and never in the ansatz, so two integrators that share one ansatz
 object give identical results.
 
+Both modes are declined by the method and are kept for comparison. In `:all` mode no solver variant
+converges the step, and the error does not improve where one comes close (K38 in
+`KNOWN_ISSUES.md`). In `:last_layer` mode the slab has no root where the coupling's data rows
+outnumber what the output weights can satisfy (K39).
+
 The ansatz carries a [`TensorBSplineAnsatz`](@ref) as its trace basis, `trace_basis(ansatz)`, built
 from `degree` and `ncells` on the same `xspan` with `Free()` at both ends, the condition the weak
 initial-and-boundary coupling needs. The functions of that basis are the multipliers of a coupling

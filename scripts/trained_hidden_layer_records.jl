@@ -181,7 +181,7 @@ end
 
     # The two records of the old stack's ELM formulation, at its own cells: a run of each completes
     # and its deviation from the entry is written with its metadata. Both entries are unconverged
-    # iterates of another architecture, so the deviation is a record (K44, K45).
+    # iterates of another architecture, so the deviation is a record (K44).
     @testset "E5a the two section A soundings" for T in (Float64,)
         elm_method(problem) = SpaceTimeGalerkin(
             NetworkAnsatz(S = TRAINED_S, mode = :last_layer, xspan = problem.xspan,

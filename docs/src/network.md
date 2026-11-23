@@ -33,6 +33,11 @@ result = integrate(problem, SpaceTimeGalerkin(last_layer, WeakInitialAndBoundary
 result.stats
 ```
 
+Both modes are declined by the method and are kept for comparison. In `:all` mode no solver variant
+converges the step, and the error does not improve where one comes close (K38 in
+`KNOWN_ISSUES.md`). In `:last_layer` mode the slab has no root where the coupling's data rows
+outnumber what the output weights can satisfy (K39).
+
 ## The fits
 
 A network is not linear in its parameters, so a [`Projection`](@ref) is refused on it. Its
