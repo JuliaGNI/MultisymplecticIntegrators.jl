@@ -1081,3 +1081,14 @@ keeping.
   that this file holds no entries. This closes the known issues K49, K67, K73, K74, K75, K80 and
   K82. Two findings of the audit of 2026-10-31 are recorded as the known issues K83, the size of
   `src/couplings/weak_multipliers.jl`, and K84, the dense slab Jacobian.
+- **Four network families are declined by the method and kept for comparison.** `NetworkAnsatz`
+  in `:all` mode (K38), `NetworkAnsatz` in `:last_layer` mode (K39), the ELM family of
+  `TrainedHiddenLayer` (K44) and the TrialNN family, `HardConstraintLifting` on a `NetworkAnsatz`
+  (K47), do not converge because of the method and not because of a defect of the code: the slab
+  of the two `:last_layer` families has no root, no solver variant converges the `:all` mode, and
+  the lifting converges on `Wave` only under variable projection, with the error of the
+  unconverged run. The docstrings of `NetworkAnsatz`, `TrainedHiddenLayer` and
+  `HardConstraintLifting` and the manual's pages `network.md`, `elm.md` and `trialnn.md` say so.
+  The code, its examples and its test assertions are unchanged, and no warning is raised. The
+  known issues K40 and K42 merge into K38, K46 into K39, K45 into K44 and K48 into K47, each
+  merged entry with the measurement behind the decision.

@@ -91,6 +91,10 @@ converts it to the element type of the slab.
 
 A network in `:all` mode is refused, because Newton determines the hidden layer there.
 
+The ELM family, a `:last_layer` network fitted by this method, is declined by the method and is
+kept for comparison: its slab has no root, because the coupling's data rows outnumber what the
+output weights can satisfy (K44 in `KNOWN_ISSUES.md`).
+
 ```julia
 method = SpaceTimeGalerkin(NetworkAnsatz(S = 20, mode = :last_layer, xspan = (0.0, 1.0),
         ncells = (2, 5), degree = 3), WeakInitialAndBoundaryConditions();

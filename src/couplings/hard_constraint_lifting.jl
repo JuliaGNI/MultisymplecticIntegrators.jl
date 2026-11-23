@@ -52,6 +52,12 @@ to every free parameter together with the field, because the projection is linea
 A coefficient ansatz carries no parameter derivative, and its rows are its own basis functions
 rather than the projected ones: there the transform places the data in the field and the residual is
 a record of what the placement leaves.
+
+The lifting on a [`NetworkAnsatz`](@ref), the TrialNN family, is declined by the method and is kept
+for comparison: it converges on `Wave` only under a variable-projection solve, with the error of the
+unconverged run, and under no solve on a Klein–Gordon layer whose density depends on the position
+(K47 in `KNOWN_ISSUES.md`). The lifting on a [`TensorBSplineAnsatz`](@ref) is not part of that
+decision.
 """
 struct HardConstraintLifting <: SlabCoupling end
 
