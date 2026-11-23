@@ -179,9 +179,8 @@ The block of a [`TensorBSplineAnsatz`](@ref) in the slab cache: what the ansatz 
 `coeffs` is the coefficient array of the slab, of size `(Nt, Nx, D)`, `residual` its interior weak
 form, and `top` the top row of the last solved slab. `tabulation` holds the tables of the slab's
 quadrature, which the ansatz owns. `output` and `trace` evaluate the space basis at the output grid
-and at the nodes of the space quadrature, and `top_slope` holds the time functions' first
-derivatives at the top of the slab. `top_derivatives[a, k + 1]` is the `k`-th derivative of the
-time function `a` at the top of the slab, for `k` from 0 to the time degree, and `top_expansion`,
+and at the nodes of the space quadrature. `top_derivatives[a, k + 1]` is the `k`-th derivative of
+the time function `a` at the top of the slab, for `k` from 0 to the time degree, and `top_expansion`,
 of size `(Nx, D, degree + 1)`, the buffer that the extrapolation of the previous slab expands the
 top time cell into.
 """
@@ -192,8 +191,7 @@ struct TensorBSplineSlab{ST, T}
     tabulation::SlabTabulation{T}
     output::PointEvaluation{T}
     trace::PointEvaluation{T}
-    top_slope::Vector{T}
-    top_derivatives::Matrix{ST}
+    top_derivatives::Matrix{T}
     top_expansion::Array{ST, 3}
 end
 
@@ -214,8 +212,7 @@ function ansatz_data(a::TensorBSplineAnsatz{T}, problem::LagrangianPDEProblem,
         coeffs, similar(coeffs), zeros(ST, nx, components(problem)),
         SlabTabulation(quadrature(a)), PointEvaluation(xb, xgrid(problem)),
         PointEvaluation(xb, space_quadrature_nodes(a)),
-        [evaluate(tb, k, one(T), 1) for k in 1:nt],
-        ST[convert(ST, evaluate(tb, j, one(T), k)) for j in 1:nt, k in 0:order],
+        [evaluate(tb, j, one(T), k) for j in 1:nt, k in 0:order],
         zeros(ST, nx, components(problem), order + 1))
 end
 
@@ -322,7 +319,7 @@ function top_values!(u::AbstractMatrix{ST}, v::AbstractMatrix{ST}, w::AbstractMa
             # the time derivative at the top of the slab, per space function: `∂ₜu` is `∂_{t̂}u / h`
             tderiv = zero(ST)
             for k in 1:nt
-                tderiv += s.coeffs[k, j, d] * s.top_slope[k]
+                tderiv += s.coeffs[k, j, d] * s.top_derivatives[k, 2]
             end
             tderiv /= hh
             for i in axes(e.value, 1)
