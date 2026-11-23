@@ -63,7 +63,8 @@ drives to zero is unchanged. It has two exceptions:
 
 - the direct linear solve of `linear_solver = true` factorises the Jacobian without the shift, so
   `λ` has no effect there;
-- the fixed-boundary network's [`LevenbergMarquardt`](@ref) solver does not read it.
+- a [`LevenbergMarquardt`](@ref) solver, which a fixed-boundary network may be given, does not read
+  it.
 
 ```@example network
 result = integrate(problem, SpaceTimeGalerkin(ansatz, WeakInitialAndBoundaryConditions());
