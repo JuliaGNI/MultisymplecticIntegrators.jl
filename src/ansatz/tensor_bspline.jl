@@ -180,9 +180,9 @@ The block of a [`TensorBSplineAnsatz`](@ref) in the slab cache: what the ansatz 
 form, and `top` the top row of the last solved slab. `tabulation` holds the tables of the slab's
 quadrature, which the ansatz owns. `output` and `trace` evaluate the space basis at the output grid
 and at the nodes of the space quadrature. `top_derivatives[a, k + 1]` is the `k`-th derivative of
-the time function `a` at the top of the slab, for `k` from 0 to the time degree, and `top_expansion`,
-of size `(Nx, D, degree + 1)`, the buffer that the extrapolation of the previous slab expands the
-top time cell into.
+the time function `a` at the top of the slab, for `k` from 0 to the time degree, and
+`top_expansion`, of size `(Nx, D, degree + 1)`, the buffer that the extrapolation of the previous
+slab expands the top time cell into.
 """
 struct TensorBSplineSlab{ST, T}
     coeffs::Array{ST, 3}
