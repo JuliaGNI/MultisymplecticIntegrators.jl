@@ -514,9 +514,10 @@ end
 evaluation_points(e::NetworkPoints) = e.points
 
 """
-    NetworkSlab{ST, T, A}
+    NetworkSlab{ST, T, A, P}
 
-The block of a [`NetworkAnsatz`](@ref) in the slab cache: what the ansatz keeps of one slab.
+The block of a [`NetworkAnsatz`](@ref) in the slab cache: what the ansatz keeps of one slab. `A`
+is the type of the ansatz, and `P` the type of the parameter set, `parameter_set`.
 
 `params` is the network's parameter vector of the slab, in the order `L1.W`, `L1.b`, `L2.W`, and
 `residual` its interior weak form, one row per free parameter. `u`, `v` and `w` hold the field and

@@ -1115,9 +1115,10 @@ keeping.
   the next evaluation reads, and `evaluate_at!` calls no `unflatten!`.
 - **The extrapolation of the previous slab on a `TensorBSplineAnsatz` allocates nothing after the
   first step.** The block holds the time functions' derivatives at the top of the slab,
-  `top_derivatives`, built once with the cache, and the buffer of the expansion,
-  `top_expansion`, where `evaluate!(sample, ::PreviousSlab, …)` evaluated the time basis and
-  allocated an `nx × D × (degree + 1)` array at every call. The known issue K83 also records the
+  `top_derivatives`, built once with the cache as a matrix of the ansatz's float type, whose
+  second column `top_values!` also reads, and the buffer of the expansion, `top_expansion`, where
+  `evaluate!(sample, ::PreviousSlab, …)` evaluated the time basis and allocated an
+  `nx × D × (degree + 1)` array at every call. The known issue K83 also records the
   scalar loops of `src/couplings/weak_multipliers.jl` that a `mul!` on its trace tables would
   replace.
 - **Four network families are declined by the method and kept for comparison.** `NetworkAnsatz`
