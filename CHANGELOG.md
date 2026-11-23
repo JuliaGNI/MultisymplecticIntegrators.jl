@@ -136,8 +136,10 @@ keeping.
   `SineGordon` runs at `h = 0.1` and `0.05`, in both bubble forms, to `t = 0.2`, and at 612 of 615
   steps over those, the `h = 0.025` rows, long runs and a 119-step screen of a problem with a
   position-dependent density parameter, where Levenberg–Marquardt as the default converged at 44 of
-  the 119 steps of the screen, with errors of the same size. The three steps that fail are K91, K92 and K93 in `KNOWN_ISSUES.md`; pass
-  `solver = LevenbergMarquardt()` for the previous behaviour.
+  the 119 steps of the screen, with errors of the same size. The three steps that fail are K91, K92
+  and K93 in `KNOWN_ISSUES.md`; pass `solver = LevenbergMarquardt()` for the previous behaviour. A
+  `BigFloat` run that names its `f_reltol` and no solver is now refused, because LAPACK's pivoted QR
+  does not provide that element type; it names `solver = LevenbergMarquardt()` as well.
 
 ### New Features
 
