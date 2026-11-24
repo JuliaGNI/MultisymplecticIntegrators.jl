@@ -295,21 +295,26 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
 - kind: defect
 - found: 2026-11-10
 
-### K53 · The plateau probe's extended-precision entry cannot run, because `GeometricSolutions` cannot build a solution at `BigFloat`.
+### K53 · The plateau probe's extended-precision entry cannot run, because the fit of the first datum takes an SVD that `LinearAlgebra` does not provide at `BigFloat`.
 
 - location: `scripts/experiments.jl` (the `BigFloat` plateau entry);
-  `GeometricSolutions`, `src/timeseries.jl:8`
-- evidence: `TimeSeries(ti::AbstractVector, Δt)` builds `new{T, n, typeof(t)}` with
-  `n = length(ti) - 1`, and the `length` of a `BigFloat` range is a `BigInt` — it is a
-  `StepRangeLen{BigFloat, BigFloat, BigFloat, BigInt}` — so `GeometricSolution(problem)` on a
-  `BigFloat` `Wave` raises `TypeError: in Type, in parameter, expected Int64, got a value of type
-  BigInt` before a step is taken. The entry names its own `f_reltol = big"1e-8"`, because the family
-  measures no tolerance at `BigFloat` and refuses a caller there that names none, and
-  `fixed_boundary_solver_keywords` hands the entry's value to the solver, so the integrator builds
-  and `TimeSeries`'s `TypeError` is the whole block. The entry stays in the registry and in the
-  build-only testset "FB18", which builds it and never runs it; the fix is a pull request of its own
-  to `GeometricSolutions`, and the step runs through the family's `run` once it lands.
-- kind: upstream
+  `src/core/levenberg_marquardt.jl:182` (`least_squares!`), reached from
+  `src/couplings/fixed_boundary.jl:632` (`first_datum!`)
+- evidence: `integrate` of a `BigFloat` `Wave` with
+  `FixedBoundaryNetwork(Sx = 4, St = 4, ncells = 3, nq = (6, 4))`, `solver =
+  LevenbergMarquardt()` and `f_reltol = big"1e-30"` raises `MethodError: no method matching
+  svd!(::Matrix{BigFloat}; full::Bool, alg::LinearAlgebra.DivideAndConquer, atol::Int64,
+  rtol::Int64)` in `least_squares!`, which `first_datum!` calls from `slab_bottom!` before the
+  first slab is solved (Julia 1.13.4, GeometricSolutions 0.7.2, the package's own environment).
+  `GeometricSolution(problem)` builds at `BigFloat`. The entry names its own `f_reltol =
+  big"1e-8"`, because the family measures no tolerance at `BigFloat` and refuses a caller there
+  that names none, and `fixed_boundary_solver_keywords` hands the entry's value to the solver, so
+  an integrator that names `LevenbergMarquardt()` builds, as "FB18" builds it; under the default
+  `Newton()` the build stops earlier, at SimpleSolvers' refusal of `LapackPivotedQR` at `BigFloat`
+  (FB8). The entry stays in the registry and in the build-only testset "FB18", which builds it and
+  never runs it. `scripts/Project.toml` carries `GenericLinearAlgebra`; whether it supplies this
+  `svd!` with these keywords is not measured.
+- kind: defect
 - found: 2026-11-10
 
 ### K54 · A reference run that itself failed part-way makes the driver throw after every row has archived.
@@ -579,7 +584,7 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   whole slab residual into a dense matrix, which `factorize!(lsolver, jacobianmatrix(s))` factorises
   (`src/core/slab_integrator.jl:690-691`) under `linear_solver = true`. The fixed-boundary
   network's `LevenbergMarquardt` takes `ForwardDiff`'s `jacobian` of the residual as well
-  (`jacobian_of`, `src/core/levenberg_marquardt.jl:156`). Under a B-spline ansatz with a
+  (`jacobian_of`, `src/core/levenberg_marquardt.jl:159`). Under a B-spline ansatz with a
   coupling that adds no lifting, a coefficient reaches only the residual rows of its own support,
   so the matrix is sparse there and is stored and factorised dense. Under `HardConstraintLifting`,
   `transform_field!` subtracts `(1 - t̂)` times the coefficient-dependent bottom correction from
@@ -610,3 +615,73 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   `src/initial_guess/orthogonal_greedy.jl:53-56`). The call is the same at `dd937ed`.
 - kind: defect
 - found: #85
+
+### K91 · The relative convergence rule asks a fixed-boundary step with a small initial residual for a residual below the floor its slab reaches.
+
+- location: `src/couplings/fixed_boundary.jl:219` (`fixed_boundary_f_reltol`), `:407`
+  (`default_options`)
+- evidence: a step converges at `r ≤ f_abstol + f_reltol · r₀`, and the family's defaults are
+  `f_reltol = 1e-8` and `f_abstol = 0`. The case is a problem with a position-dependent density
+  parameter, which the package does not hold, on 71 cells at `h = 0.1499` over 119 steps, `:tsr`,
+  with `FixedBoundaryNetwork(Sx = 8, St = 10, ncells = 20, nq = (6, 4))`, `Continuation()` and the
+  default `Newton()`, in `Float64` (Julia 1.13, SimpleSolvers 0.14). Step 80 stops after 37
+  iterations at `r₀ = 174.7` and `r/r₀ = 1.71e-8`: SimpleSolvers reports stagnation at
+  `‖r‖ = 2.98e-6`, a floor that no step lowers, because the residual lies outside the range of the
+  Jacobian (share 1.000), and Levenberg–Marquardt from that iterate stops at its μ cap without
+  moving. Seven converged steps of the same run end above that floor, at `3.0e-6 … 6.2e-6`. `r₀` is
+  110–175 at the turning points of the field (steps 1, 20–21, 40–41, 60–61, 80–81) and up to `6.0e3`
+  between them, so with `f_abstol = 0` the relative rule asks those steps for the smallest absolute
+  residual of the run. Which steps fail depends on round-off in the history: a 21-step run of the
+  same case differs from the 119-step run from step 7 on, as K59 records for the network's
+  generated kernels. The tolerance stays as it is; an `f_abstol` would be a change of the rule.
+- kind: defect
+- found: 2026-11-23
+
+### K92 · The family's pivoted QR keeps a direction that the SVD's rank cut drops, and the Newton step along it grows the residual.
+
+- location: `src/couplings/fixed_boundary.jl:463` (`initsolver(::Newton, …)`), `:202`
+  (`fixed_boundary_qr_cut`)
+- evidence: on the case of K91, step 21 stops at the cap of 300 iterations at `r₀ = 129.3` and
+  `r/r₀ = 9.97e-3`. At the cut `1e-12 σ₁` the SVD of the slab Jacobian keeps 30 directions, and
+  its step leaves `1.3e-4` of `‖r‖`. `LapackPivotedQR(rtol = 1e-12)` keeps rank 31, because its
+  31st `|R_ii|` lies above the cut while `σ₃₁/σ₁ = 9.0e-13` lies below it; it takes a step 150
+  times longer (`5.0e-3` against `3.3e-5`) and multiplies `‖r‖` by 2.9 at the full step.
+  Levenberg–Marquardt from the same iterate converges in 20 trials (`r/r₀ = 3.4e-9`). Which steps
+  fail depends on round-off in the history: the 21-step run of the same case converges at step 21,
+  as K59 records for the network's generated kernels. The route of the fix is the cut SVD of the
+  port to `GeometricSolvers`; the package keeps the pivoted QR until then.
+- kind: defect
+- found: 2026-11-23
+
+### K93 · SimpleSolvers' Newton loop makes no progress for 298 iterations at a step that two plain Newton steps solve.
+
+- location: `src/couplings/fixed_boundary.jl:463` (`initsolver(::Newton, …)`); SimpleSolvers 0.14,
+  its Newton loop
+- evidence: `Wave` at `h = 0.05` over 160 steps to `t = 8`, `:tsr`, with
+  `FixedBoundaryNetwork(Sx = 8, St = 10, ncells = 20, nq = (6, 4))`, `Continuation()` and the
+  default `Newton()`, in `Float64` (Julia 1.13, SimpleSolvers 0.14), converges at 159 of 160
+  steps. Step 25 (`t = 1.25`) stops at the cap of 300 iterations at `r₀ = 1.014` and
+  `r/r₀ = 1.445e-4`, with no progress for 298 iterations and no line-search failure in the status.
+  At the final iterate the QR step and the SVD step agree (rank 27, `‖δ‖ = 2.9e-3`), and two plain
+  full Newton steps of the same factorization converge (`r/r₀ = 2.1e-6`, then `1.3e-11`), so the
+  stall is in the loop of `SimpleSolvers` and not in the factorization. Which steps fail depends
+  on round-off in the history, as K59 records for the network's generated kernels.
+- kind: upstream
+- found: 2026-11-23
+
+### K94 · On the coarse quadrature of `ncells = 3`, the default `Newton()` stalls at the cap where Levenberg–Marquardt reduces the residual by six orders.
+
+- location: `src/couplings/fixed_boundary.jl:391` (`default_solver`), `:463`
+  (`initsolver(::Newton, …)`)
+- evidence: `Wave` at `h = 0.05` over two steps, with
+  `FixedBoundaryNetwork(Sx = 8, St = 10, ncells = 3, nq = (6, 4))`, `Continuation()` and the
+  family's default options, in `Float64` (Julia 1.13.4, SimpleSolvers 0.14.4). Under the default
+  `Newton()` both steps stop at the cap of 300 iterations, in both forms: from `r₀ = [0.4689,
+  0.0544]` to `r = [0.4559, 0.0317]`. Under `LevenbergMarquardt()` both steps also stop at 300
+  iterations, at `r = [1.18e-7, 1.37e-7]` (`:abg`) and `[6.96e-7, 6.07e-7]` (`:tsr`) from
+  `r₀ = [0.4689, 0.398]`, so their ratios are above `f_reltol = 1e-8` as well. Every measurement behind the
+  default is on `ncells = 20`, and the default's docstring is limited to it. `fixed_ansatz` in
+  `test/helpers/fixed_boundary_setup.jl` builds this quadrature, and FB10, which solves one slab of
+  it, names `LevenbergMarquardt()`.
+- kind: defect
+- found: #91

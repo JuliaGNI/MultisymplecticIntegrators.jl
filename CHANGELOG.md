@@ -128,6 +128,22 @@ keeping.
   `field_side_data`, so the two modules keep neither helper: `SineGordon.problem` and
   `LinearTransport.problem` build their data from the closed forms they carry. `Wave` keeps
   `initial_data` and its `boundary_data` is now `side_data`.
+- **The default solver of a fixed-boundary method is `Newton()`, not `LevenbergMarquardt()`, so a
+  fixed-boundary run that names no `solver` gives a different result.** `default_solver` of a
+  `SpaceTimeGalerkin` over a `FixedBoundaryNetwork` returns `Newton()`, which the family builds with
+  its minimum-norm `LapackPivotedQR` step, its tolerance and its 300 iterations; no tolerance, cut
+  or solver code changes. Under `Continuation()`, on the `ncells = 20` quadrature that every run
+  here uses, it converges at every step of the eight `Wave` and `SineGordon` runs at `h = 0.1` and
+  `0.05`, in both bubble forms, to `t = 0.2`, and at 612 of 615 steps over those, the `h = 0.025`
+  rows, long runs and a 119-step screen of a problem with a position-dependent density parameter,
+  where Levenberg–Marquardt as the default converged at 44 of the 119 steps of the screen, with
+  errors of the same size. The three steps that fail are K91, K92 and K93 in `KNOWN_ISSUES.md`. On
+  the coarser `ncells = 3` quadrature the default stalls at its 300-iteration cap where
+  Levenberg–Marquardt reduces the residual by six orders (K94). Pass
+  `solver = LevenbergMarquardt()` for the previous behaviour.
+  Building the integrator at `BigFloat` with an `f_reltol` and no solver is now refused with an
+  `ArgumentError`, because LAPACK's pivoted QR does not provide that element type; an integrator at
+  such a type names its solver, `solver = LevenbergMarquardt()`, as well as its tolerance.
 
 ### New Features
 
@@ -591,15 +607,15 @@ keeping.
   carries the datum `(φ₀, p₀)`, hands on `∂S/∂φ₁`, and its `BubbleGreedy` fit starts a slab from a
   greedy dictionary of 2184 atoms. The bubble's hidden layer has two coordinate systems, `:abg` and
   the ridge chart `:tsr`, whose Jacobian is applied to the equations as well as to the unknowns.
-  `LevenbergMarquardt` is the family's solver — damped by a shift on the singular values, with the
-  bubble's output weights eliminable by an inner Newton solve — and `Newton()` stays available with
-  the minimum-norm step of a pivoted QR cut at `1e-12`. A step converges when
-  `residual ≤ f_abstol + f_reltol · r₀`, at `f_abstol = 0` and the element type's own `f_reltol`: the
-  dead branch's twenty steps on `Wave` all reach it at `Float64`, and a live-branch row records its
-  convergence flags and asserts none of them. `fixed_boundary_f_reltol(T)` is the one place that
-  constant lives, at the two element types the family measured it for: a third type is refused, and
-  a caller at such a type names its own `f_reltol`. A failed step is carried, with its statistics
-  recorded, as every family's is.
+  `Newton()` is the family's default solver, with the minimum-norm step of a pivoted QR cut at
+  `1e-12` at `Float64` and `10 * eps(T)` at another element type, and `LevenbergMarquardt` — damped
+  by a shift on the singular values, with the bubble's output weights eliminable by an inner Newton
+  solve — is a solver a caller names. A step converges when `residual ≤ f_abstol + f_reltol · r₀`,
+  at `f_abstol = 0` and the element type's own `f_reltol`: the dead branch's twenty steps on `Wave`
+  all reach it at `Float64`, and a live-branch row records its convergence flags and asserts none
+  of them. `fixed_boundary_f_reltol(T)` is the one place that constant lives, at the two element
+  types the family measured it for: a third type is refused, and a caller at such a type names its
+  own `f_reltol`. A failed step is carried, with its statistics recorded, as every family's is.
   `ForwardDiff` (compat `0.10.36, 1`) joins `[deps]`, because the family differentiates the side
   data in `t`, the initial data's momentum on the level's parameters and the Jacobian of the
   Levenberg–Marquardt routines with it directly rather than through `SimpleSolvers`' re-export; the

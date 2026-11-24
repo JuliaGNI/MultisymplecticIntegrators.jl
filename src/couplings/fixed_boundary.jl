@@ -380,16 +380,24 @@ else
     @doc """A fixed-boundary slab is started by the fit of the bubble."""
     default_fit(::FixedBoundaryNetwork) = BubbleGreedy()
 
-    @doc """A fixed-boundary slab is solved by Levenberg–Marquardt."""
-    default_solver(::SpaceTimeGalerkin{<:FixedBoundaryNetwork}) = LevenbergMarquardt()
+    @doc """
+    A fixed-boundary slab is solved by `Newton()`, which the family's `initsolver` gives the
+    minimum-norm step of a pivoted QR cut at [`fixed_boundary_qr_cut`](@ref). From the
+    `Continuation()` guess, on the quadrature of `ncells = 20` cells, it converges at steps where
+    Levenberg–Marquardt stops above the tolerance; on the coarser `ncells = 3` it stalls at its
+    cap where Levenberg–Marquardt reduces the residual by six orders (K94 in `KNOWN_ISSUES.md`).
+    [`LevenbergMarquardt`](@ref) is a solver a caller may name.
+    """
+    default_solver(::SpaceTimeGalerkin{<:FixedBoundaryNetwork}) = Newton()
 
     @doc """
         default_options(method, problem)
 
     The family's solver options: a step converges on the rule of `step_converged` at
     `f_abstol = 0` and the element type's own relative tolerance, and a solve is capped at 300
-    iterations. They are the defaults of both the family's solver and the `Newton()` a caller may
-    name instead, so that an affine control and a dead branch are measured under one rule.
+    iterations. They are the defaults of both the family's `Newton()` and the
+    [`LevenbergMarquardt`](@ref) a caller may name instead, so that an affine control and a dead
+    branch are measured under one rule.
 
     The tolerance is handed on as `nothing`, because `GeometricIntegrator` merges these defaults
     into the caller's keywords before any solver is built: the family's `initsolver` resolves it from
@@ -428,7 +436,7 @@ else
     @doc """
         initsolver(solvermethod::LevenbergMarquardt, method, caches; kwargs...)
 
-    The family's default solver, its tolerance resolved as above.
+    The Levenberg–Marquardt solver a caller may name, its tolerance resolved as above.
 
     It is a method of its own because the generic Levenberg–Marquardt method and the family's method
     for every nonlinear solver would otherwise both apply to this method and this solver, and this

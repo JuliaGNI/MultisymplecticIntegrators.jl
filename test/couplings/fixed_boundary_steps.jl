@@ -63,8 +63,15 @@ include("../helpers/fixed_boundary_setup.jl")
         problem, SpaceTimeGalerkin(a, HardConstraintLifting()))
     method = SpaceTimeGalerkin(a, FixedBoundary())
     int = GeometricIntegrator(problem, method)
-    @test default_solver(method) isa LevenbergMarquardt
-    @test solver(int) isa M.LevenbergMarquardtSolver
+    @test default_solver(method) isa Newton
+    @test solver(int) isa SimpleSolvers.NonlinearSolver{Float64, <:Newton}
+    # Levenberg–Marquardt is the solver a caller names, and the family builds it as its own
+    named = GeometricIntegrator(problem, method; solver = LevenbergMarquardt())
+    @test solver(named) isa M.LevenbergMarquardtSolver
+    # the `FitTo(Predictor())` guess changes the guess and not the solver
+    predicted = SpaceTimeGalerkin(a, FixedBoundary(); initial_guess = FitTo(Predictor()))
+    @test solver(GeometricIntegrator(problem, predicted)) isa
+          SimpleSolvers.NonlinearSolver{Float64, <:Newton}
     @test length(cache(int).x) == 28
     # A `PINNTraining` fit on a fixed-boundary network matches the network's refusal for any fit
     # method and `PINNTraining`'s refusal for any ansatz, so it reaches this intersection's.
@@ -307,7 +314,7 @@ end
 
 @testset "FB6 the record of a step under each form and solve" begin
     @test default_solver(SpaceTimeGalerkin(fixed_ansatz(PROBLEMS[:wave]()),
-        FixedBoundary())) isa LevenbergMarquardt
+        FixedBoundary())) isa Newton
     for name in (:wave, :sinegordon), form in (:abg, :tsr),
         solve in (:lm, :projected, :newton)
         problem = PROBLEMS[name]()
@@ -437,16 +444,22 @@ end
     # and the refusal names it — matched whole and anchored, as every refusal of this file is.
     @test_throws r"^ArgumentError: the fixed-boundary network has no measured f_reltol at BigFloat; name the tolerance as an option of its own$" fixed_boundary_f_reltol(
         BigFloat)
-    # A caller who names the tolerance at such a type runs: the option reaches the solver's config
-    # unmoved, and the same build without it raises the same refusal.
+    # The default `Newton()` factorizes with LAPACK's pivoted QR, which refuses an element type
+    # LAPACK does not provide, so a caller at such a type names the solver as well as the tolerance.
+    # Such a caller runs: the option reaches the solver's config unmoved, and the same build without
+    # the tolerance raises the same refusal.
     big = WF.problem(T = BigFloat, timespan = (big"0.0", big"0.1"), timestep = big"0.05",
         xstep = big"0.05", xspan = (big"0.0", big"1.0"))
     big_method = SpaceTimeGalerkin(fixed_ansatz(big; Sx = 4, St = 4), FixedBoundary())
-    big_int = GeometricIntegrator(big, big_method; f_reltol = big"1e-30")
+    # the refusal's text is SimpleSolvers', so only its type is this package's to assert
+    # ast-grep-ignore: test-throws-bare-type
+    @test_throws ArgumentError GeometricIntegrator(big, big_method; f_reltol = big"1e-30")
+    big_int = GeometricIntegrator(big, big_method; solver = LevenbergMarquardt(),
+        f_reltol = big"1e-30")
     @test eltype(nlsolution(cache(big_int))) === BigFloat
     @test config(solver(big_int)).f_reltol == big"1e-30"
     @test_throws r"^ArgumentError: the fixed-boundary network has no measured f_reltol at BigFloat; name the tolerance as an option of its own$" GeometricIntegrator(
-        big, big_method)
+        big, big_method; solver = LevenbergMarquardt())
     # the family's rank cut is one value per element type, `1e-12` at `Float64` and `10 eps(T)`
     # for another type
     @test M.fixed_boundary_qr_cut(Float64) == 1e-12
@@ -486,6 +499,10 @@ end
     # ... and a caller that names none is refused, whole and anchored, before a solver is built
     @test_throws r"^ArgumentError: the fixed-boundary network has no measured f_reltol at BigFloat; name the tolerance as an option of its own$" GeometricIntegrator(
         big, big_method; solver = SimpleSolvers.DogLeg())
+    # ... and so is a caller that names neither the tolerance nor the solver: the family's default
+    # solver resolves the tolerance as every other one does
+    @test_throws r"^ArgumentError: the fixed-boundary network has no measured f_reltol at BigFloat; name the tolerance as an option of its own$" GeometricIntegrator(
+        big, big_method)
 end
 
 # ---- FB9 -----------------------------------------------------------------------------
@@ -495,9 +512,9 @@ end
         xspan = (0.0, 1.0))
     ansatz = FixedBoundaryNetwork(Sx = 8, St = 10, bubble_form = :abg, xspan = (0.0, 1.0),
         ncells = 20, nq = (6, 4))
-    method = SpaceTimeGalerkin(ansatz, FixedBoundary(); initial_guess = Continuation())
-    result = integrate(problem, method; solver = Newton(), max_iterations = 60,
-        f_abstol = 0.0, f_reltol = fixed_boundary_f_reltol(Float64), verbosity = 0)
+    # the family's defaults: the guess, the solver, its rank cut, its tolerance and its cap
+    method = SpaceTimeGalerkin(ansatz, FixedBoundary())
+    result = integrate(problem, method; verbosity = 0)
     stats = result.stats
     @test length(stats.converged) == 20
     @test all(stats.converged)
@@ -518,11 +535,11 @@ end
         xstep = 0.05f0, xspan = (0.0f0, 1.0f0))
     ansatz32 = FixedBoundaryNetwork(Sx = 8, St = 10, bubble_form = :abg,
         xspan = (0.0f0, 1.0f0), ncells = 20, nq = (6, 4))
-    method32 = SpaceTimeGalerkin(ansatz32, FixedBoundary(); initial_guess = Continuation())
-    result32 = integrate(problem32, method32; solver = Newton(), max_iterations = 60,
-        f_abstol = 0.0f0, f_reltol = fixed_boundary_f_reltol(Float32), verbosity = 0)
+    method32 = SpaceTimeGalerkin(ansatz32, FixedBoundary())
+    result32 = integrate(problem32, method32; verbosity = 0)
     @info("FB9 the dead branch's Float32 arm", VERSION, T="Float32",
         ratios=result32.stats.residuals ./ result32.stats.initial_residuals,
+        converged=result32.stats.converged,
         machine=Sys.MACHINE, cpu=Sys.CPU_NAME,
         blas_threads=BLAS.get_num_threads(),
         check_bounds=Base.JLOptions().check_bounds)
@@ -537,7 +554,9 @@ end
     for form in (:abg, :tsr)
         problem = PROBLEMS[:wave]()
         ansatz = fixed_ansatz(problem; form = form)
-        slab = fixed_slab(problem, ansatz)
+        # the claim is the guess's layout, whatever the solver; on this coarse rule the default
+        # `Newton()` stalls at the cap (K94), so Levenberg–Marquardt solves the first slab
+        slab = fixed_slab(problem, ansatz; solver = LevenbergMarquardt())
         c = cache(slab.int)
         nfp = length(M.spatial_free(ansatz))
         M.initial_guess!(current(slab.solstep), nothing, parameters(problem), slab.int)
@@ -738,14 +757,14 @@ end
     end
     # A `BigFloat` slab converts the `Float64` ranges to new `BigFloat` objects at every fit; the
     # key compares by value, so a second fit with the same method keeps the table the first built,
-    # and a method of other ranges builds it again. `GeometricSolutions` builds no solution at
-    # `BigFloat` (K53) and the fits of the levels take an `svd` that `BigFloat` lacks, so the slab
-    # gets its side data alone and the bubble's fit runs on its own.
+    # and a method of other ranges builds it again. The fits of the levels take an `svd` that
+    # `BigFloat` lacks (K53), so the slab gets its side data alone and the bubble's fit runs on its
+    # own.
     pbig = WF.problem(T = BigFloat, timespan = (big"0.0", big"0.1"), timestep = big"0.05",
         xstep = big"0.05", xspan = (big"0.0", big"1.0"))
     abig = fixed_ansatz(pbig; Sx = 4, St = 4)
     cbig = cache(GeometricIntegrator(pbig, SpaceTimeGalerkin(abig, FixedBoundary());
-        f_reltol = big"1e-30"))
+        solver = LevenbergMarquardt(), f_reltol = big"1e-30"))
     tbbig = abig.tabulation
     for (row, t̂) in enumerate((zero(BigFloat), tbbig.tnode..., one(BigFloat)))
         M.side_row!(cbig.coupling, pbig, row, timestep(pbig) * t̂)
@@ -988,5 +1007,40 @@ end
     for entry in entries
         @test fixed_boundary_problem(entry) isa M.LagrangianPDEProblem
         @test fixed_boundary_method(entry) isa SpaceTimeGalerkin
+    end
+end
+
+# ---- FB19 ----------------------------------------------------------------------------
+
+@testset "FB19 the defaults converge on the matrix's rows" begin
+    # The matrix's rows at `h = 0.1` and `h = 0.05`, both problems and both bubble forms, under the
+    # family's defaults alone: `Continuation()`, `Newton()` on the pivoted QR cut at
+    # `fixed_boundary_qr_cut`, `f_reltol = fixed_boundary_f_reltol`, `f_abstol = 0` and 300
+    # iterations. Every step converges, and the error lies within ±10 % of its measured value, as
+    # FB9's does: Wave 1.28e-4 and 3.26e-5, SineGordon 2.35e-6 and 2.00e-6 at `h = 0.1` and `0.05`,
+    # in both forms (Julia 1.13.4, SimpleSolvers 0.14.4). The worst ratio is a record.
+    bands = Dict((:Wave, 0.1) => (1.15e-4, 1.41e-4), (:Wave, 0.05) => (2.93e-5, 3.58e-5),
+        (:SineGordon, 0.1) => (2.11e-6, 2.58e-6), (:SineGordon, 0.05) => (1.80e-6, 2.20e-6))
+    for P in (M.Wave, M.SineGordon), h in (0.1, 0.05), form in (:abg, :tsr)
+        problem = P.problem(timespan = (0.0, 0.2), timestep = h, xstep = h,
+            xspan = (0.0, 1.0))
+        ansatz = FixedBoundaryNetwork(Sx = 8, St = 10, bubble_form = form,
+            xspan = (0.0, 1.0), ncells = 20, nq = (6, 4))
+        result = integrate(problem, SpaceTimeGalerkin(ansatz, FixedBoundary()); verbosity = 0)
+        stats = result.stats
+        t = result.solution.t
+        u = result.solution.u
+        xs = collect(xgrid(problem))
+        error = maximum(abs(P.solution_u(t[n], x, parameters(problem)) - u[n][i])
+        for n in 1:ntime(problem), (i, x) in enumerate(xs))
+        @info("FB19 a row under the defaults", problem=nameof(P), h, form,
+            worst_ratio=maximum(stats.residuals ./ stats.initial_residuals),
+            iterations=stats.iterations, error, cpu=Sys.CPU_NAME)
+        @testset "$(nameof(P)), h = $h, $form" begin
+            @test length(stats.converged) == (h == 0.1 ? 2 : 4)
+            @test all(stats.converged)
+            lower, upper = bands[(nameof(P), h)]
+            @test lower ≤ error ≤ upper
+        end
     end
 end
