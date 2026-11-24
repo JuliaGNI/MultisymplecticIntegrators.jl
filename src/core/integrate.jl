@@ -63,8 +63,8 @@ factorisation; the [`LevenbergMarquardt`](@ref) solver a fixed-boundary network 
 not read it. It is a shift of the Newton matrix, not a Tikhonov term of a
 least-squares step: the residual that a step drives to zero is unchanged. The direct linear solve
 of `linear_solver = true` factorises the Jacobian without the shift, so `λ` has no effect there.
-On a fixed-boundary network the shift can leave a step unconverged after the family's 300
-iterations where the same step converges without it.
+On a fixed-boundary network the shift can leave a step unconverged where the same step converges
+without it.
 """
 function integrate(problem::LagrangianPDEProblem, method::SpaceTimeMethod;
         on_failure = :warn, kwargs...)
