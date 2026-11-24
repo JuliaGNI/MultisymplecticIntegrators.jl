@@ -35,6 +35,7 @@ import GeometricIntegratorsBase: Cache, CacheType, IntegratorCache, check_solver
                                  initial_guess!,
                                  integrate_step!, residual!, solver, initsolver,
                                  solverstate, copy_internal_variables!, internal
+import GeometricSolutions: ntimesteps
 
 # abstract types
 include("methods.jl")

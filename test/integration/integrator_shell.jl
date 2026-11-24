@@ -97,6 +97,17 @@ end
         @test result.solution.v[ntime(result.solution)] ≈ vec(problem.ics.v)
     end
 
+    @testset "a run takes every step of a span of whole steps" begin
+        # Fifteen steps of `λ/3` fill `(0, 5λ)`, where the float range `0:λ/3:5λ` holds fourteen.
+        λ = 2π / (2π * 100e9 / 2.99792458e10)
+        span = Wave.problem(timespan = (0.0, 5λ), timestep = λ / 3, xstep = 0.25)
+        run = integrate(span, method)
+        @test ntime(run.solution) == ntime(span) == 15
+        @test length(run.traces) == 15
+        @test run.solution.t[15] ≈ 5λ rtol = 8 * eps()
+        @test run.solution.u[15] ≈ vec(span.ics.u) .+ 15
+    end
+
     @testset "the history states hold the initial data" begin
         @test default_extrapolation(method) isa NoExtrapolation
         solstep = solutionstep(GeometricIntegrator(problem, method),
