@@ -608,14 +608,14 @@ keeping.
   greedy dictionary of 2184 atoms. The bubble's hidden layer has two coordinate systems, `:abg` and
   the ridge chart `:tsr`, whose Jacobian is applied to the equations as well as to the unknowns.
   `Newton()` is the family's default solver, with the minimum-norm step of a pivoted QR cut at
-  `1e-12`, and `LevenbergMarquardt` — damped by a shift on the singular values, with the bubble's
-  output weights eliminable by an inner Newton solve — is a solver a caller names. A step converges
-  when `residual ≤ f_abstol + f_reltol · r₀`, at `f_abstol = 0` and the element type's own
-  `f_reltol`: the dead branch's twenty steps on `Wave` all reach it at `Float64`, and a live-branch
-  row records its convergence flags and asserts none of them. `fixed_boundary_f_reltol(T)` is the
-  one place that constant lives, at the two element types the family measured it for: a third type
-  is refused, and a caller at such a type names its own `f_reltol`. A failed step is carried, with
-  its statistics recorded, as every family's is.
+  `1e-12` at `Float64` and `10 * eps(T)` at another element type, and `LevenbergMarquardt` — damped
+  by a shift on the singular values, with the bubble's output weights eliminable by an inner Newton
+  solve — is a solver a caller names. A step converges when `residual ≤ f_abstol + f_reltol · r₀`,
+  at `f_abstol = 0` and the element type's own `f_reltol`: the dead branch's twenty steps on `Wave`
+  all reach it at `Float64`, and a live-branch row records its convergence flags and asserts none
+  of them. `fixed_boundary_f_reltol(T)` is the one place that constant lives, at the two element
+  types the family measured it for: a third type is refused, and a caller at such a type names its
+  own `f_reltol`. A failed step is carried, with its statistics recorded, as every family's is.
   `ForwardDiff` (compat `0.10.36, 1`) joins `[deps]`, because the family differentiates the side
   data in `t`, the initial data's momentum on the level's parameters and the Jacobian of the
   Levenberg–Marquardt routines with it directly rather than through `SimpleSolvers`' re-export; the
