@@ -554,7 +554,9 @@ end
     for form in (:abg, :tsr)
         problem = PROBLEMS[:wave]()
         ansatz = fixed_ansatz(problem; form = form)
-        slab = fixed_slab(problem, ansatz)
+        # the claim is the guess's layout, whatever the solver; on this coarse rule the default
+        # `Newton()` stalls at the cap (K94), so Levenberg–Marquardt solves the first slab
+        slab = fixed_slab(problem, ansatz; solver = LevenbergMarquardt())
         c = cache(slab.int)
         nfp = length(M.spatial_free(ansatz))
         M.initial_guess!(current(slab.solstep), nothing, parameters(problem), slab.int)
@@ -755,9 +757,9 @@ end
     end
     # A `BigFloat` slab converts the `Float64` ranges to new `BigFloat` objects at every fit; the
     # key compares by value, so a second fit with the same method keeps the table the first built,
-    # and a method of other ranges builds it again. `GeometricSolutions` builds no solution at
-    # `BigFloat` (K53) and the fits of the levels take an `svd` that `BigFloat` lacks, so the slab
-    # gets its side data alone and the bubble's fit runs on its own.
+    # and a method of other ranges builds it again. The fits of the levels take an `svd` that
+    # `BigFloat` lacks (K53), so the slab gets its side data alone and the bubble's fit runs on its
+    # own.
     pbig = WF.problem(T = BigFloat, timespan = (big"0.0", big"0.1"), timestep = big"0.05",
         xstep = big"0.05", xspan = (big"0.0", big"1.0"))
     abig = fixed_ansatz(pbig; Sx = 4, St = 4)
@@ -1014,7 +1016,11 @@ end
     # The matrix's rows at `h = 0.1` and `h = 0.05`, both problems and both bubble forms, under the
     # family's defaults alone: `Continuation()`, `Newton()` on the pivoted QR cut at
     # `fixed_boundary_qr_cut`, `f_reltol = fixed_boundary_f_reltol`, `f_abstol = 0` and 300
-    # iterations. Every step converges; the worst ratio and the error are a record.
+    # iterations. Every step converges, and the error lies within ±10 % of its measured value, as
+    # FB9's does: Wave 1.28e-4 and 3.26e-5, SineGordon 2.35e-6 and 2.00e-6 at `h = 0.1` and `0.05`,
+    # in both forms (Julia 1.13.4, SimpleSolvers 0.14.4). The worst ratio is a record.
+    bands = Dict((:Wave, 0.1) => (1.15e-4, 1.41e-4), (:Wave, 0.05) => (2.93e-5, 3.58e-5),
+        (:SineGordon, 0.1) => (2.11e-6, 2.58e-6), (:SineGordon, 0.05) => (1.80e-6, 2.20e-6))
     for P in (M.Wave, M.SineGordon), h in (0.1, 0.05), form in (:abg, :tsr)
         problem = P.problem(timespan = (0.0, 0.2), timestep = h, xstep = h,
             xspan = (0.0, 1.0))
@@ -1033,6 +1039,8 @@ end
         @testset "$(nameof(P)), h = $h, $form" begin
             @test length(stats.converged) == (h == 0.1 ? 2 : 4)
             @test all(stats.converged)
+            lower, upper = bands[(nameof(P), h)]
+            @test lower ≤ error ≤ upper
         end
     end
 end

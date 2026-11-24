@@ -26,9 +26,9 @@ include("../helpers/fixed_boundary_setup.jl")
     rng = Xoshiro(11)
     drng = Xoshiro(12)
     # `jacobian!` is SimpleSolvers' and writes the solver's own matrix, so it exists for a
-    # `NonlinearSolver`. The family's Levenberg–Marquardt keeps no such matrix — it takes one SVD of
-    # the Jacobian at each accepted iterate — so the Jacobian of the residual is read through the
-    # `Newton()` solver the family also offers, on the same residual and the same block.
+    # `NonlinearSolver`. The Levenberg–Marquardt a caller may name keeps no such matrix — it takes
+    # one SVD of the Jacobian at each accepted iterate — so the Jacobian of the residual is read
+    # through the family's default `Newton()` solver, on the same residual and the same block.
     #
     # N5's and N18's second check: the legs are `Wave`, `SineGordon` and all 24 seeded entries, in
     # both forms and both modes, at 16 vectors each, and at both element types. Each vector's `J` is

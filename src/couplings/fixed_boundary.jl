@@ -383,8 +383,10 @@ else
     @doc """
     A fixed-boundary slab is solved by `Newton()`, which the family's `initsolver` gives the
     minimum-norm step of a pivoted QR cut at [`fixed_boundary_qr_cut`](@ref). From the
-    `Continuation()` guess it converges at steps where Levenberg–Marquardt stops above the
-    tolerance; [`LevenbergMarquardt`](@ref) is a solver a caller may name.
+    `Continuation()` guess, on the quadrature of `ncells = 20` cells, it converges at steps where
+    Levenberg–Marquardt stops above the tolerance; on the coarser `ncells = 3` it stalls at its
+    cap where Levenberg–Marquardt reduces the residual by six orders (K94 in `KNOWN_ISSUES.md`).
+    [`LevenbergMarquardt`](@ref) is a solver a caller may name.
     """
     default_solver(::SpaceTimeGalerkin{<:FixedBoundaryNetwork}) = Newton()
 

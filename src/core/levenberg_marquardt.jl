@@ -50,7 +50,10 @@ const LM_MU_MIN = 1e-15
 """The damping at which a solve gives up: every singular value is damped away there."""
 const LM_MU_MAX = 1e12
 
-"""The iteration cap of a Levenberg–Marquardt solve when the integrator's options name none."""
+"""
+The iteration cap of a fixed-boundary solve, by Levenberg–Marquardt or by `Newton()`, when the
+integrator's options name none.
+"""
 const LM_MAX_ITERATIONS = 300
 
 """The iteration cap of the inner Newton solve of the projected variant."""
