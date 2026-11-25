@@ -312,8 +312,8 @@ Defects found in review and recorded, not fixed. Each entry names its kind and i
   an integrator that names `LevenbergMarquardt()` builds, as "FB18" builds it; under the default
   `Newton()` the build stops earlier, at SimpleSolvers' refusal of `LapackPivotedQR` at `BigFloat`
   (FB8). The entry stays in the registry and in the build-only testset "FB18", which builds it and
-  never runs it. `scripts/Project.toml` carries `GenericLinearAlgebra`; whether it supplies this
-  `svd!` with these keywords is not measured.
+  never runs it. No environment of the package loads a generic `svd!` for `BigFloat`; whether
+  `GenericLinearAlgebra` supplies one with these keywords is not measured.
 - kind: defect
 - found: 2026-11-10
 
