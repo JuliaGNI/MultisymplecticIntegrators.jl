@@ -878,6 +878,17 @@ keeping.
 
 ### Changed
 
+- **Compat only: the bounds admit the latest releases of the dependencies.** `Project.toml` and
+  `scripts/Project.toml` admit `SimpleSplines` 0.5 (`"0.3.5, 0.4, 0.5"`), and
+  `scripts/Project.toml`, which admitted only 0.3, now admits 0.4 too. `scripts/Project.toml`
+  admits `GenericLinearAlgebra` 0.4 (`"0.3, 0.4"`); each floor stays.
+  SimpleSplines 0.5 throws an `ArgumentError` for a mesh that 0.4 built silently and wrong — an
+  overflowing domain length, or breakpoints that are not finite and strictly increasing — and
+  fixes the derivatives of a periodic basis at the seam. `TensorBSplineAnsatz` builds its meshes
+  on `[0, 1]` and on an increasing `xspan`, and of the meshes it built before only four kinds are
+  now refused: a span with an infinite end, a span whose length overflows, a span whose length is
+  finite but whose breakpoints overflow, and a span too narrow for its cells at the coordinate
+  precision, where breakpoints round onto each other. No API of this package changes.
 - **The ladders, the runs and the long-time settings of the two verification files move into
   `test/helpers/manufactured.jl`**, with their values: `COUPLINGS`, `slab_run`, `box_run`,
   `self_differences`, `wave_run`, `quadrature_energy`, `energy_periods`, the ladder constants and
