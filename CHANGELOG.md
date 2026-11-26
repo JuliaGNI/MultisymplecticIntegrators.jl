@@ -623,7 +623,7 @@ keeping.
 - **`scripts/experiments.jl` registers the fixed-boundary family.** Thirty rows — `Wave` and
   `SineGordon` at three time steps, on the dead branch and on the four combinations of the bubble's
   form and its solve — and the two entries of the plateau probe, one of them at `Sx = 12`, `St = 16`
-  and one at `BigFloat` with `GenericLinearAlgebra` in `scripts/Project.toml` alone. The plateau's
+  and one at `BigFloat`. The plateau's
   numbers are recorded, never asserted. `run_family.jl fixed_boundary` without a stem runs the
   plateau's `Float64` entry, which the family names as its default, and not the `BigFloat` entry,
   which cannot run (K53 in `KNOWN_ISSUES.md`).
@@ -880,8 +880,7 @@ keeping.
 
 - **Compat only: the bounds admit the latest releases of the dependencies.** `Project.toml` and
   `scripts/Project.toml` admit `SimpleSplines` 0.5 (`"0.3.5, 0.4, 0.5"`), and
-  `scripts/Project.toml`, which admitted only 0.3, now admits 0.4 too. `scripts/Project.toml`
-  admits `GenericLinearAlgebra` 0.4 (`"0.3, 0.4"`); each floor stays.
+  `scripts/Project.toml`, which admitted only 0.3, now admits 0.4 too; each floor stays.
   SimpleSplines 0.5 throws an `ArgumentError` for a mesh that 0.4 built silently and wrong — an
   overflowing domain length, or breakpoints that are not finite and strictly increasing — and
   fixes the derivatives of a periodic basis at the seam. `TensorBSplineAnsatz` builds its meshes
